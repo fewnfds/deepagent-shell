@@ -22,7 +22,8 @@ Context Worker 委派。
 - 替换：保存同类型 block UUID；
 - 关闭：最终移除该能力。
 
-model 只能继承或替换。filesystem 在当前 Primary 选择时固定继承，未选择时 Subagent 也没有该能力；
+model 只能继承或替换。项目 filesystem 在当前 Primary 选择时固定继承；未选择项目 Filesystem 时，Subagent
+仍使用 Deep Agents 默认 StateBackend 文件工具；
 output mode、提示词预设、Subagent 和 Context Worker 委派按 manifest 策略从 Subagent 移除，不提供覆写选项。
 
 ## 绑定
@@ -87,13 +88,13 @@ DeepAgents 是否安装、磁盘资源是否仍存在、Provider 能否连接，
 请求准备期的静态和动态配置问题都归入后端 `request_prepare` 报告，内部保留稳定 code、
 Primary/Subagent/Context Worker owner、领域 path 和安全 message；OpenAI-compatible API 用同一问题生成现有错误
 外壳。报告对象在统一边界脱敏用户可控的 owner、path 和 message，不把 secret、Bearer token、
-源码、宿主路径或 traceback 返回给调用者。每个 Agent owner 成功物化的 Tool、
-Middleware、model 和 filesystem 对象直接交给本次唯一 `create_deep_agent()`，不会先“试构造”再重复
+源码、宿主路径或 traceback 返回给调用者。Primary 与同步 Subagent owner 成功物化的 Tool、Middleware、
+model 和 filesystem 对象直接交给本次唯一 `create_deep_agent()`；当前 Context Worker 仍直接交给自己的 `create_agent()`，不会先“试构造”再重复
 构造。Provider/Tool/graph 真正执行后的失败仍属于 runtime，不混进配置报告。
 
 修改组件、当前 Primary、覆写策略或 Provider credential 后，后续请求使用新配置；正在运行的请求
 继续使用其已经构造的对象。每个新推理请求先在一次 SQLite 读事务中复制配置和 secret，再从该
-query-only 内存快照解析 model 与完整装配，因此不会在同一次 create_deep_agent 中混用修改前后的记录。
+query-only 内存快照解析 model 与完整装配，因此不会在同一次 `create_deep_agent()` 中混用修改前后的记录。
 请求仍会重新加载 Primary 配置的请求级初始文件；同一请求中的 Primary 与同步 Subagent 共享这份
 临时文件 state，请求结束后不会保留到下一请求。Skill 和 mapped filesystem 等磁盘资源保持实时。
 共享普通工作空间不等于共享 Skill：每个消费者只挂载自己最终选择的只读 Skill 集合。没有真实

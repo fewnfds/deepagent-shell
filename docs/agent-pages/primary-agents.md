@@ -45,10 +45,10 @@ binding 的名称必须匹配 `[A-Za-z_][A-Za-z0-9_-]*`，同一 Primary 内唯�
 = 一个 raw synchronous Subagent
 ```
 
-Subagent 不能选择其他 Primary。filesystem 在当前 Primary 选择时固定继承，不提供覆写入口；
-同一次请求内 Primary 与全部同步 Subagent 共享请求级临时文件 state。未选择时 Subagent 仍可运行，
-但没有 filesystem 工具。当前不自动添加 general-purpose，不支持
-异步、dynamic 或 CompiledSubAgent。
+Subagent 不能选择其他 Primary。filesystem 在当前 Primary 选择时固定继承，不提供覆写入口；同一次请求内
+Primary 与全部同步 Subagent 共享项目配置提供的请求级临时文件 state。未选择项目 Filesystem 时，Deep Agents
+默认 StateBackend 仍提供默认文件工具。当前不自动添加 general-purpose；同步 child 是 `create_deep_agent()`
+构造的官方 `CompiledSubAgent`，不支持异步、dynamic 或递归委派。
 
 ## Context Worker binding
 
@@ -60,9 +60,10 @@ Subagent 不能选择其他 Primary。filesystem 在当前 Primary 选择时固�
 
 只有 Primary 装配 Context Worker 委派组件时才创建 `run_worker` Tool，并要求至少一条有效 binding。
 模型可以在同一个响应中发出多个 `run_worker` 调用；LangChain ToolNode 执行并把各自结果作为独立
-ToolMessage 交还 Primary。每个 Worker 是完整 `create_deep_agent()` graph，使用冻结客户端消息副本和自己的
+ToolMessage 交还 Primary。每个 Worker 当前是完整 `create_agent()` graph，使用冻结客户端消息副本和自己的
 Prompt Preset，不继承 Primary 已经产生的 AI/Tool 过程。DeepAgents Subagent binding 与 Worker
-binding 互相独立，可分别或同时使用。
+binding 互相独立，可分别或同时使用。Context Worker 的 Deep Agents 迁移本阶段暂停，后续是否由同步
+Subagent 取代另行决定。
 
 ## 保存与运行
 
@@ -70,7 +71,7 @@ binding 互相独立，可分别或同时使用。
 静态装配报告；连续输入停止 1000ms 后刷新，离散选择可立即刷新，晚到的旧响应不会覆盖新草稿。错误行
 包含具体 owner、字段 path 和原因。保存按钮不把最近报告当作授权，服务端保存与真实请求共享同一个静态装配
 校验，不能由直接 API 调用绕过 required、引用、依赖、最终 Subagent/Worker 或静态工具名规则。最终公开
-工具名在 Primary 与每个 Subagent/Worker 各自的 `create_deep_agent()` 前检查，重名会以稳定 422 拒绝，不再
+工具名在 Primary 与每个同步 Subagent 的 `create_deep_agent()`、以及当前 Context Worker 的 `create_agent()` 前检查，重名会以稳定 422 拒绝，不再
 静默覆盖。磁盘资源、Python 构造、依赖安装和 Provider 等运行现场问题仍在真实请求中检查。
 保存失败会一次展示后端报告中的全部问题，并按当前中文/英文语言格式化；成功保存后，该 Primary 名称会在 API Server
 通过静态门禁并处于 running 时成为 `/v1/models` 中的公开 model ID。

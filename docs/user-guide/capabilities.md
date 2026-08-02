@@ -166,8 +166,10 @@ binding，否则构建失败。
 
 向 Primary 提供 `run_worker(worker, task)` 标准 LangChain Tool。具体 Worker 在 Primary 页面绑定，
 装配内容在独立 Worker Profile 页面设置。一个模型响应可以发出多个 Tool Call，由 LangChain ToolNode
-并行执行；结果分别作为 ToolMessage 返回 Primary。Worker 是完整 `create_deep_agent()` graph，使用冻结
+并行执行；结果分别作为 ToolMessage 返回 Primary。Worker 当前是完整 `create_agent()` graph，使用冻结
 客户端消息副本和自己的 Prompt Preset，不继承 Primary 的 AI/Tool 过程。
+
+Context Worker 的 Deep Agents 迁移在本阶段暂停；未来是否由带 message adapter 的同步 Subagent 取代，另行决定。
 
 本组件与 DeepAgents 同步 Subagent 并列，不侵入其配置或运行。完整字段见
 [Context Worker 委派](../wizard-pages/worker-delegation-config.md)。

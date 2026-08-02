@@ -31,10 +31,11 @@ API 保存的新值会用于后续请求，已经构造完成的 Agent 不会被
 管理 API 或管理台对已载入 UUID 执行 PUT 改名后，旧名称立即失效。只有明确新建或从配置仓库复制
 Primary 才会生成另一份 UUID。
 
-`POST /v1/chat/completions` 在每次 `create_deep_agent()` 前，以一次 SQLite 读事务把 blocks、Primary、
+`POST /v1/chat/completions` 在每次 Primary `create_deep_agent()` 前，以一次 SQLite 读事务把 blocks、Primary、
 Subagent override、Worker Profile 和 Provider secret 复制到私有 query-only 内存库。公开 model 名称解析、Primary
 UUID、静态装配和 credential 都使用这同一份请求快照；捕获完成后的数据库修改只影响后续请求。
-随后构造 selected model、tools、Middleware、同步 Subagent 与所需 Context Worker graph，并调用真实 `create_deep_agent()`。请求会复用
+随后构造 selected model、tools、Middleware 和同步 Subagent child graph，并调用真实 `create_deep_agent()`；所需
+Context Worker graph 当前仍调用 `create_agent()`。请求会复用
 保存/启动使用的静态规则，再检查当前磁盘、Skill 元数据、选中用户 Python、最终 Tool/Middleware 名称
 和构造结果；这些准备期问题都会在 Provider 前返回稳定 code 与安全说明。已经成功准备的对象不会
 为了校验再构造一次，未选择的能力不会读取或执行。Provider、Tool 或 graph 真正执行后的失败仍使用

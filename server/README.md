@@ -21,7 +21,8 @@
 - `/api/system/settings`：不回显 secret 的启动配置读取与原子保存。
 
 Primary runtime 按明确选择构造 OpenAI-compatible model、tools、Middleware、同步 Subagent、
-提示词注入和输出模式，并统一调用 `langchain.agents.create_agent()`。服务提供轻量只读会话时间线，
+提示词注入和输出模式；Primary 与同步 Subagent 统一调用 `deepagents.create_deep_agent()`，Context Worker
+仍暂时沿用 `langchain.agents.create_agent()`。服务提供轻量只读会话时间线，
 但不提供持久聊天记忆、通用 trace/span 平台、异步 Subagent 或兼容旧 schema 的读取层。
 每个 Chat Completions 请求在 model 解析和 Agent 构造前，以单次 SQLite 读事务把四类配置数据复制到
 query-only 内存库；运行装配不在多个时刻读取 live 配置。
