@@ -769,7 +769,6 @@ function technologyTerm(
   technologyTerm('deepSubagents', 'task-tool', 'task', '子智能体任务工具', '主智能体用于启动同步子智能体并等待单个最终结果的工具。', 'The tool through which a main agent launches a synchronous subagent and waits for one final result.');
   technologyTerm('subagentMiddlewareApi', 'task-tool-input-description', 'task.description', '任务工具输入说明', '传给子智能体、用于说明任务上下文和期望输出的文本参数。', 'A text parameter passed to a subagent to describe the task context and expected output.');
   technologyTerm('deepCustomization', 'task-description', 'Task Description', '任务工具说明', 'SubAgentMiddleware 用于替换 task 工具说明的构造参数。', 'The SubAgentMiddleware constructor parameter that replaces the task tool description.', ['task_description']);
-  technologyTerm('deepCustomization', 'task-description-override', 'Task Description Override', '任务说明覆写', '用新文本替换既有任务工具说明的配置字段。', 'A configuration field that replaces an existing task-tool description with new text.', ['task_description_override']);
   technologyTerm('deepCustomization', 'available-agents-placeholder', '{available_agents}', '可用智能体占位符', '任务说明中在运行时替换为可用子智能体名称和说明列表的占位符。', 'A task-description placeholder replaced at runtime with available subagent names and descriptions.');
   technologyTerm('deepCustomization', 'available-agents-field', 'available_agents', '可用智能体字段', '承载可用子智能体名称和说明列表的字段。', 'A field carrying the names and descriptions of available subagents.');
   technologyTerm('deepSubagents', 'subagent-type', 'Subagent Type', '子智能体类型', 'task 工具中选择要调用哪一种子智能体的参数。', 'The task-tool parameter selecting which subagent type to invoke.', ['subagent_type']);

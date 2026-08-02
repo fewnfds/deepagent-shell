@@ -34,22 +34,5 @@ const draft = useEditorModel(() => props.modelValue, (value) => emit('update:mod
         />
       </div>
     </section>
-    <section class="card mb-3">
-      <header class="card-header">
-        <h3 class="card-title">{{ t('editors.subagent.taskDescriptionTitle') }}</h3>
-      </header>
-      <div class="card-body">
-        <div class="d-flex justify-content-end mb-3">
-          <LteButton theme="warning" @click="draft.task_description_override = defaults.tool_description">
-            {{ t('editors.common.restoreDefault') }}
-          </LteButton>
-        </div>
-        <LteTextarea
-          v-model="draft.task_description_override"
-          :aria-label="t('editors.subagent.taskDescriptionTitle')"
-          :rows="14"
-        />
-      </div>
-    </section>
   </div>
 </template>

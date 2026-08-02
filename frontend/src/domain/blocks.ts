@@ -330,22 +330,18 @@ export interface SystemPromptPayload extends BlockPayloadBase { system_prompt: s
 
 export interface SubagentDraft extends BlockDraftBase {
   instruction_override: string
-  task_description_override: string
 }
 
 export interface SubagentApiRecord extends BlockDraftBase {
   instruction_override: string | null
-  task_description_override: string | null
 }
 
 export interface SubagentPayload extends BlockPayloadBase {
   instruction_override: string | null
-  task_description_override: string | null
 }
 
 export interface SubagentDefaults {
   system_prompt: string
-  tool_description: string
 }
 
 export interface TodoListDraft extends BlockDraftBase {
@@ -917,21 +913,18 @@ export const subagentAdapter = {
     return {
       id: '', name: '',
       instruction_override: defaults.system_prompt,
-      task_description_override: defaults.tool_description,
     }
   },
   fromApi(value: SubagentApiRecord, defaults: SubagentDefaults): SubagentDraft {
     return {
       ...identity(value),
       instruction_override: editableText(value.instruction_override, defaults.system_prompt),
-      task_description_override: editableText(value.task_description_override, defaults.tool_description),
     }
   },
   toPayload(value: SubagentDraft, defaults: SubagentDefaults): SubagentPayload {
     return {
       name: cleanName(value.name),
       instruction_override: overrideValue(value.instruction_override, defaults.system_prompt),
-      task_description_override: overrideValue(value.task_description_override, defaults.tool_description),
     }
   },
 }

@@ -96,7 +96,7 @@ class RequestRuntimeSnapshot:
         try:
             return self._runtime.start(primary_id, raw_messages, **kwargs)
         finally:
-            # create_agent has materialized every database-backed dependency.
+            # Agent construction has materialized every database-backed dependency.
             # Closing here makes any accidental lazy configuration read fail.
             self._database.close()
 

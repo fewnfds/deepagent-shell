@@ -370,7 +370,6 @@ export const zhCN = {
     max_parallel_workers: '最大并行 Worker 数',
     include_client_messages: '包含客户端消息',
     worker_profile_id: 'Context Worker 配置 UUID',
-    task_description_override: 'task 工具说明覆写',
     capability_refs: '能力引用',
     block_id: '组件 UUID',
     description: '说明',
@@ -569,7 +568,6 @@ export const zhCN = {
     subagent: {
       namePlaceholder: '例如：同步研究组',
       instructionTitle: '委派指令',
-      taskDescriptionTitle: 'task 工具说明',
     },
     todoList: {
       namePlaceholder: '例如：复杂任务计划',

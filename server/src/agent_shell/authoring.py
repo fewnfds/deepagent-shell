@@ -140,19 +140,6 @@ Remember: Skills make you more capable and consistent. When in doubt, check if a
 
 SUBAGENT_EDITOR_SYSTEM_PROMPT = ""
 
-TASK_TOOL_DESCRIPTION = """Launch an ephemeral subagent to handle a complex, multi-step task in an isolated context window.
-
-Available agent types and the tools they have access to:
-{available_agents}
-
-Specify subagent_type to select the agent. Usage notes:
-- Launch multiple agents concurrently when their tasks are independent, using a single message with multiple tool calls.
-- Each invocation is stateless: the agent sees only the prompt you give it and returns a single final report. Put full detail in the prompt and state exactly what it should return.
-- The agent's report is not shown to the user; relay a summary yourself.
-- Tell the agent whether to create content, analyze, or only research, since it cannot see the user's intent.
-- If an agent's description says to use it proactively, do so without waiting to be asked.
-- When only general-purpose is available, use it for any complex, context-heavy task; it has the same capabilities as the main agent."""
-
 WRITE_TODOS_SYSTEM_PROMPT = """## `write_todos`
 
 You have access to the `write_todos` tool to help you manage and plan complex objectives.
@@ -400,7 +387,6 @@ _EDITOR_DEFAULTS = {
     },
     "subagent": {
         "system_prompt": SUBAGENT_EDITOR_SYSTEM_PROMPT,
-        "tool_description": TASK_TOOL_DESCRIPTION,
     },
     "todo_list": {
         "system_prompt": WRITE_TODOS_SYSTEM_PROMPT,

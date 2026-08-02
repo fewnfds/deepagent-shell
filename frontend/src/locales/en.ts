@@ -372,7 +372,6 @@ export const en: MessageSchema = {
     max_parallel_workers: 'Maximum parallel Workers',
     include_client_messages: 'Include client messages',
     worker_profile_id: 'Context Worker profile UUID',
-    task_description_override: 'Task tool description override',
     capability_refs: 'Capability references',
     block_id: 'Component UUID',
     description: 'Description',
@@ -571,7 +570,6 @@ export const en: MessageSchema = {
     subagent: {
       namePlaceholder: 'For example: Synchronous research team',
       instructionTitle: 'Delegation instructions',
-      taskDescriptionTitle: 'Task tool description',
     },
     todoList: {
       namePlaceholder: 'For example: Complex task planning',

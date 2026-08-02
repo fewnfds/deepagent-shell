@@ -52,7 +52,6 @@ const outputDefaults: OutputModeDefaults = {
 const skillDefaults: SkillDefaults = { system_prompt: 'skill default' }
 const subagentDefaults: SubagentDefaults = {
   system_prompt: 'subagent default',
-  tool_description: 'task default',
 }
 const todoDefaults: TodoListDefaults = {
   system_prompt: 'todo default',
@@ -248,9 +247,8 @@ describe('block adapters', () => {
     } as never).system_prompt).toBe('')
     expect(subagentAdapter.fromApi({
       id: 'subagent', name: 'Subagent', instruction_override: 42,
-      task_description_override: null,
     } as never, subagentDefaults)).toMatchObject({
-      instruction_override: 'subagent default', task_description_override: 'task default',
+      instruction_override: 'subagent default',
     })
     expect(todoListAdapter.fromApi({
       id: 'todo', name: 'Todo', system_prompt_override: 42,
@@ -327,7 +325,7 @@ describe('block adapters', () => {
     subagent.name = ' Subagent '
     expect(subagentAdapter.toPayload(subagent, subagentDefaults)).toEqual({
       name: 'Subagent',
-      instruction_override: null, task_description_override: null,
+      instruction_override: null,
     })
 
     const todo = todoListAdapter.blank(todoDefaults)

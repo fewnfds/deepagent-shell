@@ -44,7 +44,6 @@ SKILL_PROMPT_FIELDS = (
     "skills_load_warnings",
     "skills_list",
 )
-TASK_DESCRIPTION_FIELDS = ("available_agents",)
 PROMPT_PRESET_TEMPLATE_FIELDS = (
     "agent_name",
     "available_workers",
@@ -768,19 +767,6 @@ class SkillBlock(StrictBlock):
 
 class SubagentBlock(StrictBlock):
     instruction_override: PromptOverrideText | None = None
-    task_description_override: PromptOverrideText | None = None
-
-    @model_validator(mode="after")
-    def validate_overrides(self) -> "SubagentBlock":
-        task = self.task_description_override
-        if task is not None:
-            _validate_format_template(
-                task,
-                allowed_fields=TASK_DESCRIPTION_FIELDS,
-                label="Subagent task description",
-            )
-
-        return self
 
 
 class TodoListBlock(StrictBlock):
