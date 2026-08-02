@@ -46,8 +46,6 @@ SKILL_PROMPT_FIELDS = (
 )
 PROMPT_PRESET_TEMPLATE_FIELDS = (
     "agent_name",
-    "available_workers",
-    "worker_name",
     "task",
     "workspace",
 )
@@ -360,7 +358,6 @@ OutputEventName = Literal[
     "tool_result",
     "tool_error",
     "subagent",
-    "context_worker",
     "custom",
     "lifecycle",
 ]
@@ -371,7 +368,6 @@ OUTPUT_EVENT_NAMES = (
     "tool_result",
     "tool_error",
     "subagent",
-    "context_worker",
     "custom",
     "lifecycle",
 )
@@ -392,12 +388,6 @@ OUTPUT_EVENT_TEMPLATE_VARIABLES = {
     "tool_result": ("tool_name", "tool_call_id", "status", "output"),
     "tool_error": ("tool_name", "tool_call_id", "status", "error_code"),
     "subagent": ("subagent_name", "tool_call_id", "status"),
-    "context_worker": (
-        "worker_name",
-        "tool_call_id",
-        "status",
-        "error_code",
-    ),
     "custom": ("channel", "data_json"),
     "lifecycle": ("status", "finish_reason", "error_code"),
 }
@@ -857,50 +847,13 @@ class PromptPresetBlock(StrictBlock):
         return self
 
 
-class WorkerDelegationBlock(StrictBlock):
-    tool_description: Annotated[str, Field(min_length=1, max_length=100_000)] = (
-        "Delegate one self-contained task to a configured Context Worker and return "
-        "its final result."
-    )
-    worker_parameter_description: Annotated[
-        str, Field(min_length=1, max_length=10_000)
-    ] = "The configured Context Worker that should perform the task."
-    task_parameter_description: Annotated[
-        str, Field(min_length=1, max_length=10_000)
-    ] = "A complete and specific task for the selected Context Worker."
-    max_worker_calls_per_request: int = Field(default=16, ge=1, le=64)
-    max_parallel_workers: int = Field(default=4, ge=1, le=16)
-
-    @model_validator(mode="after")
-    def validate_limits(self) -> "WorkerDelegationBlock":
-        for field_name in (
-            "tool_description",
-            "worker_parameter_description",
-            "task_parameter_description",
-        ):
-            if not getattr(self, field_name).strip():
-                raise ValueError(f"{field_name} must contain visible text")
-        if self.max_parallel_workers > self.max_worker_calls_per_request:
-            raise ValueError(
-                "max_parallel_workers must not exceed max_worker_calls_per_request"
-            )
-        return self
-
-
 class SubagentBinding(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: Annotated[str, Field(max_length=120)] = ""
     description: DescriptionDraft = ""
     subagent_override_id: BlockReference = ""
-
-
-class WorkerBinding(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    name: Annotated[str, Field(max_length=120)] = ""
-    description: DescriptionDraft = ""
-    worker_profile_id: BlockReference = ""
+    include_client_messages: bool = False
 
 
 class CapabilityReference(BaseModel):
@@ -921,7 +874,6 @@ class CapabilityReference(BaseModel):
 class PrimaryAgentProfile(StrictBlock):
     capability_refs: list[CapabilityReference] = Field(default_factory=list, max_length=100)
     subagents: list[SubagentBinding] = Field(default_factory=list, max_length=100)
-    workers: list[WorkerBinding] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
     def validate_profile(self) -> "PrimaryAgentProfile":
@@ -973,49 +925,6 @@ class SubagentOverrideProfile(StrictBlock):
         return self
 
 
-class WorkerCapabilityOverride(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    type: Annotated[str, Field(min_length=1, max_length=120)]
-    mode: Literal["replace", "disabled"]
-    block_id: BlockReference = ""
-
-    @field_validator("type")
-    @classmethod
-    def validate_type(cls, value: str) -> str:
-        manifest = CAPABILITY_BY_TYPE.get(value)
-        if manifest is None or not manifest.worker_overrideable:
-            raise ValueError(f"capability is not overrideable by Context Worker: {value}")
-        return value
-
-    @model_validator(mode="after")
-    def validate_replace(self) -> "WorkerCapabilityOverride":
-        manifest = CAPABILITY_BY_TYPE[self.type]
-        if self.mode == "disabled" and manifest.required:
-            raise ValueError(f"required capability cannot be disabled: {self.type}")
-        if self.mode == "replace" and not self.block_id:
-            raise ValueError("replace mode requires block_id")
-        if self.mode == "disabled" and self.block_id:
-            raise ValueError("disabled mode must not include block_id")
-        return self
-
-
-class WorkerProfile(StrictBlock):
-    include_client_messages: bool = True
-    capability_overrides: list[WorkerCapabilityOverride] = Field(
-        default_factory=list, max_length=100
-    )
-
-    @model_validator(mode="after")
-    def validate_overrides(self) -> "WorkerProfile":
-        capability_types = [item.type for item in self.capability_overrides]
-        if len(capability_types) != len(set(capability_types)):
-            raise ValueError(
-                "Worker capability_overrides must contain at most one item per type"
-            )
-        return self
-
-
 BLOCK_MODELS: dict[str, type[StrictBlock]] = {
     "model": ModelBlock,
     "system-prompt": SystemPromptBlock,
@@ -1028,7 +937,6 @@ BLOCK_MODELS: dict[str, type[StrictBlock]] = {
     "exception-retry": ExceptionRetryBlock,
     "subagent": SubagentBlock,
     "prompt-preset": PromptPresetBlock,
-    "worker-delegation": WorkerDelegationBlock,
 }
 
 validate_capability_manifests(CAPABILITY_MANIFESTS, BLOCK_MODELS)
@@ -1051,9 +959,4 @@ def validate_primary_agent_payload(payload: dict) -> dict:
 
 def validate_subagent_override_payload(payload: dict) -> dict:
     model = SubagentOverrideProfile.model_validate(payload)
-    return model.model_dump(mode="json")
-
-
-def validate_worker_profile_payload(payload: dict) -> dict:
-    model = WorkerProfile.model_validate(payload)
     return model.model_dump(mode="json")

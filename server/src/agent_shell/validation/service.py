@@ -13,7 +13,6 @@ from agent_shell.contracts import (
     CapabilityReference,
     PrimaryAgentProfile,
     SubagentOverrideProfile,
-    WorkerProfile,
 )
 from agent_shell.registries.custom_tools import (
     resolve_custom_tool_file,
@@ -29,21 +28,11 @@ from agent_shell.validation.capability_assembly import (
 from agent_shell.validation.contracts import report_from_validation_error
 from agent_shell.validation.models import ValidationIssue, ValidationReport
 from agent_shell.validation.subagent_bindings import subagent_binding_issues
-from agent_shell.validation.worker_bindings import worker_binding_issues
 
 
 @dataclass(frozen=True, slots=True)
 class ResolvedSubagent:
     binding: dict[str, Any]
-    references: dict[str, str]
-    blocks: dict[str, dict[str, Any]]
-    filesystem_mode: FilesystemMode
-
-
-@dataclass(frozen=True, slots=True)
-class ResolvedWorker:
-    binding: dict[str, Any]
-    profile: dict[str, Any]
     references: dict[str, str]
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
@@ -56,7 +45,6 @@ class StaticAssembly:
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
     subagents: tuple[ResolvedSubagent, ...]
-    workers: tuple[ResolvedWorker, ...]
 
 
 _PRIMARY_REQUIRED_CAPABILITY_TYPES = frozenset(
@@ -67,13 +55,6 @@ _SUBAGENT_REQUIRED_CAPABILITY_TYPES = frozenset(
     for manifest in CAPABILITY_MANIFESTS
     if manifest.required and manifest.subagent_policy == "inherit"
 )
-_WORKER_REQUIRED_CAPABILITY_TYPES = frozenset(
-    manifest.type
-    for manifest in CAPABILITY_MANIFESTS
-    if manifest.required and manifest.worker_policy == "inherit"
-)
-
-
 class ConfigurationValidationService:
     def __init__(
         self,
@@ -95,7 +76,6 @@ class ConfigurationValidationService:
         stored: bool = False,
         block_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
         override_overrides: dict[str, dict[str, Any]] | None = None,
-        worker_profile_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> tuple[ValidationReport, dict[str, Any] | None, StaticAssembly | None]:
         owner_name = str(payload.get("name", ""))
         try:
@@ -135,7 +115,6 @@ class ConfigurationValidationService:
             owner_id=owner_id,
             block_overrides=block_overrides,
             override_overrides=override_overrides,
-            worker_profile_overrides=worker_profile_overrides,
         )
         return report, primary, assembly
 
@@ -176,58 +155,6 @@ class ConfigurationValidationService:
             prospective,
             stage=stage,
         )
-        return ValidationReport(stage=stage, issues=tuple(issues)), validated
-
-    def validate_worker_profile(
-        self,
-        payload: dict[str, Any],
-        *,
-        stage: str,
-        owner_id: str = "",
-        stored: bool = False,
-    ) -> tuple[ValidationReport, dict[str, Any] | None]:
-        try:
-            model = WorkerProfile.model_validate(
-                (
-                    {key: value for key, value in payload.items() if key != "id"}
-                    if stored
-                    else payload
-                )
-            )
-        except ValidationError as exc:
-            return (
-                report_from_validation_error(
-                    exc,
-                    stage=stage,
-                    scope="worker_profile",
-                    owner_id=owner_id,
-                    owner_name=str(payload.get("name", "")),
-                ),
-                None,
-            )
-        validated = model.model_dump(mode="json")
-        references = {
-            item["type"]: item["block_id"]
-            for item in validated["capability_overrides"]
-            if item["mode"] == "replace"
-        }
-        _, issues = self._load_references(
-            references,
-            scope="worker_profile",
-            owner_id=owner_id,
-            owner_name=validated["name"],
-            path_prefix="capability_overrides",
-        )
-        if owner_id and not issues:
-            prospective = dict(validated)
-            prospective["id"] = owner_id
-            issues.extend(
-                self._impact_issues_for_worker_profile(
-                    owner_id,
-                    prospective,
-                    stage=stage,
-                )
-            )
         return ValidationReport(stage=stage, issues=tuple(issues)), validated
 
     def validate_block_copy(
@@ -389,14 +316,6 @@ class ConfigurationValidationService:
                 override,
                 stage=stage,
                 owner_id=str(override.get("id", "")),
-                stored=True,
-            )
-            issues.extend(report.issues)
-        for profile in self._agent_configs.list_items("worker_profiles"):
-            report, _ = self.validate_worker_profile(
-                profile,
-                stage=stage,
-                owner_id=str(profile.get("id", "")),
                 stored=True,
             )
             issues.extend(report.issues)
@@ -641,7 +560,7 @@ class ConfigurationValidationService:
         owner_id: str,
         owner_name: str,
     ) -> ValidationIssue | None:
-        seen: dict[str, str] = {}
+        seen: dict[str, str] = {"task": "Deep Agents default harness"}
         if filesystem_mode == "skill-fallback-isolated":
             seen["read_file"] = "skill"
         for capability_type in references:
@@ -777,63 +696,6 @@ class ConfigurationValidationService:
             )
         return model.model_dump(mode="json"), None
 
-    def _worker_profile(
-        self,
-        profile_id: str,
-        *,
-        binding: dict[str, Any],
-        owner_id: str,
-        worker_profile_overrides: dict[str, dict[str, Any]] | None = None,
-    ) -> tuple[dict[str, Any] | None, ValidationIssue | None]:
-        profile = (
-            worker_profile_overrides[profile_id]
-            if worker_profile_overrides and profile_id in worker_profile_overrides
-            else self._agent_configs.get_item("worker_profiles", profile_id)
-        )
-        if profile is None:
-            return None, ValidationIssue(
-                code="assembly.worker_profile_not_found",
-                scope="context_worker",
-                owner_id=owner_id,
-                owner_name=str(binding.get("name", "")),
-                path="worker_profile_id",
-                message="The referenced Context Worker profile does not exist.",
-                message_key="validation.issue.assembly.workerProfileNotFound",
-                message_args={},
-            )
-        try:
-            model = WorkerProfile.model_validate(
-                {key: value for key, value in profile.items() if key != "id"}
-            )
-        except ValidationError as exc:
-            detail_report = report_from_validation_error(
-                exc,
-                stage="referenced_worker_profile",
-                scope="context_worker",
-                owner_id=owner_id,
-                owner_name=str(binding.get("name", "")),
-            )
-            detail = (
-                detail_report.issues[0].message
-                if detail_report.issues
-                else "The configuration structure is invalid."
-            )
-            profile_name = str(profile.get("name", ""))
-            return None, ValidationIssue(
-                code="assembly.worker_profile_invalid",
-                scope="context_worker",
-                owner_id=owner_id,
-                owner_name=str(binding.get("name", "")),
-                path="worker_profile_id",
-                message=(
-                    f"Referenced Context Worker profile {profile_name!r} does not "
-                    f"satisfy the current contract: {detail}"
-                ),
-                message_key="validation.issue.assembly.workerProfileInvalid",
-                message_args={"profile_name": profile_name, "detail": detail},
-            )
-        return model.model_dump(mode="json"), None
-
     @staticmethod
     def _prompt_preset_issue(
         block: dict[str, Any] | None,
@@ -907,7 +769,6 @@ class ConfigurationValidationService:
         owner_id: str,
         block_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
         override_overrides: dict[str, dict[str, Any]] | None = None,
-        worker_profile_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> tuple[ValidationReport, StaticAssembly | None]:
         owner_name = str(primary.get("name", ""))
         references = self._reference_map(primary)
@@ -922,11 +783,6 @@ class ConfigurationValidationService:
         issues = [
             *subagent_binding_issues(
                 list(primary.get("subagents", [])),
-                owner_id=owner_id,
-                owner_name=owner_name,
-            ),
-            *worker_binding_issues(
-                list(primary.get("workers", [])),
                 owner_id=owner_id,
                 owner_name=owner_name,
             ),
@@ -1016,6 +872,17 @@ class ConfigurationValidationService:
             )
             if child_tool_issue is not None:
                 child_issues.append(child_tool_issue)
+            child_preset_issue = self._prompt_preset_issue(
+                child_blocks.get("prompt-preset"),
+                allowed_fields=frozenset({"agent_name", "task", "workspace"}),
+                required_field=None,
+                scope="subagent",
+                owner_id=owner_id,
+                owner_name=subagent_name,
+                path="capability_refs.prompt-preset",
+            )
+            if child_preset_issue is not None:
+                child_issues.append(child_preset_issue)
             issues.extend(child_issues)
             if delegation_selected and not child_issues:
                 resolved_subagents.append(
@@ -1027,33 +894,10 @@ class ConfigurationValidationService:
                     )
                 )
 
-        worker_delegation_selected = selected.get("worker-delegation") is not None
-        worker_bindings = (
-            list(primary.get("workers", [])) if worker_delegation_selected else []
-        )
-        if worker_delegation_selected and not worker_bindings:
-            issues.append(
-                ValidationIssue(
-                    code="assembly.worker_binding_required",
-                    scope="primary",
-                    owner_id=owner_id,
-                    owner_name=owner_name,
-                    path="workers",
-                    message=(
-                        "At least one valid Context Worker binding is required when "
-                        "Worker Delegation is enabled."
-                    ),
-                    message_key="validation.issue.assembly.workerBindingRequired",
-                    message_args={},
-                )
-            )
-
         primary_preset_issue = self._prompt_preset_issue(
             selected.get("prompt-preset"),
-            allowed_fields=frozenset({"agent_name", "available_workers"}),
-            required_field=(
-                "available_workers" if worker_delegation_selected else None
-            ),
+            allowed_fields=frozenset({"agent_name"}),
+            required_field=None,
             scope="primary",
             owner_id=owner_id,
             owner_name=owner_name,
@@ -1061,90 +905,6 @@ class ConfigurationValidationService:
         )
         if primary_preset_issue is not None:
             issues.append(primary_preset_issue)
-
-        resolved_workers = []
-        for binding in worker_bindings:
-            worker_name = str(binding.get("name", ""))
-            worker_references = {
-                capability_type: block_id
-                for capability_type, block_id in references.items()
-                if (
-                    CAPABILITY_BY_TYPE.get(capability_type) is None
-                    or CAPABILITY_BY_TYPE[capability_type].worker_policy
-                    in {"inherit", "guarded"}
-                )
-            }
-            profile: dict[str, Any] = {
-                "name": "",
-                "include_client_messages": True,
-                "capability_overrides": [],
-            }
-            profile_id = str(binding.get("worker_profile_id", ""))
-            if profile_id:
-                loaded_profile, profile_issue = self._worker_profile(
-                    profile_id,
-                    binding=binding,
-                    owner_id=owner_id,
-                    worker_profile_overrides=worker_profile_overrides,
-                )
-                if profile_issue is not None:
-                    issues.append(profile_issue)
-                    continue
-                assert loaded_profile is not None
-                profile = loaded_profile
-                for selection in profile["capability_overrides"]:
-                    capability_type = selection["type"]
-                    if selection["mode"] == "replace":
-                        worker_references[capability_type] = selection["block_id"]
-                    elif selection["mode"] == "disabled":
-                        worker_references.pop(capability_type, None)
-
-            (
-                worker_blocks,
-                worker_issues,
-                worker_filesystem_mode,
-            ) = self._resolve_capability_subject(
-                worker_references,
-                required_types=_WORKER_REQUIRED_CAPABILITY_TYPES,
-                scope="context_worker",
-                owner_id=owner_id,
-                owner_name=worker_name,
-                block_overrides=block_overrides,
-            )
-            worker_preset_issue = self._prompt_preset_issue(
-                worker_blocks.get("prompt-preset"),
-                allowed_fields=frozenset(
-                    {"agent_name", "worker_name", "task", "workspace"}
-                ),
-                required_field="task",
-                scope="context_worker",
-                owner_id=owner_id,
-                owner_name=worker_name,
-                path="capability_refs.prompt-preset",
-            )
-            if worker_preset_issue is not None:
-                worker_issues.append(worker_preset_issue)
-            worker_tool_issue = self._static_tool_issue(
-                worker_references,
-                worker_blocks,
-                filesystem_mode=worker_filesystem_mode,
-                scope="context_worker",
-                owner_id=owner_id,
-                owner_name=worker_name,
-            )
-            if worker_tool_issue is not None:
-                worker_issues.append(worker_tool_issue)
-            issues.extend(worker_issues)
-            if worker_delegation_selected and not worker_issues:
-                resolved_workers.append(
-                    ResolvedWorker(
-                        binding=binding,
-                        profile=profile,
-                        references=worker_references,
-                        blocks=worker_blocks,
-                        filesystem_mode=worker_filesystem_mode,
-                    )
-                )
 
         report = ValidationReport(stage=stage, issues=tuple(issues))
         if not report.valid:
@@ -1155,7 +915,6 @@ class ConfigurationValidationService:
             blocks=selected,
             filesystem_mode=filesystem_mode,
             subagents=tuple(resolved_subagents),
-            workers=tuple(resolved_workers),
         )
 
     @staticmethod
@@ -1175,7 +934,6 @@ class ConfigurationValidationService:
         stage: str,
         block_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
         override_overrides: dict[str, dict[str, Any]] | None = None,
-        worker_profile_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> list[ValidationIssue]:
         primary_id = str(primary.get("id", ""))
         baseline, _, _ = self.validate_primary(
@@ -1191,7 +949,6 @@ class ConfigurationValidationService:
             stored=True,
             block_overrides=block_overrides,
             override_overrides=override_overrides,
-            worker_profile_overrides=worker_profile_overrides,
         )
         baseline_keys = {self._issue_key(issue) for issue in baseline.issues}
         return [
@@ -1240,26 +997,6 @@ class ConfigurationValidationService:
                 ):
                     indirect = True
                     break
-            worker_bindings = primary.get("workers", [])
-            if not isinstance(worker_bindings, list):
-                worker_bindings = []
-            for binding in worker_bindings:
-                if (
-                    not isinstance(binding, dict)
-                    or not binding.get("worker_profile_id")
-                ):
-                    continue
-                profile = self._agent_configs.get_item(
-                    "worker_profiles", binding["worker_profile_id"]
-                )
-                if profile and any(
-                    item.get("type") == block_type
-                    and item.get("mode") == "replace"
-                    and item.get("block_id") == block_id
-                    for item in profile.get("capability_overrides", [])
-                ):
-                    indirect = True
-                    break
             if direct or indirect:
                 issues.extend(
                     self._new_impact_issues(
@@ -1293,33 +1030,6 @@ class ConfigurationValidationService:
                     primary,
                     stage=stage,
                     override_overrides={override_id: prospective},
-                )
-            )
-        return issues
-
-    def _impact_issues_for_worker_profile(
-        self,
-        profile_id: str,
-        prospective: dict[str, Any],
-        *,
-        stage: str,
-    ) -> list[ValidationIssue]:
-        issues: list[ValidationIssue] = []
-        for primary in self._agent_configs.list_items("primary_agents"):
-            bindings = primary.get("workers", [])
-            if not isinstance(bindings, list):
-                continue
-            if not any(
-                isinstance(binding, dict)
-                and binding.get("worker_profile_id") == profile_id
-                for binding in bindings
-            ):
-                continue
-            issues.extend(
-                self._new_impact_issues(
-                    primary,
-                    stage=stage,
-                    worker_profile_overrides={profile_id: prospective},
                 )
             )
         return issues

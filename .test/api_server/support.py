@@ -161,7 +161,6 @@ def output_mode_payload(
         "tool_result",
         "tool_error",
         "subagent",
-        "context_worker",
         "custom",
         "lifecycle",
     )

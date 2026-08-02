@@ -141,15 +141,6 @@ def _timeline_event_summary(
     elif kind == "subagent":
         summary_data["phase"] = event_data.get("phase", "")
         summary_data["subagent_name"] = event_data.get("subagent_name", "")
-    elif kind == "context_worker":
-        for key in (
-            "phase",
-            "worker_name",
-            "tool_call_id",
-            "status",
-            "error_code",
-        ):
-            summary_data[key] = event_data.get(key, "")
     return {
         "step_id": f"event-{index}",
         "sequence": event.get("sequence", index + 1),

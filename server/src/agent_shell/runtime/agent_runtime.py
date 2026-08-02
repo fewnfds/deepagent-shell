@@ -4,7 +4,7 @@ import asyncio
 import warnings
 from collections.abc import AsyncIterator, Callable
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from agent_shell.runtime.agent_builder import AgentBuilder
@@ -31,6 +31,7 @@ class AgentExecution:
     input_state: dict[str, Any]
     rectifier: OutputEventRectifier
     normalizer: V3EventNormalizer
+    context: dict[str, Any] = field(default_factory=dict)
     event_observers: tuple[Callable[[OutputEvent], None], ...] = ()
     _started: bool = False
 
@@ -81,10 +82,13 @@ class AgentExecution:
             async with asyncio.timeout(EXECUTION_TIMEOUT_SECONDS):
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", LangChainBetaWarning)
+                    stream_options: dict[str, Any] = {"version": "v3"}
+                    if self.context:
+                        stream_options["context"] = self.context
                     stream = await self.graph.astream_events(
                         self.input_state,
                         config={"recursion_limit": GRAPH_RECURSION_LIMIT},
-                        version="v3",
+                        **stream_options,
                     )
                 # The v3 run stream owns the graph iterator. Its async context
                 # manager aborts in-flight provider/tool work when an OpenAI
@@ -216,6 +220,7 @@ class AgentRuntime:
         return AgentExecution(
             graph=built.graph,
             input_state=built.input_state,
+            context=built.context,
             rectifier=OutputEventRectifier(OutputProjector(built.output_config)),
             normalizer=V3EventNormalizer(
                 built.agent_name,

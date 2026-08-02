@@ -32,12 +32,6 @@ CREATE TABLE IF NOT EXISTS subagent_overrides (
     payload TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS worker_profiles (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    payload TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS api_server_settings (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),

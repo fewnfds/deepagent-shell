@@ -1,6 +1,6 @@
 # 使用配置仓库
 
-配置仓库集中显示十二类组件、Primary、Subagent 覆写和 Context Worker Profile。删除只在这里提供。
+配置仓库集中显示十一类组件、Primary 和 Subagent 覆写。删除只在这里提供。
 
 ## 查看
 
@@ -16,11 +16,11 @@ JSON 仍保留真实字段名和引用 UUID，中文只作说明。模型凭据�
 
 页面顶部的“仓库配置有效性”清单直接渲染后端对全部分类的权威报告，不依赖浏览器已加载的数组，
 也不会因为切换到模型、文件系统等其他分类而隐藏。无效组件会显示类型、名称和原因；引用该组件
-而无法顺利构造 Agent 的 Primary、Subagent 覆写或 Worker Profile 也会单独列出。全部正常时只显示一条“通过”汇总，
+而无法顺利构造 Agent 的 Primary 或 Subagent 覆写也会单独列出。全部正常时只显示一条“通过”汇总，
 不为每条正常配置制造重复信息。
 
-管理后端提供 `GET /api/validation/repository` 权威读取入口。它直接按当前严格 contract 检查十二类
-组件、Primary、Subagent/Worker Profile 及两类 binding 的最终引用，返回 `valid`、`stage` 和可按
+管理后端提供 `GET /api/validation/repository` 权威读取入口。它直接按当前严格 contract 检查十一类
+组件、Primary、Subagent 覆写及 binding 的最终引用，返回 `valid`、`stage` 和可按
 `owner_id` 定位的 `issues[]`；每项还带稳定 message key 和安全参数，由页面按当前语言显示。它不会
 import/exec 用户 Python、连接 Provider、写回配置或保存
 报告。HTTP 请求失败表示报告不可用，不等于仓库有效。
@@ -41,10 +41,10 @@ import/exec 用户 Python、连接 Provider、写回配置或保存
 - “编辑”回到对应页面并携带原 UUID；保存时始终更新该 UUID，即使修改名称也不会暗中新建。
 - “复制”先打开命名面板；填写一个未被同类型配置使用的新名称并确认后，才创建新 UUID。
 - 复制会按当前严格结构重新校验组件、Primary 或覆写；不符合当前结构的记录会拒绝复制且不写入新记录。
-- 页面复制时只提交源 UUID 和新名称：组件、Primary、Subagent 覆写和 Worker Profile 分别由各自的服务端 copy
+- 页面复制时只提交源 UUID 和新名称：组件、Primary 和 Subagent 覆写分别由各自的服务端 copy
   endpoint 完成读取、改名、校验、生成 UUID 和保存。源记录及引用它的记录保持不变，已有引用不会
   自动迁移到副本。
-- 提示词预设与 Context Worker 委派和其他组件一样回到【组件】相应步骤。
+- 提示词预设和其他组件一样回到【组件】相应步骤。
 
 后端报告判定无效的记录仍可查看 JSON 或载入当前编辑器；再次保存时必须满足当前严格结构，不会
 保留未知旧字段。编辑器只把类型正确且属于现行 schema 的字段载入草稿：缺失或类型错误字段使用
@@ -52,7 +52,7 @@ import/exec 用户 Python、连接 Provider、写回配置或保存
 覆盖；仅查看、载入或取消编辑都不会写回。“复制”仍由服务端直接校验原始记录，无效时不创建新 UUID。
 项目不会在读取或运行时自动迁移、补字段或改写 `data/`。
 
-覆盖已有组件、Subagent 覆写或 Worker Profile 时，服务端还会以内存中的拟保存内容检查所有受影响的
+覆盖已有组件或 Subagent 覆写时，服务端还会以内存中的拟保存内容检查所有受影响的
 Primary 和最终消费者。若修改会新增失效引用、缺少必需能力或静态工具名冲突，保存会被拒绝，旧记录
 保持原样；新建且尚未被引用的合法组件不会因为无关 Agent 的问题被阻止。
 
@@ -65,8 +65,8 @@ Python 构造、动态 Tool/Middleware 名称、文件后来消失等只有真�
 
 ## 删除保护
 
-删除前使用页面内确认层。仍被 Primary `capability_refs[]`、Subagent 或 Worker `replace` 覆写引用的
-组件不能删除；仍出现在任意 binding 中的 Subagent 覆写或 Worker Profile 也不能删除。binding 直接保存在所属 Primary 中，
+删除前使用页面内确认层。仍被 Primary `capability_refs[]` 或 Subagent `replace` 覆写引用的
+组件不能删除；仍出现在任意 binding 中的 Subagent 覆写也不能删除。binding 直接保存在所属 Primary 中，
 因此删除 Primary 会删除它自身及随它保存的 binding。先编辑
 引用方并移除组件或覆写策略关系，再返回仓库删除。
 

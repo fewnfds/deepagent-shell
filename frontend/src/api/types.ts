@@ -13,7 +13,6 @@ export type BlockType =
   | 'exception-retry'
   | 'prompt-preset'
   | 'subagent'
-  | 'worker-delegation'
 
 export interface CapabilityManifest {
   type: BlockType
@@ -23,10 +22,8 @@ export interface CapabilityManifest {
   icon_key: string
   editor_key: string
   subagent_overrideable: boolean
-  worker_overrideable: boolean
   required: boolean
   subagent_policy: 'force-remove' | 'inherit' | 'top-level-only'
-  worker_policy: 'force-remove' | 'guarded' | 'inherit' | 'top-level-only'
   tool_names: string[]
 }
 
@@ -168,13 +165,13 @@ export interface SubagentBinding {
   name: string
   description: string
   subagent_override_id: string
+  include_client_messages: boolean
 }
 
 export interface PrimaryAgentPayload {
   name: string
   capability_refs: CapabilityReference[]
   subagents: SubagentBinding[]
-  workers: WorkerBinding[]
 }
 
 export type PrimaryAgent = PrimaryAgentPayload & { id: string }
@@ -192,31 +189,10 @@ export interface SubagentOverridePayload {
 
 export type SubagentOverride = SubagentOverridePayload & { id: string }
 
-export interface WorkerBinding {
-  name: string
-  description: string
-  worker_profile_id: string
-}
-
-export interface WorkerCapabilityOverride {
-  type: BlockType
-  mode: 'disabled' | 'replace'
-  block_id: string
-}
-
-export interface WorkerProfilePayload {
-  name: string
-  include_client_messages: boolean
-  capability_overrides: WorkerCapabilityOverride[]
-}
-
-export type WorkerProfile = WorkerProfilePayload & { id: string }
-
 export type ValidationTarget =
   | { kind: 'block'; type: BlockType; id?: string }
   | { kind: 'primary'; type?: ''; id?: string }
   | { kind: 'subagent-override'; type?: ''; id?: string }
-  | { kind: 'worker-profile'; type?: ''; id?: string }
 
 export interface DraftValidationRequest {
   target: ValidationTarget

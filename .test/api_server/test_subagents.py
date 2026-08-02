@@ -102,8 +102,18 @@ def test_subagent_runs_without_project_filesystem(
     assert response.json()["choices"][0]["message"]["content"].endswith(
         "parent completed"
     )
-    assert ParentModel.bound_tool_names == ["task"]
-    assert ChildModel.bound_tool_names == []
+    expected_deep_agent_tools = [
+        "ls",
+        "read_file",
+        "write_file",
+        "edit_file",
+        "delete",
+        "glob",
+        "grep",
+        "task",
+    ]
+    assert ParentModel.bound_tool_names == expected_deep_agent_tools
+    assert ChildModel.bound_tool_names == expected_deep_agent_tools
 
 
 def test_skill_fallback_is_consumer_local_and_read_only_for_subagent(
@@ -283,7 +293,7 @@ def test_skill_fallback_is_consumer_local_and_read_only_for_subagent(
 
     assert response.status_code == 200, response.text
     assert ParentModel.bound_tool_names == ["read_file", "task"]
-    assert ChildModel.bound_tool_names == ["read_file"]
+    assert ChildModel.bound_tool_names == ["read_file", "task"]
 
     parent_messages = ParentModel.seen_messages[-1]
     child_messages = ChildModel.seen_messages[-1]
@@ -548,8 +558,8 @@ def test_shared_filesystem_keeps_skill_namespace_isolated_between_children(
 
     assert response.status_code == 200, response.text
     assert ParentModel.bound_tool_names == ["read_file", "task"]
-    assert ChildAModel.bound_tool_names == ["read_file"]
-    assert ChildBModel.bound_tool_names == ["read_file"]
+    assert ChildAModel.bound_tool_names == ["read_file", "task"]
+    assert ChildBModel.bound_tool_names == ["read_file", "task"]
 
     def results(messages: list[object]) -> dict[str, str]:
         return {
@@ -692,7 +702,8 @@ def test_selected_subagent_applies_effective_overrides_and_returns_result(
         "parent completed"
     )
     assert ParentModel.bound_tool_names == ["read_file", "task"]
-    assert ChildModel.bound_tool_names == ["read_file"]
+    assert ChildModel.bound_tool_names == ["read_file", "task"]
+    assert "general-purpose" in ChildModel.bound_tool_descriptions["task"]
     child_system = next(
         message for message in ChildModel.seen_messages[0] if message.type == "system"
     )
@@ -703,10 +714,11 @@ def test_selected_subagent_applies_effective_overrides_and_returns_result(
         for message in ParentModel.seen_messages[0]
         if message.type == "system"
     )
-    child_human = next(
-        message for message in ChildModel.seen_messages[0] if message.type == "human"
-    )
-    assert child_human.text == "Solve the delegated check."
+    assert [
+        message.text
+        for message in ChildModel.seen_messages[0]
+        if message.type == "human"
+    ] == ["Solve the delegated check."]
     task_result = next(
         message
         for message in ParentModel.seen_messages[1]
@@ -822,12 +834,183 @@ def test_subagent_inherits_current_primary_without_saved_override(
         "parent received self result"
     )
     assert ParentModel.bound_tool_names == ["read_file", "task"]
-    assert ChildModel.bound_tool_names == ["read_file"]
+    assert ChildModel.bound_tool_names == ["read_file", "task"]
     child_system = next(
         message for message in ChildModel.seen_messages[0] if message.type == "system"
     )
     assert child_system.text == "SELF INHERITED PROMPT"
     assert "Filesystem Tools" not in child_system.text
+
+
+def test_subagent_prompt_override_builds_from_frozen_client_messages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class ParentModel(ToolCallingFakeModel):
+        seen_messages: ClassVar[list[list[object]]] = []
+
+    class ChildModel(ToolCallingFakeModel):
+        seen_messages: ClassVar[list[list[object]]] = []
+        bound_tool_names: ClassVar[list[str]] = []
+
+    parent_model = ParentModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[{
+                    "name": "task",
+                    "args": {
+                        "description": "Run the override prompt.",
+                        "subagent_type": "override_worker",
+                    },
+                    "id": "call-override-prompt",
+                    "type": "tool_call",
+                }],
+            ),
+            AIMessage(content="parent completed"),
+        ]
+    )
+    child_model = ChildModel(
+        responses=[AIMessage(content="override child completed")]
+    )
+
+    with make_client(tmp_path, monkeypatch) as client:
+        monkeypatch.setattr(
+            "agent_shell.runtime.agent_builder._build_chat_model",
+            lambda block, _credential, *_args: (
+                child_model if block["name"] == "Override child model" else parent_model
+            ),
+        )
+        primary = create_primary(client, include_filesystem=False)
+
+        def create_model(name: str) -> dict:
+            response = client.post(
+                "/api/blocks/model",
+                json={
+                    "name": name,
+                    "provider": "openai",
+                    "base_url": "https://provider.example/v1",
+                    "credential": f"{name}-secret",
+                    "model": f"{name}-model",
+                    "provider_settings": {},
+                    "tool_choice": None,
+                    "response_format": None,
+                    "model_settings": {},
+                },
+            )
+            assert response.status_code == 200, response.text
+            return response.json()
+
+        override_model = create_model("Override child model")
+        override_preset_response = client.post(
+            "/api/blocks/prompt-preset",
+            json={
+                "name": "Delegated task startup",
+                "tag_replacements": [],
+                "startup_messages": [
+                    {
+                        "role": "user",
+                        "content_template": "Delegated: {task}",
+                    },
+                    {
+                        "role": "assistant",
+                        "content_template": "Ready as {agent_name}.",
+                    },
+                ],
+            },
+        )
+        assert override_preset_response.status_code == 200, (
+            override_preset_response.text
+        )
+        override_preset = override_preset_response.json()
+
+        def create_override(
+            name: str, model: dict, prompt_preset: dict | None = None
+        ) -> dict:
+            capability_overrides = [{
+                "type": "model",
+                "mode": "replace",
+                "block_id": model["id"],
+            }]
+            if prompt_preset is not None:
+                capability_overrides.append({
+                    "type": "prompt-preset",
+                    "mode": "replace",
+                    "block_id": prompt_preset["id"],
+                })
+            response = client.post(
+                "/api/subagent-overrides",
+                json={
+                    "name": name,
+                    "capability_overrides": capability_overrides,
+                },
+            )
+            assert response.status_code == 200, response.text
+            return response.json()
+
+        prompt_override = create_override(
+            "Override prompt child", override_model, override_preset
+        )
+        delegation_response = client.post(
+            "/api/blocks/subagent",
+            json={"name": "Prompt construction delegation"},
+        )
+        assert delegation_response.status_code == 200, delegation_response.text
+        updated = client.put(
+            f"/api/primary-agents/{primary['id']}",
+            json={
+                "name": primary["name"],
+                "capability_refs": [
+                    *primary["capability_refs"],
+                    {
+                        "type": "subagent",
+                        "block_id": delegation_response.json()["id"],
+                    },
+                ],
+                "subagents": [
+                    {
+                        "name": "override_worker",
+                        "description": "Uses a child-only Prompt Preset.",
+                        "subagent_override_id": prompt_override["id"],
+                        "include_client_messages": True,
+                    },
+                ],
+            },
+        )
+        assert updated.status_code == 200, updated.text
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": primary["name"],
+                "messages": [
+                    {"role": "system", "content": "CLIENT SYSTEM"},
+                    {"role": "user", "content": "Earlier request"},
+                    {"role": "assistant", "content": "Earlier response"},
+                    {"role": "user", "content": "Current request"},
+                ],
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["choices"][0]["message"]["content"].endswith(
+        "parent completed"
+    )
+    assert "task" in ChildModel.bound_tool_names
+
+    def messages_from_client_prefix(messages: list[object]) -> list[tuple[str, str]]:
+        pairs = [(message.type, message.text) for message in messages]
+        start = pairs.index(("system", "CLIENT SYSTEM"))
+        return pairs[start:]
+
+    assert messages_from_client_prefix(ChildModel.seen_messages[0]) == [
+        ("system", "CLIENT SYSTEM"),
+        ("human", "Earlier request"),
+        ("ai", "Earlier response"),
+        ("human", "Current request"),
+        ("human", "Delegated: Run the override prompt."),
+        ("ai", "Ready as override_worker."),
+        ("human", "Run the override prompt."),
+    ]
+
 
 def test_subagent_shares_primary_request_files_without_reloading_sources(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

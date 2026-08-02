@@ -15,7 +15,6 @@ import {
   agentAuthoringServiceKey,
   blankPrimaryAgent,
   blankSubagentBinding,
-  blankWorkerBinding,
   managementAgentAuthoringService,
   normalizePrimaryAgent,
   primaryAgentPayload,
@@ -27,7 +26,6 @@ import {
   type PrimaryAgentProfile,
   type StoredBlock,
   type SubagentOverrideProfile,
-  type WorkerProfileRecord,
 } from '@/domain/agents'
 
 const props = defineProps<{
@@ -48,7 +46,6 @@ const manifests = ref<CapabilityManifest[]>([])
 const blocks = ref<Record<string, StoredBlock[]>>({})
 const profiles = ref<PrimaryAgentProfile[]>([])
 const overrideProfiles = ref<SubagentOverrideProfile[]>([])
-const workerProfiles = ref<WorkerProfileRecord[]>([])
 const selectedProfileId = ref('')
 const form = ref(blankPrimaryAgent())
 let profileLoadSequence = 0
@@ -154,14 +151,6 @@ function removeBinding(index: number): void {
   form.value.subagents.splice(index, 1)
 }
 
-function addWorkerBinding(): void {
-  form.value.workers.push(blankWorkerBinding())
-}
-
-function removeWorkerBinding(index: number): void {
-  form.value.workers.splice(index, 1)
-}
-
 function upsertProfile(saved: PrimaryAgentProfile): void {
   const index = profiles.value.findIndex((profile) => profile.id === saved.id)
   if (index === -1) profiles.value.push(saved)
@@ -206,16 +195,14 @@ async function loadWorkspace(): Promise<void> {
   }
   loading.value = true
   try {
-    const [catalog, primaryItems, overrideItems, workerItems] = await Promise.all([
+    const [catalog, primaryItems, overrideItems] = await Promise.all([
       service.value.getCatalog(),
       service.value.listPrimaryAgents(),
       service.value.listSubagentOverrides(),
-      service.value.listWorkerProfiles(),
     ])
     manifests.value = [...catalog.block_types].sort((left, right) => left.order - right.order)
     profiles.value = primaryItems.map(normalizePrimaryAgent)
     overrideProfiles.value = overrideItems
-    workerProfiles.value = workerItems
     const entries = await Promise.all(manifests.value.map(async (manifest) => [
       manifest.type,
       await service.value?.listBlocks(manifest.type) ?? [],
@@ -373,63 +360,24 @@ watch(
                     <textarea v-model="binding.description" class="form-control" rows="4" />
                   </FormField>
                 </div>
+                <div class="col-12">
+                  <div class="form-check">
+                    <input
+                      :id="`subagent-include-client-${index}`"
+                      v-model="binding.include_client_messages"
+                      class="form-check-input"
+                      type="checkbox"
+                    >
+                    <label class="form-check-label" :for="`subagent-include-client-${index}`">
+                      {{ t('fields.include_client_messages') }}
+                    </label>
+                  </div>
+                </div>
               </div>
             </div>
           </article>
         </section>
 
-        <section aria-labelledby="primary-worker-bindings-title">
-          <header class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-            <h2 id="primary-worker-bindings-title" class="h5 fw-semibold mb-0">
-              {{ t('agents.primary.workerBindingsTitle') }}
-            </h2>
-            <LteButton theme="success" type="button" @click="addWorkerBinding">
-              {{ t('agents.primary.addWorkerBinding') }}
-            </LteButton>
-          </header>
-          <p v-if="form.workers.length === 0" class="text-body-secondary">
-            {{ t('agents.primary.noWorkerBindings') }}
-          </p>
-          <article
-            v-for="(binding, index) in form.workers"
-            :key="index"
-            class="card mb-3"
-            data-testid="worker-binding-card"
-          >
-            <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-              <h3 class="card-title mb-0">
-                {{ binding.name || t('agents.primary.unnamedWorkerBinding') }}
-              </h3>
-              <LteButton class="ms-auto" data-action="remove-worker-binding" theme="danger" type="button" @click="removeWorkerBinding(index)">
-                {{ t('common.remove') }}
-              </LteButton>
-            </header>
-            <div class="card-body">
-              <div class="row g-3">
-                <div class="col-md-6">
-                  <FormField :field-path="`workers.${index}.name`">
-                    <input v-model="binding.name" autocomplete="off" class="form-control">
-                  </FormField>
-                </div>
-                <div class="col-md-6">
-                  <FormField :field-path="`workers.${index}.worker_profile_id`">
-                    <select v-model="binding.worker_profile_id" class="form-select" data-testid="worker-binding-profile">
-                      <option disabled value="">{{ t('common.chooseConfiguration') }}</option>
-                      <option v-for="profile in workerProfiles" :key="profile.id" :value="profile.id">
-                        {{ profile.name }}
-                      </option>
-                    </select>
-                  </FormField>
-                </div>
-                <div class="col-12">
-                  <FormField :field-path="`workers.${index}.description`">
-                    <textarea v-model="binding.description" class="form-control" rows="4" />
-                  </FormField>
-                </div>
-              </div>
-            </div>
-          </article>
-        </section>
       </section>
 
       <aside class="col-lg-4">

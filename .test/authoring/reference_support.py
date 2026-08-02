@@ -24,7 +24,6 @@ OUTPUT_EVENT_TYPES = (
     "tool_result",
     "tool_error",
     "subagent",
-    "context_worker",
     "custom",
     "lifecycle",
 )
@@ -78,11 +77,10 @@ def block_payload(capability_type: str, name: str) -> dict:
             "startup_messages": [
                 {
                     "role": "user",
-                    "content_template": "Begin as {agent_name}. Available: {available_workers}",
+                    "content_template": "Begin as {agent_name}.",
                 }
             ],
         },
-        "worker-delegation": {"name": name},
         "exception-retry": {
             "name": name,
             "strategy": "provider_native",

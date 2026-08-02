@@ -34,6 +34,10 @@ from agent_shell.runtime.model_request_settings import (
     make_model_request_settings_middleware,
 )
 from agent_shell.runtime.model_response import ModelResponse
+from agent_shell.runtime.subagent_input import (
+    AgentRequestContext,
+    SubagentInputMiddleware,
+)
 from agent_shell.validation.capability_assembly import FilesystemMode
 from agent_shell.validation.models import ValidationIssue, ValidationReport
 from agent_shell.validation.service import ConfigurationValidationService
@@ -141,6 +145,7 @@ class BuiltAgent:
     input_state: dict[str, Any]
     output_config: dict[str, Any]
     agent_name: str
+    context: AgentRequestContext
 
 
 class AgentBuilder:
@@ -558,16 +563,11 @@ class AgentBuilder:
         primary_name = str(primary["name"])
         from agent_shell.runtime.prompt_preset import prepare_agent_input
 
-        available_workers = "\n".join(
-            f"- {resolved.binding['name']}: {resolved.binding['description']}"
-            for resolved in assembly.workers
-        )
         prepared_input = prepare_agent_input(
             messages,
             selected_blocks.get("prompt-preset"),
             variables={
                 "agent_name": primary_name,
-                "available_workers": available_workers,
             },
         )
         if agent_input_observer is not None:
@@ -589,44 +589,10 @@ class AgentBuilder:
             owner_id=primary_id,
             owner_name=primary_name,
         )
-        if assembly.workers:
-            from agent_shell.runtime.context_workers import build_context_worker_tool
-
-            try:
-                worker_tool = build_context_worker_tool(
-                    assembly.workers,
-                    messages,
-                    selected_blocks["worker-delegation"],
-                    primary_id=primary_id,
-                    materialize_profile=self._materialize_profile,
-                    validate_middleware_names=self._validate_middleware_names,
-                    validate_tool_names=self._validate_model_visible_tool_names,
-                    agent_input_observer=agent_input_observer,
-                    model_request_observer=model_request_observer,
-                    model_response_observer=model_response_observer,
-                )
-            except AgentRuntimeError as exc:
-                raise self._reported_error(
-                    exc,
-                    scope="primary",
-                    owner_id=primary_id,
-                    owner_name=primary_name,
-                    path="workers",
-                ) from exc
-            except Exception as exc:
-                raise self._configuration_error(
-                    "context_worker_configuration_failed",
-                    "The selected Context Workers could not be constructed.",
-                    status_code=422,
-                    scope="primary",
-                    owner_id=primary_id,
-                    owner_name=primary_name,
-                    path="workers",
-                ) from exc
-            materialized["tools"].append(worker_tool)
         constructor: dict[str, object] = {
             "model": materialized["model"],
             "name": str(primary["name"]),
+            "context_schema": AgentRequestContext,
         }
         if materialized["system_prompt"] is not None:
             constructor["system_prompt"] = materialized["system_prompt"]
@@ -648,6 +614,9 @@ class AgentBuilder:
                 )
             )
         input_state: dict[str, Any] = {"messages": prepared_input.messages}
+        request_context: AgentRequestContext = {
+            "client_messages": [dict(message) for message in messages]
+        }
         initial_files = dict(materialized["initial_files"])
 
         compiled_subagents: list[dict[str, Any]] = []
@@ -670,6 +639,19 @@ class AgentBuilder:
                     ToolErrorBoundaryMiddleware(),
                     *child["middleware"],
                 ]
+                child_preset = child_blocks.get("prompt-preset")
+                if bool(binding.get("include_client_messages")) or child_preset:
+                    child_middleware.insert(
+                        1,
+                        SubagentInputMiddleware(
+                            agent_name=child_name,
+                            include_client_messages=bool(
+                                binding.get("include_client_messages")
+                            ),
+                            preset=child_preset,
+                            observer=agent_input_observer,
+                        ),
+                    )
                 if child["tool_choice"] is not None or child["model_settings"]:
                     child_middleware.append(
                         make_model_request_settings_middleware(
@@ -702,7 +684,8 @@ class AgentBuilder:
                             ()
                             if "FilesystemMiddleware" in child_middleware_names
                             else FILESYSTEM_TOOL_NAMES
-                        ),
+                        )
+                        + ("task",),
                     )
                 except AgentRuntimeError as exc:
                     raise self._reported_error(
@@ -716,6 +699,7 @@ class AgentBuilder:
                     "model": child["model"],
                     "name": child_name,
                     "middleware": child_middleware,
+                    "context_schema": AgentRequestContext,
                 }
                 if child["system_prompt"] is not None:
                     child_constructor["system_prompt"] = child["system_prompt"]
@@ -798,7 +782,7 @@ class AgentBuilder:
                     if "FilesystemMiddleware" in primary_middleware_names
                     else FILESYSTEM_TOOL_NAMES
                 )
-                + (("task",) if compiled_subagents else ()),
+                + ("task",),
             )
         except AgentRuntimeError as exc:
             raise self._reported_error(
@@ -823,4 +807,5 @@ class AgentBuilder:
             input_state=input_state,
             output_config=output_config,
             agent_name=str(primary["name"]),
+            context=request_context,
         )

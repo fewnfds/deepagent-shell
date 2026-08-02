@@ -23,7 +23,6 @@ PUBLIC_TYPES = (
     "exception-retry",
     "prompt-preset",
     "subagent",
-    "worker-delegation",
 )
 
 OUTPUT_EVENT_TYPES = (
@@ -33,7 +32,6 @@ OUTPUT_EVENT_TYPES = (
     "tool_result",
     "tool_error",
     "subagent",
-    "context_worker",
     "custom",
     "lifecycle",
 )
@@ -172,5 +170,4 @@ def block_cases(tmp_path: Path) -> list[tuple[str, dict]]:
                 ],
             },
         ),
-        ("worker-delegation", {"name": "Context Worker delegation"}),
     ]

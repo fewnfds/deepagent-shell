@@ -7,7 +7,7 @@
 
 1. [启动并认识管理台](user-guide/getting-started.md)
 2. [创建组件](user-guide/capabilities.md)
-3. [装配 Primary、Subagent 与 Context Worker](user-guide/configuration-workflow.md)
+3. [装配 Primary 与 Subagent](user-guide/configuration-workflow.md)
 4. [使用配置仓库](user-guide/configuration-library.md)
 5. [调用 API Server](user-guide/api-server.md)
 6. [查看最终 ModelRequest](user-guide/interception-test.md)

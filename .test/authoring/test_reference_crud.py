@@ -252,30 +252,6 @@ def test_primary_reference_create_update_and_delete_protection_cover_every_type(
     client = make_client(tmp_path, monkeypatch)
     original = create_blocks(client, "original")
     replacement = create_blocks(client, "replacement")
-    worker_preset = client.post(
-        "/api/blocks/prompt-preset",
-        json={
-            "name": "Matrix Worker preset",
-            "tag_replacements": [],
-            "startup_messages": [
-                {"role": "user", "content_template": "Complete {task}."}
-            ],
-        },
-    ).json()
-    worker_profile = client.post(
-        "/api/worker-profiles",
-        json={
-            "name": "Matrix Worker profile",
-            "include_client_messages": True,
-            "capability_overrides": [
-                {
-                    "type": "prompt-preset",
-                    "mode": "replace",
-                    "block_id": worker_preset["id"],
-                }
-            ],
-        },
-    ).json()
 
     response = client.post(
         "/api/primary-agents",
@@ -286,11 +262,6 @@ def test_primary_reference_create_update_and_delete_protection_cover_every_type(
                 "name": "matrix_worker",
                 "description": "Exercises every selected capability reference.",
                 "subagent_override_id": "",
-            }],
-            "workers": [{
-                "name": "matrix_context_worker",
-                "description": "Exercises the Worker Delegation reference.",
-                "worker_profile_id": worker_profile["id"],
             }],
         },
     )
@@ -308,7 +279,6 @@ def test_primary_reference_create_update_and_delete_protection_cover_every_type(
             "name": primary["name"],
             "capability_refs": references(replacement),
             "subagents": primary["subagents"],
-            "workers": primary["workers"],
         },
     )
     assert updated.status_code == 200, updated.text

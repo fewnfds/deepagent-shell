@@ -3,16 +3,12 @@ import { describe, expect, it } from 'vitest'
 import {
   blankPrimaryAgent,
   blankSubagentOverride,
-  blankWorkerProfile,
   normalizeSubagentBinding,
   overrideSelection,
   primaryAgentPayload,
   setOverrideSelection,
   setReference,
-  setWorkerOverrideSelection,
   subagentOverridePayload,
-  workerOverrideSelection,
-  workerProfilePayload,
 } from './agents'
 
 describe('agent profile adapters', () => {
@@ -29,21 +25,6 @@ describe('agent profile adapters', () => {
         block_id: '00000000-0000-0000-0000-000000000001',
       }, { type: 'unknown', block_id: 'discarded' }],
       subagents: [],
-      workers: [],
-    })
-  })
-
-  it('stores Context Worker component choices independently from Subagent overrides', () => {
-    const draft = blankWorkerProfile()
-    draft.include_client_messages = false
-    setWorkerOverrideSelection(draft, 'model', 'replace', '00000000-0000-0000-0000-000000000003')
-    expect(workerOverrideSelection(draft, 'model').mode).toBe('replace')
-    expect(workerProfilePayload(draft)).toEqual({
-      name: '',
-      include_client_messages: false,
-      capability_overrides: [{
-        type: 'model', mode: 'replace', block_id: '00000000-0000-0000-0000-000000000003',
-      }],
     })
   })
 
@@ -63,10 +44,12 @@ describe('agent profile adapters', () => {
       name: 'researcher',
       description: 'Research delegated topics',
       subagent_override_id: '',
+      include_client_messages: true,
     })).toEqual({
       name: 'researcher',
       description: 'Research delegated topics',
       subagent_override_id: '',
+      include_client_messages: true,
     })
   })
 })

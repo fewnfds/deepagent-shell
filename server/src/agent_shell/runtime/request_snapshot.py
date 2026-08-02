@@ -28,7 +28,6 @@ class _SnapshotDatabase:
         ("blocks", ("id", "block_type", "name", "payload")),
         ("primary_agents", ("id", "name", "payload")),
         ("subagent_overrides", ("id", "name", "payload")),
-        ("worker_profiles", ("id", "name", "payload")),
     )
 
     def __init__(self, source: SQLiteDatabase) -> None:

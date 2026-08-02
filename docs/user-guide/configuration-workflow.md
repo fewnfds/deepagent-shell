@@ -1,14 +1,12 @@
-# 装配 Primary、Subagent 与 Context Worker
+# 装配 Primary 与 Subagent
 
 ## Primary
 
 在【Agent / Primary Agent】选择已有配置或填写新名称，然后按顺序选择：模型、系统提示词、文件系统、
-待办计划、自定义工具、Skill、自定义 Middleware、输出模式、异常重试、提示词预设、Subagent 和
-Context Worker 委派。
+待办计划、自定义工具、Skill、自定义 Middleware、输出模式、异常重试、提示词预设和 Subagent。
 
 模型和输出模式是必选项，缺少任一项时右侧草稿校验区会显示问题，服务端保存会拒绝；
-文件系统及其他能力最多各选择一份，不选择就不装配。委派区域分别保存 `subagents[]` 与 `workers[]`。
-每条 Subagent binding 固定以
+文件系统及其他能力最多各选择一份，不选择就不装配。委派区域保存 `subagents[]`。每条 Subagent binding 固定以
 当前 Primary 为基础，只保存可选的覆写策略 UUID，不复制被引用 payload。
 
 保存后的 Primary 在 API Server 通过静态门禁并处于 running 时作为 `/v1/models` 中的 model
@@ -24,7 +22,7 @@ Context Worker 委派。
 
 model 只能继承或替换。项目 filesystem 在当前 Primary 选择时固定继承；未选择项目 Filesystem 时，Subagent
 仍使用 Deep Agents 默认 StateBackend 文件工具；
-output mode、提示词预设、Subagent 和 Context Worker 委派按 manifest 策略从 Subagent 移除，不提供覆写选项。
+output mode 与 Subagent 按 manifest 策略从 child 移除；提示词预设可以继承、替换或关闭。
 
 ## 绑定
 
@@ -32,29 +30,34 @@ Primary 的每条 binding 添加后立即启用，并需要：
 
 - 在该 Primary 内唯一、符合标识符规则的名称；
 - 面向父 Agent 的用途说明；
-- 可选的 Subagent 覆写策略；不选择表示完整继承当前 Primary。
+- 可选的 Subagent 覆写策略；不选择表示完整继承当前 Primary；
+- 是否接收本次请求冻结的原始客户端消息，默认关闭。
 
-真实请求按“当前 Primary + 可选覆写 - 顶层专属能力”构造同步 Subagent。当前 Primary 的自身
-bindings 不会继续解析，因此不会递归委派。binding 不保存其他 Primary ID；完整继承时只把
+真实请求按“当前 Primary + 可选覆写 - 顶层专属能力”构造同步 Subagent。当前 Primary 的命名
+bindings 不会复制到 child；child 未显式传入命名 children 时仍有 Deep Agents 默认
+`general-purpose/task`，因此可以递归委派。binding 不保存其他 Primary ID；完整继承时只把
 `subagent_override_id` 留空，也不要求创建空覆写配置。
 
-## Context Worker Profile 与绑定
+## Subagent 输入与缓存友好装配
 
-【Agent / Context Worker】保存独立 Worker 的 `include_client_messages` 和组件覆写。允许覆写的能力可继承
-当前 Primary、替换为同类型组件或关闭可选能力；具体范围由后端 manifest 的 Worker 策略决定。
+`include_client_messages=true` 时，child 的 LangChain 原生 node-style `before_agent` Middleware 读取请求
+context 中的冻结客户端消息，应用 child 最终 Prompt Preset，追加 Preset 启动消息，再保留 Deep Agents
+传入的委派 task。为 `false` 时只准备 child 的启动消息与 task。每次委派使用 fresh state，不继承
+Primary 已产生的 AI/Tool 过程，也不包裹 `CompiledSubAgent` runnable。
 
-Primary 的每条 `workers[]` binding 必须有唯一名称、用途说明和 Worker Profile UUID。Primary 同时选择
-Context Worker 委派组件后，LangChain Agent 获得 `run_worker(worker, task)` Tool；一个模型响应可产生
-多个并行调用。Worker 从冻结客户端消息副本和自己的 Prompt Preset 启动，不继承 Primary 的 AI/Tool
-过程。DeepAgents Subagent 与 Context Worker 是并列能力，互不覆盖。
+Subagent 继续允许按策略自由装配；普通组合不承诺跨 Agent Prompt Caching。需要尽量共享较长前缀时，
+启用客户端消息并完整继承，确保最终 model、system prompt、Prompt Preset、客户端消息、按序 tool
+schema、response schema 与相关 model settings 实际一致。工具不能假定为缓存键中的较后部分，默认
+`task` 的 schema 也可能因命名 Subagent 列表不同而变化。实际缓存门槛、范围、TTL、计费和命中由具体
+Provider/model 决定。
 
 ## 保存期与运行期
 
-组件、Primary Agent、Subagent 覆写和 Context Worker Profile 页把完整草稿发给同一个后端预校验入口。文本、数字等连续输入停止固定
+组件、Primary Agent 和 Subagent 覆写页把完整草稿发给同一个后端预校验入口。文本、数字等连续输入停止固定
 1000ms 后刷新；能力选择等离散操作可立即刷新。清单明确区分“正在校验”“有效”“无效”和
 “校验状态不可用”，并忽略晚到的旧草稿响应。问题项使用后端给出的 owner、字段 path、稳定
 message key 和安全参数，并按当前页面语言显示；前端不重新判断 required、依赖、引用、最终
-Subagent、Context Worker 或工具名。无效与不可用状态统一显示为默认收起的报警摘要，展开后才显示完整问题；每个问题
+Subagent 或工具名。无效与不可用状态统一显示为默认收起的报警摘要，展开后才显示完整问题；每个问题
 都必须有非空的问题位置、原因和处理方法，未知错误代码也使用安全通用兜底，不显示空字段名或空处理方法。
 
 保存按钮不依赖最近一次实时报告是否显示“通过”；点击后服务端一定用当前 payload 再校验，因此直接 API
@@ -62,21 +65,21 @@ Subagent、Context Worker 或工具名。无效与不可用状态统一显示为
 显示成绿色。Subagent 的继承与覆写由后端解析。
 
 Primary 保存和每次真实请求现在复用同一个后端静态装配校验，统一检查 required、失效 UUID、
-委派 binding、有效 Subagent/Context Worker 最终引用、被引用组件当前结构、最终 Filesystem 装配模式和可静态确定的工具
+委派 binding、有效 Subagent 最终引用、被引用组件当前结构、最终 Filesystem 装配模式和可静态确定的工具
 重名。自定义 Tool 的静态名称来自 AST 可确定的函数默认名或字面量 `@tool` 名，不使用资源文件名
 猜测。组件、Primary 和覆写自身的
 严格 contract 错误会使用统一问题报告返回稳定 code、字段路径与安全说明，不回显原始输入。
-所有组件、Primary、Subagent 覆写和 Worker Profile 在新建、覆盖或从仓库复制时都会由服务端重新校验；直接调用
+所有组件、Primary 和 Subagent 覆写在新建、覆盖或从仓库复制时都会由服务端重新校验；直接调用
 management API 也不能绕过。更新已有组件或覆写时，服务端会用拟保存内容检查正在引用它的
 Primary 与绑定的 Subagent；如果新增装配问题，本次写入会被拒绝，数据库仍保留原内容。已有的
 无关旧问题不会阻止修复其他配置。
 仓库复制只把源 UUID 和新名称提交给对应服务端 copy endpoint；服务端读取当前源记录并复用上述
 校验后生成新 UUID。页面不再用 GET、改名、POST 模拟复制，副本也不会改写源配置或移动任何引用。
 管理页面通过一个通用的 `POST /api/validation/draft` 提交 `target` 与完整草稿做不落库预校验；
-block、Primary、Subagent 覆写和 Worker Profile 共用同一入口与保存规则。后端返回稳定 code、message key 和安全
+block、Primary 和 Subagent 覆写共用同一入口与保存规则。后端返回稳定 code、message key 和安全
 参数；页面通过 vue-i18n 显示当前语言，不解析英文 fallback，也不弹出只有错误码的对话框。
 输出模式模板的未闭合双花括号、未知变量和空启用模板使用专用稳定 code，并定位到具体事件模板；
-Subagent 与 Context Worker binding 的名称缺失、名称格式、说明缺失和重复名称分别使用专用稳定 code，
+Subagent binding 的名称缺失、名称格式、说明缺失和重复名称分别使用专用稳定 code，
 并精确定位到对应数组字段；不会退化成 Primary 的整份配置错误。
 其余普通 contract 错误至少提示所属配置、字段或整份配置，并建议检查格式、JSON 结构或模板语法。
 Python 资源能否物化、
@@ -86,11 +89,11 @@ DeepAgents 是否安装、磁盘资源是否仍存在、Provider 能否连接，
 结构可保存并参与装配，不表示外部状态以后不会变化。
 
 请求准备期的静态和动态配置问题都归入后端 `request_prepare` 报告，内部保留稳定 code、
-Primary/Subagent/Context Worker owner、领域 path 和安全 message；OpenAI-compatible API 用同一问题生成现有错误
+Primary/Subagent owner、领域 path 和安全 message；OpenAI-compatible API 用同一问题生成现有错误
 外壳。报告对象在统一边界脱敏用户可控的 owner、path 和 message，不把 secret、Bearer token、
 源码、宿主路径或 traceback 返回给调用者。Primary 与同步 Subagent owner 成功物化的 Tool、Middleware、
-model 和 filesystem 对象直接交给本次唯一 `create_deep_agent()`；当前 Context Worker 仍直接交给自己的 `create_agent()`，不会先“试构造”再重复
-构造。Provider/Tool/graph 真正执行后的失败仍属于 runtime，不混进配置报告。
+model 和 filesystem 对象直接交给本次唯一 `create_deep_agent()`，不会先“试构造”再重复构造。
+Provider/Tool/graph 真正执行后的失败仍属于 runtime，不混进配置报告。
 
 修改组件、当前 Primary、覆写策略或 Provider credential 后，后续请求使用新配置；正在运行的请求
 继续使用其已经构造的对象。每个新推理请求先在一次 SQLite 读事务中复制配置和 secret，再从该

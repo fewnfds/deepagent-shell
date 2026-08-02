@@ -15,14 +15,12 @@ import {
   subagentAdapter,
   systemPromptAdapter,
   todoListAdapter,
-  workerDelegationAdapter,
   type FilesystemDefaults,
   type ExceptionRetryDefaults,
   type OutputModeDefaults,
   type SkillDefaults,
   type SubagentDefaults,
   type TodoListDefaults,
-  type WorkerDelegationDefaults,
 } from '@/domain/blocks'
 import { zhCN } from '@/locales/zh-CN'
 
@@ -38,7 +36,6 @@ import {
   SubagentCapabilityEditor,
   SystemPromptEditor,
   TodoListEditor,
-  WorkerDelegationEditor,
 } from './index'
 
 const filesystemDefaults: FilesystemDefaults = {
@@ -90,16 +87,6 @@ const todoDefaults: TodoListDefaults = {
 const promptPresetDefaults = {
   template_variables: ['{agent_name}', '{task}'],
 }
-const workerDelegationDefaults: WorkerDelegationDefaults = {
-  default_value: {
-    tool_description: 'delegate a task',
-    worker_parameter_description: 'worker name',
-    task_parameter_description: 'complete task',
-    max_worker_calls_per_request: 16,
-    max_parallel_workers: 4,
-  },
-}
-
 const i18n = createI18n({
   legacy: false,
   locale: 'en',
@@ -149,10 +136,6 @@ describe('dedicated block editors', () => {
       mountEditor(SubagentCapabilityEditor, {
         modelValue: subagentAdapter.blank(subagentDefaults), defaults: subagentDefaults,
       }),
-      mountEditor(WorkerDelegationEditor, {
-        modelValue: workerDelegationAdapter.blank(workerDelegationDefaults),
-        defaults: workerDelegationDefaults,
-      }),
       mountEditor(TodoListEditor, {
         modelValue: todoListAdapter.blank(todoDefaults), defaults: todoDefaults,
       }),
@@ -160,7 +143,7 @@ describe('dedicated block editors', () => {
 
     expect(wrappers.map((wrapper) => wrapper.attributes('data-editor'))).toEqual([
       'model', 'custom-tool', 'custom-middleware', 'output-mode', 'exception-retry', 'prompt-preset',
-      'filesystem', 'skill', 'system-prompt', 'subagent', 'worker-delegation', 'todo-list',
+      'filesystem', 'skill', 'system-prompt', 'subagent', 'todo-list',
     ])
   })
 

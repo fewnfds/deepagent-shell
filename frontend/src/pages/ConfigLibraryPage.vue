@@ -125,7 +125,6 @@ async function refreshRepositoryValidation(): Promise<void> {
 async function listCategory(category: LibraryCategoryId): Promise<LibraryItem[]> {
   if (category === 'primary-agent') return api.value.listPrimaryAgents()
   if (category === 'subagent-override') return api.value.listSubagentOverrides()
-  if (category === 'worker-profile') return api.value.listWorkerProfiles()
   return api.value.listBlocks(category)
 }
 
@@ -184,8 +183,6 @@ async function copyCurrentItem(): Promise<void> {
       await api.value.copyPrimaryAgent(source.id, copyName.value)
     } else if (category === 'subagent-override') {
       await api.value.copySubagentOverride(source.id, copyName.value)
-    } else if (category === 'worker-profile') {
-      await api.value.copyWorkerProfile(source.id, copyName.value)
     } else {
       await api.value.copyBlock(category, source.id, copyName.value)
     }
@@ -298,7 +295,6 @@ const libraryTableConfig: DataTableConfig<LibraryItem> = {
         if (!category) return
         if (category === 'primary-agent') await api.value.deletePrimaryAgent(item.id)
         else if (category === 'subagent-override') await api.value.deleteSubagentOverride(item.id)
-        else if (category === 'worker-profile') await api.value.deleteWorkerProfile(item.id)
         else await api.value.deleteBlock(category, item.id)
         if (detailItem.value?.id === item.id) closeDetail()
         await refreshRepositoryValidation()
@@ -327,8 +323,6 @@ const libraryTableConfig: DataTableConfig<LibraryItem> = {
         ? await api.value.deletePrimaryAgents(ids)
         : category === 'subagent-override'
           ? await api.value.deleteSubagentOverrides(ids)
-          : category === 'worker-profile'
-            ? await api.value.deleteWorkerProfiles(ids)
           : await api.value.deleteBlocks(category, ids)
       closeDetail()
       await refreshRepositoryValidation()

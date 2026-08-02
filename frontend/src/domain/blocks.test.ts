@@ -13,11 +13,9 @@ import {
   subagentAdapter,
   systemPromptAdapter,
   todoListAdapter,
-  workerDelegationAdapter,
   type FilesystemDefaults,
   type ModelApiRecord,
   type OutputModeDefaults,
-  type WorkerDelegationDefaults,
   type SkillDefaults,
   type SubagentDefaults,
   type TodoListDefaults,
@@ -57,16 +55,6 @@ const todoDefaults: TodoListDefaults = {
   system_prompt: 'todo default',
   tool_description: 'write_todos default',
 }
-const workerDelegationDefaults: WorkerDelegationDefaults = {
-  default_value: {
-    tool_description: 'delegate a task',
-    worker_parameter_description: 'worker name',
-    task_parameter_description: 'complete task',
-    max_worker_calls_per_request: 16,
-    max_parallel_workers: 4,
-  },
-}
-
 function modelRecord(): ModelApiRecord {
   return {
     id: 'model-id', name: 'Model', provider: 'openai', base_url: 'https://example.test/v1', model: 'example-model',
@@ -293,13 +281,6 @@ describe('block adapters', () => {
       name: 'Prompt',
       tag_replacements: [{ tag: '|||tag|||', replacement: '' }],
       startup_messages: [{ role: 'user', content_template: 'Do {task}', name: null }],
-    })
-
-    const delegation = workerDelegationAdapter.blank(workerDelegationDefaults)
-    delegation.name = ' Workers '
-    expect(workerDelegationAdapter.toPayload(delegation)).toEqual({
-      name: 'Workers',
-      ...workerDelegationDefaults.default_value,
     })
 
     const skill = skillAdapter.blank(skillDefaults)

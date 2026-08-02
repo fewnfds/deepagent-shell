@@ -88,10 +88,6 @@ def block_reference_owner(
         selection = capability_override(item, block_type)
         if selection.get("mode") == "replace" and selection.get("block_id") == block_id:
             return "subagent_override", str(item.get("name", ""))
-    for item in config_store.list_items("worker_profiles"):
-        selection = capability_override(item, block_type)
-        if selection.get("mode") == "replace" and selection.get("block_id") == block_id:
-            return "worker_profile", str(item.get("name", ""))
     return None
 
 

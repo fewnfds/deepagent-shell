@@ -7,8 +7,8 @@
 
 navbar 使用带轻微红/绿光晕的停止/运行图标表达当前业务状态；悬停提示当前状态和点击后的启停动作。
 
-点击“启动”时，服务端先使用当前统一静态规则全局检查保存的 block、Subagent override、Worker Profile 和全部将作为
-model 公开的 Primary；任一 contract、required、UUID 引用、依赖、Subagent/Context Worker 最终引用或静态
+点击“启动”时，服务端先使用当前统一静态规则全局检查保存的 block、Subagent override 和全部将作为
+model 公开的 Primary；任一 contract、required、UUID 引用、依赖、Subagent 最终引用或静态
 工具名有误，启动返回完整管理报告并保持 stopped。该门禁不构建 Agent、不 import 用户
 Tool/Middleware，也不连接 Provider；对已选择自定义 Tool 只做不执行代码的 AST 名称发现，文件缺失、
 动态名称或 import 状态仍留给真实请求检查。没有 Primary 时可以开启并返回空 models 列表。管理网站、
@@ -32,10 +32,10 @@ API 保存的新值会用于后续请求，已经构造完成的 Agent 不会被
 Primary 才会生成另一份 UUID。
 
 `POST /v1/chat/completions` 在每次 Primary `create_deep_agent()` 前，以一次 SQLite 读事务把 blocks、Primary、
-Subagent override、Worker Profile 和 Provider secret 复制到私有 query-only 内存库。公开 model 名称解析、Primary
+Subagent override 和 Provider secret 复制到私有 query-only 内存库。公开 model 名称解析、Primary
 UUID、静态装配和 credential 都使用这同一份请求快照；捕获完成后的数据库修改只影响后续请求。
-随后构造 selected model、tools、Middleware 和同步 Subagent child graph，并调用真实 `create_deep_agent()`；所需
-Context Worker graph 当前仍调用 `create_agent()`。请求会复用
+随后构造 selected model、tools、Middleware 和同步 Subagent child graph，并调用真实
+`create_deep_agent()`。请求会复用
 保存/启动使用的静态规则，再检查当前磁盘、Skill 元数据、选中用户 Python、最终 Tool/Middleware 名称
 和构造结果；这些准备期问题都会在 Provider 前返回稳定 code 与安全说明。已经成功准备的对象不会
 为了校验再构造一次，未选择的能力不会读取或执行。Provider、Tool 或 graph 真正执行后的失败仍使用

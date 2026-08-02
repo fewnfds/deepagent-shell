@@ -54,8 +54,8 @@ home：`data/` 是完整用户持久数据，`runtime/` 是可重新生成的运
 
 1. 【首页】：查看 API 接入地址和配置报警；API Server 状态与启停位于全局右上角。
 2. 【系统】：系统配置、用户文件管理、日志中心和历史会话。
-3. 【Agent】：装配 Primary，并配置可复用 Subagent 与 Context Worker 策略。
-4. 【组件】：按 manifest 顺序编辑十二类能力。
+3. 【Agent】：装配 Primary，并配置可复用 Subagent 策略。
+4. 【组件】：按 manifest 顺序编辑十一类能力。
 5. 【配置仓库】：查看、复制、编辑和删除配置。
 6. 【术语】：搜索 AI/Agent 中英术语，不保存配置。
 

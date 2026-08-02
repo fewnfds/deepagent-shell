@@ -202,26 +202,6 @@ class V3EventNormalizer:
             )
         if method == "tools":
             return self._tool_events(data, timestamp=timestamp, namespace=namespace)
-        if (
-            method == "custom"
-            and isinstance(data, dict)
-            and data.get("event_type") == "context_worker"
-        ):
-            phase = str(data.get("phase") or "end")
-            status = str(data.get("status") or "")
-            return [
-                self._event(
-                    "context_worker",
-                    phase,
-                    timestamp=timestamp,
-                    namespace=namespace,
-                    message=status,
-                    worker_name=str(data.get("worker_name") or ""),
-                    tool_call_id=str(data.get("tool_call_id") or ""),
-                    status=status,
-                    error_code=str(data.get("error_code") or ""),
-                )
-            ]
         if method == "custom" or method.startswith("custom:"):
             serialized = _json_text(data)
             channel = method.partition(":")[2] or "custom"

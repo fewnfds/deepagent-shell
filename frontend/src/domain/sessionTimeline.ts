@@ -9,7 +9,6 @@ export type SessionTimelineKind =
   | 'tool_result'
   | 'tool_error'
   | 'subagent'
-  | 'context_worker'
   | 'request_output'
 
 export interface SessionTimelineEntry {
@@ -30,7 +29,6 @@ const DISPLAYED_EVENT_KINDS = new Set<SessionTimelineKind>([
   'tool_result',
   'tool_error',
   'subagent',
-  'context_worker',
 ])
 
 function eventData(event: Record<string, unknown>): Record<string, unknown> {

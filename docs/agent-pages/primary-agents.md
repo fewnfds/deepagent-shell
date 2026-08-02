@@ -9,15 +9,14 @@ Primary 保存一份加法式装配：
     {"type": "model", "block_id": "UUID"},
     {"type": "output-mode", "block_id": "UUID"}
   ],
-  "subagents": [],
-  "workers": []
+  "subagents": []
 }
 ```
 
 ## 能力引用
 
 页面顺序为模型、系统提示词、文件系统、待办计划、自定义工具、Skill、自定义 Middleware、输出
-模式、异常重试、提示词预设、Subagent、Context Worker 委派。每个 type 最多一项
+模式、异常重试、提示词预设和 Subagent。每个 type 最多一项
 `{type, block_id}`；未出现就是不装配。
 
 模型和输出模式由 manifest 标为必需，页面没有“不装配”或清除选项，右侧草稿校验区
@@ -31,7 +30,8 @@ Shell 不构造同名替换项，Deep Agents 默认 StateBackend 文件工具仍
 
 - `name`：父 Agent 调用 task 时使用的唯一标识；
 - `description`：告诉父 Agent 何时委派；
-- `subagent_override_id`：可选的覆写策略 UUID；空字符串表示完整继承当前 Primary。
+- `subagent_override_id`：可选的覆写策略 UUID；空字符串表示完整继承当前 Primary；
+- `include_client_messages`：是否把本次请求冻结的原始客户端消息带入 child，默认 `false`。
 
 binding 的名称必须匹配 `[A-Za-z_][A-Za-z0-9_-]*`，同一 Primary 内唯一，说明必填；
 添加 binding 即启用，未完成的 binding 应直接移除。非空覆写 UUID 会参与删除保护。
@@ -41,37 +41,41 @@ binding 的名称必须匹配 `[A-Za-z_][A-Za-z0-9_-]*`，同一 Primary 内唯�
 ```text
 当前 Primary 的 capability_refs
 + 可选 Subagent capability_overrides
-- output mode、Prompt Preset、两类委派能力与当前 Primary 自身 bindings
+- output mode、Subagent block 与当前 Primary 自身 bindings
 = 一个由 `create_deep_agent()` 构造的同步 child graph
 ```
 
 Subagent 不能选择其他 Primary。filesystem 在当前 Primary 选择时固定继承，不提供覆写入口；同一次请求内
 Primary 与全部同步 Subagent 共享项目配置提供的请求级临时文件 state。未选择项目 Filesystem 时，Deep Agents
-默认 StateBackend 仍提供默认文件工具。当前不自动添加 general-purpose；同步 child 是 `create_deep_agent()`
-构造的官方 `CompiledSubAgent`，不支持异步、dynamic 或递归委派。
+默认 StateBackend 仍提供默认文件工具。同步 child 是 `create_deep_agent()` 构造的官方
+`CompiledSubAgent`。Primary 的命名 bindings 不复制到 child；child 未显式传入命名 subagents 时仍保留
+Deep Agents 默认 `general-purpose` 与 `task`，所以可继续递归委派。当前不支持异步或 dynamic Subagent。
 
-## Context Worker binding
+`include_client_messages=true` 时，child 的原生 `before_agent` Middleware 从请求 context 读取冻结客户端
+消息，对其应用 child 最终 Prompt Preset，再把 Deep Agents 的委派 task 放在末尾。`false` 时 child 只从
+自己的 Preset 启动消息和委派 task 开始。该处理不携带 Primary 已产生的 AI/Tool 过程，不包裹
+`CompiledSubAgent`，并且每次委派只执行一次。
 
-每条 `workers[]` binding 保存：
+## Prompt Caching 边界
 
-- `name`：`run_worker` 的可选 Worker 枚举值，在当前 Primary 内唯一；
-- `description`：告诉 Primary 何时使用该 Worker；
-- `worker_profile_id`：必填 Worker Profile UUID。
+Subagent 的自由覆写优先于缓存对齐，普通 binding 不保证与 Primary 共享 Provider 缓存。需要尽量共享
+长前缀时，使用 `include_client_messages=true`，不选择 Subagent 覆写，并确保 Primary 与 child 的最终
+model、system prompt、Prompt Preset、按序 tool schema、response schema 和相关 model settings 实际一致。
+委派 task 会排在这段冻结消息之后，因此可保持前面的消息字节稳定；但工具、结构化输出和 Provider
+内部序列化也可能参与缓存键，不能假定工具只是较后的提示词。
 
-只有 Primary 装配 Context Worker 委派组件时才创建 `run_worker` Tool，并要求至少一条有效 binding。
-模型可以在同一个响应中发出多个 `run_worker` 调用；LangChain ToolNode 执行并把各自结果作为独立
-ToolMessage 交还 Primary。每个 Worker 当前是完整 `create_agent()` graph，使用冻结客户端消息副本和自己的
-Prompt Preset，不继承 Primary 已经产生的 AI/Tool 过程。DeepAgents Subagent binding 与 Worker
-binding 互相独立，可分别或同时使用。Context Worker 的 Deep Agents 迁移本阶段暂停，后续是否由同步
-Subagent 取代另行决定。
+Deep Agents 默认让 child 拥有 `general-purpose/task`，有助于保留递归能力，但 Primary 的命名 Subagent
+清单可能生成不同的 `task` schema。最终请求任何一处不同都可能缩短可复用前缀。缓存是否命中及其 token
+门槛仍由具体 Provider/model 决定；需要核对时使用拦截测试比较最终 `ModelRequest`，不要把完整继承等同于
+命中保证。
 
 ## 保存与运行
 
 桌面宽度下，右侧草稿校验区占页面三分之一；窄屏下恢复为整行。校验区展示后端对当前完整草稿的结构与
 静态装配报告；连续输入停止 1000ms 后刷新，离散选择可立即刷新，晚到的旧响应不会覆盖新草稿。错误行
 包含具体 owner、字段 path 和原因。保存按钮不把最近报告当作授权，服务端保存与真实请求共享同一个静态装配
-校验，不能由直接 API 调用绕过 required、引用、依赖、最终 Subagent/Worker 或静态工具名规则。最终公开
-工具名在 Primary 与每个同步 Subagent 的 `create_deep_agent()`、以及当前 Context Worker 的 `create_agent()` 前检查，重名会以稳定 422 拒绝，不再
+校验，不能由直接 API 调用绕过 required、引用、依赖、最终 Subagent 或静态工具名规则。最终公开
+工具名在 Primary 与每个同步 Subagent 的 `create_deep_agent()` 前检查，重名会以稳定 422 拒绝，不再
 静默覆盖。磁盘资源、Python 构造、依赖安装和 Provider 等运行现场问题仍在真实请求中检查。
 保存失败会一次展示后端报告中的全部问题，并按当前中文/英文语言格式化；成功保存后，该 Primary 名称会在 API Server
 通过静态门禁并处于 running 时成为 `/v1/models` 中的公开 model ID。

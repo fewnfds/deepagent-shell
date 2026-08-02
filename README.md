@@ -3,7 +3,7 @@
 `deepagent-shell` 是 `agent-shell` 的升级项目：保留本机管理台、配置持久化、OpenAI-compatible API
 和运行观测等可复用能力，将 Agent harness 从 LangChain `create_agent()` 升级为 Deep Agents
 `create_deep_agent()`。用户在管理台中保存模型、提示词、
-工具、Middleware、文件系统、Skill、同步 Subagent 和 Context Worker，再把一份 Primary Agent 作为
+工具、Middleware、文件系统、Skill 和同步 Subagent，再把一份 Primary Agent 作为
 OpenAI-compatible model 调用。
 
 项目的新内核只使用 `deepagents.create_deep_agent()` 构造 Agent。Deep Agents 默认提供 filesystem、
@@ -16,14 +16,14 @@ Backend、Subagent 和额外 Middleware 再合入该默认 harness。未被配�
 - 随服务本地发布的 Vue 3 管理台、FastAPI 管理 API 与 SQLite 持久化；管理台支持中文/英文与
   云白、深海、青玉、暮紫四套颜色主题；
 - 模型、系统提示词、文件系统、待办计划、自定义工具、Skill、自定义 Middleware、输出模式、
-  异常重试、提示词预设、Subagent 和 Context Worker 委派十二类组件；
-- Primary Agent、可复用 Subagent 覆写与 Context Worker Profile、统一配置仓库与 UUID 删除保护；
+  异常重试、提示词预设和 Subagent 十一类组件；
+- Primary Agent、可复用 Subagent 覆写、统一配置仓库与 UUID 删除保护；
 - OpenAI-compatible `/v1/models`、流式/非流式 `/v1/chat/completions` 和 API 调用事件；
 - 每次 Chat Completions 在 `create_deep_agent()` 前捕获最新已提交的配置与 Provider secret 内存快照，
   新请求使用新配置，已构造 Agent 不受后续数据库修改影响；
 - 汇总 API 调用、拦截记录、脱敏系统操作和 Agent 运行日志的滚动事件信息流，长条目支持鉴权下载；
 - 按 `X-Agent-Session-ID` 分组、以模型请求编号的历史会话 Timeline；
-- selected custom tools、Todo、filesystem/Skill、自定义 Middleware、同步 Subagent 与 Context Worker 的真实
+- selected custom tools、Todo、filesystem/Skill、自定义 Middleware 与同步 Subagent 的真实
   Agent 循环；
 - LangChain v3 事件到自定义文本流的输出模式；
 - 可选的整块提示词移动，以及在 Provider 前短路并展示最终 `ModelRequest` 的拦截测试；

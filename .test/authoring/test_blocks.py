@@ -23,10 +23,9 @@ def test_health_catalog_and_readiness_are_small_and_current(
             "output_mode",
             "exception_retry",
             "prompt_preset",
-            "worker_delegation",
         }
     assert [item["type"] for item in catalog["block_types"]] == list(PUBLIC_TYPES)
-    assert [item["order"] for item in catalog["block_types"]] == list(range(1, 13))
+    assert [item["order"] for item in catalog["block_types"]] == list(range(1, 12))
     by_type = {item["type"]: item for item in catalog["block_types"]}
     assert set(by_type["model"]) == {
         "type",
@@ -36,10 +35,8 @@ def test_health_catalog_and_readiness_are_small_and_current(
         "icon_key",
         "editor_key",
         "subagent_overrideable",
-        "worker_overrideable",
         "required",
         "subagent_policy",
-        "worker_policy",
         "tool_names",
     }
     assert by_type["model"]["required"] is True
@@ -58,8 +55,8 @@ def test_health_catalog_and_readiness_are_small_and_current(
     assert by_type["todo-list"]["tool_names"] == ["write_todos"]
     assert by_type["output-mode"]["subagent_policy"] == "top-level-only"
     assert by_type["output-mode"]["subagent_overrideable"] is False
-    assert by_type["prompt-preset"]["worker_overrideable"] is True
-    assert by_type["worker-delegation"]["worker_policy"] == "guarded"
+    assert by_type["prompt-preset"]["subagent_overrideable"] is True
+    assert by_type["prompt-preset"]["subagent_policy"] == "inherit"
     readiness = client.get("/api/readiness").json()
     assert readiness["status"] == "configuration_ready"
     assert set(readiness["sections"]) == {

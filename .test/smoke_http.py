@@ -33,7 +33,6 @@ CAPABILITY_TYPES = (
     "exception-retry",
     "prompt-preset",
     "subagent",
-    "worker-delegation",
 )
 OUTPUT_EVENT_TYPES = (
     "assistant_text",
@@ -136,7 +135,6 @@ def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> d
             "tag_replacements": [{"tag": "|||smoke|||", "replacement": ""}],
             "startup_messages": [],
         },
-        "worker-delegation": {"name": name},
     }
     return payloads[capability_type]
 

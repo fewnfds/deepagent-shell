@@ -9,7 +9,6 @@ export const blockTypes = [
   'skill',
   'system-prompt',
   'subagent',
-  'worker-delegation',
   'todo-list',
 ] as const
 
@@ -214,22 +213,6 @@ export interface PromptPresetPayload extends BlockPayloadBase {
 
 export interface PromptPresetDefaults {
   template_variables: string[]
-}
-
-export interface WorkerDelegationValue {
-  tool_description: string
-  worker_parameter_description: string
-  task_parameter_description: string
-  max_worker_calls_per_request: number | string
-  max_parallel_workers: number | string
-}
-
-export interface WorkerDelegationDraft extends BlockDraftBase, WorkerDelegationValue {}
-export type WorkerDelegationApiRecord = WorkerDelegationDraft
-export interface WorkerDelegationPayload extends BlockPayloadBase, WorkerDelegationValue {}
-
-export interface WorkerDelegationDefaults {
-  default_value: WorkerDelegationValue
 }
 
 export interface MappedDirectory {
@@ -709,46 +692,6 @@ export const promptPresetAdapter = {
   },
 }
 
-export const workerDelegationAdapter = {
-  blank(defaults: WorkerDelegationDefaults): WorkerDelegationDraft {
-    return { id: '', name: '', ...clone(defaults.default_value) }
-  },
-  fromApi(
-    value: WorkerDelegationApiRecord,
-    defaults: WorkerDelegationDefaults,
-  ): WorkerDelegationDraft {
-    const fallback = defaults.default_value
-    return {
-      ...identity(value),
-      tool_description: stringValue(value.tool_description, fallback.tool_description),
-      worker_parameter_description: stringValue(
-        value.worker_parameter_description,
-        fallback.worker_parameter_description,
-      ),
-      task_parameter_description: stringValue(
-        value.task_parameter_description,
-        fallback.task_parameter_description,
-      ),
-      max_worker_calls_per_request: typeof value.max_worker_calls_per_request === 'number'
-        ? value.max_worker_calls_per_request
-        : fallback.max_worker_calls_per_request,
-      max_parallel_workers: typeof value.max_parallel_workers === 'number'
-        ? value.max_parallel_workers
-        : fallback.max_parallel_workers,
-    }
-  },
-  toPayload(value: WorkerDelegationDraft): WorkerDelegationPayload {
-    return {
-      name: cleanName(value.name),
-      tool_description: value.tool_description,
-      worker_parameter_description: value.worker_parameter_description,
-      task_parameter_description: value.task_parameter_description,
-      max_worker_calls_per_request: value.max_worker_calls_per_request,
-      max_parallel_workers: value.max_parallel_workers,
-    }
-  },
-}
-
 function filesystemToolDraft(
   source: unknown,
   fallback: FilesystemToolDefault,
@@ -964,6 +907,5 @@ export const blockAdapters = {
   skill: skillAdapter,
   'system-prompt': systemPromptAdapter,
   subagent: subagentAdapter,
-  'worker-delegation': workerDelegationAdapter,
   'todo-list': todoListAdapter,
 } as const

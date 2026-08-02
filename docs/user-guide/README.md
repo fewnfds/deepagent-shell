@@ -8,7 +8,7 @@
 
 1. [启动并认识管理台](getting-started.md)
 2. [创建组件](capabilities.md)
-3. [装配 Primary、Subagent 与 Context Worker](configuration-workflow.md)
+3. [装配 Primary 与 Subagent](configuration-workflow.md)
 4. [使用配置仓库](configuration-library.md)
 5. [调用 API Server](api-server.md)
 6. [查看最终 ModelRequest](interception-test.md)
@@ -17,7 +17,7 @@
 
 最短可运行路径是：分别保存一份模型、文件系统和输出模式配置，在【Agent / Primary Agent】选择这三项，
 等服务端装配报告显示绿色勾选且没有问题后保存，通过右上角 API Server 状态图标启动，然后从
-`/v1/chat/completions` 使用 Primary 名称调用。其余八类组件都可以随后按需增加。
+`/v1/chat/completions` 使用 Primary 名称调用。其余能力都可以随后按需增加。
 
 ## 重要边界
 

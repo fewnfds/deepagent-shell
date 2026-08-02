@@ -10,14 +10,14 @@ from agent_shell.runtime.prompt_preset import prepare_agent_input
 
 def preset(**updates) -> dict:
     value = {
-        "name": "Worker startup",
+        "name": "Agent startup",
         "tag_replacements": [
             {"tag": "|||requirements|||", "replacement": "fixed guidance"}
         ],
         "startup_messages": [
             {"role": "user", "content_template": "Task: {task}"},
             {"role": "assistant", "content_template": "Understood."},
-            {"role": "user", "content_template": "Begin as {worker_name}."},
+            {"role": "user", "content_template": "Begin as {agent_name}."},
         ],
     }
     value.update(updates)
@@ -54,7 +54,7 @@ def test_prepare_agent_input_replaces_once_and_appends_ordered_messages() -> Non
     prepared = prepare_agent_input(
         original,
         preset(),
-        variables={"task": "review {literal}", "worker_name": "reviewer"},
+        variables={"task": "review {literal}", "agent_name": "reviewer"},
     )
 
     assert prepared.messages == [
@@ -80,7 +80,7 @@ def test_replacement_output_is_not_rescanned_and_duplicate_match_fails() -> None
     prepared = prepare_agent_input(
         [{"role": "user", "content": "|||one|||"}],
         configured,
-        variables={"task": "x", "worker_name": "worker"},
+        variables={"task": "x", "agent_name": "worker"},
     )
     assert prepared.messages[0]["content"] == "contains |||two|||"
 
@@ -91,6 +91,6 @@ def test_replacement_output_is_not_rescanned_and_duplicate_match_fails() -> None
                 {"role": "user", "content": "again |||one|||"},
             ],
             configured,
-            variables={"task": "x", "worker_name": "worker"},
+            variables={"task": "x", "agent_name": "worker"},
         )
     assert caught.value.code == "ambiguous_prompt_tag"

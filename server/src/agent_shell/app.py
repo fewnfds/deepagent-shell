@@ -21,9 +21,7 @@ from agent_shell.api.file_manager import build_file_manager_router
 from agent_shell.api.provider_integrations import build_provider_integrations_router
 from agent_shell.api.system_settings import build_system_settings_router
 from agent_shell.api.validation import build_validation_router
-from agent_shell.api.worker_profiles import build_worker_profile_router
 from agent_shell.provider_http import ProviderHttpClients
-from agent_shell.provider_integrations import configure_deepagent_harness_profiles
 from agent_shell.provider_secrets import ProviderSecretResolver
 from agent_shell.runtime.request_snapshot import RequestSnapshotRuntime
 from agent_shell.settings import Settings, SettingsError, get_settings
@@ -60,7 +58,6 @@ def create_app(
     settings: Settings | None = None,
     serve_frontend: bool | None = None,
 ) -> FastAPI:
-    configure_deepagent_harness_profiles()
     application_home = (
         settings.application_home if settings is not None else Path.cwd().resolve()
     )
@@ -415,9 +412,6 @@ def create_app(
             config_store,
             configuration_validation,
         )
-    )
-    app.include_router(
-        build_worker_profile_router(config_store, configuration_validation)
     )
     app.include_router(build_validation_router(configuration_validation))
     app.include_router(build_agent_session_router(agent_session_store))

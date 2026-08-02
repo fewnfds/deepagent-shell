@@ -53,10 +53,8 @@ const modelManifest: CapabilityManifest = {
   icon_key: 'bot',
   editor_key: 'model',
   subagent_overrideable: true,
-  worker_overrideable: true,
   required: true,
   subagent_policy: 'inherit',
-  worker_policy: 'inherit',
   tool_names: [],
 }
 

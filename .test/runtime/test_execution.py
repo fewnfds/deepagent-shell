@@ -186,7 +186,7 @@ def test_session_capture_persists_only_explicit_workflow_fields() -> None:
     capture = AgentRunCapture()
     capture.model_request(
         {
-            "agent_type": "context_worker",
+            "agent_type": "subagent",
             "agent_name": "Worker",
             "tool_call_id": "call-1",
             "model": {"name": "provider-model", "credential": "private-token"},
@@ -236,7 +236,7 @@ def test_session_capture_persists_only_explicit_workflow_fields() -> None:
 
     request, response, tool_result = capture.snapshot()
     assert request["data"] == {
-        "agent_type": "context_worker",
+        "agent_type": "subagent",
         "agent_name": "Worker",
         "tool_call_id": "call-1",
         "model_name": "provider-model",

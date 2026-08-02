@@ -46,8 +46,6 @@ import type {
   SystemSettings,
   SystemSettingsUpdate,
   ValidationReport,
-  WorkerProfile,
-  WorkerProfilePayload,
 } from './types'
 
 export * from './transport'
@@ -323,37 +321,6 @@ export const managementApi = {
 
   deleteSubagentOverrides(ids: string[]): Promise<{ deleted: number }> {
     return managementRequest('/api/subagent-overrides/delete', jsonBody({ ids }))
-  },
-
-  listWorkerProfiles(): Promise<WorkerProfile[]> {
-    return managementRequest('/api/worker-profiles')
-  },
-
-  getWorkerProfile(id: string): Promise<WorkerProfile> {
-    return managementRequest(recordPath('/api/worker-profiles', id))
-  },
-
-  saveWorkerProfile(data: WorkerProfilePayload | WorkerProfile): Promise<WorkerProfile> {
-    const id = 'id' in data ? data.id : ''
-    return managementRequest(id ? recordPath('/api/worker-profiles', id) : '/api/worker-profiles', {
-      method: id ? 'PUT' : 'POST',
-      body: JSON.stringify(withoutId(data)),
-    })
-  },
-
-  copyWorkerProfile(id: string, name: string): Promise<WorkerProfile> {
-    return managementRequest(
-      `${recordPath('/api/worker-profiles', id)}/copy`,
-      jsonBody({ name }),
-    )
-  },
-
-  deleteWorkerProfile(id: string): Promise<{ ok: boolean }> {
-    return managementRequest(recordPath('/api/worker-profiles', id), { method: 'DELETE' })
-  },
-
-  deleteWorkerProfiles(ids: string[]): Promise<{ deleted: number }> {
-    return managementRequest('/api/worker-profiles/delete', jsonBody({ ids }))
   },
 
   getApiServer(): Promise<ApiServerSettings> {

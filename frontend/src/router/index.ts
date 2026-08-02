@@ -10,7 +10,6 @@ const PrimaryAgentPage = () => import('@/pages/PrimaryAgentPage.vue')
 const StyleLabPage = () => import('@/pages/StyleLabPage.vue')
 const SystemSettingsPage = () => import('@/pages/SystemSettingsPage.vue')
 const SubagentOverridePage = () => import('@/pages/SubagentOverridePage.vue')
-const WorkerProfilePage = () => import('@/pages/WorkerProfilePage.vue')
 const TerminologyPage = () => import('@/pages/TerminologyPage.vue')
 
 export interface NavigationItem {
@@ -55,7 +54,6 @@ const sectionNavigationGroups: SectionNavigationGroup[] = [
     items: [
       { path: '/agents/primary', labelKey: 'navigation.sections.primary' },
       { path: '/agents/subagents', labelKey: 'navigation.sections.subagentOverrides' },
-      { path: '/agents/workers', labelKey: 'navigation.sections.workerProfiles' },
     ],
   },
 ]
@@ -70,7 +68,6 @@ export const router = createRouter({
     { path: '/', component: ApiServerSettingsPage, meta: { titleKey: 'apiServer.homeTitle' } },
     { path: '/agents/primary', component: PrimaryAgentPage, meta: { titleKey: 'navigation.agents' } },
     { path: '/agents/subagents', component: SubagentOverridePage, meta: { titleKey: 'navigation.agents' } },
-    { path: '/agents/workers', component: WorkerProfilePage, meta: { titleKey: 'navigation.agents' } },
     { path: '/components/:type', component: ComponentsPage, meta: { titleKey: 'components.title' } },
     { path: '/library/:type', component: ConfigLibraryPage, meta: { titleKey: 'library.title' } },
     {

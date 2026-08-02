@@ -45,7 +45,6 @@ import {
   SubagentCapabilityEditor,
   SystemPromptEditor,
   TodoListEditor,
-  WorkerDelegationEditor,
 } from '@/editors'
 
 interface PageBlockAdapter {
@@ -66,7 +65,6 @@ const editorComponents: Record<BlockType, Component> = {
   'exception-retry': ExceptionRetryEditor,
   'prompt-preset': PromptPresetEditor,
   subagent: SubagentCapabilityEditor,
-  'worker-delegation': WorkerDelegationEditor,
 }
 
 const { t } = useI18n()
@@ -167,7 +165,6 @@ const editorProps = computed<Record<string, unknown>>(() => {
     case 'exception-retry':
     case 'prompt-preset':
     case 'subagent':
-    case 'worker-delegation':
       return { defaults: activeDefaults.value }
     default:
       return {}

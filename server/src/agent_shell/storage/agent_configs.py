@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 class AgentConfigStore:
-    _TABLES = {"primary_agents", "subagent_overrides", "worker_profiles"}
+    _TABLES = {"primary_agents", "subagent_overrides"}
 
     def __init__(
         self,
@@ -83,7 +83,6 @@ class AgentConfigStore:
         entities = {
             "primary_agents": "primary-agent",
             "subagent_overrides": "subagent-override",
-            "worker_profiles": "worker-profile",
         }
         emit_configuration_events(
             self._events,
@@ -118,7 +117,6 @@ class AgentConfigStore:
             entities = {
                 "primary_agents": "primary-agent",
                 "subagent_overrides": "subagent-override",
-                "worker_profiles": "worker-profile",
             }
             emit_configuration_events(
                 self._events,

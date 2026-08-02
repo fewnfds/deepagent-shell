@@ -416,12 +416,6 @@ function timelineTitle(entry: SessionTimelineEntry): string {
       const state = phase === 'start' ? 'started' : phase === 'error' ? 'failed' : 'finished'
       return t(`agentSessions.timeline.subagent.${state}`, { sequence, subagent })
     }
-    case 'context_worker': {
-      const phase = textValue(entry.data.phase)
-      const worker = textValue(entry.data.worker_name) || t('agentSessions.timeline.unknownWorker')
-      const state = phase === 'start' ? 'started' : phase === 'error' ? 'failed' : 'finished'
-      return t(`agentSessions.timeline.contextWorker.${state}`, { sequence, worker })
-    }
     case 'request_output':
       if (entry.run.status === 'failed') {
         return t('agentSessions.timeline.requestFailedTitle', {
@@ -567,7 +561,7 @@ onMounted(() => {
       <div v-if="timelineEntries.length" class="timeline" data-testid="session-timeline">
         <div v-for="entry in timelineEntries" :key="entry.id" data-testid="timeline-step">
           <i
-            v-if="entry.kind === 'agent_input' || entry.kind === 'model_request' || entry.kind === 'model_response' || entry.kind === 'subagent' || entry.kind === 'context_worker'"
+            v-if="entry.kind === 'agent_input' || entry.kind === 'model_request' || entry.kind === 'model_response' || entry.kind === 'subagent'"
             class="bi bi-robot bg-primary"
             aria-hidden="true"
           />

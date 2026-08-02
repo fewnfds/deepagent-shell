@@ -22,7 +22,6 @@ _VERBOSE_EVENT_TYPES = frozenset(
         "tool_result",
         "tool_error",
         "subagent",
-        "context_worker",
     }
 )
 

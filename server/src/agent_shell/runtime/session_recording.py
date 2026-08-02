@@ -14,7 +14,6 @@ _RECORDED_EVENT_TYPES = frozenset(
         "tool_result",
         "tool_error",
         "subagent",
-        "context_worker",
     }
 )
 
@@ -90,12 +89,6 @@ class AgentRunCapture:
             "tool_result": ("tool_name", "tool_call_id", "status"),
             "tool_error": ("tool_name", "tool_call_id", "status", "error_code"),
             "subagent": ("subagent_name", "tool_call_id", "status"),
-            "context_worker": (
-                "worker_name",
-                "tool_call_id",
-                "status",
-                "error_code",
-            ),
         }
         self._append(
             event.event_type,

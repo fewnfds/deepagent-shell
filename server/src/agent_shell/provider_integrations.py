@@ -16,9 +16,6 @@ _BUNDLED_PROVIDER_IDS = frozenset(
     }
 )
 
-_DEEPAGENT_HARNESS_PROFILES_CONFIGURED = False
-
-
 @dataclass(frozen=True, slots=True)
 class ProviderIntegration:
     provider: str
@@ -75,33 +72,6 @@ def bundled_provider_integrations() -> tuple[ProviderIntegration, ...]:
 
 def bundled_provider_ids() -> frozenset[str]:
     return frozenset(item.provider for item in bundled_provider_integrations())
-
-
-def configure_deepagent_harness_profiles() -> None:
-    """Disable Deep Agents' implicit general-purpose Subagent for this product.
-
-    The management contract enables synchronous delegation only when a Primary
-    explicitly binds it. Deep Agents 0.7 otherwise adds a ``task`` tool even
-    when ``subagents=[]``. Provider-wide registration is process configuration,
-    not request state, and preserves any upstream profile fields by using the
-    official additive registry.
-    """
-
-    global _DEEPAGENT_HARNESS_PROFILES_CONFIGURED
-    if _DEEPAGENT_HARNESS_PROFILES_CONFIGURED:
-        return
-    from deepagents import (
-        GeneralPurposeSubagentProfile,
-        HarnessProfile,
-        register_harness_profile,
-    )
-
-    profile = HarnessProfile(
-        general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False)
-    )
-    for provider in sorted(_BUNDLED_PROVIDER_IDS):
-        register_harness_profile(provider, profile)
-    _DEEPAGENT_HARNESS_PROFILES_CONFIGURED = True
 
 
 def _distribution_snapshot() -> dict[str, str]:

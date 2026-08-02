@@ -115,7 +115,6 @@ const messages = {
     model: { label: 'Model' },
     'primary-agent': { label: 'Primary Agent' },
     'subagent-override': { label: 'Subagent override' },
-    'worker-profile': { label: 'Context Worker' },
   },
   validation: {
     status: {
@@ -148,10 +147,8 @@ const manifests: CapabilityManifest[] = [
     icon_key: 'bot',
     editor_key: 'model',
     subagent_overrideable: true,
-    worker_overrideable: true,
     required: true,
     subagent_policy: 'inherit',
-    worker_policy: 'inherit',
     tool_names: [],
   },
   {
@@ -162,10 +159,8 @@ const manifests: CapabilityManifest[] = [
     icon_key: 'folder',
     editor_key: 'filesystem',
     subagent_overrideable: false,
-    worker_overrideable: false,
     required: true,
     subagent_policy: 'inherit',
-    worker_policy: 'inherit',
     tool_names: [],
   },
 ]
@@ -186,7 +181,6 @@ function createApi() {
   const listBlocks = vi.fn(async () => [...stored])
   const listPrimaryAgents = vi.fn(async () => [])
   const listSubagentOverrides = vi.fn(async () => [])
-  const listWorkerProfiles = vi.fn(async () => [])
   const copyBlock = vi.fn(async () => {
     stored = [...stored, copied]
     return copied
@@ -206,20 +200,16 @@ function createApi() {
     listBlocks,
     listPrimaryAgents,
     listSubagentOverrides,
-    listWorkerProfiles,
     copyBlock,
     copyPrimaryAgent: vi.fn(),
     copySubagentOverride: vi.fn(),
-    copyWorkerProfile: vi.fn(),
     deleteBlock,
     deleteUnsupportedBlock,
     deleteBlocks: vi.fn(async (_type, ids) => deleteBlocks(ids)),
     deletePrimaryAgent: vi.fn(),
     deleteSubagentOverride: vi.fn(),
-    deleteWorkerProfile: vi.fn(),
     deletePrimaryAgents: vi.fn(),
     deleteSubagentOverrides: vi.fn(),
-    deleteWorkerProfiles: vi.fn(),
   }
   return {
     service,
@@ -229,7 +219,6 @@ function createApi() {
     listBlocks,
     listPrimaryAgents,
     listSubagentOverrides,
-    listWorkerProfiles,
     copyBlock,
     deleteBlock,
     deleteUnsupportedBlock,
@@ -312,11 +301,11 @@ describe('ConfigLibraryPage', () => {
     expect(wrapper
       .get('[data-testid="library-agent-group"] [data-testid="section-nav"]')
       .findAll('button')
-      .map((item) => item.text())).toEqual(['Primary Agent', 'Subagent override', 'Context Worker'])
+      .map((item) => item.text())).toEqual(['Primary Agent', 'Subagent override'])
     expect(wrapper.findAll('[data-testid="section-nav"] button').every((button) => !button.classes().includes('w-100'))).toBe(true)
     expect(wrapper.findAll('[data-testid="section-nav"] button').map((button) => (
       button.classes().includes('btn-primary') ? 'primary' : 'secondary'
-    ))).toEqual(['secondary', 'primary', 'secondary', 'secondary', 'secondary'])
+    ))).toEqual(['secondary', 'primary', 'secondary', 'secondary'])
     expect(wrapper.find('[data-testid="navigation-region"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="library-content-region"]').classes()).toContain('col-lg-8')
     expect(wrapper.get('[data-testid="library-validation-region"]').classes()).toContain('col-lg-4')

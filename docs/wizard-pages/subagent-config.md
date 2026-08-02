@@ -17,8 +17,11 @@
 
 每段文本最多 100,000 字符。具体 binding 的名称、用途和可选覆写策略在【Agent / Primary Agent】维护。
 每条 binding 的 child graph 都由 `create_deep_agent()` 构造，再以官方 `CompiledSubAgent` 交给 Primary 的
-`subagents=` 参数；child 不继续解析当前 Primary 的 bindings，因此不会递归委派。
+`subagents=` 参数；child 不复制当前 Primary 的命名 bindings，但未显式传入命名 subagents 时仍保留
+Deep Agents 默认 `general-purpose` 与 `task`，可以真实递归委派。提示词可指导模型何时不要继续委派，
+但不是强制禁止边界。
 
 项目 Filesystem block 被 Primary 选择时，child 继承该项目 Filesystem 配置；未选择时，Deep Agents 默认
 StateBackend Filesystem 仍提供默认文件工具。项目 Skills、模型、工具和其他允许继承的能力按 Subagent
-覆写策略解析。当前不支持异步或 dynamic Subagent。
+覆写策略解析。Prompt Preset 也可继承、替换或关闭，并通过 child 原生 `before_agent` Middleware 处理
+binding 选择的冻结客户端消息，随后保留委派 task。当前不支持异步或 dynamic Subagent。

@@ -320,7 +320,6 @@
           "src/pages/PrimaryAgentPage.vue",
           "src/pages/StyleLabPage.vue",
           "src/pages/SubagentOverridePage.vue",
-          "src/pages/WorkerProfilePage.vue",
           "src/pages/SystemSettingsPage.vue",
           "src/pages/TerminologyPage.vue"
         ]
@@ -338,7 +337,6 @@
           "src/editors/ModelEditor.vue",
           "src/editors/OutputModeEditor.vue",
           "src/editors/PromptPresetEditor.vue",
-          "src/editors/WorkerDelegationEditor.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/PrimaryAgentPage.vue"
         ]
@@ -351,8 +349,7 @@
         "callers": [
           "src/pages/ComponentsPage.vue",
           "src/pages/PrimaryAgentPage.vue",
-          "src/pages/SubagentOverridePage.vue",
-          "src/pages/WorkerProfilePage.vue"
+          "src/pages/SubagentOverridePage.vue"
         ]
       },
       {
@@ -376,8 +373,7 @@
           "src/pages/ComponentsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/PrimaryAgentPage.vue",
-          "src/pages/SubagentOverridePage.vue",
-          "src/pages/WorkerProfilePage.vue"
+          "src/pages/SubagentOverridePage.vue"
         ]
       },
       {

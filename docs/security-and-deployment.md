@@ -48,10 +48,10 @@ uv run python -m deepagent_shell --home .. --data-dir ..\data --mode environment
 - loopback、remote=false 也必须配置 management token；它就是管理网站的简单密码。
 - `/v1/*` 的 API Key 保存在 SQLite，由【首页】设置；没有 Key 时拒绝调用。
 - 推理 API 的 running 状态在进程创建和页面启动操作时都会全局静态检查保存的 block、Subagent
-  override、Worker Profile 和全部公开 Primary。无效配置只会将 `/v1/*` 保持为 stopped；管理外壳、健康检查和
+  override 和全部公开 Primary。无效配置只会将 `/v1/*` 保持为 stopped；管理外壳、健康检查和
   management 修复入口仍可用。门禁不执行用户 Python、不连接 Provider，也不会把配置问题或
   traceback 写入普通安全响应。
-- 每个 Chat Completions 请求只把 blocks、Primary、Subagent override、Worker Profile 与 Provider secret 复制到私有
+- 每个 Chat Completions 请求只把 blocks、Primary、Subagent override 与 Provider secret 复制到私有
   query-only 内存库；API 调用记录和会话正文不进入配置快照。明文 credential 会在该请求进程内存中存在，
   但不会进入普通响应或日志。
 - 非 loopback 或可信代理模式启用 `ALLOW_REMOTE=true`，并在监听前保存 API Key。Docker 首次初始化
@@ -140,7 +140,7 @@ secret 明文保存在同一 SQLite 的 `provider_secrets` 表，model JSON 只�
 API 调用记录只在本次配置快照解析出真实 Primary 后，保存 OpenAI 请求 JSON 和实际对外 JSON/SSE
 响应；未知 model 与快照失败不会持久化附带正文。拦截测试保存原始 API JSON 与最终
 `ModelRequest`；历史会话按请求保存输入 messages、白名单 workflow timeline 和最终对外文本，Tool、
-Subagent 与 Context Worker 只记录身份、调用关联和状态。这三类观察数据中的客户端输入、拦截请求与最终
+Subagent 只记录身份、调用关联和状态。这三类观察数据中的客户端输入、拦截请求与最终
 响应含用户正文，只能通过 management scope 读取，并与配置、安全事件
 分表。历史会话详情还从已保存的每次模型响应 usage 汇总整个会话的【输入】、【输出（正文）】和
 【输出（思考）】token；正文数包含工具调用等非 reasoning 输出。任一模型调用未上报对应明细时，

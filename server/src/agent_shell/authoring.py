@@ -15,7 +15,6 @@ from agent_shell.contracts import (
     OUTPUT_EVENT_TEMPLATE_VARIABLES,
     PROMPT_PRESET_TEMPLATE_FIELDS,
     SKILL_PROMPT_FIELDS,
-    WorkerDelegationBlock,
 )
 
 
@@ -245,7 +244,6 @@ _OUTPUT_EVENT_UI = {
     "tool_result": ("工具结果", "工具完成后的最终结果。"),
     "tool_error": ("工具错误", "工具执行失败时的稳定错误信息。"),
     "subagent": ("子代理", "命名 Subagent 的完整开始和结束状态。"),
-    "context_worker": ("Context Worker", "Context Worker 的开始、完成和失败状态。"),
     "custom": ("自定义进度", "Middleware 或 tool 显式产生的自定义事件。"),
     "lifecycle": ("运行状态", "整次执行的开始、正常结束和错误状态。"),
 }
@@ -282,13 +280,6 @@ _OUTPUT_TEMPLATES: dict[str, str] = {
     ),
     "subagent": (
         "<details><summary>*Subagent {{subagent_name}}*</summary>\n"
-        "{{message}}\n\n"
-        "*event={{phase}}* | *status={{status}}* | *seq={{sequence}}* | *call={{tool_call_id}}*\n"
-        "─────────\n"
-        "</details>\n"
-    ),
-    "context_worker": (
-        "<details><summary>*Context Worker {{worker_name}}*</summary>\n"
         "{{message}}\n\n"
         "*event={{phase}}* | *status={{status}}* | *seq={{sequence}}* | *call={{tool_call_id}}*\n"
         "─────────\n"
@@ -413,18 +404,6 @@ _EDITOR_DEFAULTS = {
         "template_variables": [
             f"{{{field}}}" for field in PROMPT_PRESET_TEMPLATE_FIELDS
         ],
-    },
-    "worker_delegation": {
-        "default_value": {
-            field_name: WorkerDelegationBlock.model_fields[field_name].default
-            for field_name in (
-                "tool_description",
-                "worker_parameter_description",
-                "task_parameter_description",
-                "max_worker_calls_per_request",
-                "max_parallel_workers",
-            )
-        },
     },
 }
 

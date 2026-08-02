@@ -6,7 +6,7 @@
 ## 执行方式
 
 开启后，有效 Primary 请求仍走同一 `AgentBuilder`，先应用可选 Prompt Preset，再真实构造 selected
-model、tools、Todo、filesystem/Skill、自定义 Middleware、同步 Subagent 与 Context Worker 委派工具。
+model、tools、Todo、filesystem/Skill、自定义 Middleware 与同步 Subagent 委派工具。
 最终测试 Middleware：
 
 1. 序列化 Provider 可见的 messages、tool schema、tool choice、response format、model 类型与

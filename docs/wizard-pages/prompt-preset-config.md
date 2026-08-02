@@ -1,11 +1,12 @@
 # 提示词预设
 
-Prompt Preset 在某个 Agent graph 启动前，对该消费者的客户端消息副本做一次确定性处理；它不是
-LangChain Middleware，也不会在后续模型轮次重复运行。
+Prompt Preset 在某个 Agent graph 启动前，对该消费者的客户端消息副本做一次确定性处理。Primary 在
+构造 graph 输入时执行；Subagent 通过 LangChain 原生 node-style `before_agent` Middleware 执行。两者都
+只处理一次，不会在后续模型轮次重复运行。
 
 ```json
 {
-  "name": "worker startup",
+  "name": "subagent startup",
   "tag_replacements": [
     {"tag": "|||requirement|||", "replacement": "Use the selected requirement."}
   ],
@@ -24,9 +25,15 @@ LangChain Middleware，也不会在后续模型轮次重复运行。
 
 标签替换后，`startup_messages` 按保存顺序追加到同一 Agent 输入。角色只允许 `user` 与
 `assistant`，可选 `name` 直接作为 LangChain 消息 name。管理 catalog 会列出当前可用模板变量；
-Primary 与 Context Worker 的变量范围不同，保存与装配校验以服务端报告为准。启用 Context Worker
-委派的 Primary Preset 必须使用 `{available_workers}`，有效 Worker Preset 必须使用 `{task}`。
+Primary 可使用 `{agent_name}`；Subagent 可使用 `{agent_name}`、`{task}` 与 `{workspace}`。保存与装配
+校验以服务端报告为准。
 
-Primary 与每次 Context Worker 调用各自选择自己的 Prompt Preset。Worker 可对同一个客户端标签使用
-不同替换、删除或保持未配置；框架不内置业务标签、角色或流程。未选择 Preset 时不替换客户端正文，
-也不追加启动消息。DeepAgents Subagent 不经过这套 Shell 输入预处理。
+Primary 在 graph 启动前直接准备自己的输入。Subagent 的最终 Preset 可以继承 Primary、替换或关闭；
+binding 的 `include_client_messages=true` 时，child 通过 LangChain 原生 node-style `before_agent`
+Middleware 对本次请求冻结的原始客户端消息执行该 Preset，随后把 Deep Agents 的委派 task 保留在末尾。
+为 `false` 时，Subagent Preset 只生成启动消息并排在 task 前。框架不内置业务标签、角色或流程；未选择
+Preset 时不替换正文，也不追加启动消息。
+
+该 Middleware 属于 child `create_deep_agent()` 的正常装配，不包裹官方 `CompiledSubAgent` runnable，
+也不修改第三方源码。完整继承同一 Preset 并启用客户端消息有利于形成稳定消息前缀，但缓存还会受到
+最终 model、system prompt、工具 schema/顺序、response schema、Provider 和 token 门槛影响，不保证命中。

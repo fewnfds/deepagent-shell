@@ -91,14 +91,14 @@ Timeline；完整会话 JSON 只由列表中的【下载】生成文件，不在
 客户端请求输入
 → Agent 初始输入准备
 → 模型请求 1
-→ 模型请求 1 的工具调用 / 工具结果 / Subagent / Context Worker 事件
+→ 模型请求 1 的工具调用 / 工具结果 / Subagent 事件
 → 模型请求 2…
 → 最近一次模型请求的最终对外文本或异常结束
 ```
 
-`agent_input` 分别记录 Primary 或 Context Worker 完成 Prompt Preset 后的初始消息数、标签命中数和启动
+`agent_input` 分别记录 Primary 或 Subagent 完成 Prompt Preset 后的初始消息数、标签命中数和启动
 消息数。Timeline 只在遇到 `kind=model_request` 时递增可见序号；对应的 `model_response`、工具、工具结果、
-工具错误、Subagent 和 Context Worker 事件沿用该序号，直到下一个 ModelRequest。`lifecycle` 已由概览中的
+工具错误和 Subagent 事件沿用该序号，直到下一个 ModelRequest。`lifecycle` 已由概览中的
 时间和最终状态表达，不再重复进入 Timeline。Subagent 一次调用的开始与结束使用相同 `namespace`；
 `subagent_name` 标识实际 Subagent，`tool_call_id` 对应主 Agent 发起的 `task` 调用，因此无需建立独立
 会话即可确认它属于哪组 session、哪次模型请求和哪次委派。

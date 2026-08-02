@@ -1,6 +1,6 @@
 # 创建组件
 
-【组件】按以下顺序提供十二类配置。保存组件不会自动加入任何 Agent；需要回到【Agent / Primary Agent】
+【组件】按以下顺序提供十一类配置。保存组件不会自动加入任何 Agent；需要回到【Agent / Primary Agent】
 明确选择。
 
 左侧导航中的组件子项和页面标题下方的快速切换按钮都由后端 capability manifest 按顺序生成，不维护
@@ -148,8 +148,9 @@ retry owner，并可强制完整、非流式模型响应；不改变 tool choice
 `user`/`assistant` 启动消息。只扫描原始客户端 user 字符串正文；未命中不处理，空 replacement 删除
 标签，同一标签多次出现会在 Provider 前拒绝。替换结果与后续 Agent 消息不会再次扫描。
 
-Primary 与每次 Context Worker 调用分别选择自己的 Preset；框架不内置业务标签、角色或协作流程。
-DeepAgents Subagent 不经过该输入预处理。完整字段见
+Primary 在 graph 启动前准备自己的输入。Subagent 的最终 Preset 可继承、替换或关闭；binding 的
+`include_client_messages` 决定 child 是否先带入本次请求冻结的原始客户端消息。child 使用 LangChain
+原生 `before_agent` Middleware 应用 Preset，并把委派 task 保留在末尾，不包裹官方 runnable。完整字段见
 [提示词预设](../wizard-pages/prompt-preset-config.md)。
 
 ## 11. 同步子代理（Synchronous Subagents）
@@ -159,17 +160,11 @@ DeepAgents Subagent 不经过该输入预处理。完整字段见
 委派；具体 Subagent 绑定在 Primary 页面维护。引用后，真实请求中必须至少有一条完整且已启用的
 binding，否则构建失败。
 
-每个 binding 的 child graph 由 `create_deep_agent()` 构造并作为 `CompiledSubAgent` 传入；当前只支持
-synchronous Subagent，不包含异步、dynamic 或递归委派。
+每个 binding 的 child graph 由 `create_deep_agent()` 构造并作为 `CompiledSubAgent` 传入。binding 还可用
+`include_client_messages=true` 让 child 接收冻结客户端消息；child Prompt Preset 在原生
+`before_agent` 节点中运行。当前只支持 synchronous Subagent，不包含异步或 dynamic Subagent。
 
-## 12. Context Worker 委派
-
-向 Primary 提供 `run_worker(worker, task)` 标准 LangChain Tool。具体 Worker 在 Primary 页面绑定，
-装配内容在独立 Worker Profile 页面设置。一个模型响应可以发出多个 Tool Call，由 LangChain ToolNode
-并行执行；结果分别作为 ToolMessage 返回 Primary。Worker 当前是完整 `create_agent()` graph，使用冻结
-客户端消息副本和自己的 Prompt Preset，不继承 Primary 的 AI/Tool 过程。
-
-Context Worker 的 Deep Agents 迁移在本阶段暂停；未来是否由带 message adapter 的同步 Subagent 取代，另行决定。
-
-本组件与 DeepAgents 同步 Subagent 并列，不侵入其配置或运行。完整字段见
-[Context Worker 委派](../wizard-pages/worker-delegation-config.md)。
+child 不复制 Primary 的命名 bindings，但没有显式命名 children 时仍保留 Deep Agents 默认
+`general-purpose/task`，所以拥有真实递归委派能力。普通自由覆写不保证跨 Agent Prompt Caching；只有
+客户端消息、model、system prompt、Prompt Preset、按序 tool schema、response schema 等最终前缀都一致时，
+才具备共享较长前缀的条件，实际命中仍由 Provider/model 决定。
