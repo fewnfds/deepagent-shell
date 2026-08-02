@@ -50,7 +50,6 @@ jobs:
             --env AGENT_SHELL_PORT=19100 \
             --env AGENT_SHELL_ALLOW_REMOTE=true \
             --env AGENT_SHELL_MANAGEMENT_TOKEN=container-smoke-shared-token-0001 \
-            --env AGENT_SHELL_INFERENCE_TOKEN=container-smoke-shared-token-0001 \
             agent-shell:ci \
             python -I -B -m agent_shell --home /app --data-dir /app/data --mode environment
           healthy=false
@@ -70,7 +69,13 @@ jobs:
             --header 'Authorization: Bearer container-smoke-shared-token-0001' \
             http://127.0.0.1:19100/api/catalog >/dev/null
           curl --fail --silent \
+            --request PUT \
             --header 'Authorization: Bearer container-smoke-shared-token-0001' \
+            --header 'Content-Type: application/json' \
+            --data '{"api_key":{"operation":"replace","value":"container-smoke-api-key-0001"}}' \
+            http://127.0.0.1:19100/api/api-server >/dev/null
+          curl --fail --silent \
+            --header 'Authorization: Bearer container-smoke-api-key-0001' \
             http://127.0.0.1:19100/v1/models >/dev/null
           test "$(docker image inspect agent-shell:ci --format '{{.Architecture}}')" = "amd64"
           test "$(docker exec "${name}" id -u)" != "0"

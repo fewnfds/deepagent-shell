@@ -14,7 +14,7 @@
 
 ## Subagent 策略
 
-【Agent / Subagent】保存可复用的 `capability_overrides[]`：
+【Agent / Subagent】保存可复用的 `capability_overrides[]` 和该 Subagent 自己的 `subagents[]`：
 
 - 继承：不保存显式项，沿用当前 Primary 的同类引用；
 - 替换：保存同类型 block UUID；
@@ -33,9 +33,9 @@ Primary 的每条 binding 添加后立即启用，并需要：
 - 可选的 Subagent 覆写策略；不选择表示完整继承当前 Primary；
 - 是否接收本次请求冻结的原始客户端消息，默认关闭。
 
-真实请求按“当前 Primary + 可选覆写 - 顶层专属能力”构造同步 Subagent。当前 Primary 的命名
-bindings 不会复制到 child；child 未显式传入命名 children 时仍有 Deep Agents 默认
-`general-purpose/task`，因此可以递归委派。binding 不保存其他 Primary ID；完整继承时只把
+真实请求按“当前 Primary + 可选覆写”构造同步 Subagent。父 Agent 的命名 bindings 不会隐式复制到
+child；child 只使用目标覆写显式保存的 catalog。隐式 `general-purpose` 已全局关闭，空 catalog 没有
+`task`；显式自引用或循环引用可提供递归委派。binding 不保存其他 Primary ID；完整继承能力时只把
 `subagent_override_id` 留空，也不要求创建空覆写配置。
 
 ## Subagent 输入与缓存友好装配
@@ -48,8 +48,8 @@ Primary 已产生的 AI/Tool 过程，也不包裹 `CompiledSubAgent` runnable�
 Subagent 继续允许按策略自由装配；普通组合不承诺跨 Agent Prompt Caching。需要尽量共享较长前缀时，
 启用客户端消息并完整继承，确保最终 model、system prompt、Prompt Preset、客户端消息、按序 tool
 schema、response schema 与相关 model settings 实际一致。工具不能假定为缓存键中的较后部分，默认
-`task` 的 schema 也可能因命名 Subagent 列表不同而变化。实际缓存门槛、范围、TTL、计费和命中由具体
-Provider/model 决定。
+`task` 的 schema 会随命名 Subagent 列表变化。需要对齐时为两侧显式保存内容和顺序相同的 catalog；
+实际缓存门槛、范围、TTL、计费和命中由具体 Provider/model 决定。
 
 ## 保存期与运行期
 

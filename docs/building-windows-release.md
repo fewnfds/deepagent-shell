@@ -4,7 +4,7 @@
 审阅和自行构建渠道；正式 ZIP 已包含完整 runtime。
 
 源码 checkout 中的 `start_server.bat` 使用自包含 Python 与依赖，后端直接运行当前 `server/src/`；
-前端输入变化时只生成当前 production 管理台，不构建 DeepAgent Shell wheel 或发行包。Vite HMR 是另行
+前端输入变化时只生成当前 production 管理台，不构建 Agent Shell wheel 或发行包。Vite HMR 是另行
 显式调用且使用隔离临时数据的开发工具。日常运行、Debug、版本、tag 和 GitHub Release 的完整顺序
 见[源码运行、Debug 与发布流程](development-and-release.md)。
 下面只说明 Windows 正式构建的细节；它会把当前前后端冻结进 ZIP。ZIP 不携带 `frontend/`、`server/src/` 或 Node.js，也
@@ -40,7 +40,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\windows\buil
 3. 需要重建时，按 `packaging/windows/runtime-lock.json` 下载固定 uv，并校验该 ZIP 的 SHA-256；
 4. 由固定 uv 安装精确 CPython 版本，并从 `server/uv.lock` 导出带哈希的 production requirements；
 5. 只安装 Windows x64/Python 3.12 的二进制第三方依赖；
-6. 每次发布单独快速构建当前非 editable DeepAgent Shell wheel，刷新依赖 runtime 中的应用层；
+6. 每次发布单独快速构建当前非 editable Agent Shell wheel，刷新依赖 runtime 中的应用层；
 7. 删除 console wrapper、checkout `direct_url.json`、uv 绝对路径 junction 和第三方开发辅助资料；
 8. 只把 Git 已跟踪的 `docs/` 和产品文件装入 staging；
 9. 生成 SPDX 2.3 SBOM、第三方 notices/许可证原文和逐文件大小/SHA-256 manifest；
@@ -67,28 +67,28 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 ## 构建结果
 
 ```text
-release/deepagent-shell-windows-x64/          staging 目录
-release/deepagent-shell-windows-x64.zip       便携发行包
-release/deepagent-shell-windows-x64.zip.sha256
+release/agent-shell-windows-x64/          staging 目录
+release/agent-shell-windows-x64.zip       便携发行包
+release/agent-shell-windows-x64.zip.sha256
 ```
 
 ZIP 内包含：
 
 - 根 `start_server.bat`、`.env.example`、README 和 MIT `LICENSE`；
-- `runtime/app/` 下的完整 Python、生产依赖与 DeepAgent Shell wheel；
+- `runtime/app/` 下的完整 Python、生产依赖与 Agent Shell wheel；
 - `docs/` 以及空的 `data/config`、`data/state`、`data/files`、`data/resources`、`data/logs`
   和运行态目录；
 - `release-manifest.json`、`SBOM.spdx.json`、`THIRD_PARTY_NOTICES.md` 和
   `THIRD_PARTY_LICENSES/`。
 
-它不包含真实 `data/config/deepagent-shell.env`、数据库、用户 Skill、未提交的本机 Tool/Middleware、`.docs/`、`.test/`、
+它不包含真实 `data/config/agent-shell.env`、数据库、用户 Skill、未提交的本机 Tool/Middleware、`.docs/`、`.test/`、
 源码目录、Node/Python 包缓存、日志或维护者路径。
 
 验证外部 ZIP 哈希：
 
 ```powershell
-Get-FileHash .\release\deepagent-shell-windows-x64.zip -Algorithm SHA256
-Get-Content .\release\deepagent-shell-windows-x64.zip.sha256
+Get-FileHash .\release\agent-shell-windows-x64.zip -Algorithm SHA256
+Get-Content .\release\agent-shell-windows-x64.zip.sha256
 ```
 
 在新解压的、可丢弃目录中验证首次设置、宿主环境隔离、健康检查和移动导入路径：
@@ -96,7 +96,7 @@ Get-Content .\release\deepagent-shell-windows-x64.zip.sha256
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File .\packaging\release\smoke_portable.ps1 `
-  -PortableRoot C:\tmp\deepagent-shell-windows-x64 `
+  -PortableRoot C:\tmp\agent-shell-windows-x64 `
   -Cleanup
 ```
 

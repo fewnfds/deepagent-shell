@@ -13,7 +13,7 @@ Provider 位于编辑器顶部；当前版本内置 OpenAI、Anthropic、Google 
 DeepSeek 和 xAI 的官方 LangChain integration。选择后显示该 Provider 的原生参数组，切换 Provider
 会清空这组参数。字段按原名保存到 `provider_settings` 并直接传给 LangChain，不做跨 Provider 映射。
 
-Provider 包只随 DeepAgent Shell 发行版统一安装和升级，管理台不提供安装入口。连接保存 Base URL、模型
+Provider 包只随 Agent Shell 发行版统一安装和升级，管理台不提供安装入口。连接保存 Base URL、模型
 名称和 write-only Key；只有 Provider 与 Base URL 都未改变时，Key 输入留空才会保持已有值。Vertex AI
 使用 Application Default Credentials，不接受普通 Key。其他 Provider 不探测宿主模型 Key 环境变量。
 
@@ -165,7 +165,7 @@ binding，否则构建失败。
 `include_client_messages=true` 让 child 接收冻结客户端消息；child Prompt Preset 在原生
 `before_agent` 节点中运行。当前只支持 synchronous Subagent，不包含异步或 dynamic Subagent。
 
-child 不复制 Primary 的命名 bindings，但没有显式命名 children 时仍保留 Deep Agents 默认
-`general-purpose/task`，所以拥有真实递归委派能力。普通自由覆写不保证跨 Agent Prompt Caching；只有
-客户端消息、model、system prompt、Prompt Preset、按序 tool schema、response schema 等最终前缀都一致时，
-才具备共享较长前缀的条件，实际命中仍由 Provider/model 决定。
+每个 Subagent 覆写还保存自己的命名 bindings，可以引用自身。隐式 `general-purpose` 已全局关闭，空
+catalog 没有 `task`；非空 catalog 仍由官方 `SubAgentMiddleware` 生成工具。普通自由覆写不保证跨 Agent
+Prompt Caching；只有客户端消息、model、system prompt、Prompt Preset、按序 tool schema、response schema
+等最终前缀都一致时，才具备共享较长前缀的条件，实际命中仍由 Provider/model 决定。

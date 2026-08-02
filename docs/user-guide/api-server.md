@@ -45,7 +45,7 @@ UUID、静态装配和 credential 都使用这同一份请求快照；捕获完�
 请求快照只保护数据库配置一致性。用户 Custom Tool 源码、`data/resources/skills/` 和 filesystem 映射是实时
 外部资源，不复制、不锁定；运行中修改它们可能被当前或后续 Agent 观察到，维护时机由使用者负责。
 
-DeepAgent Shell 不对请求正文设置自定义字节、字符或 token 上限，也不会截断、压缩客户端提交的正文。
+Agent Shell 不对请求正文设置自定义字节、字符或 token 上限，也不会截断、压缩客户端提交的正文。
 【系统 / 系统配置】可以设置一次请求的【初始消息条数上限】，默认 1000，可设 1–10,000。服务端只数
 客户端顶层 `messages[]` 的项目数：等于上限时完整进入后续流程，超过时返回
 `input_messages_too_many`，整次请求不进入 Agent，不会只取前 N 条。Agent 内部后续产生的
@@ -69,16 +69,16 @@ ModelRequest 不受此设置影响。
 
 成功响应的 `choices[0].finish_reason` 来自最后一次 Primary 模型响应，不再固定写成 `stop`。如果
 Provider 没有提供原因则明确返回 `unknown`；`length`、`content_filter`、最终 `tool_calls`、未知值等
-非正常完成还会在顶层 `deepagent_shell.termination` 返回 `status/category/source/message` 结构。流式响应
+非正常完成还会在顶层 `agent_shell.termination` 返回 `status/category/source/message` 结构。流式响应
 把该结构放在 `[DONE]` 前的最终 chunk，非流式响应放在最终 JSON。运行错误继续使用既有 `error` 结构。
-DeepAgent Shell 不因未知原因或诊断差异主动取消 graph；只有客户端断开/用户停止会取消正在执行的 Agent。
+Agent Shell 不因未知原因或诊断差异主动取消 graph；只有客户端断开/用户停止会取消正在执行的 Agent。
 
 Provider 通过 LangChain usage 上报 reasoning token 时，两种响应都会保留标准
 `usage.completion_tokens_details.reasoning_tokens` 数值；流式响应位于 `[DONE]` 前的最终 chunk。该数值
 累计一次 Agent 请求中的全部模型调用。字段缺失表示 Provider 没有上报，不能按 `0` 解读；明确返回
 `0` 才表示 Provider 报告本次没有使用 reasoning token。
 
-DeepAgent Shell 不提供进程级推理并发配额、请求排队或容量拒绝。多个有效请求可以同时构造并运行各自的
+Agent Shell 不提供进程级推理并发配额、请求排队或容量拒绝。多个有效请求可以同时构造并运行各自的
 Agent；部署者应按机器容量、Provider 配额和调用方行为自行控制并发与费用。有限但较慢或较多的请求
 属于部署容量，不会由应用自动截断或排队。
 
@@ -116,7 +116,7 @@ runtime 实现值。
 
 - “接收 · OpenAI Request”是外部客户端交给 deepagent-shell 的原始 UTF-8 JSON；
 - “发送 · OpenAI Response”是 deepagent-shell 实际返回的 JSON 或 SSE wire；
-- 内容范围限于外部客户端与 DeepAgent Shell 之间的 wire；Provider 调用和 Agent runtime 事件由各自来源记录。
+- 内容范围限于外部客户端与 Agent Shell 之间的 wire；Provider 调用和 Agent runtime 事件由各自来源记录。
 
 记录还包含 request ID、时间、公开 model、当时的 Agent 名称、状态、HTTP 状态、Content-Type
 和稳定错误码。它不保存 Authorization、客户端地址、traceback、Provider 原始响应或内部
@@ -137,6 +137,6 @@ API 调用默认最多保留最近 20 组请求/响应，事件页可设置 1–
 
 拦截测试开启时，API 调用记录仍保存原请求和固定拦截响应；最终 `ModelRequest` 另存在拦截记录。
 
-API 调用记录描述客户端与 DeepAgent Shell 之间的 wire。Agent 内部 ModelRequest、工具调用链和安全错误
+API 调用记录描述客户端与 Agent Shell 之间的 wire。Agent 内部 ModelRequest、工具调用链和安全错误
 位置分别由拦截记录、历史会话和运行日志提供，可在[日志中心与历史会话](runtime-observability.md)
 中查看具体边界。

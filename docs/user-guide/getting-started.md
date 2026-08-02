@@ -6,7 +6,7 @@
 分支后运行：
 
 ```powershell
-git clone --branch dev https://github.com/fewnfds/deepdeepagent-shell.git
+git clone --branch dev https://github.com/fewnfds/deepagent-shell.git
 cd deepagent-shell
 .\start_server.bat
 ```
@@ -23,26 +23,26 @@ runtime 或前端输入变化时刷新对应部分。正常启动不会运行 Vi
 Git 忽略，不会被 pull 覆盖；不要在这个运行目录中切换 `main/dev` 或手工编辑源码。只需要稳定源码时
 改为 Clone 默认 `main`。
 
-只有 [GitHub Releases](https://github.com/fewnfds/deepdeepagent-shell/releases) 中实际存在的版本才提供 Windows
+只有 [GitHub Releases](https://github.com/fewnfds/deepagent-shell/releases) 中实际存在的版本才提供 Windows
 ZIP。ZIP 解压后同样运行：
 
 ```powershell
 .\start_server.bat
 ```
 
-ZIP 已包含固定 CPython、锁定依赖、DeepAgent Shell wheel 和管理台；普通使用不需要 Git、Python、
+ZIP 已包含固定 CPython、锁定依赖、Agent Shell wheel 和管理台；普通使用不需要 Git、Python、
 Node.js、uv、编译器或首次启动网络。是否已有可下载版本以 Release 页面为准，不能只根据源码版本号
 推断。自行构建见[从源码构建 Windows 发行包](../building-windows-release.md)。
 
 没有已有配置时，控制台随后引导输入并确认管理网站密码，输入过程不会显示。脚本创建
-`data/config/deepagent-shell.env`；以后双击时检测到已有密码便直接启动，不会再次询问或覆盖。该步骤只
+`data/config/agent-shell.env`；以后双击时检测到已有密码便直接启动，不会再次询问或覆盖。该步骤只
 设置管理网站密码。用户调用 `/v1/*` 使用的 API Key 随后在【系统 / 系统配置】设置；两项凭据可以使用相同值。
 
 端口被占用时，脚本会显示 PID，并让用户选择关闭该进程、输入另一个端口或取消；没有监听进程但端口
 被 Windows 保留时，也会在启动前识别并要求选择其他端口。临时选择只影响本次启动；进入【系统 / 系统
 配置】保存新端口后，下一次启动才会继续使用它。启动脚本始终把当前脚本所在目录作为 application
 home：`data/` 是完整用户持久数据，`runtime/` 是可重新生成的运行态。复制或移动整个目录后，再次
-启动会使用新位置，不会引用原目录。便携入口还会忽略宿主 `DEEPAGENT_SHELL_*`、`PYTHONHOME` 和
+启动会使用新位置，不会引用原目录。便携入口还会忽略宿主 `AGENT_SHELL_*`、`PYTHONHOME` 和
 `PYTHONPATH`。
 
 新实例当前默认打开 <http://127.0.0.1:19100/admin>；已有实例或本次临时选择了其他端口时，以启动器

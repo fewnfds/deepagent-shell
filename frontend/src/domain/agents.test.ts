@@ -36,6 +36,24 @@ describe('agent profile adapters', () => {
     setOverrideSelection(draft, 'model', 'inherit')
     expect(overrideSelection(draft, 'model').mode).toBe('inherit')
     expect(subagentOverridePayload(draft).capability_overrides).toEqual([])
+    expect(subagentOverridePayload(draft).subagents).toEqual([])
+  })
+
+  it('projects named Subagents from an override with all binding fields', () => {
+    const draft = blankSubagentOverride()
+    draft.subagents.push({
+      name: ' self_worker ',
+      description: 'Continue the same role.',
+      subagent_override_id: '00000000-0000-0000-0000-000000000020',
+      include_client_messages: true,
+    })
+
+    expect(subagentOverridePayload(draft).subagents).toEqual([{
+      name: 'self_worker',
+      description: 'Continue the same role.',
+      subagent_override_id: '00000000-0000-0000-0000-000000000020',
+      include_client_messages: true,
+    }])
   })
 
   it('projects Subagent bindings without the removed enabled field', () => {

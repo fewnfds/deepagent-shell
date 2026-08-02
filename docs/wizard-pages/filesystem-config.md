@@ -64,7 +64,7 @@
 /memories/
 ```
 
-DeepAgent Shell 只在 filesystem 配置入口阻止用户来源误占这些名称；它不提供 Memory 配置，也不创建、
+Agent Shell 只在 filesystem 配置入口阻止用户来源误占这些名称；它不提供 Memory 配置，也不创建、
 挂载、读取、写入或管理这些上游目录。自定义 Middleware 的内部 backend 和目录生命周期仍由该
 Middleware 与 LangChain/DeepAgents 自己负责。
 
@@ -93,7 +93,7 @@ write/edit 一样覆盖该 Agent 的普通可写虚拟命名空间：请求级 S
 `read_file` 的分页结果会说明总行数、剩余行数和下一次 `offset`。空 `ls` / `glob` 返回
 `No files found`；`glob` / `grep` 在超时或达到结果上限时返回已经找到的部分结果和截断说明。
 `grep` 默认最多 1,000 个匹配，模型可通过工具参数传入更小或更大的 `max_count`；管理台不再建立
-第二个阈值字段。DeepAgent Shell 不解析或转换这些上游工具正文，只把完整 ToolMessage 交给模型和既定
+第二个阈值字段。Agent Shell 不解析或转换这些上游工具正文，只把完整 ToolMessage 交给模型和既定
 事件投影。当前页面不修改其他工具参数 schema。
 
 filesystem 是可选的项目能力。没有项目 Filesystem 时，`create_deep_agent()` 仍保留必需的默认

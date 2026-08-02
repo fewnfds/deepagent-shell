@@ -17,7 +17,7 @@ def preset(**updates) -> dict:
         "startup_messages": [
             {"role": "user", "content_template": "Task: {task}"},
             {"role": "assistant", "content_template": "Understood."},
-            {"role": "user", "content_template": "Begin as {agent_name}."},
+            {"role": "user", "content_template": "Begin now."},
         ],
     }
     value.update(updates)
@@ -42,6 +42,12 @@ def test_prompt_preset_contract_is_literal_and_requires_content() -> None:
         )
     with pytest.raises(ValidationError):
         preset(tag_replacements=[{"tag": "line\nbreak", "replacement": ""}])
+    with pytest.raises(ValidationError):
+        preset(
+            startup_messages=[
+                {"role": "user", "content_template": "Begin as {agent_name}."}
+            ]
+        )
 
 
 def test_prepare_agent_input_replaces_once_and_appends_ordered_messages() -> None:
@@ -54,7 +60,7 @@ def test_prepare_agent_input_replaces_once_and_appends_ordered_messages() -> Non
     prepared = prepare_agent_input(
         original,
         preset(),
-        variables={"task": "review {literal}", "agent_name": "reviewer"},
+        variables={"task": "review {literal}"},
     )
 
     assert prepared.messages == [
@@ -63,7 +69,7 @@ def test_prepare_agent_input_replaces_once_and_appends_ordered_messages() -> Non
         {"role": "assistant", "content": "earlier response"},
         {"role": "user", "content": "Task: review {literal}"},
         {"role": "assistant", "content": "Understood."},
-        {"role": "user", "content": "Begin as reviewer."},
+        {"role": "user", "content": "Begin now."},
     ]
     assert prepared.matched_tag_count == 1
     assert prepared.startup_message_count == 3
@@ -80,7 +86,7 @@ def test_replacement_output_is_not_rescanned_and_duplicate_match_fails() -> None
     prepared = prepare_agent_input(
         [{"role": "user", "content": "|||one|||"}],
         configured,
-        variables={"task": "x", "agent_name": "worker"},
+        variables={"task": "x"},
     )
     assert prepared.messages[0]["content"] == "contains |||two|||"
 
@@ -91,6 +97,14 @@ def test_replacement_output_is_not_rescanned_and_duplicate_match_fails() -> None
                 {"role": "user", "content": "again |||one|||"},
             ],
             configured,
-            variables={"task": "x", "agent_name": "worker"},
+            variables={"task": "x"},
         )
     assert caught.value.code == "ambiguous_prompt_tag"
+
+
+def test_missing_runtime_variable_returns_stable_prompt_error() -> None:
+    with pytest.raises(AgentRuntimeError) as caught:
+        prepare_agent_input([], preset(), variables={})
+
+    assert caught.value.code == "prompt_preset_variable_unavailable"
+    assert caught.value.status_code == 422

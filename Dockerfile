@@ -25,7 +25,7 @@ RUN uv sync --project /build/server --locked --no-dev --no-editable \
     && test -z "$(find /opt/venv -name direct_url.json -type f -print -quit)"
 
 FROM python:3.12.9-slim-bookworm@sha256:48a11b7ba705fd53bf15248d1f94d36c39549903c5d59edcfa2f3f84126e7b44 AS runtime
-LABEL org.opencontainers.image.source="https://github.com/fewnfds/agent-shell" \
+LABEL org.opencontainers.image.source="https://github.com/fewnfds/deepagent-shell" \
       org.opencontainers.image.licenses="MIT"
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \

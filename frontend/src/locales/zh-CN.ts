@@ -1,7 +1,7 @@
 export const zhCN = {
   app: {
     mark: 'a',
-    name: 'agent-shell',
+    name: 'Agent Shell',
   },
   navigation: {
     skipToContent: '跳到主要内容',

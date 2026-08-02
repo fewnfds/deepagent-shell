@@ -397,6 +397,61 @@ def test_binding_delete_protection_only_tracks_override_references(
     assert client.delete(f"/api/primary-agents/{owner['id']}").status_code == 200
     assert client.delete(f"/api/subagent-overrides/{override['id']}").status_code == 200
 
+
+def test_subagent_override_self_reference_and_external_delete_protection(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = make_client(tmp_path, monkeypatch)
+    target = client.post(
+        "/api/subagent-overrides",
+        json={"name": "Recursive target", "capability_overrides": []},
+    ).json()
+    self_binding = {
+        "name": "recursive_worker",
+        "description": "Continues the same recursive role.",
+        "subagent_override_id": target["id"],
+        "include_client_messages": True,
+    }
+    recursive = client.put(
+        f"/api/subagent-overrides/{target['id']}",
+        json={
+            "name": target["name"],
+            "capability_overrides": [],
+            "subagents": [self_binding],
+        },
+    )
+    assert recursive.status_code == 200, recursive.text
+    assert recursive.json()["subagents"] == [self_binding]
+
+    external = client.post(
+        "/api/subagent-overrides",
+        json={
+            "name": "External owner",
+            "capability_overrides": [],
+            "subagents": [{
+                **self_binding,
+                "name": "target_worker",
+            }],
+        },
+    )
+    assert external.status_code == 200, external.text
+
+    blocked = client.delete(f"/api/subagent-overrides/{target['id']}")
+    assert blocked.status_code == 409, blocked.text
+    assert blocked.json()["detail"] == {
+        "code": "configuration_referenced",
+        "message": "The configuration is still referenced by a Subagent override.",
+        "message_key": "errors.configurationReferencedBySubagentOverride",
+        "message_args": {"owner": "External owner"},
+    }
+
+    released = client.post(
+        "/api/subagent-overrides/delete",
+        json={"ids": [target["id"], external.json()["id"]]},
+    )
+    assert released.status_code == 200, released.text
+    assert released.json() == {"deleted": 2}
+
 def test_binding_uses_current_primary_and_optional_override_only(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -425,6 +480,7 @@ def test_binding_uses_current_primary_and_optional_override_only(
         "name",
         "description",
         "subagent_override_id",
+        "include_client_messages",
     }
 
     override = client.post(
@@ -505,7 +561,6 @@ def test_reference_contracts_reject_unknown_duplicate_wrong_type_and_force_remov
     invalid_overrides = [
         [{"type": "unknown-capability", "mode": "inherit", "block_id": ""}],
         [{"type": "subagent", "mode": "disabled", "block_id": ""}],
-        [{"type": "prompt-preset", "mode": "disabled", "block_id": ""}],
         [{"type": "filesystem", "mode": "disabled", "block_id": ""}],
         [{"type": "model", "mode": "unsupported", "block_id": ""}],
         [{"type": "model", "mode": "replace", "block_id": ""}],

@@ -1,7 +1,7 @@
 [project]
 name = "agent-shell-server"
 version = "0.2.0"
-description = "Local configuration collection shell for additive LangChain Agents"
+description = "Local Deep Agents configuration and OpenAI-compatible API shell"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11,<4.0"

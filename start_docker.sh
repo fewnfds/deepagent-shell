@@ -3,7 +3,7 @@ set -eu
 
 project=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 data=${1:-"$project/data"}
-image=${AGENT_SHELL_IMAGE:-"ghcr.io/fewnfds/agent-shell:latest"}
+image=${AGENT_SHELL_IMAGE:-"ghcr.io/fewnfds/deepagent-shell:latest"}
 mkdir -p "$data"
 data=$(CDPATH= cd -- "$data" && pwd -P)
 settings="$data/config/agent-shell.env"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from deepagents import create_deep_agent
 from langchain.agents import create_agent
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -117,6 +118,24 @@ def test_retry_owner_overrides_current_provider_parameter_names() -> None:
 def test_official_model_retry_handles_transient_provider_failure() -> None:
     model = TransientOnceModel(responses=[AIMessage(content="done")])
     graph = graph_with_retry(model, capability())
+
+    output = graph.invoke({"messages": [HumanMessage("answer")]})
+
+    assert model.calls == 2
+    assert output["messages"][-1].text == "done"
+
+
+def test_deep_agent_uses_official_model_retry_middleware() -> None:
+    model = TransientOnceModel(responses=[AIMessage(content="done")])
+    runtime = materialize_exception_retry(capability())
+    graph = create_deep_agent(
+        model=model,
+        middleware=[
+            ProviderErrorBoundaryMiddleware(),
+            *runtime.after_provider_boundary,
+        ],
+        name="retry_integration",
+    )
 
     output = graph.invoke({"messages": [HumanMessage("answer")]})
 

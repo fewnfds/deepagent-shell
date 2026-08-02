@@ -29,10 +29,11 @@ Deep Agents 建立在 LangChain Agent 和 LangGraph runtime 之上，提供面�
 Filesystem 工具。项目配置的同名 Filesystem/Skills Middleware 会按上游规则替换对应默认项；其他项目
 Middleware 继续作为额外 Middleware 传入。Middleware 顺序不作为产品 contract，不增加顺序控制逻辑或测试。
 
-Deep Agents 在没有显式 `subagents=` 时默认添加 `general-purpose` 和 `task`。本项目保留这一上游基线：
-Primary 配置命名 child 时，`task` 使用这些 `CompiledSubAgent`；child graph 未显式配置命名 child 时，仍可
-使用上游 `general-purpose` 和 `task`，因此具备真实递归委派能力。递归是否发生由模型和提示词决定，最终仍
-受 LangGraph recursion limit 约束；提示词建议不是强制禁止边界。
+Deep Agents 在没有显式 `subagents=` 时会自动添加 `general-purpose` 和 `task`。Agent Shell 在每个实际
+model Provider 的 Harness Profile 中关闭该默认项，只向模型暴露用户明确保存的命名 Subagent。Primary
+和每个 Subagent 覆写都拥有自己的 `subagents[]`；列表为空时该 Agent 没有 `task`，列表非空时仍由官方
+`SubAgentMiddleware` 生成 `task`。递归只能来自显式自引用或循环引用，仍受 LangGraph recursion limit
+约束。
 
 同步 Subagent block 当前只保存 `instruction_override`。非空内容追加到 Primary 的 system prompt；task 工具
 schema 和 description 由 Deep Agents 管理，不再保存项目自定义的 `task_description_override`。
@@ -41,9 +42,9 @@ schema 和 description 由 Deep Agents 管理，不再保存项目自定义的 `
 
 - Primary 和同步 Subagent 的最终 graph 必须通过 `create_deep_agent()` 构造；Shell 在构造后只观察事件、记录诊断
   和投影公开输出，不接管模型循环、工具执行、重试或终止。
-- 同步 child 使用当前 Primary 的有效能力解析结果和可选覆写，再以官方 `CompiledSubAgent` 进入 Primary 的
-  原生 `subagents=` 装配链；Primary 的命名 bindings 不递归复制到 child，child 仍保留上游默认
-  `general-purpose` 委派。
+- 同步 child 使用当前 Primary 的有效能力解析结果和可选覆写，再以官方 `CompiledSubAgent` 进入父 Agent
+  的原生 `subagents=` 装配链；child catalog 只来自目标覆写自己的 `subagents[]`，不隐式复制父 catalog。
+  自引用和循环引用通过请求级有限 graph registry 与延迟 runnable 解析，不展开无限构造。
 - Filesystem 不属于 Subagent 可覆写能力；同一次请求的 Primary 与所有同步 child 通过上游 `task` state
   transfer 双向共享完整虚拟 `files` state、一次性初始文件和 mapped routes。Skill 仍可按 Agent 选择
   提示与 sources；每个 Agent 只读 `/skills/` overlay 只暴露其最终选中的 Skill，但不得据此创建第二套
@@ -66,8 +67,9 @@ Prompt Preset、按相同顺序生成的 tool schema、response schema 与相关
 
 工具不能被假定为“位于消息之后”的无关尾部。Provider 的缓存 wire 和序列化顺序不是本项目 contract；
 如果最终 `task` schema、其他工具的名称/description/参数结构或顺序不同，完整请求前缀可能在工具处就分叉。
-上游默认 `general-purpose` 能让 child 保留 `task` 能力，但它与 Primary 命名 Subagent 列表生成的 `task`
-schema 仍可能不同，因此只能以拦截测试看到的最终 `ModelRequest` 判断实际对齐面，不能仅比较工具名。
+需要让 Primary 与 Subagent 的 `task` schema 相同时，为两者显式配置相同的命名 catalog（名称、说明及顺序
+一致）。Agent Shell 继续把这些 catalog 交给官方 `SubAgentMiddleware`，不自定义工具 schema；实际对齐面
+仍应以最终 `ModelRequest` 为准，不能只比较工具名。
 
 ## 官方资料
 

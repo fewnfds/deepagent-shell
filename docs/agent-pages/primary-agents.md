@@ -42,7 +42,7 @@ binding 的名称必须匹配 `[A-Za-z_][A-Za-z0-9_-]*`，同一 Primary 内唯�
 ```text
 当前 Primary 的 capability_refs
 + 可选 Subagent capability_overrides
-- output mode、Subagent block 与当前 Primary 自身 bindings
+- output mode 与 Subagent block
 = 一个由 `create_deep_agent()` 构造的同步 child graph
 ```
 
@@ -51,8 +51,9 @@ Primary 与全部同步 Subagent 双向共享完整虚拟 `files` state、初始
 每个 Agent 在共享普通 workspace 上叠加自己的只读 `/skills/` 视图，只能读取最终选中的 Skill；
 未选路径返回 not found，且不会为此创建第二套普通 workspace。未选择项目 Filesystem 时，全链仍共享
 Deep Agents 默认 StateBackend，但只暴露 `read_file`。同步 child 是 `create_deep_agent()` 构造的官方
-`CompiledSubAgent`。Primary 的命名 bindings 不复制到 child；child 未显式传入命名 subagents 时仍保留
-Deep Agents 默认 `general-purpose` 与 `task`，所以可继续递归委派。当前不支持异步或 dynamic Subagent。
+`CompiledSubAgent`。Primary 的命名 bindings 不复制到 child；child 只使用目标 Subagent 覆写中显式保存的
+bindings。全局关闭隐式 `general-purpose`，因此空列表没有 `task`；用户可通过普通自引用或循环引用明确
+提供递归委派。当前不支持异步或 dynamic Subagent。
 
 `include_client_messages=true` 时，child 的原生 `before_agent` Middleware 从请求 context 读取冻结客户端
 消息，对其应用 child 最终 Prompt Preset，再把 Deep Agents 的委派 task 放在末尾。`false` 时 child 只从
@@ -67,10 +68,10 @@ model、system prompt、Prompt Preset、按序 tool schema、response schema 和
 委派 task 会排在这段冻结消息之后，因此可保持前面的消息字节稳定；但工具、结构化输出和 Provider
 内部序列化也可能参与缓存键，不能假定工具只是较后的提示词。
 
-Deep Agents 默认让 child 拥有 `general-purpose/task`，有助于保留递归能力，但 Primary 的命名 Subagent
-清单可能生成不同的 `task` schema。最终请求任何一处不同都可能缩短可复用前缀。缓存是否命中及其 token
-门槛仍由具体 Provider/model 决定；需要核对时使用拦截测试比较最终 `ModelRequest`，不要把完整继承等同于
-命中保证。
+需要相同 `task` schema 时，应在 Primary 与 Subagent 覆写中保存名称、说明和顺序相同的显式 catalog；
+两侧继续由官方 `SubAgentMiddleware` 生成工具。最终请求任何一处不同都可能缩短可复用前缀。缓存是否
+命中及其 token 门槛仍由具体 Provider/model 决定；需要核对时使用拦截测试比较最终 `ModelRequest`，
+不要把配置相似等同于命中保证。
 
 ## 保存与运行
 

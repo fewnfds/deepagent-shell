@@ -3,7 +3,7 @@ import type { MessageSchema } from './zh-CN'
 export const en: MessageSchema = {
   app: {
     mark: 'a',
-    name: 'agent-shell',
+    name: 'Agent Shell',
   },
   navigation: {
     skipToContent: 'Skip to main content',

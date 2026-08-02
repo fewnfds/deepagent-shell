@@ -57,9 +57,7 @@ class SubagentInputMiddleware(AgentMiddleware):
             source_messages,
             self._preset,
             variables={
-                "agent_name": self._agent_name,
                 "task": task,
-                "workspace": "/",
             },
         )
         rebuilt_messages = [*prepared.messages, *delegated_messages]

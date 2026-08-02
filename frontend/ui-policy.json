@@ -331,14 +331,24 @@
         "reason": "Owns localized backend field labels, technical field names and contextual hints without wrapping controls",
         "callers": [
           "src/components/RecordPicker.vue",
+          "src/components/SubagentBindingsEditor.vue",
           "src/editors/CustomMiddlewareEditor.vue",
           "src/editors/ExceptionRetryEditor.vue",
           "src/editors/FilesystemEditor.vue",
           "src/editors/ModelEditor.vue",
           "src/editors/OutputModeEditor.vue",
           "src/editors/PromptPresetEditor.vue",
-          "src/pages/ConfigLibraryPage.vue",
-          "src/pages/PrimaryAgentPage.vue"
+          "src/pages/ConfigLibraryPage.vue"
+        ]
+      },
+      {
+        "name": "SubagentBindingsEditor",
+        "path": "src/components/SubagentBindingsEditor.vue",
+        "kind": "domain-composition",
+        "reason": "Owns the shared named Subagent catalog fields and add/remove interaction for Primary and Subagent configurations",
+        "callers": [
+          "src/pages/PrimaryAgentPage.vue",
+          "src/pages/SubagentOverridePage.vue"
         ]
       },
       {

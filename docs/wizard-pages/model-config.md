@@ -1,7 +1,7 @@
 # 模型
 
 模型 block 选择一个明确的 LangChain Provider integration，并保存连接、模型名和该 Provider 自己的
-构造参数。Provider 描述实际 wire adapter；DeepAgent Shell 不按模型名称猜测 Provider，也不把一家
+构造参数。Provider 描述实际 wire adapter；Agent Shell 不按模型名称猜测 Provider，也不把一家
 Provider 的参数改名后传给另一家。
 
 当前版本随发行物固定内置以下 integration：
@@ -15,7 +15,7 @@ Provider 的参数改名后传给另一家。
 | `deepseek` | `langchain-deepseek` | `ChatDeepSeek` |
 | `xai` | `langchain-xai` | `ChatXAI` |
 
-这些包由 DeepAgent Shell 的 `uv.lock` 随版本统一安装和升级。管理台没有安装、更新或任意包名入口。
+这些包由 Agent Shell 的 `uv.lock` 随版本统一安装和升级。管理台没有安装、更新或任意包名入口。
 本版不内置 OpenRouter integration。
 
 ## 编辑顺序与 Payload
@@ -71,7 +71,7 @@ Provider 位于模型编辑器顶部。输入框兼具下拉和模糊搜索，�
 可见推理还取决于模型、wire 和所选 LangChain integration 是否产生标准 reasoning content block；
 选错 Provider 不能靠填写 `reasoning_effort` 修复。
 
-API 请求中的 `stream` 只控制 DeepAgent Shell 对客户端的传输形式，不等同于 model block 的 `streaming`。
+API 请求中的 `stream` 只控制 Agent Shell 对客户端的传输形式，不等同于 model block 的 `streaming`。
 Chat Completions 请求体中的临时生成参数覆盖尚未接通，当前以 model block 为准。
 
 ## 连接与凭据
@@ -85,7 +85,7 @@ Chat Completions 请求体中的临时生成参数覆盖尚未接通，当前以
 - secret 明文保存在同一 SQLite 的独立表，当前不是加密 vault。
 
 【获取模型】是原有的 OpenAI-compatible 目录辅助：它请求 `${base_url}/models`，只把返回中的模型
-`id` 带回页面，并使用 Bearer Key。目录请求使用 DeepAgent Shell 内置的 curl HTTP transport，并携带明确
+`id` 带回页面，并使用 Bearer Key。目录请求使用 Agent Shell 内置的 curl HTTP transport，并携带明确
 User-Agent，以兼容会按服务端 HTTP/TLS 客户端特征应用规则的上游网关。请求同时携带 Provider；只有
 Provider 与 Base URL 都和已保存模型一致时才能复用其 secret。若原生服务不提供这种目录 wire，则
 直接填写官方模型 ID。

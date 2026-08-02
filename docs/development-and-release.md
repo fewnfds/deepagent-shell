@@ -5,13 +5,13 @@ Docker image 是不同渠道，不能互相替代：
 
 | 场景 | 读取的代码 | 是否 build | 用户入口 |
 | --- | --- | --- | --- |
-| 滚动源码 Clone | `server/src/` + 当前 production 前端 | 前端输入变化时自动 build | `DEEPAGENT_SHELL_PORT` |
+| 滚动源码 Clone | `server/src/` + 当前 production 前端 | 前端输入变化时自动 build | `AGENT_SHELL_PORT` |
 | 显式前端 Debug | `frontend/` + `server/src/` | 否，使用 Vite HMR | 自动临时端口 |
 | production 前端验证 | `frontend/` | 只生成 `frontend_dist/` | 不作为日常服务入口 |
 | Windows ZIP | production 前端 + 当前 Python wheel + 自包含 runtime | 是 | ZIP 内 `start_server.bat` |
 | Docker image | multi-stage build 中的当前前后端 | 是 | 容器 HTTP 端口 |
 
-`server/src/deepagent_shell/frontend_dist/` 是被 Git 忽略的 production 输出。它不是源码，不提交 Git，
+`server/src/agent_shell/frontend_dist/` 是被 Git 忽略的 production 输出。它不是源码，不提交 Git，
 滚动 Clone 按输入指纹在需要时生成并由当前 Python 源码托管；正式发行物再把同一份前端冻结进 wheel。
 前端仍只有根 `frontend/` 一份可编辑源码。
 
@@ -54,11 +54,11 @@ production 前端；正式 ZIP 用户不需要 Node.js。
 ```
 
 `start_server.bat` 不根据分支名或源码目录进入 Debug。它使用 Clone 自己的
-`data/config/deepagent-shell.env`，由同一个 Python 进程提供管理台、`/api/*` 和 `/v1/*`：
+`data/config/agent-shell.env`，由同一个 Python 进程提供管理台、`/api/*` 和 `/v1/*`：
 
 ```text
 浏览器 / OpenAI 客户端
-  → 127.0.0.1:DEEPAGENT_SHELL_PORT
+  → 127.0.0.1:AGENT_SHELL_PORT
   → Python 当前 server/src
   → 当前 frontend_dist、/api、/v1
 ```
@@ -209,7 +209,7 @@ git push origin v<version>
 匹配版本的 `v*` tag 会同时触发：
 
 - `windows-release.yml`：前端门禁、相关后端测试、源码发布面、自包含 ZIP、移动目录 smoke，随后把
-  `deepagent-shell-windows-x64.zip` 和 `.sha256` 上传到该 GitHub Release；
+  `agent-shell-windows-x64.zip` 和 `.sha256` 上传到该 GitHub Release；
 - `container-release.yml`：secret scan、Linux amd64 image build/smoke，随后推送 GHCR 的完整版本、
   `major.minor` 和 `latest` tag；
 - GitHub 自动提供该 tag 的 Source code ZIP/TAR，用户可以克隆或下载源码自行构建。
@@ -223,13 +223,13 @@ git push origin v<version>
 2. 从 Release 重新下载 Windows ZIP 和 `.sha256`，在本地核对：
 
    ```powershell
-   Get-FileHash .\deepagent-shell-windows-x64.zip -Algorithm SHA256
-   Get-Content .\deepagent-shell-windows-x64.zip.sha256
+   Get-FileHash .\agent-shell-windows-x64.zip -Algorithm SHA256
+   Get-Content .\agent-shell-windows-x64.zip.sha256
    ```
 
 3. 解压到一个与仓库不同、可丢弃且最好包含空格的目录，运行包内 `start_server.bat`，确认首次设置、
    `/api/health`、数据库落点和移动后导入来源；
-4. 拉取 `ghcr.io/fewnfds/deepdeepagent-shell:<version>`，使用独立宿主 data 目录确认启动、health 和持久化；
+4. 拉取 `ghcr.io/fewnfds/deepagent-shell:<version>`，使用独立宿主 data 目录确认启动、health 和持久化；
 5. 确认 Release 同时有 Windows ZIP/hash、GitHub Source code ZIP/TAR，GHCR 有预期 tag。
 
 本流程不要求日常开发重复扫描、哈希和压缩数千个 Python 文件。那部分只属于正式 Windows 发行包，

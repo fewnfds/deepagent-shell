@@ -67,6 +67,7 @@ function service(overrides: Partial<AgentAuthoringService> = {}): AgentAuthoring
     id: '00000000-0000-0000-0000-000000000020',
     name: 'Override',
     capability_overrides: [],
+    subagents: [],
   }
   return {
     getCatalog: vi.fn(async () => ({
@@ -170,12 +171,13 @@ describe('agent authoring pages', () => {
     expect(wrapper.findAll('[data-testid="binding-card"]')).toHaveLength(1)
     const card = wrapper.get('[data-testid="binding-card"]')
     expect(card.find('[data-action="toggle-binding"]').exists()).toBe(false)
-    expect(card.find('input[type="checkbox"]').exists()).toBe(false)
+    expect(card.find('input[type="checkbox"]').exists()).toBe(true)
     expect(card.get('[data-testid="binding-body"]').exists()).toBe(true)
     const fields = card.get('[data-testid="binding-body"] .row').element.children
     expect([...fields].map((field) => field.className)).toEqual([
       'col-md-6',
       'col-md-6',
+      'col-12',
       'col-12',
     ])
     await card.get('[data-testid="binding-body"] input[autocomplete="off"]').setValue('researcher')
@@ -192,6 +194,7 @@ describe('agent authoring pages', () => {
         name: 'researcher',
         description: 'Research delegated topics',
         subagent_override_id: '00000000-0000-0000-0000-000000000020',
+        include_client_messages: false,
       }],
     }))
     wrapper.unmount()
@@ -246,6 +249,7 @@ describe('agent authoring pages', () => {
         { type: 'model', mode: 'replace', block_id: '00000000-0000-0000-0000-000000000001' },
         { type: 'system-prompt', mode: 'disabled', block_id: '' },
       ],
+      subagents: [],
     })
     wrapper.unmount()
   })
@@ -264,6 +268,34 @@ describe('agent authoring pages', () => {
     expect(api.updateSubagentOverride).toHaveBeenCalledWith(
       id,
       expect.objectContaining({ name: 'Override' }),
+    )
+    wrapper.unmount()
+  })
+
+  it('adds a named child to a Subagent override and can reference itself', async () => {
+    const api = service()
+    const id = '00000000-0000-0000-0000-000000000020'
+    const { wrapper } = await mountSubagentPage(api, `/agents/subagents?id=${id}`)
+
+    await buttonByText(wrapper, 'agents.primary.addBinding').trigger('click')
+    const binding = wrapper.get('[data-testid="binding-card"]')
+    await binding.get('input[autocomplete="off"]').setValue('self_worker')
+    await binding.get('textarea').setValue('Continue the same role.')
+    await binding.get('[data-testid="binding-override"]').setValue(id)
+    await binding.get('input[type="checkbox"]').setValue(true)
+    await buttonByText(wrapper, 'common.save').trigger('click')
+    await flushPromises()
+
+    expect(api.updateSubagentOverride).toHaveBeenCalledWith(
+      id,
+      expect.objectContaining({
+        subagents: [{
+          name: 'self_worker',
+          description: 'Continue the same role.',
+          subagent_override_id: id,
+          include_client_messages: true,
+        }],
+      }),
     )
     wrapper.unmount()
   })
@@ -345,12 +377,14 @@ describe('agent authoring pages', () => {
       id: secondOverrideId,
       name: 'Latest Override',
       capability_overrides: [],
+      subagents: [],
     })
     await flushPromises()
     firstOverride.resolve({
       id: firstOverrideId,
       name: 'Late Override',
       capability_overrides: [],
+      subagents: [],
     })
     await flushPromises()
     await buttonByText(overridePage.wrapper, 'common.save').trigger('click')

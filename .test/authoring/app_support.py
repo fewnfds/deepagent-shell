@@ -165,7 +165,7 @@ def block_cases(tmp_path: Path) -> list[tuple[str, dict]]:
                 "startup_messages": [
                     {
                         "role": "user",
-                        "content_template": "Begin work as {agent_name}.",
+                        "content_template": "Begin work.",
                     }
                 ],
             },

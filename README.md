@@ -1,6 +1,6 @@
-# deepagent-shell
+# Agent Shell
 
-`deepagent-shell` 是 `agent-shell` 的升级项目：保留本机管理台、配置持久化、OpenAI-compatible API
+Agent Shell 是 `agent-shell` 的升级项目：保留本机管理台、配置持久化、OpenAI-compatible API
 和运行观测等可复用能力，将 Agent harness 从 LangChain `create_agent()` 升级为 Deep Agents
 `create_deep_agent()`。用户在管理台中保存模型、提示词、
 工具、Middleware、文件系统、Skill 和同步 Subagent，再把一份 Primary Agent 作为
@@ -9,7 +9,8 @@ OpenAI-compatible model 调用。
 项目的新内核只使用 `deepagents.create_deep_agent()` 构造 Agent。Deep Agents 默认提供 filesystem、
 subagent、summarization、tool-call repair 和适用模型的 prompt caching；本项目显式选择的 Tool、Skill、
 Backend、Subagent 和额外 Middleware 再合入该默认 harness。未被配置引用的用户资源仍不读取、不导入、
-不实例化。当前仓库先迁移文档与架构基线，功能清单表示从原项目继承的目标范围，不表示代码已经迁入。
+不实例化。Primary 和同步 Subagent 的构造内核已经迁移；后续功能继续按模块核对并收口，不把旧项目
+说明或历史记录当作当前运行事实。
 
 ## 当前能力
 
@@ -38,7 +39,7 @@ Docker image 只在维护者从 `main` 创建明确版本 tag 后构建，不要
 滚动 `dev` 分支：
 
 ```powershell
-git clone --branch dev https://github.com/fewnfds/deepdeepagent-shell.git
+git clone --branch dev https://github.com/fewnfds/deepagent-shell.git
 cd deepagent-shell
 .\start_server.bat
 ```
@@ -61,13 +62,13 @@ git pull --ff-only
 才 merge/fast-forward 到 `main`。
 
 没有已有配置时，控制台首次启动会要求输入两次管理网站密码，并创建
-`data/config/deepagent-shell.env`；输入不会显示，后续启动直接使用已有配置。这个密码用于管理网站
+`data/config/agent-shell.env`；输入不会显示，后续启动直接使用已有配置。这个密码用于管理网站
 和 `/api/*`。在【系统 / 系统配置】设置 `/v1/*` 使用的 API Key；两项凭据可以使用相同值。打开
 <http://127.0.0.1:19100/admin>。端口始终以该实例配置为准；19100 只是新实例当前默认值。
 
 ## 稳定发行物
 
-只有 [GitHub Releases](https://github.com/fewnfds/deepdeepagent-shell/releases) 中实际存在的版本才提供受支持的
+只有 [GitHub Releases](https://github.com/fewnfds/deepagent-shell/releases) 中实际存在的版本才提供受支持的
 Windows ZIP 和对应 GHCR image；源码中的版本字段不代表相应发行物已经发布。
 
 Windows ZIP 解压到可写目录后双击：
@@ -76,9 +77,9 @@ Windows ZIP 解压到可写目录后双击：
 .\start_server.bat
 ```
 
-ZIP 已包含固定 CPython、锁定生产依赖、DeepAgent Shell wheel 和构建好的管理台。普通用户不需要 Git、
+ZIP 已包含固定 CPython、锁定生产依赖、Agent Shell wheel 和构建好的管理台。普通用户不需要 Git、
 Python、Node.js、uv、编译器或首次启动网络。便携入口只读取当前目录的
-`data/config/deepagent-shell.env`，忽略宿主 `DEEPAGENT_SHELL_*`、`PYTHONHOME` 和 `PYTHONPATH`，因此复制或
+`data/config/agent-shell.env`，忽略宿主 `AGENT_SHELL_*`、`PYTHONHOME` 和 `PYTHONPATH`，因此复制或
 移动目录后会使用新目录自己的 `data/`。`runtime/` 是可重新生成的临时运行态。端口被占用或被
 Windows 保留时，脚本会让用户选择可用端口或取消启动；已有监听进程时还可明确选择关闭它。
 
@@ -87,11 +88,11 @@ Windows 保留时，脚本会让用户选择可用端口或取消启动；已有
 正式发布后，Linux amd64/服务器可使用 GitHub Container Registry 中相同版本的 image：
 
 ```text
-ghcr.io/fewnfds/deepdeepagent-shell:<version>
+ghcr.io/fewnfds/deepagent-shell:<version>
 ```
 
 从对应 GitHub Release 的源码包或 tag 获取仓库内容。Windows 运行 `./start_docker.ps1`，Linux
-运行 `sh ./start_docker.sh`；首次启动会创建同一 `data/config/deepagent-shell.env`，并把一个宿主
+运行 `sh ./start_docker.sh`；首次启动会创建同一 `data/config/agent-shell.env`，并把一个宿主
 `data/` 映射为容器 `/app/data`。默认从宿主机访问 <http://127.0.0.1:19100/admin/>；容器不包含
 Node、uv 或编译工具。配置、端口和持久化说明见 [Docker 部署](docs/docker.md)。
 
@@ -100,7 +101,7 @@ Node、uv 或编译工具。配置、端口和持久化说明见 [Docker 部署]
 稳定 `main` 源码可以这样取得：
 
 ```powershell
-git clone https://github.com/fewnfds/deepdeepagent-shell.git
+git clone https://github.com/fewnfds/deepagent-shell.git
 cd deepagent-shell
 ```
 
@@ -112,13 +113,13 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\packaging\windows\buil
 ```
 
 构建脚本执行 `npm ci` 和前端门禁，随后自行下载并校验锁定 uv/CPython，不要求预装 Python 或 uv。
-结果位于 `release/deepagent-shell-windows-x64.zip`；包内同时包含 `release-manifest.json`、
+结果位于 `release/agent-shell-windows-x64.zip`；包内同时包含 `release-manifest.json`、
 `SBOM.spdx.json`、`THIRD_PARTY_NOTICES.md` 与上游提供的许可证文件。这里的 Node.js 只属于构建环境，
 只供维护者构建发行物。完整输入、产物和校验说明见[从源码构建 Windows 发行包](docs/building-windows-release.md)。
 滚动源码运行、显式 Debug、版本更新、tag、GitHub Release 和发布后复验见
 [源码运行、Debug 与发布流程](docs/development-and-release.md)。
 
-默认数据库是 `data/state/deepagent-shell.sqlite3`。配置、数据库、用户文件/资源和日志都在 `data/`；
+默认数据库是 `data/state/agent-shell.sqlite3`。配置、数据库、用户文件/资源和日志都在 `data/`；
 不要用删除数据库代替页面操作。停止实例后复制完整 `data/`，即可给当前版本的新安装或新容器使用。
 项目不提供初始 Skill、Custom Tool 或 Custom Middleware 数据；这些用户资源都由当前实例在
 `data/resources/` 中维护。
@@ -157,7 +158,7 @@ data/                         首次启动创建或由用户停机复制，不�
   logs/                       系统与 Agent 运行日志
 runtime/                      启动或构建生成的可清理运行态，不属于源码
 frontend/                     Vue SFC、TypeScript 与前端构建配置
-server/src/deepagent_shell/       后端、runtime 与已构建管理台产物
+server/src/agent_shell/           后端、runtime 与已构建管理台产物
 packaging/                    公开的自举、发行、SBOM 与校验代码
 .test/                        公开的稳定行为测试
 docs/                         当前版本使用说明
@@ -209,7 +210,7 @@ npm test
 npm run build
 ```
 
-`npm run build` 生成被 Git 忽略的 `server/src/deepagent_shell/frontend_dist/`；源码正常运行在输入变化时
+`npm run build` 生成被 Git 忽略的 `server/src/agent_shell/frontend_dist/`；源码正常运行在输入变化时
 自动执行它，正式 Windows ZIP 与 Docker image 再把当前源码和该产物冻结进发行物。源码输出、
 production build 和发行包各自只有一个明确职责。
 

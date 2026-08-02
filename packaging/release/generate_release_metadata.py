@@ -210,7 +210,7 @@ def _write_sbom(path: Path, components: list[Component], version: str) -> None:
             "SPDXID": "SPDXRef-Package-Agent-Shell",
             "name": APPLICATION_NAME,
             "versionInfo": version,
-            "downloadLocation": "https://github.com/fewnfds/agent-shell",
+            "downloadLocation": "https://github.com/fewnfds/deepagent-shell",
             "filesAnalyzed": False,
             "licenseConcluded": "MIT",
             "licenseDeclared": "MIT",
@@ -262,7 +262,7 @@ def _write_sbom(path: Path, components: list[Component], version: str) -> None:
         "dataLicense": "CC0-1.0",
         "SPDXID": "SPDXRef-DOCUMENT",
         "name": f"agent-shell-{version}-windows-x64",
-        "documentNamespace": f"https://github.com/fewnfds/agent-shell/sbom/{digest}",
+        "documentNamespace": f"https://github.com/fewnfds/deepagent-shell/sbom/{digest}",
         "creationInfo": {
             "created": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
             "creators": ["Tool: agent-shell-generate-release-metadata"],

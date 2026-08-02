@@ -34,12 +34,24 @@ from agent_shell.validation.models import ValidationIssue, ValidationReport
 from agent_shell.validation.subagent_bindings import subagent_binding_issues
 
 
+SubagentNodeKey = tuple[str, str, bool]
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedSubagentEdge:
+    binding: dict[str, Any]
+    target_key: SubagentNodeKey
+
+
 @dataclass(frozen=True, slots=True)
 class ResolvedSubagent:
-    binding: dict[str, Any]
+    key: SubagentNodeKey
+    name: str
+    include_client_messages: bool
     references: dict[str, str]
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
+    subagents: tuple[ResolvedSubagentEdge, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +60,8 @@ class StaticAssembly:
     references: dict[str, str]
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
-    subagents: tuple[ResolvedSubagent, ...]
+    subagents: tuple[ResolvedSubagentEdge, ...]
+    subagent_nodes: dict[SubagentNodeKey, ResolvedSubagent]
 
 
 _PRIMARY_REQUIRED_CAPABILITY_TYPES = frozenset(
@@ -249,6 +262,24 @@ class ConfigurationValidationService:
             owner_name=validated["name"],
             path_prefix="capability_overrides",
         )
+        issues.extend(
+            subagent_binding_issues(
+                list(validated.get("subagents", [])),
+                owner_id=owner_id,
+                owner_name=validated["name"],
+            )
+        )
+        for binding in validated.get("subagents", []):
+            target_id = str(binding.get("subagent_override_id", ""))
+            if not target_id or target_id == owner_id:
+                continue
+            _, target_issue = self._subagent_override(
+                target_id,
+                binding=binding,
+                owner_id=owner_id,
+            )
+            if target_issue is not None:
+                issues.append(target_issue)
         if owner_id and not issues:
             prospective = dict(validated)
             prospective["id"] = owner_id
@@ -559,12 +590,15 @@ class ConfigurationValidationService:
         references: dict[str, str],
         blocks: dict[str, dict[str, Any]],
         *,
+        has_subagents: bool,
         filesystem_mode: FilesystemMode,
         scope: str,
         owner_id: str,
         owner_name: str,
     ) -> ValidationIssue | None:
-        seen: dict[str, str] = {"task": "Deep Agents default harness"}
+        seen: dict[str, str] = (
+            {"task": "Deep Agents default harness"} if has_subagents else {}
+        )
         if filesystem_mode == "default-shared":
             seen.update(
                 {
@@ -822,6 +856,7 @@ class ConfigurationValidationService:
         tool_issue = self._static_tool_issue(
             references,
             selected,
+            has_subagents=bool(bindings),
             filesystem_mode=filesystem_mode,
             scope="primary",
             owner_id=owner_id,
@@ -830,9 +865,25 @@ class ConfigurationValidationService:
         if tool_issue is not None:
             issues.append(tool_issue)
 
-        resolved_subagents = []
-        for binding in bindings:
+        subagent_nodes: dict[SubagentNodeKey, ResolvedSubagent] = {}
+        resolving_nodes: set[SubagentNodeKey] = set()
+
+        def resolve_binding(
+            binding: dict[str, Any],
+        ) -> ResolvedSubagentEdge | None:
             subagent_name = str(binding.get("name", ""))
+            override_id = str(binding.get("subagent_override_id", ""))
+            node_key: SubagentNodeKey = (
+                override_id,
+                subagent_name,
+                bool(binding.get("include_client_messages")),
+            )
+            edge = ResolvedSubagentEdge(binding=binding, target_key=node_key)
+            if node_key in subagent_nodes or node_key in resolving_nodes:
+                return edge
+
+            resolving_nodes.add(node_key)
+            issue_count = len(issues)
             child_references = {
                 capability_type: block_id
                 for capability_type, block_id in references.items()
@@ -841,7 +892,7 @@ class ConfigurationValidationService:
                     or CAPABILITY_BY_TYPE[capability_type].subagent_policy == "inherit"
                 )
             }
-            override_id = str(binding.get("subagent_override_id", ""))
+            child_bindings: list[dict[str, Any]] = []
             if override_id:
                 override, override_issue = self._subagent_override(
                     override_id,
@@ -851,13 +902,24 @@ class ConfigurationValidationService:
                 )
                 if override_issue is not None:
                     issues.append(override_issue)
-                    continue
+                    resolving_nodes.remove(node_key)
+                    return None
+                assert override is not None
                 for selection in override["capability_overrides"]:
                     capability_type = selection["type"]
                     if selection["mode"] == "replace":
                         child_references[capability_type] = selection["block_id"]
                     elif selection["mode"] == "disabled":
                         child_references.pop(capability_type, None)
+                child_bindings = list(override.get("subagents", []))
+
+            issues.extend(
+                subagent_binding_issues(
+                    child_bindings,
+                    owner_id=owner_id,
+                    owner_name=subagent_name,
+                )
+            )
 
             (
                 child_blocks,
@@ -874,6 +936,7 @@ class ConfigurationValidationService:
             child_tool_issue = self._static_tool_issue(
                 child_references,
                 child_blocks,
+                has_subagents=bool(child_bindings),
                 filesystem_mode=child_filesystem_mode,
                 scope="subagent",
                 owner_id=owner_id,
@@ -883,7 +946,7 @@ class ConfigurationValidationService:
                 child_issues.append(child_tool_issue)
             child_preset_issue = self._prompt_preset_issue(
                 child_blocks.get("prompt-preset"),
-                allowed_fields=frozenset({"agent_name", "task", "workspace"}),
+                allowed_fields=frozenset({"task"}),
                 required_field=None,
                 scope="subagent",
                 owner_id=owner_id,
@@ -893,19 +956,37 @@ class ConfigurationValidationService:
             if child_preset_issue is not None:
                 child_issues.append(child_preset_issue)
             issues.extend(child_issues)
-            if delegation_selected and not child_issues:
-                resolved_subagents.append(
-                    ResolvedSubagent(
-                        binding=binding,
-                        references=child_references,
-                        blocks=child_blocks,
-                        filesystem_mode=child_filesystem_mode,
-                    )
+            child_edges: list[ResolvedSubagentEdge] = []
+            if len(issues) == issue_count:
+                for child_binding in child_bindings:
+                    child_edge = resolve_binding(child_binding)
+                    if child_edge is not None:
+                        child_edges.append(child_edge)
+
+            if len(issues) == issue_count:
+                subagent_nodes[node_key] = ResolvedSubagent(
+                    key=node_key,
+                    name=subagent_name,
+                    include_client_messages=bool(
+                        binding.get("include_client_messages")
+                    ),
+                    references=child_references,
+                    blocks=child_blocks,
+                    filesystem_mode=child_filesystem_mode,
+                    subagents=tuple(child_edges),
                 )
+            resolving_nodes.remove(node_key)
+            return edge if node_key in subagent_nodes else None
+
+        resolved_subagents = tuple(
+            edge
+            for binding in bindings
+            if (edge := resolve_binding(binding)) is not None
+        )
 
         primary_preset_issue = self._prompt_preset_issue(
             selected.get("prompt-preset"),
-            allowed_fields=frozenset({"agent_name"}),
+            allowed_fields=frozenset(),
             required_field=None,
             scope="primary",
             owner_id=owner_id,
@@ -923,7 +1004,8 @@ class ConfigurationValidationService:
             references=references,
             blocks=selected,
             filesystem_mode=filesystem_mode,
-            subagents=tuple(resolved_subagents),
+            subagents=resolved_subagents,
+            subagent_nodes=subagent_nodes,
         )
 
     @staticmethod
@@ -985,27 +1067,10 @@ class ConfigurationValidationService:
                 and item.get("block_id") == block_id
                 for item in references
             )
-            indirect = False
             bindings = primary.get("subagents", [])
             if not isinstance(bindings, list):
                 bindings = []
-            for binding in bindings:
-                if (
-                    not isinstance(binding, dict)
-                    or not binding.get("subagent_override_id")
-                ):
-                    continue
-                override = self._agent_configs.get_item(
-                    "subagent_overrides", binding["subagent_override_id"]
-                )
-                if override and any(
-                    item.get("type") == block_type
-                    and item.get("mode") == "replace"
-                    and item.get("block_id") == block_id
-                    for item in override.get("capability_overrides", [])
-                ):
-                    indirect = True
-                    break
+            indirect = self._bindings_reach_block(bindings, block_type, block_id)
             if direct or indirect:
                 issues.extend(
                     self._new_impact_issues(
@@ -1028,11 +1093,7 @@ class ConfigurationValidationService:
             bindings = primary.get("subagents", [])
             if not isinstance(bindings, list):
                 continue
-            if not any(
-                isinstance(binding, dict)
-                and binding.get("subagent_override_id") == override_id
-                for binding in bindings
-            ):
+            if not self._bindings_reach_override(bindings, override_id):
                 continue
             issues.extend(
                 self._new_impact_issues(
@@ -1042,3 +1103,74 @@ class ConfigurationValidationService:
                 )
             )
         return issues
+
+    def _bindings_reach_block(
+        self,
+        bindings: list[Any],
+        block_type: str,
+        block_id: str,
+        *,
+        visited: set[str] | None = None,
+    ) -> bool:
+        visited = set() if visited is None else visited
+        for binding in bindings:
+            if not isinstance(binding, dict):
+                continue
+            override_id = str(binding.get("subagent_override_id", ""))
+            if not override_id or override_id in visited:
+                continue
+            visited.add(override_id)
+            override = self._agent_configs.get_item(
+                "subagent_overrides", override_id
+            )
+            if not override:
+                continue
+            selections = override.get("capability_overrides", [])
+            if isinstance(selections, list) and any(
+                isinstance(item, dict)
+                and item.get("type") == block_type
+                and item.get("mode") == "replace"
+                and item.get("block_id") == block_id
+                for item in selections
+            ):
+                return True
+            nested = override.get("subagents", [])
+            if isinstance(nested, list) and self._bindings_reach_block(
+                nested,
+                block_type,
+                block_id,
+                visited=visited,
+            ):
+                return True
+        return False
+
+    def _bindings_reach_override(
+        self,
+        bindings: list[Any],
+        target_id: str,
+        *,
+        visited: set[str] | None = None,
+    ) -> bool:
+        visited = set() if visited is None else visited
+        for binding in bindings:
+            if not isinstance(binding, dict):
+                continue
+            override_id = str(binding.get("subagent_override_id", ""))
+            if not override_id:
+                continue
+            if override_id == target_id:
+                return True
+            if override_id in visited:
+                continue
+            visited.add(override_id)
+            override = self._agent_configs.get_item(
+                "subagent_overrides", override_id
+            )
+            nested = override.get("subagents", []) if override else []
+            if isinstance(nested, list) and self._bindings_reach_override(
+                nested,
+                target_id,
+                visited=visited,
+            ):
+                return True
+        return False

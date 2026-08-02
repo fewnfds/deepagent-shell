@@ -159,12 +159,14 @@ export function blankSubagentOverride(): SubagentOverrideProfile {
     id: '',
     name: '',
     capability_overrides: [],
+    subagents: [],
   }
 }
 
 export function normalizeSubagentOverride(value: unknown): SubagentOverrideProfile {
   const source = record(value)
   const overrides = Array.isArray(source.capability_overrides) ? source.capability_overrides : []
+  const subagents = Array.isArray(source.subagents) ? source.subagents : []
   return {
     id: text(source.id),
     name: text(source.name),
@@ -176,6 +178,7 @@ export function normalizeSubagentOverride(value: unknown): SubagentOverrideProfi
         block_id: text(override.block_id),
       }
     }),
+    subagents: subagents.map(normalizeSubagentBinding),
   }
 }
 
@@ -207,5 +210,11 @@ export function subagentOverridePayload(
     name: value.name.trim(),
     capability_overrides: value.capability_overrides
       .map((selection) => ({ ...selection })),
+    subagents: value.subagents.map((binding) => ({
+      name: binding.name.trim(),
+      description: binding.description,
+      subagent_override_id: binding.subagent_override_id,
+      include_client_messages: binding.include_client_messages,
+    })),
   }
 }

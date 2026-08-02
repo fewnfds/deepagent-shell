@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$DataDirectory = (Join-Path $PSScriptRoot "data"),
-    [string]$Image = "ghcr.io/fewnfds/agent-shell:latest"
+    [string]$Image = "ghcr.io/fewnfds/deepagent-shell:latest"
 )
 
 Set-StrictMode -Version Latest

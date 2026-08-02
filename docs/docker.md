@@ -1,11 +1,11 @@
 # Docker 部署
 
-Docker 是 DeepAgent Shell 正式版本的 Linux amd64/服务器交付方式，不是 Windows 便携版的前置环境。
+Docker 是 Agent Shell 正式版本的 Linux amd64/服务器交付方式，不是 Windows 便携版的前置环境。
 只有 GitHub Releases 中实际存在的版本才有对应 GHCR image；源码版本字段本身不代表镜像已经发布。
 已有正式版本时使用：
 
 ```text
-ghcr.io/fewnfds/deepdeepagent-shell:<version>
+ghcr.io/fewnfds/deepagent-shell:<version>
 ```
 
 ## 首次启动
@@ -23,7 +23,7 @@ sh ./start_docker.sh
 ```
 
 首次启动会分别要求输入并确认管理密码和 API Key，长度由用户决定；两项输入可以使用相同值。
-管理密码写入 `data/config/deepagent-shell.env`，API Key 写入 SQLite。已有有效配置保持原值。
+管理密码写入 `data/config/agent-shell.env`，API Key 写入 SQLite。已有有效配置保持原值。
 
 默认访问 <http://127.0.0.1:19100/admin/>。查看服务状态和日志：
 
@@ -66,15 +66,15 @@ docker compose down
 
 ## 端口与设置
 
-`data/config/deepagent-shell.env` 保存应用设置。Docker 首次初始化的默认值为：
+`data/config/agent-shell.env` 保存应用设置。Docker 首次初始化的默认值为：
 
 ```dotenv
-DEEPAGENT_SHELL_HOST=0.0.0.0
-DEEPAGENT_SHELL_PORT=19100
+AGENT_SHELL_HOST=0.0.0.0
+AGENT_SHELL_PORT=19100
 ```
 
-- `DEEPAGENT_SHELL_PORT` 同时用于容器监听端口和宿主映射端口；
-- Docker 中应保持 `DEEPAGENT_SHELL_HOST=0.0.0.0`，否则端口映射无法连接到容器内服务；
+- `AGENT_SHELL_PORT` 同时用于容器监听端口和宿主映射端口；
+- Docker 中应保持 `AGENT_SHELL_HOST=0.0.0.0`，否则端口映射无法连接到容器内服务；
 - 保存【系统配置】后重新运行正式 Docker 启动脚本，Compose 会重建服务并应用新端口。
 - 管理密码保存在 env 文件中；API Key 在【系统 / 系统配置】修改并立即生效。
 
@@ -85,20 +85,20 @@ DEEPAGENT_SHELL_PORT=19100
 需要更新时拉取目标版本或 `latest`，再重新运行启动脚本：
 
 ```powershell
-docker pull ghcr.io/fewnfds/deepdeepagent-shell:latest
+docker pull ghcr.io/fewnfds/deepagent-shell:latest
 .\start_docker.ps1
 ```
 
 Windows 可显式选择镜像：
 
 ```powershell
-.\start_docker.ps1 -Image ghcr.io/fewnfds/deepdeepagent-shell:<version>
+.\start_docker.ps1 -Image ghcr.io/fewnfds/deepagent-shell:<version>
 ```
 
-Linux 可设置 `DEEPAGENT_SHELL_IMAGE`：
+Linux 可设置 `AGENT_SHELL_IMAGE`：
 
 ```sh
-DEEPAGENT_SHELL_IMAGE=ghcr.io/fewnfds/deepdeepagent-shell:<version> sh ./start_docker.sh
+AGENT_SHELL_IMAGE=ghcr.io/fewnfds/deepagent-shell:<version> sh ./start_docker.sh
 ```
 
 当前构建链只发布 Linux amd64/glibc image，不承诺 ARM64、Alpine/musl 或 Linux 原生便携包。容器
@@ -110,5 +110,5 @@ DEEPAGENT_SHELL_IMAGE=ghcr.io/fewnfds/deepdeepagent-shell:<version> sh ./start_d
 宿主项目目录，需要额外挂载到容器，例如 `/workspaces/project`，并在页面填写这个容器内 POSIX
 路径。Windows 的 `H:\...` 不能直接作为容器内路径。
 
-外部 workspace 不属于 DeepAgent Shell 的 `data/`，迁移实例时要单独处理。远程 Docker daemon 的 bind
+外部 workspace 不属于 Agent Shell 的 `data/`，迁移实例时要单独处理。远程 Docker daemon 的 bind
 source 位于 daemon 主机，不是运行 Docker CLI 的客户端电脑。

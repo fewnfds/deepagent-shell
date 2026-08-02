@@ -45,9 +45,7 @@ SKILL_PROMPT_FIELDS = (
     "skills_list",
 )
 PROMPT_PRESET_TEMPLATE_FIELDS = (
-    "agent_name",
     "task",
-    "workspace",
 )
 
 
@@ -914,6 +912,7 @@ class SubagentOverrideProfile(StrictBlock):
     capability_overrides: list[CapabilityOverride] = Field(
         default_factory=list, max_length=100
     )
+    subagents: list[SubagentBinding] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
     def validate_overrides(self) -> "SubagentOverrideProfile":

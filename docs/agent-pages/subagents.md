@@ -8,7 +8,8 @@
   "capability_overrides": [
     {"type": "custom-tool", "mode": "disabled", "block_id": ""},
     {"type": "system-prompt", "mode": "replace", "block_id": "UUID"}
-  ]
+  ],
+  "subagents": []
 }
 ```
 
@@ -22,6 +23,10 @@ model 允许 inherit/replace，但不能 disabled。system-prompt、todo-list、
 custom-middleware、exception-retry 和 prompt-preset 支持三种模式。filesystem 不出现在覆写策略中；
 一次请求的 Primary 与全部同步 Subagent 固定使用同一个 workspace。output-mode 和 subagent 不由
 Deep Agents Subagent 覆写，按 manifest 策略移除。
+
+`subagents[]` 是该 Subagent 自己的命名 child catalog，字段与 Primary binding 相同。列表为空表示没有
+`task`；可以引用任意已保存覆写，也可以引用当前覆写自身。平台不增加 inherit/custom/none 模式：每条
+binding 的目标、名称、说明和客户端消息选项就是完整配置。
 
 覆写策略只在与 binding 所在的当前 Primary 组合后才有最终含义。model 丢失、引用失效或资源无法
 物化仍会由集中装配校验拒绝保存、启动或真实 Agent 构建。

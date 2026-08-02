@@ -6,6 +6,7 @@ import { useRoute } from 'vue-router'
 
 import PageShell from '@/components/PageShell.vue'
 import RecordPicker from '@/components/RecordPicker.vue'
+import SubagentBindingsEditor from '@/components/SubagentBindingsEditor.vue'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
 import { useDraftValidation } from '@/composables/useDraftValidation'
 import { useManagementError } from '@/composables/useManagementError'
@@ -322,6 +323,10 @@ watch(
             </div>
           </div>
         </section>
+        <SubagentBindingsEditor
+          :bindings="form.subagents"
+          :override-profiles="profiles"
+        />
       </section>
 
       <aside class="col-lg-4">

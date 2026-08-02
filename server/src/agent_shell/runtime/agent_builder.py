@@ -35,10 +35,7 @@ from agent_shell.runtime.model_request_settings import (
     make_model_request_settings_middleware,
 )
 from agent_shell.runtime.model_response import ModelResponse
-from agent_shell.runtime.subagent_input import (
-    AgentRequestContext,
-    SubagentInputMiddleware,
-)
+from agent_shell.runtime.subagent_input import AgentRequestContext
 from agent_shell.validation.capability_assembly import FilesystemMode
 from agent_shell.validation.models import ValidationIssue, ValidationReport
 from agent_shell.validation.service import ConfigurationValidationService
@@ -494,8 +491,12 @@ class AgentBuilder:
         path: str,
     ) -> Any:
         try:
+            from agent_shell.runtime.deepagents_harness import (
+                ensure_agent_shell_harness_profiles,
+            )
             from deepagents import create_deep_agent
 
+            ensure_agent_shell_harness_profiles(constructor.get("model"))
             return create_deep_agent(**constructor)
         except AgentRuntimeError as exc:
             raise self._reported_error(
@@ -567,9 +568,7 @@ class AgentBuilder:
         prepared_input = prepare_agent_input(
             messages,
             selected_blocks.get("prompt-preset"),
-            variables={
-                "agent_name": primary_name,
-            },
+            variables={},
         )
         if agent_input_observer is not None:
             agent_input_observer(
@@ -622,111 +621,20 @@ class AgentBuilder:
 
         compiled_subagents: list[dict[str, Any]] = []
         if resolved_subagents:
-            for resolved in resolved_subagents:
-                binding = resolved.binding
-                child_name = str(binding["name"])
-                child_references = resolved.references
-                child_blocks = resolved.blocks
-                child = self._materialize_profile(
-                    child_references,
-                    child_blocks,
-                    filesystem_mode=resolved.filesystem_mode,
-                    scope="subagent",
-                    owner_id=primary_id,
-                    owner_name=child_name,
-                    workspace=materialized["workspace"],
-                )
-                child_middleware = [
-                    ToolErrorBoundaryMiddleware(),
-                    *child["middleware"],
-                ]
-                child_preset = child_blocks.get("prompt-preset")
-                if bool(binding.get("include_client_messages")) or child_preset:
-                    child_middleware.insert(
-                        1,
-                        SubagentInputMiddleware(
-                            agent_name=child_name,
-                            include_client_messages=bool(
-                                binding.get("include_client_messages")
-                            ),
-                            preset=child_preset,
-                            observer=agent_input_observer,
-                        ),
-                    )
-                if child["tool_choice"] is not None or child["model_settings"]:
-                    child_middleware.append(
-                        make_model_request_settings_middleware(
-                            tool_choice=child["tool_choice"],
-                            model_settings=child["model_settings"],
-                        )
-                    )
-                child_middleware.extend(
-                    child["custom_middleware"]
-                )
-                child_exception_retry = child["exception_retry"]
-                child_middleware.append(ProviderErrorBoundaryMiddleware())
-                if child_exception_retry is not None:
-                    child_middleware.extend(
-                        child_exception_retry.after_provider_boundary
-                    )
-                try:
-                    self._validate_middleware_names(
-                        child_middleware,
-                        owner=f"Subagent {child_name}",
-                    )
-                    child_middleware_names = {
-                        getattr(item, "name", None) for item in child_middleware
-                    }
-                    self._validate_model_visible_tool_names(
-                        tools=child["tools"],
-                        middleware=child_middleware,
-                        owner=f"Subagent {child_name}",
-                        default_tool_names=(
-                            ()
-                            if "FilesystemMiddleware" in child_middleware_names
-                            else FILESYSTEM_TOOL_NAMES
-                        )
-                        + ("task",),
-                    )
-                except AgentRuntimeError as exc:
-                    raise self._reported_error(
-                        exc,
-                        scope="subagent",
-                        owner_id=primary_id,
-                        owner_name=child_name,
-                        path="capability_refs",
-                    ) from exc
-                child_constructor: dict[str, object] = {
-                    "model": child["model"],
-                    "name": child_name,
-                    "middleware": child_middleware,
-                    "context_schema": AgentRequestContext,
-                }
-                if child["system_prompt"] is not None:
-                    child_constructor["system_prompt"] = child["system_prompt"]
-                if child["tools"]:
-                    child_constructor["tools"] = child["tools"]
-                if child["response_format"] is not None:
-                    child_constructor["response_format"] = child["response_format"]
-                if child["backend"] is not None:
-                    child_constructor["backend"] = child["backend"]
-                if child["skill_sources"]:
-                    child_constructor["skills"] = list(child["skill_sources"])
-                child_graph = self._construct_deep_agent(
-                    child_constructor,
-                    scope="subagent",
-                    owner_id=primary_id,
-                    owner_name=child_name,
-                    subject=f"Subagent {child_name}",
-                    path="capability_refs",
-                )
-                compiled_subagents.append(
-                    {
-                        "name": child_name,
-                        "description": str(binding["description"]),
-                        "runnable": child_graph,
-                    }
-                )
+            from agent_shell.runtime.subagent_graphs import build_subagent_graphs
+
+            compiled_subagents = build_subagent_graphs(
+                roots=resolved_subagents,
+                nodes=assembly.subagent_nodes,
+                primary_id=primary_id,
+                workspace=materialized["workspace"],
+                materialize_profile=self._materialize_profile,
+                construct_deep_agent=self._construct_deep_agent,
+                validate_middleware_names=self._validate_middleware_names,
+                validate_tool_names=self._validate_model_visible_tool_names,
+                report_error=self._reported_error,
+                agent_input_observer=agent_input_observer,
+            )
             delegation_instruction = selected_blocks["subagent"][
                 "instruction_override"
             ]
@@ -783,7 +691,7 @@ class AgentBuilder:
                     if "FilesystemMiddleware" in primary_middleware_names
                     else FILESYSTEM_TOOL_NAMES
                 )
-                + ("task",),
+                + (("task",) if resolved_subagents else ()),
             )
         except AgentRuntimeError as exc:
             raise self._reported_error(

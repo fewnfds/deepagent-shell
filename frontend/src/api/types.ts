@@ -185,6 +185,7 @@ export interface CapabilityOverride {
 export interface SubagentOverridePayload {
   name: string
   capability_overrides: CapabilityOverride[]
+  subagents: SubagentBinding[]
 }
 
 export type SubagentOverride = SubagentOverridePayload & { id: string }

@@ -2,12 +2,12 @@
 
 ## `data/` 是实例数据根
 
-DeepAgent Shell 把用户持久数据集中在一个 `data/`：
+Agent Shell 把用户持久数据集中在一个 `data/`：
 
 ```text
 data/
-  config/deepagent-shell.env
-  state/deepagent-shell.sqlite3*
+  config/agent-shell.env
+  state/agent-shell.sqlite3*
   files/
   resources/
     skills/
@@ -22,7 +22,7 @@ data/
 - `resources/` 保存用户 Skill、Custom Tool 和文件型 Middleware；
 - `logs/` 保存有界的系统事件日志；Agent 运行日志保存在 `state/` 的 SQLite 中。
 
-DeepAgent Shell 不提供初始 Skill、Custom Tool 或 Custom Middleware 数据。配置、SQLite、用户文件、用户
+Agent Shell 不提供初始 Skill、Custom Tool 或 Custom Middleware 数据。配置、SQLite、用户文件、用户
 资源和持久日志全部位于 `data/`；`runtime/` 只放 cache、tmp 和运行 HOME，可在程序停止后重新生成。
 
 源码仓库不携带 `data/`，干净 Clone 可在首次启动前保持没有该目录。程序会创建缺失目录；如果用户先
@@ -89,7 +89,7 @@ Python 依赖或运行时构造一定成功；真实 Agent 仍会在选择该资
 
 ## 系统配置
 
-【系统 / 系统配置】修改 `data/config/deepagent-shell.env` 中的当前设置：
+【系统 / 系统配置】修改 `data/config/agent-shell.env` 中的当前设置：
 
 - 监听 host、应用端口和允许远程访问；
 - 替换管理网站密码；
@@ -100,7 +100,7 @@ Python 依赖或运行时构造一定成功；真实 Agent 仍会在选择该资
 
 管理密码和 API Key 都是 write-only，只显示是否已经配置，不返回已保存明文。管理密码留空表示保持原值；
 API Key 未编辑时保持原值，输入新值后保存会替换，编辑后清空再保存会清除。管理密码可以与 API Key
-使用相同值。页面只提供一个【保存】动作：启动设置写入 `deepagent-shell.env`，API Key 与初始消息条数上限
+使用相同值。页面只提供一个【保存】动作：启动设置写入 `agent-shell.env`，API Key 与初始消息条数上限
 写入 SQLite；拦截测试与详细诊断更新当前进程内的运行控制。
 
 API Key、初始消息条数上限和拦截测试保存后立即生效并持久化。详细诊断不再位于本页，由日志中心
@@ -108,7 +108,7 @@ API Key、初始消息条数上限和拦截测试保存后立即生效并持久�
 host、端口、远程访问、管理密码、CORS 和可信代理等启动设置不会修改正在运行的进程；Windows/source
 停止后重新运行正式启动入口，Docker 重新运行
 `start_docker.ps1` 或 `start_docker.sh`。Docker 内应保持 host 为 `0.0.0.0`；重建后
-`DEEPAGENT_SHELL_PORT` 同时成为容器监听和宿主访问端口。
+`AGENT_SHELL_PORT` 同时成为容器监听和宿主访问端口。
 
 页面不负责终止进程、控制 Docker 或修改反向代理。远程部署、TLS、凭据和代理约束见
 [安全与部署](../security-and-deployment.md)。

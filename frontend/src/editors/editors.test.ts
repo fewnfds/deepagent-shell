@@ -85,7 +85,7 @@ const todoDefaults: TodoListDefaults = {
   system_prompt: 'todo default', tool_description: 'write_todos default',
 }
 const promptPresetDefaults = {
-  template_variables: ['{agent_name}', '{task}'],
+  template_variables: ['{task}'],
 }
 const i18n = createI18n({
   legacy: false,
@@ -210,6 +210,7 @@ describe('dedicated block editors', () => {
     await editor.get('[data-action="add-message"]').trigger('click')
     expect(editor.findAll('textarea')).toHaveLength(2)
     expect(editor.find('.form-switch').exists()).toBe(false)
+    expect(editor.findAll('.badge').map((item) => item.text())).toEqual(['{task}'])
   })
 
   it('renders queried models as selectable cards', async () => {
@@ -367,10 +368,10 @@ describe('dedicated block editors', () => {
       defaults: todoDefaults,
     })
 
-    expect(skill.find('.form-switch').exists()).toBe(false)
+    expect(skill.find('.form-switch').exists()).toBe(true)
     expect(editor.find('.subagent-mode-card').exists()).toBe(false)
     expect(editor.find('input[type="checkbox"]').exists()).toBe(false)
-    expect(editor.findAll('textarea')).toHaveLength(2)
+    expect(editor.findAll('textarea')).toHaveLength(1)
     expect(editor.find('.list-group').exists()).toBe(false)
     expect(todo.findAll('textarea')).toHaveLength(2)
     expect(todo.find('.list-group').exists()).toBe(false)

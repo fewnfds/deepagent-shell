@@ -362,7 +362,7 @@ def test_selected_output_mode_wraps_the_same_timeline_for_both_transports(
     ]
     assert streamed.text.rstrip().endswith("data: [DONE]")
 
-def test_saved_system_prompt_and_complete_text_history_reach_create_agent(
+def test_saved_system_prompt_and_complete_text_history_reach_deep_agent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     RecordingFakeListChatModel.seen_messages = []

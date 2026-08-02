@@ -94,7 +94,7 @@ snapshot 与已交付 delta 不一致，客户端已收到的 delta 保持事实
 | `tool_error` | tool failed/error 或无效完整 tool call | `tool_name`、`tool_call_id`、`status`、`error_code` |
 | `subagent` | Subagent lifecycle | `subagent_name`、`tool_call_id`、`status` |
 | `custom` | 显式 `custom` / `custom:*` 原子事件 | `channel`、`data_json` |
-| `lifecycle` | DeepAgent Shell 顶层运行边界 | `status`、`finish_reason`、`error_code` |
+| `lifecycle` | Agent Shell 顶层运行边界 | `status`、`finish_reason`、`error_code` |
 
 只有最外层 Primary 的模型 text/reasoning block 进入公开输出。Subagent 内部模型内容不公开；它的
 最终回答仍通过匹配 `tool_call_id` 的完整工具结果返回。

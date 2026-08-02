@@ -74,9 +74,17 @@ def prepare_agent_input(
 
     startup_messages = preset.get("startup_messages", [])
     for template in startup_messages:
+        try:
+            content = str(template["content_template"]).format_map(variables)
+        except KeyError:
+            raise AgentRuntimeError(
+                "prompt_preset_variable_unavailable",
+                "The selected Prompt Preset uses a variable unavailable to this Agent.",
+                status_code=422,
+            ) from None
         message = {
             "role": str(template["role"]),
-            "content": str(template["content_template"]).format_map(variables),
+            "content": content,
         }
         name = template.get("name")
         if name is not None:

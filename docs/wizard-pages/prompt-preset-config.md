@@ -24,9 +24,10 @@ Prompt Preset 在某个 Agent graph 启动前，对该消费者的客户端消�
 不会再次扫描；未由当前 Preset 配置的其他文本保持原样。
 
 标签替换后，`startup_messages` 按保存顺序追加到同一 Agent 输入。角色只允许 `user` 与
-`assistant`，可选 `name` 直接作为 LangChain 消息 name。管理 catalog 会列出当前可用模板变量；
-Primary 可使用 `{agent_name}`；Subagent 可使用 `{agent_name}`、`{task}` 与 `{workspace}`。保存与装配
-校验以服务端报告为准。
+`assistant`，可选 `name` 直接作为 LangChain 消息 name。管理 catalog 只列出 `{task}`：它表示父 Agent
+通过官方 `task` 工具传给 Subagent 的本次委派说明，只能用于 Subagent。Primary 使用的 Preset 不能包含
+模板变量；同一 Preset 被装配给 Primary 时会在 Provider 前得到稳定校验错误。`{task}` 不是 Subagent
+Preset 的必填项，静态正文和完整多角色消息仍可照常使用。
 
 Primary 在 graph 启动前直接准备自己的输入。Subagent 的最终 Preset 可以继承 Primary、替换或关闭；
 binding 的 `include_client_messages=true` 时，child 通过 LangChain 原生 node-style `before_agent`

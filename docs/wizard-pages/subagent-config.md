@@ -16,10 +16,10 @@
   保存或修改 `task_description_override`。
 
 每段文本最多 100,000 字符。具体 binding 的名称、用途和可选覆写策略在【Agent / Primary Agent】维护。
-每条 binding 的 child graph 都由 `create_deep_agent()` 构造，再以官方 `CompiledSubAgent` 交给 Primary 的
-`subagents=` 参数；child 不复制当前 Primary 的命名 bindings，但未显式传入命名 subagents 时仍保留
-Deep Agents 默认 `general-purpose` 与 `task`，可以真实递归委派。提示词可指导模型何时不要继续委派，
-但不是强制禁止边界。
+每条 binding 的 child graph 都由 `create_deep_agent()` 构造，再以官方 `CompiledSubAgent` 交给父 Agent
+的 `subagents=` 参数。Agent Shell 全局关闭隐式 `general-purpose`；Primary 与每个 Subagent 覆写分别保存
+自己的命名 bindings，空 catalog 没有 `task`。Subagent 可引用自身或其他覆写形成循环，调用和终止仍由
+Deep Agents/LangGraph 管理。
 
 项目 Filesystem 不进入 Subagent 覆写策略。同一次请求只装配一个 workspace，Primary 与所有同步 child
 双向共享虚拟 `files` state、初始虚拟文件和 mapped routes；未选择项目 Filesystem 时也共享上游默认

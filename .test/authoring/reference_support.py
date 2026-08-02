@@ -77,7 +77,7 @@ def block_payload(capability_type: str, name: str) -> dict:
             "startup_messages": [
                 {
                     "role": "user",
-                    "content_template": "Begin as {agent_name}.",
+                    "content_template": "Begin work.",
                 }
             ],
         },

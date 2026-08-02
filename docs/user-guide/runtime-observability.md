@@ -25,12 +25,12 @@ management 鉴权的 JSON 文件。下载时记录若已被保存上限裁剪或
 
 API 调用条目提供下载图标加【RAW】和【DEBUG】两个紧凑操作。RAW 保持数据库中记录的完整
 wire；调试版只在下载时把 SSE `chat.completion.chunk` 合并为一段可读 content，并保留分块数、结束
-原因、usage、错误和 DeepAgent Shell 终止信息，同时把可解析的请求与非流式响应 JSON 还原为对象。调试版
+原因、usage、错误和 Agent Shell 终止信息，同时把可解析的请求与非流式响应 JSON 还原为对象。调试版
 还会按 request ID 附带当前保留范围内的脱敏 Agent 运行诊断，包括稳定错误代码、安全调用位置和异常链。
 RAW 不混入这些诊断；调试版不改写原始记录，也不承担 API wire 正文脱敏，分享文件前仍应按安全边界
 检查其中的用户内容。
 
-request ID 是 DeepAgent Shell 的请求关联 ID，不是 LangChain ID。客户端若提供唯一且格式有效的
+request ID 是 Agent Shell 的请求关联 ID，不是 LangChain ID。客户端若提供唯一且格式有效的
 `X-Request-ID`，服务端沿用该值；否则生成 `req_<uuid>`。它通过响应头返回，并保存在下载 JSON 的
 `entry.request_id`，不会写进交给模型的 OpenAI 请求正文。需要关联同一请求的 API 调用、Agent 运行、
 系统和拦截日志时，可从精简预览或下载 JSON 复制该值，并在全文查询框中搜索。

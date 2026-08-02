@@ -95,8 +95,9 @@ def binding_reference_owner(
     config_store: AgentConfigStore,
     *,
     target_id: str,
-) -> str:
-    """Return the Primary owning a Subagent override reference, if any."""
+    ignored_override_ids: frozenset[str] = frozenset(),
+) -> tuple[str, str] | None:
+    """Return a configuration that keeps a Subagent override alive, if any."""
     for owner in config_store.list_items(PRIMARY_TABLE):
         bindings = owner.get("subagents", [])
         if not isinstance(bindings, list):
@@ -106,8 +107,22 @@ def binding_reference_owner(
             and binding.get("subagent_override_id") == target_id
             for binding in bindings
         ):
-            return str(owner.get("name", ""))
-    return ""
+            return "primary", str(owner.get("name", ""))
+
+    for owner in config_store.list_items(OVERRIDE_TABLE):
+        owner_id = str(owner.get("id", ""))
+        if owner_id in ignored_override_ids:
+            continue
+        bindings = owner.get("subagents", [])
+        if not isinstance(bindings, list):
+            continue
+        if any(
+            isinstance(binding, dict)
+            and binding.get("subagent_override_id") == target_id
+            for binding in bindings
+        ):
+            return "subagent_override", str(owner.get("name", ""))
+    return None
 
 
 def build_agent_config_router(
@@ -247,6 +262,7 @@ def build_agent_config_router(
         payload: ConfigurationBulkDelete,
     ) -> dict[str, int]:
         ids = list(dict.fromkeys(payload.ids))
+        deleting_ids = frozenset(ids)
         for item_id in ids:
             if config_store.get_item(OVERRIDE_TABLE, item_id) is None:
                 raise management_error(
@@ -255,14 +271,27 @@ def build_agent_config_router(
                     message_key="errors.subagentOverrideNotFound",
                     message="A Subagent override configuration does not exist.",
                 )
-            owner = binding_reference_owner(config_store, target_id=item_id)
+            owner = binding_reference_owner(
+                config_store,
+                target_id=item_id,
+                ignored_override_ids=deleting_ids,
+            )
             if owner:
+                owner_type, owner_name = owner
                 raise management_error(
                     409,
                     code="configuration_referenced",
-                    message_key="errors.configurationReferencedByPrimary",
-                    message="The configuration is still referenced by a Primary Agent.",
-                    message_args={"owner": owner},
+                    message_key=(
+                        "errors.configurationReferencedByPrimary"
+                        if owner_type == "primary"
+                        else "errors.configurationReferencedBySubagentOverride"
+                    ),
+                    message=(
+                        "The configuration is still referenced by a Primary Agent."
+                        if owner_type == "primary"
+                        else "The configuration is still referenced by a Subagent override."
+                    ),
+                    message_args={"owner": owner_name},
                 )
         return {"deleted": config_store.delete_items(OVERRIDE_TABLE, ids)}
 
@@ -369,14 +398,24 @@ def build_agent_config_router(
         owner = binding_reference_owner(
             config_store,
             target_id=item_id,
+            ignored_override_ids=frozenset({item_id}),
         )
         if owner:
+            owner_type, owner_name = owner
             raise management_error(
                 409,
                 code="configuration_referenced",
-                message_key="errors.configurationReferencedByPrimary",
-                message="The configuration is still referenced by a Primary Agent.",
-                message_args={"owner": owner},
+                message_key=(
+                    "errors.configurationReferencedByPrimary"
+                    if owner_type == "primary"
+                    else "errors.configurationReferencedBySubagentOverride"
+                ),
+                message=(
+                    "The configuration is still referenced by a Primary Agent."
+                    if owner_type == "primary"
+                    else "The configuration is still referenced by a Subagent override."
+                ),
+                message_args={"owner": owner_name},
             )
         config_store.delete_item(OVERRIDE_TABLE, item_id)
         return {"ok": True}

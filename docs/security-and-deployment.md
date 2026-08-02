@@ -12,32 +12,32 @@ deepagent-shell 默认是本机单用户服务。管理 API、自定义 Python�
 ```
 
 根启动脚本仅在“有效本地配置唯一缺少 management token”时，隐藏输入并确认管理密码，再从
-`.env.example` 创建 `data/config/deepagent-shell.env`。配置已有密码时不会覆盖；配置非法或属于远程部署缺项时也不会
+`.env.example` 创建 `data/config/agent-shell.env`。配置已有密码时不会覆盖；配置非法或属于远程部署缺项时也不会
 自动修正。脚本只使用项目 `runtime/` 内的固定 Python 与依赖，不回退到宿主 Python、Node.js、uv
 或虚拟环境。
 
-便携入口只读取显式 data root 中的 `config/deepagent-shell.env`，不读取宿主 `DEEPAGENT_SHELL_*`。它同时清除宿主
+便携入口只读取显式 data root 中的 `config/agent-shell.env`，不读取宿主 `AGENT_SHELL_*`。它同时清除宿主
 `PYTHONHOME`/`PYTHONPATH`，因此复制目录后不会继续引用旧 checkout 或宿主 Python。高级部署入口
-必须显式使用 `--mode environment`；该模式才会读取严格的 `DEEPAGENT_SHELL_*` 环境设置，未知同前缀
+必须显式使用 `--mode environment`；该模式才会读取严格的 `AGENT_SHELL_*` 环境设置，未知同前缀
 变量会使启动失败。两种模式都在监听前校验部署设置，所有相对路径都以显式 `--home` 解析。
 
 高级入口示例（开发环境已用 uv 同步依赖）：
 
 ```powershell
 cd server
-uv run python -m deepagent_shell --home .. --data-dir ..\data --mode environment
+uv run python -m agent_shell --home .. --data-dir ..\data --mode environment
 ```
 
 ## 设置
 
 | 设置 | 默认 | 作用 |
 | --- | --- | --- |
-| `DEEPAGENT_SHELL_HOST` | `127.0.0.1` | IP literal 监听地址 |
-| `DEEPAGENT_SHELL_PORT` | `19100` | `1..65535` |
-| `DEEPAGENT_SHELL_ALLOW_REMOTE` | `false` | 显式允许非 loopback/可信代理部署 |
-| `DEEPAGENT_SHELL_MANAGEMENT_TOKEN` | 必填 | 管理网站和 `/api/*` 使用的管理密码 |
-| `DEEPAGENT_SHELL_CORS_ORIGINS` | 空 | 明确 HTTP(S) origin 列表；空为关闭 |
-| `DEEPAGENT_SHELL_TRUSTED_PROXY_CIDRS` | 空 | 直接可信代理网段 |
+| `AGENT_SHELL_HOST` | `127.0.0.1` | IP literal 监听地址 |
+| `AGENT_SHELL_PORT` | `19100` | `1..65535` |
+| `AGENT_SHELL_ALLOW_REMOTE` | `false` | 显式允许非 loopback/可信代理部署 |
+| `AGENT_SHELL_MANAGEMENT_TOKEN` | 必填 | 管理网站和 `/api/*` 使用的管理密码 |
+| `AGENT_SHELL_CORS_ORIGINS` | 空 | 明确 HTTP(S) origin 列表；空为关闭 |
+| `AGENT_SHELL_TRUSTED_PROXY_CIDRS` | 空 | 直接可信代理网段 |
 
 启动期只确定一个 data root，再固定派生
 `config/state/files/resources/logs`；Windows/source 默认 `<home>/data`，Docker 显式使用
@@ -61,7 +61,7 @@ uv run python -m deepagent_shell --home .. --data-dir ..\data --mode environment
 
 ## 资源容量责任
 
-DeepAgent Shell 首版不提供进程级推理并发配额或排队，不为请求正文、Agent 内部 ModelRequest、Session
+Agent Shell 首版不提供进程级推理并发配额或排队，不为请求正文、Agent 内部 ModelRequest、Session
 timeline、虚拟目录文件数或虚拟来源字节数设置隐藏硬上限。每个有效请求独立构造 Agent，虚拟来源按
 请求重新完整读取，Session 按当前观察契约保存客户端输入、最终响应和白名单 workflow 统计。部署者应按机器容量、Provider 配额、调用方
 并发、输入规模和历史保留设置自行管理资源与费用。
@@ -90,19 +90,19 @@ FastAPI 自动生成的 `/openapi.json`、`/docs` 和 `/redoc` 不属于产品�
 
 ## 远程发布边界
 
-DeepAgent Shell 的正式入口是普通 HTTP 后端，不内置证书和 TLS，也不根据 `X-Forwarded-Proto` 猜测
+Agent Shell 的正式入口是普通 HTTP 后端，不内置证书和 TLS，也不根据 `X-Forwarded-Proto` 猜测
 外部请求是否安全。受支持的远程拓扑只有一条：
 
 ```text
-远程客户端 -- HTTPS --> TLS 反向代理/防火墙 -- 私有 HTTP --> DeepAgent Shell
+远程客户端 -- HTTPS --> TLS 反向代理/防火墙 -- 私有 HTTP --> Agent Shell
 ```
 
-也就是说，浏览器或 OpenAI 客户端应只看到反向代理的 HTTPS 地址；DeepAgent Shell 的配置端口不能
+也就是说，浏览器或 OpenAI 客户端应只看到反向代理的 HTTPS 地址；Agent Shell 的配置端口不能
 直接暴露到公网。强 Bearer 只能防止猜中凭据，不能加密明文 HTTP 上的 Authorization header。
 TLS 证书、HTTP 到 HTTPS 跳转、公网端口、IP/网络限制以及需要时的认证失败限速，都由反向代理、
-网关或防火墙负责。DeepAgent Shell 不为这些职责增加第二套配置。
+网关或防火墙负责。Agent Shell 不为这些职责增加第二套配置。
 
-反向代理与 DeepAgent Shell 在同一台机器时，优先让 DeepAgent Shell 继续监听 `127.0.0.1`，由代理连接本机
+反向代理与 Agent Shell 在同一台机器时，优先让 Agent Shell 继续监听 `127.0.0.1`，由代理连接本机
 端口；代理位于另一容器或主机时，只绑定受防火墙保护的私有接口。开启远程模式后正式入口会打印
 一条警告，提醒当前进程仍是 HTTP 后端；TLS 状态由外部代理和访问入口确认。
 
@@ -128,7 +128,7 @@ secret 明文保存在同一 SQLite 的 `provider_secrets` 表，model JSON 只�
 普通 API 只返回 `masked|missing`。复制 model 共享 reference，替换时原子轮换，删除最后一个
 引用后清理。当前没有显式 clear 命令，也没有加密 vault。
 
-因此 `data/config/deepagent-shell.env` 中的管理密码、数据库/WAL/SHM 中的 API Key 与 Provider secret、
+因此 `data/config/agent-shell.env` 中的管理密码、数据库/WAL/SHM 中的 API Key 与 Provider secret、
 进程内存、备份软件和同账户进程都可能接触 secret。正式入口在
 创建或读取配置文件前会在 POSIX 使用私有权限，在 Windows 写入并复核当前账户 DACL；无法
 确认时拒绝继续启动。数据与日志文件沿用同一权限保护。readiness 的 storage 分区报告应用启动时
@@ -201,7 +201,7 @@ SQLite 配置结果是管理操作的权威结果，安全事件是提交后的�
 
 ## 示例
 
-本地监听至少需要管理密码；标准启动脚本会安全创建 `data/config/deepagent-shell.env`，用户 API Key 可以随后在
+本地监听至少需要管理密码；标准启动脚本会安全创建 `data/config/agent-shell.env`，用户 API Key 可以随后在
 【系统 / 系统配置】设置：
 
 ```powershell
@@ -214,15 +214,15 @@ SQLite 配置结果是管理操作的权威结果，安全事件是提交后的�
 
 ```powershell
 cd server
-$env:DEEPAGENT_SHELL_HOST = '127.0.0.1'
-$env:DEEPAGENT_SHELL_ALLOW_REMOTE = 'true'
-$env:DEEPAGENT_SHELL_MANAGEMENT_TOKEN = uv run python -c "import secrets; print(secrets.token_urlsafe(32))"
-$env:DEEPAGENT_SHELL_TRUSTED_PROXY_CIDRS = '127.0.0.1/32'
-uv run python -m deepagent_shell --home .. --data-dir ..\data --mode environment
+$env:AGENT_SHELL_HOST = '127.0.0.1'
+$env:AGENT_SHELL_ALLOW_REMOTE = 'true'
+$env:AGENT_SHELL_MANAGEMENT_TOKEN = uv run python -c "import secrets; print(secrets.token_urlsafe(32))"
+$env:AGENT_SHELL_TRUSTED_PROXY_CIDRS = '127.0.0.1/32'
+uv run python -m agent_shell --home .. --data-dir ..\data --mode environment
 ```
 
 若代理不发送 `Forwarded`/`X-Forwarded-*`，可以不配置 `TRUSTED_PROXY_CIDRS`。若配置了，网段必须
 只包含直接代理，且代理必须覆盖客户端传入的转发头。不要为了省事把任意公网网段设为可信代理。
 
-不要提交真实 token 或含 secret 的 `data/config/deepagent-shell.env`。应用只读取当前 schema，未经用户授权不迁移、删除
+不要提交真实 token 或含 secret 的 `data/config/agent-shell.env`。应用只读取当前 schema，未经用户授权不迁移、删除
 或改写 `data/`。
