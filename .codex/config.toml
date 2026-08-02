@@ -1,0 +1,6 @@
+[mcp_servers.langchain_docs]
+url = "https://docs.langchain.com/mcp"
+enabled_tools = [
+  "search_docs_by_lang_chain",
+  "query_docs_filesystem_docs_by_lang_chain",
+]

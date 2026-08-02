@@ -1,0 +1,42 @@
+from __future__ import annotations
+
+from pathlib import Path
+from urllib.parse import urlsplit
+
+import httpx
+from fastapi.testclient import TestClient
+
+from agent_shell.storage.api_server import ApiServerStore
+from agent_shell.storage.database import SQLiteDatabase
+
+
+MANAGEMENT_TOKEN = "test-management-token"
+API_KEY = "test-api-key"
+
+
+def configure_scope_tokens(monkeypatch, root: Path) -> None:
+    monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", MANAGEMENT_TOKEN)
+    database = SQLiteDatabase(
+        root / "data" / "state" / "agent-shell.sqlite3"
+    )
+    store = ApiServerStore(database)
+    if store.api_key() is None:
+        store.update_settings(
+            api_key_operation="replace",
+            api_key=API_KEY,
+        )
+
+
+class ScopedAuthTestClient(TestClient):
+    """Attach the matching test Bearer token unless a test supplies its own."""
+
+    def request(self, method, url, **kwargs):
+        headers = httpx.Headers(kwargs.get("headers"))
+        if "authorization" not in headers:
+            path = urlsplit(str(url)).path
+            if path == "/api" or path.startswith("/api/"):
+                headers["Authorization"] = f"Bearer {MANAGEMENT_TOKEN}"
+            elif path == "/v1" or path.startswith("/v1/"):
+                headers["Authorization"] = f"Bearer {API_KEY}"
+        kwargs["headers"] = headers
+        return super().request(method, url, **kwargs)

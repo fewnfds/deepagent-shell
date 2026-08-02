@@ -1,0 +1,422 @@
+{
+  "version": 1,
+  "status": "adminlte-single-stack",
+  "approval": {
+    "approvedBy": "user",
+    "approvedAt": "2026-07-30",
+    "decision": "AdminLTE 4.1 and the approved @adminlte/vue surface replace Element Plus completely",
+    "newVisualCapabilityRequiresApproval": true,
+    "simpleInfrastructureEnglishAllowed": true
+  },
+  "dependencies": {
+    "requiredExact": {
+      "@adminlte/vue": "0.3.0",
+      "bootstrap": "5.3.8",
+      "bootstrap-icons": "1.13.1",
+      "vue": "3.5.40",
+      "vue-i18n": "11.4.6",
+      "vue-router": "4.6.4"
+    },
+    "approvedRuntime": [
+      "@adminlte/vue",
+      "bootstrap",
+      "bootstrap-icons",
+      "vue",
+      "vue-i18n",
+      "vue-router"
+    ],
+    "forbidden": [
+      "@adminlte/nuxt",
+      "@adminlte/vue/plugins",
+      "@fullcalendar/core",
+      "@fullcalendar/daygrid",
+      "@fullcalendar/interaction",
+      "apexcharts",
+      "flatpickr",
+      "jsvectormap",
+      "nuxt",
+      "overlayscrollbars",
+      "quill",
+      "sortablejs",
+      "tabulator-tables",
+      "tom-select"
+    ]
+  },
+  "adminLteVue": {
+    "registration": "named-imports-only",
+    "cssImportPaths": ["src/main.ts"],
+    "allowedImports": [
+      "LteAccordion",
+      "LteAccordionItem",
+      "LteAlert",
+      "LteButton",
+      "LteCard",
+      "LteInfoBox",
+      "LteInput",
+      "LteInputFile",
+      "LteProgress",
+      "LteSelect",
+      "LteTextarea"
+    ],
+    "controlledImports": {
+      "LteAppContent": ["src/components/PageShell.vue"],
+      "LteBreadcrumb": ["src/components/PageShell.vue"],
+      "LteModal": ["src/components/ModalHost.vue"],
+      "LteSidebarNav": ["src/components/AppShell.vue"],
+      "LteToast": ["src/components/ToastHost.vue"],
+      "provideColorMode": ["src/components/AppShell.vue"]
+    },
+    "allowedTypeImports": [
+      "BootstrapTheme",
+      "ColorMode",
+      "MenuNode"
+    ],
+    "forbiddenImports": [
+      "LteAuthLayout",
+      "LteColorModeToggle",
+      "LteCommandPalette",
+      "LteDashboardLayout",
+      "LteDescriptionBlock",
+      "LteDirectChat",
+      "LteFullscreenToggle",
+      "LteInputColor",
+      "LteInputFlatpickr",
+      "LteInputSwitch",
+      "LteInputTomSelect",
+      "LteNavMessages",
+      "LteNavNotifications",
+      "LteNavTasks",
+      "LteProfileCard",
+      "LteProgressGroup",
+      "LteRatings",
+      "LteSidebar",
+      "LteSidebarBrand",
+      "LteSidebarOverlay",
+      "LteSmallBox",
+      "LteTabs",
+      "LteTab",
+      "LteTopbar",
+      "LteWizard",
+      "LteWizardStep",
+      "components",
+      "flattenMenuToCommands"
+    ],
+    "staticPropValues": {
+      "LteAlert": {
+        "theme": ["danger", "info", "success", "warning"]
+      },
+      "LteButton": {
+        "size": ["sm", "lg"],
+        "theme": ["danger", "info", "primary", "secondary", "success", "warning"]
+      },
+      "LteCard": {
+        "theme": []
+      },
+      "LteInfoBox": {
+        "theme": ["danger", "success"]
+      },
+      "LteModal": {
+        "size": ["lg", "xl"]
+      },
+      "LteToast": {
+        "theme": ["danger", "info", "success", "warning"]
+      },
+      "LteProgress": {
+        "theme": ["danger", "info", "primary", "success", "warning"]
+      }
+    },
+    "forbiddenProps": {
+      "LteButton": ["outline"],
+      "LteCard": ["gradient", "outline", "solid", "theme"]
+    },
+    "dynamicPropPaths": {
+      "LteButton": {
+        "theme": ["src/components/data-table/DataTableWorkbench.vue"]
+      },
+      "LteModal": {
+        "size": ["src/components/ModalHost.vue"]
+      },
+      "LteToast": {
+        "theme": ["src/components/ToastHost.vue"]
+      }
+    }
+  },
+  "styles": {
+    "allowedProjectCss": ["src/styles/management-console.css", "src/styles/style-lab.css"],
+    "allowedSfcStyleBlocks": [],
+    "allowedInlineStylePaths": [],
+    "hardcodedColorsAllowed": false,
+    "classRecipes": [
+      {
+        "name": "app-shell",
+        "paths": ["src/components/AppShell.vue"],
+        "classes": [
+          "active", "app-header", "app-main", "app-sidebar", "app-wrapper", "bg-body",
+          "app-page-title",
+          "api-status-indicator", "api-status-indicator--running", "api-status-indicator--stopped",
+          "bg-body-secondary", "border-bottom", "brand-link", "brand-text", "container-fluid",
+          "flex-column", "ms-auto", "nav", "nav-icon", "nav-item", "nav-link", "nav-pills",
+          "nav-sidebar", "navbar", "navbar-expand", "navbar-nav", "shadow", "sidebar-brand",
+          "sidebar-menu", "sidebar-overlay", "sidebar-wrapper", "spinner-border", "spinner-border-sm",
+          "visually-hidden-focusable"
+        ]
+      },
+      {
+        "name": "page-shell",
+        "paths": ["src/components/PageShell.vue"],
+        "classes": [
+          "app-content", "container-fluid", "page-action-dock", "page-action-reserve", "pt-3"
+        ]
+      },
+      {
+        "name": "feedback-hosts",
+        "paths": [
+          "src/components/AuthGate.vue",
+          "src/components/ConfirmDialog.vue",
+          "src/components/ModalHost.vue",
+          "src/components/ToastHost.vue"
+        ],
+        "classes": [
+          "end-0", "me-auto", "modal-title", "p-3", "position-fixed", "toast-container", "toast-host"
+        ]
+      },
+      {
+        "name": "forms-and-actions",
+        "paths": ["src/components/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
+        "classes": [
+          "btn", "btn-check", "btn-danger", "btn-info", "btn-lg", "btn-outline-primary", "btn-primary", "btn-secondary", "btn-sm", "btn-success", "btn-warning", "form-check",
+          "form-check-input", "form-check-label", "form-control", "form-label", "form-select",
+          "form-select-sm", "form-switch", "input-group", "input-group-text", "is-invalid", "invalid-feedback"
+        ]
+      },
+      {
+        "name": "content-and-data",
+        "paths": ["src/components/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
+        "classes": [
+          "accordion", "alert", "alert-danger", "align-middle", "badge", "border", "breadcrumb", "breadcrumb-item", "card", "card-body", "card-danger", "card-footer",
+          "card-primary", "bg-danger", "bg-info", "bg-primary", "bg-success", "bg-warning",
+          "card-header", "card-outline", "card-text", "card-title", "dropdown", "dropdown-item", "dropdown-menu", "dropdown-menu-end", "info-box-number", "page-item", "page-link", "pagination", "progress", "rounded", "spinner-border", "spinner-border-sm",
+          "list-group", "list-group-flush", "list-group-item", "row", "table", "table-hover", "table-responsive", "table-striped", "text-bg-danger", "text-bg-info",
+          "text-bg-primary",
+          "text-bg-secondary", "text-bg-success", "text-bg-warning", "time", "timeline", "timeline-body", "timeline-footer", "timeline-header", "timeline-item"
+        ]
+      },
+      {
+        "name": "approved-utilities",
+        "paths": ["src/components/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
+        "classes": [
+          "align-items-center", "align-items-end", "align-items-start", "bg-body-tertiary", "col-12", "col-lg-3", "col-lg-4", "col-lg-6", "col-lg-8", "col-md-6", "col-xl-5", "col-xl-7", "col-xxl-4", "d-block", "d-flex", "d-none", "d-sm-inline", "flex-wrap", "font-monospace", "form-text", "fw-semibold", "g-3", "gap-1", "gap-2", "gap-3", "h-100", "h4", "h5",
+          "justify-content-between", "justify-content-end", "lh-sm", "mb-0", "mb-1", "mb-2", "mb-3", "me-2", "ms-auto", "mt-2", "mt-3", "overflow-auto", "p-3", "small",
+          "text-body-secondary", "text-break", "text-center", "text-danger", "text-end", "text-start", "text-success", "text-uppercase", "visually-hidden", "w-100"
+        ]
+      },
+      {
+        "name": "collection-workbench",
+        "paths": [
+          "src/components/data-table/*.vue",
+          "src/components/PaginationControls.vue"
+        ],
+        "classes": [
+          "active",
+          "collection-filter-fieldset", "collection-filter-form", "collection-filter-grid",
+          "collection-filter-legend", "collection-filter-options", "collection-page-jump",
+          "collection-page-size", "collection-pager", "collection-pager-controls",
+          "collection-query", "collection-row-actions",
+          "collection-table", "collection-table-viewport", "disabled"
+        ]
+      },
+      {
+        "name": "component-editor",
+        "paths": ["src/pages/ComponentsPage.vue"],
+        "classes": ["component-editor-region"]
+      },
+      {
+        "name": "session-timeline",
+        "paths": ["src/pages/AgentSessionsPage.vue"],
+        "classes": ["session-timeline-json"]
+      },
+      {
+        "name": "style-lab-experiment",
+        "paths": ["src/pages/StyleLabPage.vue"],
+        "classes": [
+          "card-info", "card-primary", "lab-actions", "lab-card", "lab-card--aurora",
+          "lab-card--corner", "lab-card--dense", "lab-card--glass", "lab-card--layered",
+          "lab-card--rail", "lab-card--split", "lab-card--terminal", "lab-card__body",
+          "lab-card__eyebrow", "lab-card__footer", "lab-card__header", "lab-card__icon",
+          "lab-card__index", "lab-control-label", "lab-control-sample", "lab-corner-mark",
+          "lab-definition-list", "lab-dot", "lab-grid", "lab-intro", "lab-kicker",
+          "lab-kpi-row", "lab-mini-field", "lab-sample", "lab-status-value", "lab-swatch",
+          "lab-swatch-row", "lab-terminal-dots", "lab-terminal-line", "style-lab"
+        ]
+      }
+    ]
+  },
+  "icons": {
+    "cssImportPaths": ["src/main.ts"],
+    "allowed": [
+      "archive", "arrow-clockwise", "book", "boxes", "check-circle", "check-lg", "chevron-left", "circle",
+      "chevron-right", "circle-half", "copy", "download", "exclamation-triangle", "eye", "eye-slash",
+      "file-earmark", "folder", "gear", "hdd-network", "house", "info-circle", "key", "list", "moon-fill", "pencil",
+      "play-fill", "plus-lg", "robot", "search", "sliders", "stop-fill", "sun-fill", "three-dots",
+      "shield-lock", "translate", "trash", "upload", "x-circle", "x-lg"
+    ],
+    "dynamicAllowedPaths": []
+  },
+  "localComponents": {
+    "approved": [
+      {
+        "name": "AppShell",
+        "path": "src/components/AppShell.vue",
+        "kind": "product-shell",
+        "reason": "Owns real navigation, language, theme and application layout without demo data",
+        "callers": ["src/App.vue"]
+      },
+      {
+        "name": "AuthGate",
+        "path": "src/components/AuthGate.vue",
+        "kind": "product-behavior",
+        "reason": "Owns management credential challenge and retry behavior",
+        "callers": ["src/App.vue"]
+      },
+      {
+        "name": "ConfirmDialog",
+        "path": "src/components/ConfirmDialog.vue",
+        "kind": "product-behavior",
+        "reason": "Owns the automatable dangerous-operation confirmation contract",
+        "callers": ["src/App.vue"]
+      },
+      {
+        "name": "ToastHost",
+        "path": "src/components/ToastHost.vue",
+        "kind": "product-behavior",
+        "reason": "Owns the shared feedback queue and timeout policy",
+        "callers": ["src/App.vue"]
+      },
+      {
+        "name": "ModalHost",
+        "path": "src/components/ModalHost.vue",
+        "kind": "product-behavior",
+        "reason": "Owns stable modal mounting, focus and product size semantics",
+        "callers": [
+          "src/components/ConfirmDialog.vue",
+          "src/components/AuthGate.vue",
+          "src/pages/AgentSessionsPage.vue",
+          "src/pages/ConfigLibraryPage.vue",
+          "src/pages/FileManagerPage.vue"
+        ]
+      },
+      {
+        "name": "PageShell",
+        "path": "src/components/PageShell.vue",
+        "kind": "layout-composition",
+        "reason": "Owns grouped child-page navigation, page actions and the AdminLTE content recipe beneath the AppShell title",
+        "callers": [
+          "src/pages/AgentSessionsPage.vue",
+          "src/pages/ApiServerSettingsPage.vue",
+          "src/pages/ComponentsPage.vue",
+          "src/pages/ConfigLibraryPage.vue",
+          "src/pages/EventFeedPage.vue",
+          "src/pages/FileManagerPage.vue",
+          "src/pages/PrimaryAgentPage.vue",
+          "src/pages/StyleLabPage.vue",
+          "src/pages/SubagentOverridePage.vue",
+          "src/pages/WorkerProfilePage.vue",
+          "src/pages/SystemSettingsPage.vue",
+          "src/pages/TerminologyPage.vue"
+        ]
+      },
+      {
+        "name": "FormField",
+        "path": "src/components/FormField.vue",
+        "kind": "domain-composition",
+        "reason": "Owns localized backend field labels, technical field names and contextual hints without wrapping controls",
+        "callers": [
+          "src/components/RecordPicker.vue",
+          "src/editors/CustomMiddlewareEditor.vue",
+          "src/editors/ExceptionRetryEditor.vue",
+          "src/editors/FilesystemEditor.vue",
+          "src/editors/ModelEditor.vue",
+          "src/editors/OutputModeEditor.vue",
+          "src/editors/PromptPresetEditor.vue",
+          "src/editors/WorkerDelegationEditor.vue",
+          "src/pages/ConfigLibraryPage.vue",
+          "src/pages/PrimaryAgentPage.vue"
+        ]
+      },
+      {
+        "name": "RecordPicker",
+        "path": "src/components/RecordPicker.vue",
+        "kind": "domain-composition",
+        "reason": "Owns record selection, identity and create/copy/delete interaction",
+        "callers": [
+          "src/pages/ComponentsPage.vue",
+          "src/pages/PrimaryAgentPage.vue",
+          "src/pages/SubagentOverridePage.vue",
+          "src/pages/WorkerProfilePage.vue"
+        ]
+      },
+      {
+        "name": "SectionNav",
+        "path": "src/components/SectionNav.vue",
+        "kind": "layout-composition",
+        "reason": "Owns the stable inline or stacked child-page and category button navigation semantics",
+        "callers": [
+          "src/components/PageShell.vue",
+          "src/pages/ComponentsPage.vue",
+          "src/pages/ConfigLibraryPage.vue"
+        ]
+      },
+      {
+        "name": "ValidationChecklist",
+        "path": "src/components/ValidationChecklist.vue",
+        "kind": "product-behavior",
+        "reason": "Owns presentation of the backend-authoritative validation states and issues",
+        "callers": [
+          "src/pages/ApiServerSettingsPage.vue",
+          "src/pages/ComponentsPage.vue",
+          "src/pages/ConfigLibraryPage.vue",
+          "src/pages/PrimaryAgentPage.vue",
+          "src/pages/SubagentOverridePage.vue",
+          "src/pages/WorkerProfilePage.vue"
+        ]
+      },
+      {
+        "name": "ConfigDetail",
+        "path": "src/components/ConfigDetail.vue",
+        "kind": "domain-composition",
+        "reason": "Owns readable text and JSON technical detail presentation",
+        "callers": ["src/pages/ConfigLibraryPage.vue"]
+      },
+      {
+        "name": "DataTableWorkbench",
+        "path": "src/components/data-table/DataTableWorkbench.vue",
+        "kind": "product-behavior",
+        "reason": "Owns shared data query, filtering, local/numbered pagination, result states, table rendering and optional row or bulk commands",
+        "callers": [
+          "src/pages/AgentSessionsPage.vue",
+          "src/pages/ConfigLibraryPage.vue",
+          "src/pages/EventFeedPage.vue",
+          "src/pages/TerminologyPage.vue"
+        ]
+      },
+      {
+        "name": "PaginationControls",
+        "path": "src/components/PaginationControls.vue",
+        "kind": "product-behavior",
+        "reason": "Owns bounded numbered pagination, page-size, direct-jump and accessibility semantics",
+        "callers": [
+          "src/components/data-table/DataTableWorkbench.vue"
+        ]
+      }
+    ]
+  },
+  "testing": {
+    "adminLteIntegrationPaths": ["src/test/adminlteVue.integration.test.ts"]
+  },
+  "migration": {
+    "temporaryRuntimeDependencies": [],
+    "legacyVuePaths": [],
+    "legacyElementImportPaths": [],
+    "legacyCssPaths": []
+  }
+}

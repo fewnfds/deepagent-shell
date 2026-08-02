@@ -1,0 +1,90 @@
+import { flushPromises, mount } from '@vue/test-utils'
+import { createI18n } from 'vue-i18n'
+import { createMemoryHistory, createRouter } from 'vue-router'
+import { describe, expect, it } from 'vitest'
+
+import PageShell from './PageShell.vue'
+
+const messages = {
+  navigation: {
+    system: 'System',
+    agents: 'Agents',
+    sectionAriaLabel: 'Current section pages',
+    sections: {
+      systemSettings: 'System settings',
+      fileManager: 'File manager',
+      eventFeed: 'Log center',
+      agentSessions: 'Session history',
+      styleLab: 'Style lab',
+      primary: 'Primary Agent',
+      subagentOverrides: 'Subagent',
+    },
+  },
+}
+
+function i18n() {
+  return createI18n({
+    legacy: false,
+    locale: 'en',
+    messages: { en: messages },
+  })
+}
+
+describe('PageShell', () => {
+  it('shows every child page as buttons for the active route group', async () => {
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/:pathMatch(.*)*', component: { template: '<div />' } }],
+    })
+    await router.push('/system/events')
+    await router.isReady()
+
+    const wrapper = mount(PageShell, {
+      slots: { default: '<p>Content</p>' },
+      global: { plugins: [router, i18n()] },
+    })
+
+    expect(wrapper.find('.app-content-header').exists()).toBe(false)
+    expect(wrapper.get('.app-content > .container-fluid').classes()).toContain('pt-3')
+    const buttons = wrapper.get('[data-testid="section-nav"]').findAll('button')
+    expect(buttons.map((button) => button.text())).toEqual([
+      'System settings',
+      'File manager',
+      'Log center',
+      'Session history',
+      'Style lab',
+    ])
+    expect(buttons[2]?.attributes('aria-current')).toBe('page')
+    expect(buttons[2]?.classes()).toContain('btn-primary')
+
+    await buttons[1]?.trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.path).toBe('/system/files')
+  })
+
+  it('starts with content and omits child navigation outside a route group', () => {
+    const wrapper = mount(PageShell, {
+      slots: { default: '<p>Content</p>' },
+      global: { plugins: [i18n()] },
+    })
+
+    expect(wrapper.find('.app-content-header').exists()).toBe(false)
+    expect(wrapper.get('.app-content').text()).toContain('Content')
+    expect(wrapper.find('[data-testid="section-nav"]').exists()).toBe(false)
+  })
+
+  it('does not add an empty margin wrapper around the optional status slot', () => {
+    const wrapper = mount(PageShell, {
+      slots: {
+        status: '<div data-testid="status">Status</div>',
+        default: '<p>Content</p>',
+      },
+      global: { plugins: [i18n()] },
+    })
+
+    const status = wrapper.get('[data-testid="status"]')
+    expect(status.element.parentElement).toBe(wrapper.get('.container-fluid').element)
+    expect(status.element.parentElement?.classList).toContain('pt-3')
+    expect(status.element.parentElement?.classList).not.toContain('mb-3')
+  })
+})

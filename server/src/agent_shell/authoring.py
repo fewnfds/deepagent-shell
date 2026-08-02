@@ -1,0 +1,449 @@
+from __future__ import annotations
+
+from copy import deepcopy
+
+from agent_shell.capability_manifest import CAPABILITY_BY_TYPE
+from agent_shell.contracts import (
+    DEFAULT_EXCEPTION_RETRY_CONDITIONS,
+    EXCEPTION_RETRY_CONDITIONS,
+    EXCEPTION_RETRY_STRATEGIES,
+    ExceptionRetryBlock,
+    FilesystemBlock,
+    FilesystemToolConfigs,
+    OUTPUT_COMMON_TEMPLATE_VARIABLES,
+    OUTPUT_EVENT_NAMES,
+    OUTPUT_EVENT_TEMPLATE_VARIABLES,
+    PROMPT_PRESET_TEMPLATE_FIELDS,
+    SKILL_PROMPT_FIELDS,
+    WorkerDelegationBlock,
+)
+
+
+# These text snapshots are management-editor data. Production catalog reads must not
+# import optional runtime packages merely to render a form. A focused authoring test
+# compares them with the locked LangChain/DeepAgents defaults so dependency upgrades
+# cannot silently make the editor stale. Empty editor prompts represent an upstream
+# default of no additional prompt, not a copied runtime constant.
+FILESYSTEM_EDITOR_SYSTEM_PROMPT = ""
+
+LIST_FILES_TOOL_DESCRIPTION = """Lists all files in a directory.
+
+This is useful for exploring the filesystem and finding the right file to read or edit.
+You should almost ALWAYS use this tool before using the read_file or edit_file tools."""
+
+READ_FILE_TOOL_DESCRIPTION = """Reads a file from the filesystem. Assume any path the user provides is valid; reading a missing file returns an error.
+
+Usage:
+- By default, it reads up to 100 lines starting from the beginning of the file. Use `offset`/`limit` to page through large files instead of reading them whole.
+- Results are returned with line numbers starting at `offset` + 1 (1 by default), then two spaces, then the source line. Never include these line-number prefixes when editing.
+- Lines over 5,000 characters are split with continuation markers (e.g. 5.1, 5.2); `limit` counts source lines, so continuation rows do not consume the budget.
+- Speculatively batch multiple `read_file` calls in one response when several files may be useful.
+- An empty file returns a system-reminder warning in place of contents.
+- Large tool results may be offloaded to a file; the tool message gives the path. Read that path here, paging with `offset`/`limit`.
+- Images (`.png`, `.jpg`, etc.), audio, video, and PDFs return multimodal content blocks (https://docs.langchain.com/oss/python/langchain/messages#multimodal).
+- For images and PDFs, pagination via `offset`/`limit` is text-only - supply `file_path` only
+- Always read a file before editing it."""
+
+WRITE_FILE_TOOL_DESCRIPTION = """Writes content to a file. Creates the file if it does not exist; replaces it entirely if it does.
+
+Usage:
+- Use this tool when you intend to create a new file or replace the whole file. You do not need to read the file first.
+- Prefer to edit existing files (with the edit_file tool) over creating new ones when possible.
+"""
+
+EDIT_FILE_TOOL_DESCRIPTION = """Performs exact string replacements in files.
+
+Usage:
+- You must read the file before editing; this tool errors otherwise.
+- Preserve the exact indentation from the read output, and never include line-number prefixes in old_string or new_string.
+- Prefer editing an existing file over creating a new one.
+- Only use emojis if the user explicitly requests it."""
+
+DELETE_TOOL_DESCRIPTION = """Deletes a file or directory from the filesystem.
+
+Usage:
+- Permanently removes the file or directory at the given absolute path.
+- Deleting a directory removes it and everything inside it, recursively. Prefer
+  deleting a directory in one call over deleting each file individually.
+- This cannot be undone, so only delete paths you are sure are no longer needed.
+"""
+
+GLOB_TOOL_DESCRIPTION = """Find files matching a glob pattern, returning absolute paths.
+
+Supports `*` (any characters), `**` (any directories), `?` (single character), e.g. `**/*.py`, `*.txt`, `/subdir/**/*.md`."""
+
+GREP_TOOL_DESCRIPTION = """Search for a LITERAL text pattern across files (NOT regex).
+
+The pattern is matched verbatim: regex metacharacters are ordinary characters, not operators. To match any of several strings, run a separate grep for each; `grep(pattern="foo|bar")` searches for the literal text "foo|bar", and `.*` or `\\.` match those characters literally.
+- If you genuinely need regex, use the execute tool with `rg '<regex>'` instead.
+
+Returns matching files or content per `output_mode`. Offloaded large tool results live under the artifacts root (`/large_tool_results/` by default); grep that directory to search them when you do not know the exact path."""
+
+EXECUTE_TOOL_DESCRIPTION = """Executes a shell command in an isolated sandbox and returns combined stdout/stderr with the exit code (truncated if very large).
+
+Usage:
+- Quote paths containing spaces (e.g. cd "/path/with spaces").
+- Chain commands with ';' or '&&' (use '&&' when a command depends on the previous); do not use newlines except inside quoted strings.
+- Use absolute paths and avoid `cd` so the working directory stays stable; use the optional timeout to override the default (0 disables it on backends that support that).
+- You MUST avoid using search commands like find and grep. Instead use the grep, glob tools to search. Use read_file rather than cat/head/tail.
+    - execute(command="find . -name '*.py'")  # Use glob tool instead
+    - execute(command="grep -r 'pattern' .")  # Use grep tool instead
+
+Only available on backends implementing SandboxBackendProtocol; otherwise it returns an error.
+
+Additional Agent Shell runtime notes:
+- The standard Windows launcher provides `python` from its bundled runtime.
+- `npm`, `make`, `pytest`, and other external programs are available only when the selected backend or user workspace explicitly provides them; do not assume they are installed.
+"""
+
+SKILLS_SYSTEM_PROMPT = """## Skills System
+
+You have access to a skills library that provides specialized capabilities and domain knowledge.
+
+{skills_locations}{skills_load_warnings}
+
+Sources labeled "Deepagents" are specific to this agent tool; sources labeled "Agents" are shared across all agent tools on this machine.
+
+**Available Skills:**
+
+{skills_list}
+
+**How to Use Skills (Progressive Disclosure):**
+
+Skills follow a **progressive disclosure** pattern - you see their name and description above, but only read full instructions when needed:
+
+1. **Recognize when a skill applies**: Check if the user's task matches a skill's description
+2. **Read the skill's full instructions**: Use `read_file` on the path shown in the skill list above.
+    Pass `limit=1000` since the default of 100 lines is too small for most skill files.
+3. **Follow the skill's instructions**: SKILL.md contains step-by-step workflows, best practices, and examples
+4. **Access supporting files**: Skills may include helper scripts, configs, or reference docs - use absolute paths
+
+**When to Use Skills:**
+
+- User's request matches a skill's domain (e.g., "research X" -> web-research skill)
+- You need specialized knowledge or structured workflows
+- A skill provides proven patterns for complex tasks
+
+**Executing Skill Scripts:**
+Skills may contain Python scripts or other executable files. Always use absolute paths from the skill list.
+
+**Example Workflow:**
+
+User: "Can you research the latest developments in quantum computing?"
+
+1. Check available skills -> See "web-research" skill with its path
+2. Read the full skill file: `read_file(file_path="...", limit=1000)`
+3. Follow the skill's research workflow (search -> organize -> synthesize)
+4. Use any helper scripts with absolute paths
+
+Remember: Skills make you more capable and consistent. When in doubt, check if a skill exists for the task!"""
+
+SUBAGENT_EDITOR_SYSTEM_PROMPT = ""
+
+TASK_TOOL_DESCRIPTION = """Launch an ephemeral subagent to handle a complex, multi-step task in an isolated context window.
+
+Available agent types and the tools they have access to:
+{available_agents}
+
+Specify subagent_type to select the agent. Usage notes:
+- Launch multiple agents concurrently when their tasks are independent, using a single message with multiple tool calls.
+- Each invocation is stateless: the agent sees only the prompt you give it and returns a single final report. Put full detail in the prompt and state exactly what it should return.
+- The agent's report is not shown to the user; relay a summary yourself.
+- Tell the agent whether to create content, analyze, or only research, since it cannot see the user's intent.
+- If an agent's description says to use it proactively, do so without waiting to be asked.
+- When only general-purpose is available, use it for any complex, context-heavy task; it has the same capabilities as the main agent."""
+
+WRITE_TODOS_SYSTEM_PROMPT = """## `write_todos`
+
+You have access to the `write_todos` tool to help you manage and plan complex objectives.
+Use this tool for complex objectives to ensure that you are tracking each necessary step.
+This tool is very helpful for planning complex objectives, and for breaking down these larger complex objectives into smaller steps.
+
+It is critical that you mark todos as completed as soon as you are done with a step. Do not batch up multiple steps before marking them as completed.
+For simple objectives that only require a few steps, it is better to just complete the objective directly and NOT use this tool.
+Writing todos takes time and tokens, use it when it is helpful for managing complex many-step problems! But not for simple few-step requests.
+
+## Important To-Do List Usage Notes to Remember
+
+- The `write_todos` tool should never be called multiple times in parallel.
+- Don't be afraid to revise the To-Do list as you go. New information may reveal new tasks that need to be done, or old tasks that are irrelevant.
+
+## Finishing a task
+
+When you finish all work, write your final answer in the message AFTER your last `write_todos` call — not in the same turn as that call. Start the final message with the substantive content the user asked for — the data, computation, summary, or analysis. The user wants the result, not confirmation that the work is done."""
+
+WRITE_TODOS_TOOL_DESCRIPTION = """Use this tool to create and manage a structured task list for your current work session. This helps you track progress and organize complex tasks.
+
+Only use this tool if you think it will be helpful in staying organized. If the user's request is trivial and takes less than 3 steps, it is better to NOT use this tool and just do the task directly.
+
+## When to Use This Tool
+
+Use this tool in these scenarios:
+
+1. Complex multi-step tasks - When a task requires 3 or more distinct steps or actions
+2. Non-trivial and complex tasks - Tasks that require careful planning or multiple operations
+3. User explicitly requests todo list - When the user directly asks you to use the todo list
+4. User provides multiple tasks - When users provide a list of things to be done (numbered or comma-separated)
+5. The plan may need future revisions or updates based on results from the first few steps
+
+## How to Use This Tool
+
+1. When you start working on a task - Mark it as in_progress BEFORE beginning work.
+2. After completing a task - Mark it as completed and add any new follow-up tasks discovered during implementation.
+3. You can also update future tasks, such as deleting them if they are no longer necessary, or adding new tasks that are necessary. Don't change previously completed tasks.
+4. You can make several updates to the todo list at once. For example, when you complete a task, you can mark the next task you need to start as in_progress.
+
+## When NOT to Use This Tool
+
+It is important to skip using this tool when:
+1. There is only a single, straightforward task
+2. The task is trivial and tracking it provides no benefit
+3. The task can be completed in less than 3 trivial steps
+4. The task is purely conversational or informational
+
+## Task States and Management
+
+1. **Task States**: Use these states to track progress:
+    - pending: Task not yet started
+    - in_progress: Currently working on (you can have multiple tasks in_progress at a time if they are not related to each other and can be run in parallel)
+    - completed: Task finished successfully
+
+2. **Task Management**:
+    - Update task status in real-time as you work
+    - Mark tasks complete IMMEDIATELY after finishing (don't batch completions)
+    - Complete current tasks before starting new ones
+    - Remove tasks that are no longer relevant from the list entirely
+    - IMPORTANT: When you write this todo list, you should mark your first task (or tasks) as in_progress immediately!.
+    - IMPORTANT: Unless all tasks are completed, you should always have at least one task in_progress.
+
+3. **Task Completion Requirements**:
+    - ONLY mark a task as completed when you have FULLY accomplished it
+    - If you encounter errors, blockers, or cannot finish, keep the task as in_progress
+    - When blocked, create a new task describing what needs to be resolved
+    - Never mark a task as completed if:
+        - There are unresolved issues or errors
+        - Work is partial or incomplete
+        - You encountered blockers that prevent completion
+        - You couldn't find necessary resources or dependencies
+        - Quality standards haven't been met
+
+4. **Task Breakdown**:
+    - Create specific, actionable items
+    - Break complex tasks into smaller, manageable steps
+    - Use clear, descriptive task names
+
+Being proactive with task management ensures you complete all requirements successfully
+Remember: If you only need to make a few tool calls to complete a task, and it is clear what you need to do, it is better to just do the task directly and NOT call this tool at all.
+
+## When You Finish
+
+`write_todos` tracks your work; it does not deliver the answer. Whatever the user asked for — computations, summaries, comparisons, data — must appear as text content in a message after your final `write_todos` call. Marking the last todo complete is not itself an answer to the user."""
+
+
+_FILESYSTEM_TOOL_DESCRIPTIONS = {
+    "ls": ("读取", LIST_FILES_TOOL_DESCRIPTION),
+    "read_file": ("读取", READ_FILE_TOOL_DESCRIPTION),
+    "write_file": ("写入", WRITE_FILE_TOOL_DESCRIPTION),
+    "edit_file": ("写入", EDIT_FILE_TOOL_DESCRIPTION),
+    "delete": ("删除", DELETE_TOOL_DESCRIPTION),
+    "glob": ("检索", GLOB_TOOL_DESCRIPTION),
+    "grep": ("检索", GREP_TOOL_DESCRIPTION),
+    "execute": ("执行", EXECUTE_TOOL_DESCRIPTION),
+}
+
+_OUTPUT_EVENT_UI = {
+    "assistant_text": ("模型文本", "Primary 模型完成的普通文本块。"),
+    "reasoning": ("推理内容", "模型明确提供的完整 reasoning block。"),
+    "tool_call": ("工具调用", "工具名称、调用 ID 与完整参数。"),
+    "tool_result": ("工具结果", "工具完成后的最终结果。"),
+    "tool_error": ("工具错误", "工具执行失败时的稳定错误信息。"),
+    "subagent": ("子代理", "命名 Subagent 的完整开始和结束状态。"),
+    "context_worker": ("Context Worker", "Context Worker 的开始、完成和失败状态。"),
+    "custom": ("自定义进度", "Middleware 或 tool 显式产生的自定义事件。"),
+    "lifecycle": ("运行状态", "整次执行的开始、正常结束和错误状态。"),
+}
+
+_OUTPUT_TEMPLATES: dict[str, str] = {
+    "assistant_text": "{{message}}",
+    "reasoning": (
+        "<details><summary>*Reasoning*</summary>\n"
+        "{{message}}\n\n"
+        "*name={{agent_name}}* | *seq={{sequence}}* | *id={{message_id}}*\n"
+        "─────────\n"
+        "</details>\n"
+    ),
+    "tool_call": (
+        "<details><summary>*Tool Call {{tool_name}}*</summary>\n"
+        "{{message}}\n\n"
+        "*event={{phase}}* | *seq={{sequence}}* | *id={{tool_call_id}}*\n"
+        "─────────\n"
+        "</details>\n"
+    ),
+    "tool_result": (
+        "<details><summary>*Tool Result {{tool_name}}*</summary>\n"
+        "{{message}}\n\n"
+        "*status={{status}}* | *seq={{sequence}}* | *id={{tool_call_id}}*\n"
+        "─────────\n"
+        "</details>\n"
+    ),
+    "tool_error": (
+        "<details><summary>*Tool Error {{tool_name}}*</summary>\n"
+        "{{message}}\n\n"
+        "*status={{status}}* | *code={{error_code}}* | *seq={{sequence}}* | *id={{tool_call_id}}*\n"
+        "─────────\n"
+        "</details>\n"
+    ),
+    "subagent": (
+        "<details><summary>*Subagent {{subagent_name}}*</summary>\n"
+        "{{message}}\n\n"
+        "*event={{phase}}* | *status={{status}}* | *seq={{sequence}}* | *call={{tool_call_id}}*\n"
+        "─────────\n"
+        "</details>\n"
+    ),
+    "context_worker": (
+        "<details><summary>*Context Worker {{worker_name}}*</summary>\n"
+        "{{message}}\n\n"
+        "*event={{phase}}* | *status={{status}}* | *seq={{sequence}}* | *call={{tool_call_id}}*\n"
+        "─────────\n"
+        "</details>\n"
+    ),
+    "custom": (
+        "<details><summary>*Custom {{channel}}*</summary>\n"
+        "{{message}}\n\n"
+        "*event={{phase}}* | *seq={{sequence}}*\n"
+        "─────────\n"
+        "</details>\n"
+    ),
+    "lifecycle": (
+        "<details><summary>*Agent Status {{status}}*</summary>\n"
+        "{{message}}\n\n"
+        "*event={{phase}}* | *seq={{sequence}}* | *finish={{finish_reason}}* | *code={{error_code}}*\n"
+        "─────────\n"
+        "</details>\n"
+    ),
+}
+
+
+def _filesystem_tools() -> list[dict[str, object]]:
+    defaults = FilesystemToolConfigs().model_dump(mode="json")
+    return [
+        {
+            "name": name,
+            "kind": _FILESYSTEM_TOOL_DESCRIPTIONS[name][0],
+            "configurable": name not in {"read_file", "execute"},
+            "visible": defaults[name]["visible"],
+            "default_description": _FILESYSTEM_TOOL_DESCRIPTIONS[name][1],
+        }
+        for name in CAPABILITY_BY_TYPE["filesystem"].tool_names
+    ]
+
+
+def _output_events() -> list[dict[str, object]]:
+    return [
+        {
+            "key": name,
+            "label": _OUTPUT_EVENT_UI[name][0],
+            "description": _OUTPUT_EVENT_UI[name][1],
+            "variables": [
+                *OUTPUT_COMMON_TEMPLATE_VARIABLES,
+                *OUTPUT_EVENT_TEMPLATE_VARIABLES[name],
+            ],
+        }
+        for name in OUTPUT_EVENT_NAMES
+    ]
+
+
+def _filter_fields() -> list[str]:
+    unscoped = list(OUTPUT_COMMON_TEMPLATE_VARIABLES)
+    for name in OUTPUT_EVENT_NAMES:
+        for variable in OUTPUT_EVENT_TEMPLATE_VARIABLES[name]:
+            if variable not in unscoped:
+                unscoped.append(variable)
+    scoped = [
+        f"{name}.{variable}"
+        for name in OUTPUT_EVENT_NAMES
+        for variable in (
+            *OUTPUT_COMMON_TEMPLATE_VARIABLES,
+            *OUTPUT_EVENT_TEMPLATE_VARIABLES[name],
+        )
+    ]
+    return [*unscoped, *scoped]
+
+
+def _output_mode_default() -> dict[str, object]:
+    event_templates = {
+        name: {
+            "enabled": True,
+            "template": _OUTPUT_TEMPLATES[name],
+        }
+        for name in OUTPUT_EVENT_NAMES
+    }
+    return {
+        "filter_mode": "blocklist",
+        "filter_mappings": [],
+        "variable_encoding": "plain",
+        "event_templates": event_templates,
+    }
+
+
+_EDITOR_DEFAULTS = {
+    "filesystem": {
+        "system_prompt": FILESYSTEM_EDITOR_SYSTEM_PROMPT,
+        "tool_token_limit_before_evict": FilesystemBlock.model_fields[
+            "tool_token_limit_before_evict"
+        ].default,
+        "tools": _filesystem_tools(),
+    },
+    "skill": {
+        "system_prompt": SKILLS_SYSTEM_PROMPT,
+        "required_placeholders": [f"{{{field}}}" for field in SKILL_PROMPT_FIELDS],
+    },
+    "subagent": {
+        "system_prompt": SUBAGENT_EDITOR_SYSTEM_PROMPT,
+        "tool_description": TASK_TOOL_DESCRIPTION,
+    },
+    "todo_list": {
+        "system_prompt": WRITE_TODOS_SYSTEM_PROMPT,
+        "tool_description": WRITE_TODOS_TOOL_DESCRIPTION,
+    },
+    "output_mode": {
+        "events": _output_events(),
+        "filter_fields": _filter_fields(),
+        "default_value": _output_mode_default(),
+    },
+    "exception_retry": {
+        "strategies": list(EXCEPTION_RETRY_STRATEGIES),
+        "conditions": list(EXCEPTION_RETRY_CONDITIONS),
+        "default_value": {
+            "strategy": ExceptionRetryBlock.model_fields["strategy"].default,
+            "force_non_streaming": ExceptionRetryBlock.model_fields[
+                "force_non_streaming"
+            ].default,
+            "max_retries": ExceptionRetryBlock.model_fields["max_retries"].default,
+            "retry_on": list(DEFAULT_EXCEPTION_RETRY_CONDITIONS),
+        },
+    },
+    "prompt_preset": {
+        "template_variables": [
+            f"{{{field}}}" for field in PROMPT_PRESET_TEMPLATE_FIELDS
+        ],
+    },
+    "worker_delegation": {
+        "default_value": {
+            field_name: WorkerDelegationBlock.model_fields[field_name].default
+            for field_name in (
+                "tool_description",
+                "worker_parameter_description",
+                "task_parameter_description",
+                "max_worker_calls_per_request",
+                "max_parallel_workers",
+            )
+        },
+    },
+}
+
+
+def editor_defaults() -> dict[str, object]:
+    """Return the current management form data without importing runtime packages."""
+
+    return deepcopy(_EDITOR_DEFAULTS)

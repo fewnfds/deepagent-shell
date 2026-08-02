@@ -1,0 +1,499 @@
+from __future__ import annotations
+
+from contextlib import closing
+import json
+import os
+from pathlib import Path
+import re
+import secrets
+import socket
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import time
+from typing import Any
+from uuid import UUID
+
+import httpx
+
+from agent_shell.storage.api_server import ApiServerStore
+from agent_shell.storage.database import SQLiteDatabase
+
+
+CAPABILITY_TYPES = (
+    "model",
+    "system-prompt",
+    "filesystem",
+    "todo-list",
+    "custom-tool",
+    "skill",
+    "custom-middleware",
+    "output-mode",
+    "exception-retry",
+    "prompt-preset",
+    "subagent",
+    "worker-delegation",
+)
+OUTPUT_EVENT_TYPES = (
+    "assistant_text",
+    "reasoning",
+    "tool_call",
+    "tool_result",
+    "tool_error",
+    "subagent",
+    "custom",
+    "lifecycle",
+)
+MODEL_PARAMETER_NAMES = (
+    "temperature",
+    "max_completion_tokens",
+    "top_p",
+    "stop_sequences",
+    "presence_penalty",
+    "frequency_penalty",
+    "seed",
+    "timeout",
+    "max_retries",
+    "stream_usage",
+    "streaming",
+    "reasoning_effort",
+    "service_tier",
+    "logprobs",
+    "top_logprobs",
+)
+
+
+def _port() -> int:
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        return int(listener.getsockname()[1])
+
+
+def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> dict:
+    model_parameters = dict.fromkeys(MODEL_PARAMETER_NAMES)
+    if update:
+        model_parameters.update(
+            {
+                "temperature": 0,
+                "max_completion_tokens": 2048,
+                "top_p": 0.9,
+                "stop_sequences": ["END", "STOP"],
+                "presence_penalty": 0,
+                "frequency_penalty": 0,
+                "seed": 42,
+                "timeout": 30,
+                "max_retries": 2,
+                "stream_usage": True,
+                "streaming": True,
+                "reasoning_effort": "medium",
+                "service_tier": "auto",
+                "logprobs": False,
+                "top_logprobs": 5,
+            }
+        )
+    payloads = {
+        "model": {
+            "name": name,
+            "provider": "openai",
+            "base_url": "https://provider.example.invalid/v1",
+            "credential": None if update else secret,
+            "model": "smoke-model",
+            "provider_settings": model_parameters,
+            "tool_choice": None,
+            "response_format": None,
+            "model_settings": {},
+        },
+        "custom-tool": {"name": name, "tools": []},
+        "custom-middleware": {"name": name, "middlewares": []},
+        "output-mode": {
+            "name": name,
+            "filter_mode": "blocklist",
+            "filter_mappings": [],
+            "variable_encoding": "html",
+            "event_templates": {
+                event_type: {
+                    "enabled": True,
+                    "template": "{{message}}",
+                }
+                for event_type in OUTPUT_EVENT_TYPES
+            },
+        },
+        "filesystem": {"name": name},
+        "skill": {"name": name, "skills": ["fixture-skill"]},
+        "system-prompt": {"name": name, "system_prompt": "Smoke prompt."},
+        "subagent": {"name": name},
+        "todo-list": {"name": name},
+        "exception-retry": {
+            "name": name,
+            "strategy": "provider_native",
+            "force_non_streaming": False,
+            "max_retries": 2,
+            "retry_on": ["transport_error", "timeout", "rate_limit", "server_error"],
+        },
+        "prompt-preset": {
+            "name": name,
+            "tag_replacements": [{"tag": "|||smoke|||", "replacement": ""}],
+            "startup_messages": [],
+        },
+        "worker-delegation": {"name": name},
+    }
+    return payloads[capability_type]
+
+
+def _request(
+    client: httpx.Client,
+    method: str,
+    path: str,
+    *,
+    headers: dict[str, str] | None = None,
+    json_body: Any = None,
+    expected: int = 200,
+) -> httpx.Response:
+    response = client.request(method, path, headers=headers, json=json_body)
+    if response.status_code != expected:
+        raise AssertionError(
+            f"{method} {path}: expected {expected}, got {response.status_code}"
+        )
+    return response
+
+
+def _stop_process(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.wait(timeout=8)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            capture_output=True,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    else:
+        process.kill()
+    process.wait(timeout=8)
+
+
+def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
+    mode = "authenticated"
+    work = scratch_root / mode
+    work.mkdir(parents=True, exist_ok=True)
+    data_dir = work / "data"
+    database_path = data_dir / "state" / "agent-shell.sqlite3"
+    port = _port()
+    management_token = secrets.token_urlsafe(32)
+    api_key = secrets.token_urlsafe(32)
+    provider_secret = "smoke-provider-" + secrets.token_urlsafe(24)
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.upper().startswith("AGENT_SHELL_")
+    }
+    environment.update(
+        {
+            "AGENT_SHELL_HOST": "127.0.0.1",
+            "AGENT_SHELL_PORT": str(port),
+            "AGENT_SHELL_CORS_ORIGINS": "https://console.example.invalid",
+        }
+    )
+    environment["AGENT_SHELL_MANAGEMENT_TOKEN"] = management_token
+    ApiServerStore(SQLiteDatabase(database_path)).update_settings(
+        api_key_operation="replace",
+        api_key=api_key,
+    )
+    output_path = work / "server-output.txt"
+    output = output_path.open("wb")
+    creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(
+        subprocess, "CREATE_NEW_PROCESS_GROUP", 0
+    )
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "agent_shell",
+            "--home",
+            str(work),
+            "--data-dir",
+            str(data_dir),
+            "--mode",
+            "environment",
+        ],
+        cwd=repo_root / "server",
+        env=environment,
+        stdout=output,
+        stderr=subprocess.STDOUT,
+        creationflags=creationflags,
+    )
+    base_url = f"http://127.0.0.1:{port}"
+    management = {"Authorization": f"Bearer {management_token}"}
+    inference = {"Authorization": f"Bearer {api_key}"}
+    client = httpx.Client(base_url=base_url, timeout=3, trust_env=False)
+    try:
+        deadline = time.monotonic() + 20
+        while True:
+            try:
+                if client.get("/api/health").status_code == 200:
+                    break
+            except httpx.HTTPError:
+                pass
+            if process.poll() is not None:
+                raise AssertionError("server exited before health became available")
+            if time.monotonic() >= deadline:
+                raise AssertionError("server did not become healthy")
+            time.sleep(0.1)
+
+        admin = _request(client, "GET", "/admin")
+        admin_assets = set(
+            re.findall(r'(?:src|href)="(/admin/assets/[^"]+)"', admin.text)
+        )
+        assert admin_assets
+        assert not any(
+            path.endswith(("/icons.js", "/api.js")) or "/vendor/" in path
+            for path in admin_assets
+        )
+        for path in admin_assets:
+            _request(client, "GET", path)
+        health = _request(client, "GET", "/api/health").json()
+        assert health == {"status": "ok", "runtime": "model_streaming"}
+        _request(client, "GET", "/api/catalog", expected=401)
+        _request(client, "GET", "/api/catalog", headers=inference, expected=403)
+        _request(client, "GET", "/v1/unknown", headers=management, expected=403)
+        _request(client, "GET", "/v1/unknown", headers=inference, expected=404)
+        catalog = _request(client, "GET", "/api/catalog", headers=management).json()
+        assert tuple(item["type"] for item in catalog["block_types"]) == CAPABILITY_TYPES
+        _request(client, "GET", "/api/tools/custom", headers=management)
+        _request(client, "GET", "/api/middlewares/custom", headers=management)
+        _request(client, "GET", "/api/skills", headers=management)
+        readiness = _request(
+            client, "GET", "/api/readiness", headers=management
+        ).json()
+        assert set(readiness["sections"]) == {
+            "security_settings",
+            "storage",
+            "runtime_dependencies",
+        }
+        assert readiness["sections"]["storage"]["status"] == (
+            "startup_permissions_confirmed"
+        )
+        preflight = _request(
+            client,
+            "OPTIONS",
+            "/api/catalog",
+            headers={
+                "Origin": "https://console.example.invalid",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "Authorization, X-Request-ID",
+            },
+        )
+        assert preflight.headers["access-control-allow-origin"] == (
+            "https://console.example.invalid"
+        )
+
+        blocks: dict[str, dict] = {}
+        for capability_type in CAPABILITY_TYPES:
+            created = _request(
+                client,
+                "POST",
+                f"/api/blocks/{capability_type}",
+                headers={**management, "X-Request-ID": f"smoke-{mode}"},
+                json_body=_payload(
+                    capability_type,
+                    f"{mode}-{capability_type}",
+                    provider_secret,
+                    update=False,
+                ),
+            ).json()
+            UUID(created["id"])
+            assert provider_secret not in json.dumps(created)
+            if capability_type == "model":
+                assert created["provider_settings"] == {}
+            blocks[capability_type] = created
+            listed = _request(
+                client, "GET", f"/api/blocks/{capability_type}", headers=management
+            ).json()
+            assert any(item["id"] == created["id"] for item in listed)
+            fetched = _request(
+                client,
+                "GET",
+                f"/api/blocks/{capability_type}/{created['id']}",
+                headers=management,
+            ).json()
+            assert fetched["id"] == created["id"]
+            updated = _request(
+                client,
+                "PUT",
+                f"/api/blocks/{capability_type}/{created['id']}",
+                headers=management,
+                json_body=_payload(
+                    capability_type,
+                    f"{mode}-{capability_type}-updated",
+                    provider_secret,
+                    update=True,
+                ),
+            ).json()
+            assert updated["id"] == created["id"]
+            if capability_type == "model":
+                assert updated["stop"] == ["END", "STOP"]
+                assert updated["streaming"] is True
+                assert updated["provider_settings"]["stream_usage"] is True
+
+        cleared_model_payload = _payload(
+            "model",
+            f"{mode}-model-updated",
+            provider_secret,
+            update=True,
+        )
+        cleared_model_payload["provider_settings"] = {}
+        cleared_model = _request(
+            client,
+            "PUT",
+            f"/api/blocks/model/{blocks['model']['id']}",
+            headers=management,
+            json_body=cleared_model_payload,
+        ).json()
+        assert cleared_model["provider_settings"] == {}
+
+        primary = _request(
+            client,
+            "POST",
+            "/api/primary-agents",
+            headers=management,
+            json_body={
+                "name": f"{mode}-primary",
+                "capability_refs": [
+                    {"type": "model", "block_id": blocks["model"]["id"]},
+                    {
+                        "type": "filesystem",
+                        "block_id": blocks["filesystem"]["id"],
+                    },
+                    {
+                        "type": "output-mode",
+                        "block_id": blocks["output-mode"]["id"],
+                    },
+                ],
+                "subagents": [],
+            },
+        ).json()
+        override = _request(
+            client,
+            "POST",
+            "/api/subagent-overrides",
+            headers=management,
+            json_body={
+                "name": f"{mode}-override",
+                "capability_overrides": [],
+            },
+        ).json()
+        for path, item in (
+            ("primary-agents", primary),
+            ("subagent-overrides", override),
+        ):
+            UUID(item["id"])
+            _request(client, "GET", f"/api/{path}", headers=management)
+            fetched = _request(
+                client, "GET", f"/api/{path}/{item['id']}", headers=management
+            ).json()
+            assert fetched["id"] == item["id"]
+        updated_primary = dict(primary)
+        updated_primary.pop("id")
+        updated_primary["name"] += "-updated"
+        _request(
+            client,
+            "PUT",
+            f"/api/primary-agents/{primary['id']}",
+            headers=management,
+            json_body=updated_primary,
+        )
+        updated_override = dict(override)
+        updated_override.pop("id")
+        updated_override["name"] += "-updated"
+        _request(
+            client,
+            "PUT",
+            f"/api/subagent-overrides/{override['id']}",
+            headers=management,
+            json_body=updated_override,
+        )
+
+        with closing(sqlite3.connect(database_path)) as connection, connection:
+            block_text = "".join(
+                row[0] for row in connection.execute("SELECT payload FROM blocks")
+            )
+            assert provider_secret not in block_text
+            assert connection.execute(
+                "SELECT secret_value FROM provider_secrets"
+            ).fetchone()[0] == provider_secret
+        event_path = data_dir / "logs" / "security-events.jsonl"
+        event_text = event_path.read_text(encoding="utf-8")
+        assert provider_secret not in event_text
+        assert management_token not in event_text
+        assert api_key not in event_text
+
+        _request(
+            client,
+            "DELETE",
+            f"/api/primary-agents/{primary['id']}",
+            headers=management,
+        )
+        _request(
+            client,
+            "DELETE",
+            f"/api/subagent-overrides/{override['id']}",
+            headers=management,
+        )
+        for capability_type, block in blocks.items():
+            _request(
+                client,
+                "DELETE",
+                f"/api/blocks/{capability_type}/{block['id']}",
+                headers=management,
+            )
+        with closing(sqlite3.connect(database_path)) as connection, connection:
+            assert connection.execute("SELECT COUNT(*) FROM provider_secrets").fetchone()[0] == 0
+        return {
+            "mode": mode,
+            "capability_count": len(blocks),
+            "readiness_sections": len(readiness["sections"]),
+            "authenticated": True,
+        }
+    finally:
+        client.close()
+        _stop_process(process)
+        output.close()
+        if process.returncode not in {0, 1, -15}:
+            raise AssertionError(f"server shutdown failed in {mode} mode")
+        if output_path.exists():
+            output_text = output_path.read_text(encoding="utf-8", errors="replace")
+            for sentinel in (management_token, api_key, provider_secret):
+                if sentinel in output_text:
+                    raise AssertionError("server output contained a secret sentinel")
+        # Windows can briefly retain a delete-denying handle after the child
+        # process exits even though wait() has completed. Give the OS a small
+        # release window before TemporaryDirectory removes the isolated run.
+        if os.name == "nt":
+            time.sleep(0.25)
+
+
+def main() -> int:
+    repo_root = Path(__file__).resolve().parents[1]
+    scratch_parent = repo_root / "runtime" / "tmp"
+    scratch_parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(
+        prefix="security-http-smoke-", dir=scratch_parent
+    ) as scratch:
+        root = Path(scratch)
+        reports = [_run_mode(repo_root, root)]
+    leftovers = list(scratch_parent.glob("security-http-smoke-*"))
+    if leftovers:
+        raise AssertionError("security smoke left temporary artifacts")
+    print(json.dumps({"status": "passed", "modes": reports}, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
