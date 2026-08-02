@@ -21,8 +21,8 @@ Primary 保存一份加法式装配：
 `{type, block_id}`；未出现就是不装配。
 
 模型和输出模式由 manifest 标为必需，页面没有“不装配”或清除选项，右侧草稿校验区
-会逐项检查，管理 API 也拒绝缺少任一项的配置。filesystem 和其他能力可选；未选择 filesystem 时
-不构造其 Middleware，模型没有 `read_file`。配置选择器和摘要只显示名称，
+会逐项检查，管理 API 也拒绝缺少任一项的配置。filesystem 和其他项目能力可选；未选择 filesystem 时
+Shell 不构造同名替换项，Deep Agents 默认 StateBackend 文件工具仍存在。配置选择器和摘要只显示名称，
 服务端 payload 与删除保护仍只认 UUID。
 
 ## Subagent binding
@@ -42,7 +42,7 @@ binding 的名称必须匹配 `[A-Za-z_][A-Za-z0-9_-]*`，同一 Primary 内唯�
 当前 Primary 的 capability_refs
 + 可选 Subagent capability_overrides
 - output mode、Prompt Preset、两类委派能力与当前 Primary 自身 bindings
-= 一个 raw synchronous Subagent
+= 一个由 `create_deep_agent()` 构造的同步 child graph
 ```
 
 Subagent 不能选择其他 Primary。filesystem 在当前 Primary 选择时固定继承，不提供覆写入口；同一次请求内

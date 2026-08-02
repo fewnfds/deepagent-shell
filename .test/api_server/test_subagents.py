@@ -3,7 +3,7 @@ from __future__ import annotations
 from .support import *
 from agent_shell.runtime.capabilities import deepagents as deepagents_capability
 
-def test_subagent_runs_without_filesystem_or_read_file(
+def test_subagent_runs_without_project_filesystem(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class ParentModel(ToolCallingFakeModel):

@@ -95,9 +95,9 @@ write/edit 一样覆盖该 Agent 的普通可写虚拟命名空间：请求级 S
 第二个阈值字段。DeepAgent Shell 不解析或转换这些上游工具正文，只把完整 ToolMessage 交给模型和既定
 事件投影。当前页面不修改其他工具参数 schema。
 
-filesystem 是可选能力。最终既没有 Filesystem 也没有 Skill 时不构造 backend 或
-`FilesystemMiddleware`，模型也没有文件工具；普通 Primary 与同步 Subagent 仍可运行。最终有 Skill
-但没有真实 Filesystem 时，后端自动装配消费者独立的空只读 fallback，并只开放 `read_file`；它不
+filesystem 是可选的项目能力。最终既没有项目 Filesystem 也没有 Skill 时，Shell 不构造自定义 backend
+或同名 Middleware，`create_deep_agent()` 会保留默认 StateBackend 和默认文件工具。最终有 Skill
+但没有项目 Filesystem 时，后端自动装配消费者独立的空只读 fallback，并只开放 `read_file`；它不
 读取或更新请求级 StateBackend，不创建宿主临时目录或持久配置。选择真实 Filesystem 后，StateBackend
 与临时文件只活在本次 API 请求；映射目录的磁盘内容按本地文件系统自然持久。
 
@@ -106,8 +106,8 @@ filesystem 是可选能力。最终既没有 Filesystem 也没有 Skill 时不�
 filesystem 不能被 Subagent 覆写。选择后，一次请求只由根 Primary 读取并创建一份初始临时文件
 state，全部同步 Subagent 固定继承当前 Primary 的 filesystem、backend 和这份 state，不会在启动
 每个 Subagent 时再次复制初始目录或创建独立映射。这里共享的是普通工作文件；每个消费者的
-`/skills/` 只读视图仍按自己的最终 Skill 配置隔离。Primary 未选择真实 Filesystem 时，Subagent 可
-正常运行；无 Skill 者没有文件工具，有 Skill 者使用自己的只读 fallback。
+`/skills/` 只读视图仍按自己的最终 Skill 配置隔离。Primary 未选择项目 Filesystem 时，Subagent 可
+正常运行；无 Skill 者保留 Deep Agents 默认 StateBackend 工具，有 Skill 者使用自己的只读 fallback。
 顺序调用时，后调用的 Primary/Subagent 可以
 看到前序调用者新建、覆盖、修改或删除的临时文件。
 

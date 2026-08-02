@@ -4,6 +4,8 @@ from pathlib import Path
 
 from agent_shell.provider_integrations import (
     bundled_provider_integrations,
+    bundled_provider_ids,
+    configure_deepagent_harness_profiles,
     official_provider_integrations,
 )
 
@@ -57,3 +59,36 @@ def test_bundled_provider_set_is_backed_by_current_langchain_registry() -> None:
     assert integrations["openai"].package == "langchain-openai"
     assert integrations["deepseek"].package == "langchain-deepseek"
     assert integrations["xai"].package == "langchain-xai"
+
+
+def test_harness_profile_disables_only_implicit_general_purpose_subagent(
+    monkeypatch,
+) -> None:
+    import deepagents
+    from agent_shell import provider_integrations as integration_module
+
+    registered = []
+    monkeypatch.setattr(
+        integration_module,
+        "_DEEPAGENT_HARNESS_PROFILES_CONFIGURED",
+        False,
+    )
+    monkeypatch.setattr(
+        deepagents,
+        "register_harness_profile",
+        lambda provider, profile: registered.append((provider, profile)),
+    )
+
+    configure_deepagent_harness_profiles()
+    configure_deepagent_harness_profiles()
+
+    assert [provider for provider, _profile in registered] == sorted(
+        bundled_provider_ids()
+    )
+    assert all(
+        profile.general_purpose_subagent is not None
+        and profile.general_purpose_subagent.enabled is False
+        and not profile.excluded_tools
+        and not profile.excluded_middleware
+        for _provider, profile in registered
+    )

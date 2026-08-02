@@ -50,8 +50,8 @@ ID。目录请求与 OpenAI-compatible LangChain Provider 的普通/流式模型
 分页读取会返回总行数、剩余行数和下一 offset；空文件查询返回 `No files found`。glob/grep 大结果
 可能只返回有效的部分结果与截断提示，grep 默认上限是 1,000 个匹配。产品不解析这些工具正文。
 
-文件系统是可选能力。最终既没有 Filesystem 也没有 Skill 时，不构造 `FilesystemMiddleware`，
-Primary 与同步 Subagent 都没有文件工具。最终有 Skill、但没有有效 Filesystem 时，后端自动为该
+文件系统是可选的项目能力。最终既没有项目 Filesystem 也没有 Skill 时，Shell 不构造同名替换项，
+Primary 与同步 Subagent 保留 Deep Agents 默认 StateBackend 文件工具。最终有 Skill、但没有有效项目 Filesystem 时，后端自动为该
 消费者装配独立的空只读空间，只暴露 `read_file`，用于按需读取该消费者自己的 Skill；它不连接
 Primary 或 sibling 的请求级 `files` state，不创建持久 block，也不提供写、搜索、执行或宿主目录。
 
@@ -154,13 +154,13 @@ DeepAgents Subagent 不经过该输入预处理。完整字段见
 
 ## 11. 同步子代理（Synchronous Subagents）
 
-保存同步 `SubAgentMiddleware` 的附加系统说明和 task 工具说明。DeepAgents 0.7 默认不额外注入
-旧的长篇 task system prose，只保留精简的 task 工具 description；填写非空 override 才加入自定义
-附加说明。Primary 引用该 block 即启用同步
+保存同步委派的附加系统说明。DeepAgents 0.7 的 task 工具 schema 和 description 由原生
+`SubAgentMiddleware` 管理；非空 `instruction_override` 追加到 Primary system prompt。Primary 引用该 block 即启用同步
 委派；具体 Subagent 绑定在 Primary 页面维护。引用后，真实请求中必须至少有一条完整且已启用的
 binding，否则构建失败。
 
-当前只支持 raw synchronous Subagent；不包含异步、dynamic 或递归委派。
+每个 binding 的 child graph 由 `create_deep_agent()` 构造并作为 `CompiledSubAgent` 传入；当前只支持
+synchronous Subagent，不包含异步、dynamic 或递归委派。
 
 ## 12. Context Worker 委派
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from .support import *
 
-
 def test_real_provider_finish_reason_reaches_both_api_transports(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
