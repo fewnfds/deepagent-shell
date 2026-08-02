@@ -297,9 +297,11 @@ def test_skill_prompt_supports_default_override_and_disabled_modes(tmp_path: Pat
     assert disabled_capabilities.middleware[0].system_prompt_template is None
 
 
-def test_skill_fallback_is_consumer_local_read_only_and_only_exposes_read_file(
+def test_default_workspace_keeps_consumer_skill_overlays_read_only_and_isolated(
     tmp_path: Path,
 ) -> None:
+    from deepagents.backends import StateBackend
+
     skills_dir = tmp_path / "skills"
     for name in ("alpha", "beta"):
         folder = skills_dir / name
@@ -318,29 +320,37 @@ def test_skill_fallback_is_consumer_local_read_only_and_only_exposes_read_file(
     alpha_capabilities = build_deepagents_capabilities(
         None,
         alpha,
-        filesystem_mode="skill-fallback-isolated",
+        filesystem_mode="default-shared",
         skills_dir=skills_dir,
     )
     beta_capabilities = build_deepagents_capabilities(
         None,
         beta,
-        filesystem_mode="skill-fallback-isolated",
+        filesystem_mode="default-shared",
         skills_dir=skills_dir,
+        workspace=alpha_capabilities.workspace,
     )
 
     alpha_filesystem = alpha_capabilities.middleware[-1]
     assert [tool.name for tool in alpha_filesystem.tools] == ["read_file"]
     assert alpha_filesystem._tool_token_limit_before_evict is None
+    assert isinstance(alpha_capabilities.backend.default, StateBackend)
     assert alpha_capabilities.backend is not beta_capabilities.backend
-    assert alpha_capabilities.backend.default is not beta_capabilities.backend.default
-    assert alpha_capabilities.backend.routes["/skills/"] is not (
-        beta_capabilities.backend.routes["/skills/"]
-    )
+    assert alpha_capabilities.workspace is beta_capabilities.workspace
+    assert alpha_capabilities.backend.default is beta_capabilities.backend.default
+    assert alpha_capabilities.skill_sources == ("/skills/alpha/",)
+    assert beta_capabilities.skill_sources == ("/skills/beta/",)
     assert alpha_capabilities.backend.read(
         "/skills/alpha/SKILL.md"
     ).error is None
     assert "not found" in alpha_capabilities.backend.read(
         "/skills/beta/SKILL.md"
+    ).error.lower()
+    assert beta_capabilities.backend.read(
+        "/skills/beta/SKILL.md"
+    ).error is None
+    assert "not found" in beta_capabilities.backend.read(
+        "/skills/alpha/SKILL.md"
     ).error.lower()
     denied = alpha_capabilities.backend.write(
         "/skills/alpha/created.md", "must not be written"

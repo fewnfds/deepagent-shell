@@ -86,7 +86,8 @@ disabled 控件或旧记录中的相反值不会改变 `read_file` / `execute` �
 `write_file` 用于新建文件或完整替换已有文件，不要求先读；只修改局部内容时使用要求精确匹配的
 `edit_file`。`delete` 会永久删除文件，或递归删除目录及其全部内容，无法撤销。显式启用后，它和
 write/edit 一样覆盖该 Agent 的普通可写虚拟命名空间：请求级 StateBackend 和 mapped directory；
-`/skills/` 整体由消费者独有的只读 backend 接管，任何写、改、删或上传都被拒绝。`delete` 不是只
+`/skills/` 由每个 Agent 的 consumer-specific 只读 backend overlay 接管，任何写、改、删或上传都被
+拒绝。`delete` 不是只
 清理临时文件的开关。
 
 `read_file` 的分页结果会说明总行数、剩余行数和下一次 `offset`。空 `ls` / `glob` 返回
@@ -95,21 +96,22 @@ write/edit 一样覆盖该 Agent 的普通可写虚拟命名空间：请求级 S
 第二个阈值字段。DeepAgent Shell 不解析或转换这些上游工具正文，只把完整 ToolMessage 交给模型和既定
 事件投影。当前页面不修改其他工具参数 schema。
 
-filesystem 是可选的项目能力。最终既没有项目 Filesystem 也没有 Skill 时，Shell 不构造自定义 backend
-或同名 Middleware，`create_deep_agent()` 会保留默认 StateBackend 和默认文件工具。最终有 Skill
-但没有项目 Filesystem 时，后端自动装配消费者独立的空只读 fallback，并只开放 `read_file`；它不
-读取或更新请求级 StateBackend，不创建宿主临时目录或持久配置。选择真实 Filesystem 后，StateBackend
-与临时文件只活在本次 API 请求；映射目录的磁盘内容按本地文件系统自然持久。
+filesystem 是可选的项目能力。没有项目 Filesystem 时，`create_deep_agent()` 仍保留必需的默认
+StateBackend，但 Shell 用同名 FilesystemMiddleware replacement 把模型可见工具限制为 `read_file`，
+并把这一虚拟 state 作为当前请求的共享 workspace。选择项目 Filesystem 后，
+StateBackend 与临时文件只活在本次 API 请求；映射目录的磁盘内容按本地文件系统自然持久。Skill 的
+只读 `/skills/` overlay 复用同一普通 workspace backend，但每个 Agent 只暴露最终选中的 Skill，不创建
+消费者独立的普通文件空间。
 
 ## 请求内共享与资源成本
 
-filesystem 不能被 Subagent 覆写。选择后，一次请求只由根 Primary 读取并创建一份初始临时文件
-state，全部同步 Subagent 固定继承当前 Primary 的 filesystem、backend 和这份 state，不会在启动
-每个 Subagent 时再次复制初始目录或创建独立映射。这里共享的是普通工作文件；每个消费者的
-`/skills/` 只读视图仍按自己的最终 Skill 配置隔离。Primary 未选择项目 Filesystem 时，Subagent 可
-正常运行；无 Skill 者保留 Deep Agents 默认 StateBackend 工具，有 Skill 者使用自己的只读 fallback。
-顺序调用时，后调用的 Primary/Subagent 可以
-看到前序调用者新建、覆盖、修改或删除的临时文件。
+filesystem 不能被 Subagent 覆写。一次请求只由根 Primary 读取并创建一份初始虚拟文件 state；全部同步
+Subagent 通过 Deep Agents 的 `task` state transfer 使用同一个 workspace，不会在 child 启动时再次复制、
+清空或替换文件。这里共享完整虚拟 `files` state 和 mapped routes；每个 Agent 的 `/skills/` 提示与
+sources 仍按最终 Skill 配置解析，并用独立只读 overlay 隐藏未选路径；overlay 不创建第二套普通
+workspace。Primary 未选择项目 Filesystem 时，全链仍共享 Deep Agents 默认 StateBackend，但只暴露
+`read_file`。选择项目 Filesystem 并开启相应写工具后，顺序调用的后续 Primary/Subagent 可以看到前序
+调用者新建、覆盖、修改或删除的普通虚拟文件；child 的更新返回后 Primary 也能继续读取。
 
 并行 Subagent 从同一父状态快照开始；不同路径的更新由现有 state 通道合并，但本版不为同一路径
 增加锁或冲突仲裁。不要让并行 Subagent 同时修改同一个临时文件。命中 `mapped_directories` route

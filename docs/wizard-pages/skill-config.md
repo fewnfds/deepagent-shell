@@ -34,12 +34,13 @@ frontmatter 必须有 `name` 和 `description`。`name` 为 1–64 个小写字�
 
 ## Runtime
 
-集中装配器按每个消费者完成继承、替换、关闭和顶层移除后的最终能力集合决定文件模式：已有真实
-Filesystem 时使用共享工作空间；有 Skill 但无真实 Filesystem 时自动使用消费者独立的空只读
-fallback；两者都没有时不构造文件能力。该规则不按 Primary、Subagent 或其他 Agent 类型分别写死。
-若想关闭 Skill，应在 Agent 装配中不引用该 block。运行时重新确认每个选中目录位于 skills
-根目录，并重新读取当前 `SKILL.md` 的 name/description 结构；文件保存后变为不合规时不会继续
-使用。验证通过后挂载到 `/skills/{name}/`，再构造：
+一次请求只使用一个普通 Filesystem workspace。集中装配器根据每个 Agent 最终选择的 Skill，为其叠加
+consumer-specific 只读 `/skills/` overlay；`SkillsMiddleware.sources`、提示词和 overlay 都只包含该
+Agent 自己选择的 Skill，未选路径返回 not found。没有项目 Filesystem 时，普通文件仍使用请求共享的
+默认 StateBackend，且模型只获得读取 Skill 所需的 `read_file`，不会为 Skill 创建第二套 workspace。
+若想关闭 Skill，应在 Agent 装配中不引用该
+block。运行时重新确认每个选中目录位于 skills 根目录，并重新读取当前 `SKILL.md` 的 name/description
+结构；文件保存后变为不合规时不会继续使用。验证通过后构造：
 
 ```python
 SkillsMiddleware(backend=backend, sources=["/skills/outline/"], ...)
@@ -48,14 +49,14 @@ SkillsMiddleware(backend=backend, sources=["/skills/outline/"], ...)
 关闭 Skill 系统提示词只会阻止 Middleware 向模型系统消息追加 Skill 位置和列表。Middleware 仍加载
 `skills_metadata`，选中的 Skill 目录和 `read_file` 能力保持可用；它不等于从 Agent 装配中移除 Skill。
 
-同一消费者的 SkillsMiddleware 与 FilesystemMiddleware 使用同一个消费者级 backend，顺序为 Skill
-在 Filesystem 之前。整个 `/skills/` namespace 由该消费者自己的只读 allowlist 接管：自己的 Skill
-可读，未选择的 Skill not found，写、改、删和上传均拒绝，不能回落到共享请求 state。Skill 的
-`allowed-tools` 只是一段能力提示，不自动改变真实工具列表。
+每个 Agent 的 SkillsMiddleware 与 FilesystemMiddleware 复用请求级普通 workspace，但用自己的只读
+`/skills/` overlay 覆盖该 namespace：只有最终选中的 Skill 可读，未选路径 not found，写、改、删和
+上传均拒绝，不能回落到普通请求 state。Skill 的 `allowed-tools` 只是一段能力提示，不自动改变真实
+工具列表。
 
-Subagent 可以继承、替换或关闭 Skill。custom Subagent 的最终 Skill 集合独立于 Primary 和 sibling；
-继承同一真实 Filesystem 只表示共享普通工作文件，不会共享彼此的 Skill。没有真实 Filesystem 的
-Skill 消费者只看到 `read_file`，其空 fallback 不连接父级或其他消费者的文件 state。
+Subagent 可以继承、替换或关闭 Skill。custom Subagent 的最终 Skill 提示和 sources 独立于 Primary 和
+sibling，其 `/skills/` overlay 同样相互隔离；这不会分裂普通 workspace，也不会清空或替换父级的普通
+虚拟文件 state。
 
 Skill 目录是实时外部资源，不进入请求的数据库配置快照，也不会被复制或锁定。运行中的 Agent
 可能在较晚的工具步骤才读取 `SKILL.md` 或配套文件；此时若维护者修改、删除或替换目录，当前

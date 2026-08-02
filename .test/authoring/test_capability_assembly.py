@@ -21,7 +21,7 @@ def test_effective_capability_subject_reports_required_and_filesystem_mode() -> 
         "assembly.required_capability_missing",
         "assembly.required_capability_missing",
     ]
-    assert subject.filesystem_mode == "skill-fallback-isolated"
+    assert subject.filesystem_mode == "default-shared"
     assert all(issue.scope == "route" for issue in issues)
     assert all(issue.owner_id == "router-id" for issue in issues)
     assert all(issue.owner_name == "research-route" for issue in issues)
@@ -32,18 +32,18 @@ def test_filesystem_mode_uses_final_effective_selection() -> None:
         references={"filesystem": "filesystem-id", "skill": "skill-id"},
         scope="primary",
     )
-    fallback = CapabilityAssemblySubject(
+    skill_only = CapabilityAssemblySubject(
         references={"skill": "skill-id"},
         scope="subagent",
     )
-    none = CapabilityAssemblySubject(
+    default = CapabilityAssemblySubject(
         references={"model": "model-id"},
         scope="subagent",
     )
 
     assert configured.filesystem_mode == "configured-shared"
-    assert fallback.filesystem_mode == "skill-fallback-isolated"
-    assert none.filesystem_mode == "none"
+    assert skill_only.filesystem_mode == "default-shared"
+    assert default.filesystem_mode == "default-shared"
     assert capability_assembly_issues(configured) == []
-    assert capability_assembly_issues(fallback) == []
-    assert capability_assembly_issues(none) == []
+    assert capability_assembly_issues(skill_only) == []
+    assert capability_assembly_issues(default) == []

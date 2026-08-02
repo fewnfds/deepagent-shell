@@ -38,7 +38,7 @@ ID。目录请求与 OpenAI-compatible LangChain Provider 的普通/流式模型
 `read_file` 固定对模型可见，`execute` 固定关闭。页面可以开关
 `ls`、`write_file`、`edit_file`、`delete`、`glob`、`grep`；递归删除工具 `delete` 默认关闭，
 显式开启后会作用于该 Agent 的普通可写虚拟命名空间，包括请求级工作文件和实时磁盘映射；
-`/skills/` 始终是消费者独有的只读命名空间，不受这些写工具开关影响。删除操作无法撤销。
+`/skills/` 始终是每个 Agent 自己的只读 overlay，不受这些写工具开关影响。删除操作无法撤销。
 `write_file` 会新建或完整覆盖文件；局部修改使用 `edit_file`。
 
 页面还提供 filesystem 自定义 system prompt、工具说明和大结果卸载阈值。DeepAgents 0.7 默认不再
@@ -50,13 +50,14 @@ ID。目录请求与 OpenAI-compatible LangChain Provider 的普通/流式模型
 分页读取会返回总行数、剩余行数和下一 offset；空文件查询返回 `No files found`。glob/grep 大结果
 可能只返回有效的部分结果与截断提示，grep 默认上限是 1,000 个匹配。产品不解析这些工具正文。
 
-文件系统是可选的项目能力。最终既没有项目 Filesystem 也没有 Skill 时，Shell 不构造同名替换项，
-Primary 与同步 Subagent 保留 Deep Agents 默认 StateBackend 文件工具。最终有 Skill、但没有有效项目 Filesystem 时，后端自动为该
-消费者装配独立的空只读空间，只暴露 `read_file`，用于按需读取该消费者自己的 Skill；它不连接
-Primary 或 sibling 的请求级 `files` state，不创建持久 block，也不提供写、搜索、执行或宿主目录。
+文件系统是可选的项目能力。没有项目 Filesystem 时，Primary 与同步 Subagent 仍共享 Deep Agents 默认
+StateBackend 和请求级虚拟 `files` state，但模型只看到 `read_file`。Skill 的只读 `/skills/` 视图接入
+同一个 workspace，
+但每个 Agent 只能读取其最终选中的 Skill；未选路径返回 not found，且不会创建独立的普通文件空间。
 
-选择 filesystem 后，同一请求中的 Primary 与全部同步 Subagent 固定继承同一配置，并共享这份临时
-文件 state；顺序委派时，后调用者能看到前面新建或修改的临时文件。请求结束后临时文件丢弃，下一次
+选择 filesystem 后，Primary 与全部同步 Subagent 双向共享完整虚拟 `files` state、初始文件和 mapped
+routes；Subagent 不允许替换或关闭 Filesystem。顺序委派时，后调用者能看到前面新建或修改的虚拟文件，
+child 的更新返回后 Primary 也能继续读取。请求结束后临时文件丢弃，下一次
 请求会从配置的磁盘来源重新完整复制。临时文件不设内容体积或展开文件数上限，读取会一次性完成：
 大目录、大文件和二进制 Base64 会明显增加启动时间与内存，请避免选择媒体、缓存或大型工程目录。
 并行 Subagent 会从同一快照开始，适合修改不同路径；不要安排它们同时写同一个临时文件。
@@ -86,13 +87,13 @@ Primary 和 Subagent 都能装配。每个 Agent 的 Todo state 独立，且只�
 
 扫描 `data/resources/skills/` 一级子目录。有效目录包含大写 `SKILL.md`；frontmatter `name` 遵守
 1–64 字符、小写字母/数字和单个连字符规则并匹配目录，`description` 必填且最多 1024 字符。
-选择 Skill block 时，runtime 会重新校验当前 frontmatter，再将该消费者选中的目录挂载到其独有、
-只读的 `/skills/{name}/` 视图并构造 `SkillsMiddleware`。若最终没有真实 Filesystem，装配器自动增加
-只含 `read_file` 的独立空 fallback；无需为此额外创建 Filesystem 配置。
+选择 Skill block 时，runtime 会重新校验当前 frontmatter，再在请求级共享普通 workspace 上为该 Agent
+叠加只读 `/skills/` overlay，并构造 `SkillsMiddleware`。overlay 只包含该 Agent 最终选中的
+`/skills/{name}/`；无需为 Skill 额外创建 Filesystem 配置，也不会创建第二套普通 workspace。
 
-Primary 与每个 custom Subagent 的 Skill 集合按各自最终配置独立解析。继承同一 Filesystem 只共享
-普通工作文件，不会让 sibling 看到彼此的 Skill；未选择的 `/skills/...` 路径返回 not found，不能
-回落到共享请求 state，Skill 文件也不能通过 filesystem 写、改、删或上传。
+Primary 与每个 custom Subagent 的 Skill 提示、sources 和只读 overlay 按各自最终配置解析。它们始终
+共享普通工作文件，但不能读取彼此未选中的 Skill；未选路径返回 not found。Skill 文件不能通过
+filesystem 写、改、删或上传。
 
 Skill 配置至少选择一个 Skill；Agent 不需要 Skill 时，在装配页不引用该 block。配置可以关闭 Skill 系统
 提示词，此时仍加载 Skill 元数据并保留所选目录的只读访问，只是不向模型的系统消息追加 Skill 位置和列表。

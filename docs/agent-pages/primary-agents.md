@@ -21,7 +21,8 @@ Primary 保存一份加法式装配：
 
 模型和输出模式由 manifest 标为必需，页面没有“不装配”或清除选项，右侧草稿校验区
 会逐项检查，管理 API 也拒绝缺少任一项的配置。filesystem 和其他项目能力可选；未选择 filesystem 时
-Shell 不构造同名替换项，Deep Agents 默认 StateBackend 文件工具仍存在。配置选择器和摘要只显示名称，
+Shell 仍保留 Deep Agents 必需的 StateBackend，并把 FilesystemMiddleware 限制为只暴露 `read_file`。
+配置选择器和摘要只显示名称，
 服务端 payload 与删除保护仍只认 UUID。
 
 ## Subagent binding
@@ -45,9 +46,11 @@ binding 的名称必须匹配 `[A-Za-z_][A-Za-z0-9_-]*`，同一 Primary 内唯�
 = 一个由 `create_deep_agent()` 构造的同步 child graph
 ```
 
-Subagent 不能选择其他 Primary。filesystem 在当前 Primary 选择时固定继承，不提供覆写入口；同一次请求内
-Primary 与全部同步 Subagent 共享项目配置提供的请求级临时文件 state。未选择项目 Filesystem 时，Deep Agents
-默认 StateBackend 仍提供默认文件工具。同步 child 是 `create_deep_agent()` 构造的官方
+Subagent 不能选择其他 Primary，也不能覆写或关闭 Filesystem。同一次请求只装配一个 workspace：
+Primary 与全部同步 Subagent 双向共享完整虚拟 `files` state、初始虚拟文件和 mapped routes。
+每个 Agent 在共享普通 workspace 上叠加自己的只读 `/skills/` 视图，只能读取最终选中的 Skill；
+未选路径返回 not found，且不会为此创建第二套普通 workspace。未选择项目 Filesystem 时，全链仍共享
+Deep Agents 默认 StateBackend，但只暴露 `read_file`。同步 child 是 `create_deep_agent()` 构造的官方
 `CompiledSubAgent`。Primary 的命名 bindings 不复制到 child；child 未显式传入命名 subagents 时仍保留
 Deep Agents 默认 `general-purpose` 与 `task`，所以可继续递归委派。当前不支持异步或 dynamic Subagent。
 

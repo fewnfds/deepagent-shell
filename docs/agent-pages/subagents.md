@@ -19,16 +19,17 @@
 - `disabled`：必须没有 `block_id`。
 
 model 允许 inherit/replace，但不能 disabled。system-prompt、todo-list、custom-tool、skill、
-custom-middleware、exception-retry 和 prompt-preset 支持三种模式。filesystem 在当前 Primary 选择时固定
-继承，未选择时保持缺失，且不显示覆写按钮；output-mode 和 subagent 不由 DeepAgents Subagent 覆写，
-按 manifest 策略移除。
+custom-middleware、exception-retry 和 prompt-preset 支持三种模式。filesystem 不出现在覆写策略中；
+一次请求的 Primary 与全部同步 Subagent 固定使用同一个 workspace。output-mode 和 subagent 不由
+Deep Agents Subagent 覆写，按 manifest 策略移除。
 
-覆写策略只在与 binding 所在的当前 Primary 组合后才有最终含义。最终有 Skill 但没有真实
-filesystem 时，该 Subagent 自动得到独立、只读、仅 `read_file` 的空 fallback；不会因此拒绝保存。
-model 丢失、引用失效或资源无法物化仍会由集中装配校验拒绝保存、启动或真实 Agent 构建。
+覆写策略只在与 binding 所在的当前 Primary 组合后才有最终含义。model 丢失、引用失效或资源无法
+物化仍会由集中装配校验拒绝保存、启动或真实 Agent 构建。
 
-多个 Subagent 即使继承同一 filesystem，也只共享普通工作文件。Skill 按每个 Subagent 最终配置
-独立解析；替换或关闭 Skill 不影响 Primary 与 sibling，未选择的 `/skills/...` 路径不可见。
+Primary 和所有同步 Subagent 双向共享请求级虚拟文件、初始文件与 mapped routes；child 不清空或重载
+`files` state。Skill 仍按每个 Agent 的最终配置独立解析，并通过 consumer-specific 只读 `/skills/`
+overlay 只暴露最终选中的目录；未选路径返回 not found。替换或关闭 Skill 不创建第二套普通 workspace，
+也不影响 Primary 与 sibling 的 Skill 视图或宣告。
 
 Prompt Preset 在 child graph 启动时由 LangChain 原生 `before_agent` Middleware 执行。binding 的
 `include_client_messages=true` 时，它处理本次请求冻结的原始客户端消息；为 `false` 时只生成自己的启动

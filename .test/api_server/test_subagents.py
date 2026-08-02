@@ -102,21 +102,12 @@ def test_subagent_runs_without_project_filesystem(
     assert response.json()["choices"][0]["message"]["content"].endswith(
         "parent completed"
     )
-    expected_deep_agent_tools = [
-        "ls",
-        "read_file",
-        "write_file",
-        "edit_file",
-        "delete",
-        "glob",
-        "grep",
-        "task",
-    ]
+    expected_deep_agent_tools = ["read_file", "task"]
     assert ParentModel.bound_tool_names == expected_deep_agent_tools
     assert ChildModel.bound_tool_names == expected_deep_agent_tools
 
 
-def test_skill_fallback_is_consumer_local_and_read_only_for_subagent(
+def test_unconfigured_filesystem_keeps_skill_reads_agent_scoped(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     skills_dir = tmp_path / "data" / "resources" / "skills"
@@ -168,7 +159,7 @@ def test_skill_fallback_is_consumer_local_and_read_only_for_subagent(
                     "type": "tool_call",
                 }],
             ),
-            AIMessage(content="fallback boundary completed"),
+            AIMessage(content="default workspace boundary completed"),
         ]
     )
     child_model = ChildModel(
@@ -188,15 +179,6 @@ def test_skill_fallback_is_consumer_local_and_read_only_for_subagent(
                     "name": "read_file",
                     "args": {"file_path": "/skills/alpha/SKILL.md"},
                     "id": "call-child-foreign-skill",
-                    "type": "tool_call",
-                }],
-            ),
-            AIMessage(
-                content="",
-                tool_calls=[{
-                    "name": "read_file",
-                    "args": {"file_path": "/temp/parent-state.txt"},
-                    "id": "call-child-parent-state",
                     "type": "tool_call",
                 }],
             ),
@@ -293,7 +275,7 @@ def test_skill_fallback_is_consumer_local_and_read_only_for_subagent(
 
     assert response.status_code == 200, response.text
     assert ParentModel.bound_tool_names == ["read_file", "task"]
-    assert ChildModel.bound_tool_names == ["read_file", "task"]
+    assert ChildModel.bound_tool_names == ParentModel.bound_tool_names
 
     parent_messages = ParentModel.seen_messages[-1]
     child_messages = ChildModel.seen_messages[-1]
@@ -311,7 +293,6 @@ def test_skill_fallback_is_consumer_local_and_read_only_for_subagent(
     assert "not found" in parent_results["call-parent-foreign-skill"].lower()
     assert "BETA ONLY" in child_results["call-child-own-skill"]
     assert "not found" in child_results["call-child-foreign-skill"].lower()
-    assert "not found" in child_results["call-child-parent-state"].lower()
 
     parent_system = "\n".join(
         message.text for message in ParentModel.seen_messages[0]
@@ -325,12 +306,15 @@ def test_skill_fallback_is_consumer_local_and_read_only_for_subagent(
     assert "beta" in child_system and "alpha" not in child_system
 
 
-def test_shared_filesystem_keeps_skill_namespace_isolated_between_children(
+def test_shared_filesystem_merges_parallel_children_and_scopes_skill_prompts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source = tmp_path / "seed" / "shared.txt"
     source.parent.mkdir()
     source.write_text("SHARED REQUEST FILE", encoding="utf-8")
+    mapped = tmp_path / "mapped"
+    mapped.mkdir()
+    (mapped / "host.txt").write_text("SHARED MAPPED FILE", encoding="utf-8")
     skills_dir = tmp_path / "data" / "resources" / "skills"
     for name, marker in (
         ("alpha", "ALPHA ONLY"),
@@ -399,6 +383,8 @@ def test_shared_filesystem_keeps_skill_namespace_isolated_between_children(
                 ("call-parent-alpha", "/skills/alpha/SKILL.md"),
                 ("call-parent-beta", "/skills/beta/SKILL.md"),
                 ("call-parent-shared", "/input/shared.txt"),
+                ("call-parent-beta-output", "/temp/beta.txt"),
+                ("call-parent-gamma-output", "/temp/gamma.txt"),
             ),
             AIMessage(content="shared workspace and isolated Skills completed"),
         ]
@@ -409,6 +395,19 @@ def test_shared_filesystem_keeps_skill_namespace_isolated_between_children(
                 ("call-beta-own", "/skills/beta/SKILL.md"),
                 ("call-beta-foreign", "/skills/gamma/SKILL.md"),
                 ("call-beta-shared", "/input/shared.txt"),
+                ("call-beta-mapped", "/mapped/host.txt"),
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[{
+                    "name": "write_file",
+                    "args": {
+                        "file_path": "/temp/beta.txt",
+                        "content": "created by beta child",
+                    },
+                    "id": "call-beta-write",
+                    "type": "tool_call",
+                }],
             ),
             AIMessage(content="beta worker completed"),
         ]
@@ -419,6 +418,19 @@ def test_shared_filesystem_keeps_skill_namespace_isolated_between_children(
                 ("call-gamma-own", "/skills/gamma/SKILL.md"),
                 ("call-gamma-foreign", "/skills/beta/SKILL.md"),
                 ("call-gamma-shared", "/input/shared.txt"),
+                ("call-gamma-mapped", "/mapped/host.txt"),
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[{
+                    "name": "write_file",
+                    "args": {
+                        "file_path": "/temp/gamma.txt",
+                        "content": "created by gamma child",
+                    },
+                    "id": "call-gamma-write",
+                    "type": "tool_call",
+                }],
             ),
             AIMessage(content="gamma worker completed"),
         ]
@@ -460,7 +472,6 @@ def test_shared_filesystem_keeps_skill_namespace_isolated_between_children(
                     name: {"visible": False}
                     for name in (
                         "ls",
-                        "write_file",
                         "edit_file",
                         "delete",
                         "glob",
@@ -471,6 +482,10 @@ def test_shared_filesystem_keeps_skill_namespace_isolated_between_children(
                 "virtual_files": [{
                     "virtual_path": "/input/shared.txt",
                     "source_path": str(source),
+                }],
+                "mapped_directories": [{
+                    "virtual_path": "/mapped/",
+                    "local_path": str(mapped),
                 }],
             },
         )
@@ -557,9 +572,9 @@ def test_shared_filesystem_keeps_skill_namespace_isolated_between_children(
         )
 
     assert response.status_code == 200, response.text
-    assert ParentModel.bound_tool_names == ["read_file", "task"]
-    assert ChildAModel.bound_tool_names == ["read_file", "task"]
-    assert ChildBModel.bound_tool_names == ["read_file", "task"]
+    assert ParentModel.bound_tool_names == ["read_file", "write_file", "task"]
+    assert ChildAModel.bound_tool_names == ParentModel.bound_tool_names
+    assert ChildBModel.bound_tool_names == ParentModel.bound_tool_names
 
     def results(messages: list[object]) -> dict[str, str]:
         return {
@@ -574,12 +589,32 @@ def test_shared_filesystem_keeps_skill_namespace_isolated_between_children(
     assert "ALPHA ONLY" in parent_results["call-parent-alpha"]
     assert "not found" in parent_results["call-parent-beta"].lower()
     assert "SHARED REQUEST FILE" in parent_results["call-parent-shared"]
+    assert "created by beta child" in parent_results["call-parent-beta-output"]
+    assert "created by gamma child" in parent_results["call-parent-gamma-output"]
     assert "BETA ONLY" in beta_results["call-beta-own"]
     assert "not found" in beta_results["call-beta-foreign"].lower()
     assert "SHARED REQUEST FILE" in beta_results["call-beta-shared"]
+    assert "SHARED MAPPED FILE" in beta_results["call-beta-mapped"]
     assert "GAMMA ONLY" in gamma_results["call-gamma-own"]
     assert "not found" in gamma_results["call-gamma-foreign"].lower()
     assert "SHARED REQUEST FILE" in gamma_results["call-gamma-shared"]
+    assert "SHARED MAPPED FILE" in gamma_results["call-gamma-mapped"]
+
+    parent_system = "\n".join(
+        message.text for message in ParentModel.seen_messages[0]
+        if message.type == "system"
+    )
+    beta_system = "\n".join(
+        message.text for message in ChildAModel.seen_messages[0]
+        if message.type == "system"
+    )
+    gamma_system = "\n".join(
+        message.text for message in ChildBModel.seen_messages[0]
+        if message.type == "system"
+    )
+    assert "alpha" in parent_system and "beta" not in parent_system
+    assert "beta" in beta_system and "gamma" not in beta_system
+    assert "gamma" in gamma_system and "beta" not in gamma_system
 
 
 def test_selected_subagent_applies_effective_overrides_and_returns_result(

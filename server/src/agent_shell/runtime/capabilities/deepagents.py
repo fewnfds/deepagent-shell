@@ -18,6 +18,15 @@ class DeepAgentsCapabilityError(ValueError):
 
 
 @dataclass(frozen=True)
+class DeepAgentsWorkspace:
+    """Shared ordinary storage used to build consumer-specific backend views."""
+
+    default_backend: Any
+    routes: dict[str, Any]
+    initial_files: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class DeepAgentsCapabilities:
     backend: Any
     middleware: tuple[Any, ...]
@@ -25,6 +34,7 @@ class DeepAgentsCapabilities:
     selected_skills: tuple[str, ...]
     skill_sources: tuple[str, ...]
     filesystem_mode: FilesystemMode
+    workspace: DeepAgentsWorkspace
 
 
 _READ_ONLY_ERROR = "Permission denied: this filesystem namespace is read-only."
@@ -387,9 +397,9 @@ def build_deepagents_capabilities(
     *,
     filesystem_mode: FilesystemMode,
     skills_dir: Path,
-    load_initial_files: bool = True,
+    workspace: DeepAgentsWorkspace | None = None,
 ) -> DeepAgentsCapabilities:
-    """Compile filesystem and skill blocks without building or invoking an Agent."""
+    """Compile one Agent's policy against a request-level shared workspace."""
     (
         CompositeBackend,
         FilesystemBackend,
@@ -399,15 +409,11 @@ def build_deepagents_capabilities(
         SkillsMiddleware,
     ) = _load_deepagents()
 
-    if filesystem_mode == "none":
-        raise DeepAgentsCapabilityError("filesystem mode none cannot be materialized")
     if filesystem_mode == "configured-shared" and filesystem is None:
         raise DeepAgentsCapabilityError("configured filesystem mode requires a block")
-    if filesystem_mode == "skill-fallback-isolated" and (
-        filesystem is not None or skill is None
-    ):
+    if filesystem_mode == "default-shared" and filesystem is not None:
         raise DeepAgentsCapabilityError(
-            "Skill fallback mode requires Skill without a filesystem block"
+            "default filesystem mode does not accept a filesystem block"
         )
 
     tool_configs = (
@@ -419,75 +425,83 @@ def build_deepagents_capabilities(
         if config["description_override"] is not None
     }
 
-    routes: dict[str, Any] = {}
-    default_backend = (
-        StateBackend()
-        if filesystem_mode == "configured-shared"
-        else EmptyReadOnlyBackend()
-    )
-    for route in filesystem.mapped_directories if filesystem is not None else ():
-        local_path = Path(route.local_path)
-        if not local_path.is_dir():
-            raise DeepAgentsCapabilityError(
-                f"mapped local_path is not a directory: {local_path}"
-            )
-        routes[route.virtual_path] = FilesystemBackend(
-            root_dir=local_path,
-            virtual_mode=True,
-        )
-    initial_files = (
-        _seed_virtual_sources(filesystem, create_file_data)
-        if filesystem is not None and load_initial_files
-        else {}
-    )
-
     selected_skills: tuple[str, ...] = ()
     skill_sources: list[str] = []
-    skill_routes: dict[str, Any] = {}
     if skill is not None and skill.skills:
         selected_skills = tuple(skill.skills)
         for name in selected_skills:
-            skill_folder = (skills_dir / name).resolve()
-            try:
-                skill_folder.relative_to(skills_dir.resolve())
-            except ValueError as exc:
-                raise DeepAgentsCapabilityError(f"skill path escapes skills_dir: {name}") from exc
-            try:
-                scan_skill_folder(skill_folder)
-            except ValueError as exc:
+            skill_sources.append(f"/skills/{name}/")
+
+    if workspace is None:
+        shared_routes: dict[str, Any] = {}
+        for route in filesystem.mapped_directories if filesystem is not None else ():
+            local_path = Path(route.local_path)
+            if not local_path.is_dir():
                 raise DeepAgentsCapabilityError(
-                    f"selected skill is invalid: {name}: {exc}"
-                ) from exc
-            source_prefix = f"/skills/{name}/"
-            conflicting_route = next(
-                (path for path in routes if _route_paths_overlap(path, "/skills/")),
-                None,
-            )
-            if conflicting_route is not None:
-                raise DeepAgentsCapabilityError(
-                    "filesystem route conflicts with selected skill: "
-                    f"{conflicting_route}, /skills/"
+                    f"mapped local_path is not a directory: {local_path}"
                 )
-            hidden_file = next(
-                (path for path in initial_files if path.startswith("/skills/")),
-                None,
-            )
-            if hidden_file is not None:
-                raise DeepAgentsCapabilityError(
-                    f"virtual file target conflicts with selected skill: {hidden_file}"
-                )
-            skill_routes[f"/{name}/"] = FilesystemBackend(
-                root_dir=skill_folder,
+            shared_routes[route.virtual_path] = FilesystemBackend(
+                root_dir=local_path,
                 virtual_mode=True,
             )
-            skill_sources.append(source_prefix)
+        initial_files = (
+            _seed_virtual_sources(filesystem, create_file_data)
+            if filesystem is not None
+            else {}
+        )
+        workspace = DeepAgentsWorkspace(
+            default_backend=StateBackend(),
+            routes=shared_routes,
+            initial_files=initial_files,
+        )
 
-    scoped_skills = ScopedSkillsBackend(
+    conflicting_route = next(
+        (path for path in workspace.routes if _route_paths_overlap(path, "/skills/")),
+        None,
+    )
+    if conflicting_route is not None:
+        raise DeepAgentsCapabilityError(
+            "filesystem route conflicts with selected skill: "
+            f"{conflicting_route}, /skills/"
+        )
+    hidden_file = next(
+        (
+            path
+            for path in workspace.initial_files
+            if path.startswith("/skills/")
+        ),
+        None,
+    )
+    if hidden_file is not None:
+        raise DeepAgentsCapabilityError(
+            f"virtual file target conflicts with selected skill: {hidden_file}"
+        )
+
+    skill_routes: dict[str, Any] = {}
+    for name in selected_skills:
+        skill_folder = (skills_dir / name).resolve()
+        try:
+            skill_folder.relative_to(skills_dir.resolve())
+        except ValueError as exc:
+            raise DeepAgentsCapabilityError(
+                f"skill path escapes skills_dir: {name}"
+            ) from exc
+        try:
+            scan_skill_folder(skill_folder)
+        except ValueError as exc:
+            raise DeepAgentsCapabilityError(
+                f"selected skill is invalid: {name}: {exc}"
+            ) from exc
+        skill_routes[f"/{name}/"] = FilesystemBackend(
+            root_dir=skill_folder,
+            virtual_mode=True,
+        )
+
+    routes = dict(workspace.routes)
+    routes["/skills/"] = ScopedSkillsBackend(
         CompositeBackend(default=EmptyReadOnlyBackend(), routes=skill_routes)
     )
-    routes["/skills/"] = scoped_skills
-
-    backend = CompositeBackend(default=default_backend, routes=routes)
+    backend = CompositeBackend(default=workspace.default_backend, routes=routes)
     filesystem_kwargs: dict[str, Any] = {
         "backend": backend,
         "custom_tool_descriptions": custom_tool_descriptions or None,
@@ -496,12 +510,13 @@ def build_deepagents_capabilities(
             if filesystem is not None
             else None
         ),
-        "tools": (
-            [name for name, config in tool_configs.items() if config["visible"]]
-            if filesystem is not None
-            else ["read_file"]
-        ),
     }
+    if filesystem is not None:
+        filesystem_kwargs["tools"] = [
+            name for name, config in tool_configs.items() if config["visible"]
+        ]
+    else:
+        filesystem_kwargs["tools"] = ["read_file"]
     if filesystem is not None and filesystem.system_prompt_override is not None:
         filesystem_kwargs["system_prompt"] = filesystem.system_prompt_override
     filesystem_middleware = FilesystemMiddleware(**filesystem_kwargs)
@@ -521,8 +536,9 @@ def build_deepagents_capabilities(
     return DeepAgentsCapabilities(
         backend=backend,
         middleware=tuple(middleware),
-        initial_files=initial_files,
+        initial_files=dict(workspace.initial_files),
         selected_skills=selected_skills,
         skill_sources=tuple(skill_sources),
         filesystem_mode=filesystem_mode,
+        workspace=workspace,
     )

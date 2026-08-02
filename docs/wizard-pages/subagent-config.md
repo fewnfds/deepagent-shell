@@ -21,7 +21,11 @@
 Deep Agents 默认 `general-purpose` 与 `task`，可以真实递归委派。提示词可指导模型何时不要继续委派，
 但不是强制禁止边界。
 
-项目 Filesystem block 被 Primary 选择时，child 继承该项目 Filesystem 配置；未选择时，Deep Agents 默认
-StateBackend Filesystem 仍提供默认文件工具。项目 Skills、模型、工具和其他允许继承的能力按 Subagent
-覆写策略解析。Prompt Preset 也可继承、替换或关闭，并通过 child 原生 `before_agent` Middleware 处理
-binding 选择的冻结客户端消息，随后保留委派 task。当前不支持异步或 dynamic Subagent。
+项目 Filesystem 不进入 Subagent 覆写策略。同一次请求只装配一个 workspace，Primary 与所有同步 child
+双向共享虚拟 `files` state、初始虚拟文件和 mapped routes；未选择项目 Filesystem 时也共享上游默认
+StateBackend，但只暴露 `read_file`。项目 Skills、模型、工具和其他允许继承的能力仍按 Subagent 覆写
+策略解析；Skill 选择不得
+创建第二套普通 workspace，而是在共享普通 workspace 上为 child 叠加只暴露其最终选中 Skill 的只读
+`/skills/` overlay；未选路径返回 not found。Prompt Preset 也可继承、替换或关闭，并通过 child 原生
+`before_agent` Middleware 处理 binding 选择的冻结客户端消息，随后保留委派 task。当前不支持异步或
+dynamic Subagent。

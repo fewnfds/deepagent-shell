@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from .support import *
 
-def test_unselected_filesystem_exposes_no_filesystem_tools(
+def test_unselected_project_filesystem_exposes_only_read_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     ToolCallingFakeModel.bound_tool_names = []
@@ -28,7 +28,10 @@ def test_unselected_filesystem_exposes_no_filesystem_tools(
     assert response.json()["choices"][0]["message"]["content"] == (
         "completed without filesystem"
     )
-    assert ToolCallingFakeModel.bound_tool_names == []
+    assert ToolCallingFakeModel.bound_tool_names == [
+        "read_file",
+        "task",
+    ]
 
 def test_selected_filesystem_reads_request_initial_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

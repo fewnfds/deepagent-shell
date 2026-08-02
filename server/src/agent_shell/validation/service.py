@@ -7,7 +7,11 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from agent_shell.capability_manifest import CAPABILITY_BY_TYPE, CAPABILITY_MANIFESTS
+from agent_shell.capability_manifest import (
+    CAPABILITY_BY_TYPE,
+    CAPABILITY_MANIFESTS,
+    UNCONFIGURED_FILESYSTEM_TOOL_NAMES,
+)
 from agent_shell.contracts import (
     BLOCK_MODELS,
     CapabilityReference,
@@ -561,8 +565,13 @@ class ConfigurationValidationService:
         owner_name: str,
     ) -> ValidationIssue | None:
         seen: dict[str, str] = {"task": "Deep Agents default harness"}
-        if filesystem_mode == "skill-fallback-isolated":
-            seen["read_file"] = "skill"
+        if filesystem_mode == "default-shared":
+            seen.update(
+                {
+                    name: "Deep Agents default harness"
+                    for name in UNCONFIGURED_FILESYSTEM_TOOL_NAMES
+                }
+            )
         for capability_type in references:
             manifest = CAPABILITY_BY_TYPE.get(capability_type)
             block = blocks.get(capability_type)

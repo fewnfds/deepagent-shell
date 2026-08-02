@@ -2,6 +2,43 @@ from __future__ import annotations
 
 from .reference_support import *
 
+
+def test_default_deep_agent_tool_conflict_is_rejected_at_save(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = make_client(tmp_path, monkeypatch)
+    write_custom_tool(tmp_path, "read_file", "read_file")
+    blocks = create_blocks(
+        client,
+        "default-tool-conflict",
+        ("model", "output-mode", "custom-tool"),
+    )
+    selected = client.put(
+        f"/api/blocks/custom-tool/{blocks['custom-tool']['id']}",
+        json={"name": blocks["custom-tool"]["name"], "tools": ["read_file"]},
+    )
+    assert selected.status_code == 200, selected.text
+
+    primary = client.post(
+        "/api/primary-agents",
+        json={
+            "name": "Default tool conflict",
+            "capability_refs": references(
+                blocks,
+                ("model", "output-mode", "custom-tool"),
+            ),
+        },
+    )
+
+    assert primary.status_code == 422
+    issues = primary.json()["detail"]["validation"]["issues"]
+    assert any(
+        issue["code"] == "assembly.tool_name_conflict"
+        and issue["path"] == "tools.read_file"
+        for issue in issues
+    )
+
+
 def test_block_update_rejects_new_conflict_in_referencing_primary(
     tmp_path: Path, monkeypatch
 ) -> None:

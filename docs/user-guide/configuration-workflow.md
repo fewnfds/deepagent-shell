@@ -20,9 +20,9 @@
 - 替换：保存同类型 block UUID；
 - 关闭：最终移除该能力。
 
-model 只能继承或替换。项目 filesystem 在当前 Primary 选择时固定继承；未选择项目 Filesystem 时，Subagent
-仍使用 Deep Agents 默认 StateBackend 文件工具；
-output mode 与 Subagent 按 manifest 策略从 child 移除；提示词预设可以继承、替换或关闭。
+model 只能继承或替换。filesystem 不可覆写；同一次请求中 Primary 与全部同步 Subagent 固定共享
+同一个 workspace。output mode 与 Subagent 按 manifest 策略从 child 移除；提示词预设可以继承、替换
+或关闭。
 
 ## 绑定
 
@@ -65,7 +65,7 @@ Subagent 或工具名。无效与不可用状态统一显示为默认收起的�
 显示成绿色。Subagent 的继承与覆写由后端解析。
 
 Primary 保存和每次真实请求现在复用同一个后端静态装配校验，统一检查 required、失效 UUID、
-委派 binding、有效 Subagent 最终引用、被引用组件当前结构、最终 Filesystem 装配模式和可静态确定的工具
+委派 binding、有效 Subagent 最终引用、被引用组件当前结构、请求级 Filesystem workspace 和可静态确定的工具
 重名。自定义 Tool 的静态名称来自 AST 可确定的函数默认名或字面量 `@tool` 名，不使用资源文件名
 猜测。组件、Primary 和覆写自身的
 严格 contract 错误会使用统一问题报告返回稳定 code、字段路径与安全说明，不回显原始输入。
@@ -98,7 +98,7 @@ Provider/Tool/graph 真正执行后的失败仍属于 runtime，不混进配置�
 修改组件、当前 Primary、覆写策略或 Provider credential 后，后续请求使用新配置；正在运行的请求
 继续使用其已经构造的对象。每个新推理请求先在一次 SQLite 读事务中复制配置和 secret，再从该
 query-only 内存快照解析 model 与完整装配，因此不会在同一次 `create_deep_agent()` 中混用修改前后的记录。
-请求仍会重新加载 Primary 配置的请求级初始文件；同一请求中的 Primary 与同步 Subagent 共享这份
-临时文件 state，请求结束后不会保留到下一请求。Skill 和 mapped filesystem 等磁盘资源保持实时。
-共享普通工作空间不等于共享 Skill：每个消费者只挂载自己最终选择的只读 Skill 集合。没有真实
-Filesystem、但有 Skill 的消费者使用独立空 fallback，不参与该共享 state。
+请求仍只由 Primary 加载一次请求级初始文件；同一请求中的 Primary 与全部同步 Subagent 双向共享完整
+虚拟 `files` state 和 mapped filesystem，请求结束后不会保留到下一请求。Skill 仍可按 Agent 选择提示
+与 sources；每个 Agent 在共享普通 workspace 上叠加 consumer-specific 只读 `/skills/` 视图，只能读取
+最终选中的 Skill，未选路径返回 not found，且不创建第二套普通 workspace。

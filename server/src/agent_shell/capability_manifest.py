@@ -5,9 +5,13 @@ from dataclasses import dataclass
 from typing import Literal
 
 
+UNCONFIGURED_FILESYSTEM_TOOL_NAMES = (
+    "read_file",
+)
+
 FILESYSTEM_TOOL_NAMES = (
     "ls",
-    "read_file",
+    *UNCONFIGURED_FILESYSTEM_TOOL_NAMES,
     "write_file",
     "edit_file",
     "delete",

@@ -14,6 +14,7 @@ from agent_shell.provider_http import PROVIDER_HTTP_TIMEOUT, ProviderHttpClients
 from agent_shell.provider_secrets import ProviderCredentialError, ProviderSecretResolver
 from agent_shell.runtime.capabilities import (
     DeepAgentsCapabilityError,
+    DeepAgentsWorkspace,
     build_deepagents_capabilities,
 )
 from agent_shell.runtime.capabilities.custom_middlewares import (
@@ -231,7 +232,7 @@ class AgentBuilder:
         owner_id: str,
         owner_name: str,
         model_factory_override: Callable[[dict[str, Any], str | None], Any] | None = None,
-        load_initial_files: bool = True,
+        workspace: DeepAgentsWorkspace | None = None,
     ) -> dict[str, Any]:
         model_id = references["model"]
         model_block = selected_blocks["model"]
@@ -332,65 +333,64 @@ class AgentBuilder:
         skill_sources: tuple[str, ...] = ()
         filesystem = selected_blocks.get("filesystem")
         skill = selected_blocks.get("skill")
-        if filesystem_mode != "none":
-            try:
-                filesystem_block = (
-                    FilesystemBlock.model_validate(
-                        {
-                            key: value
-                            for key, value in filesystem.items()
-                            if key != "id"
-                        }
-                    )
-                    if filesystem is not None
-                    else None
+        try:
+            filesystem_block = (
+                FilesystemBlock.model_validate(
+                    {
+                        key: value
+                        for key, value in filesystem.items()
+                        if key != "id"
+                    }
                 )
-                skill_block = (
-                    SkillBlock.model_validate(
-                        {key: value for key, value in skill.items() if key != "id"}
-                    )
+                if filesystem is not None
+                else None
+            )
+            skill_block = (
+                SkillBlock.model_validate(
+                    {key: value for key, value in skill.items() if key != "id"}
+                )
+                if skill is not None
+                else None
+            )
+            deepagents = build_deepagents_capabilities(
+                filesystem_block,
+                skill_block,
+                filesystem_mode=filesystem_mode,
+                skills_dir=self._skills_dir,
+                workspace=workspace,
+            )
+        except DeepAgentsCapabilityError as exc:
+            raise self._configuration_error(
+                "middleware_materialization_failed",
+                "The selected filesystem or Skill capability could not be constructed.",
+                status_code=422,
+                scope=scope,
+                owner_id=owner_id,
+                owner_name=owner_name,
+                path=(
+                    "capability_refs.skill"
                     if skill is not None
-                    else None
-                )
-                deepagents = build_deepagents_capabilities(
-                    filesystem_block,
-                    skill_block,
-                    filesystem_mode=filesystem_mode,
-                    skills_dir=self._skills_dir,
-                    load_initial_files=load_initial_files,
-                )
-            except DeepAgentsCapabilityError as exc:
-                raise self._configuration_error(
-                    "middleware_materialization_failed",
-                    "The selected filesystem or Skill capability could not be constructed.",
-                    status_code=422,
-                    scope=scope,
-                    owner_id=owner_id,
-                    owner_name=owner_name,
-                    path=(
-                        "capability_refs.skill"
-                        if skill is not None
-                        else "capability_refs.filesystem"
-                    ),
-                ) from exc
-            except Exception as exc:
-                raise self._configuration_error(
-                    "middleware_materialization_failed",
-                    "The selected filesystem or Skill configuration is invalid.",
-                    status_code=422,
-                    scope=scope,
-                    owner_id=owner_id,
-                    owner_name=owner_name,
-                    path=(
-                        "capability_refs.skill"
-                        if skill is not None
-                        else "capability_refs.filesystem"
-                    ),
-                ) from exc
-            backend = deepagents.backend
-            middleware.extend(deepagents.middleware)
-            initial_files.update(deepagents.initial_files)
-            skill_sources = deepagents.skill_sources
+                    else "capability_refs.filesystem"
+                ),
+            ) from exc
+        except Exception as exc:
+            raise self._configuration_error(
+                "middleware_materialization_failed",
+                "The selected filesystem or Skill configuration is invalid.",
+                status_code=422,
+                scope=scope,
+                owner_id=owner_id,
+                owner_name=owner_name,
+                path=(
+                    "capability_refs.skill"
+                    if skill is not None
+                    else "capability_refs.filesystem"
+                ),
+            ) from exc
+        backend = deepagents.backend
+        middleware.extend(deepagents.middleware)
+        initial_files.update(deepagents.initial_files)
+        skill_sources = deepagents.skill_sources
 
         custom_middleware: list[Any] = []
         custom = selected_blocks.get("custom-middleware")
@@ -429,6 +429,7 @@ class AgentBuilder:
             "backend": backend,
             "initial_files": initial_files,
             "skill_sources": skill_sources,
+            "workspace": deepagents.workspace,
         }
 
     @staticmethod
@@ -633,7 +634,7 @@ class AgentBuilder:
                     scope="subagent",
                     owner_id=primary_id,
                     owner_name=child_name,
-                    load_initial_files=False,
+                    workspace=materialized["workspace"],
                 )
                 child_middleware = [
                     ToolErrorBoundaryMiddleware(),

@@ -9,9 +9,8 @@ from agent_shell.validation.models import ValidationIssue
 
 
 FilesystemMode = Literal[
-    "none",
+    "default-shared",
     "configured-shared",
-    "skill-fallback-isolated",
 ]
 
 
@@ -29,9 +28,7 @@ class CapabilityAssemblySubject:
     def filesystem_mode(self) -> FilesystemMode:
         if "filesystem" in self.references:
             return "configured-shared"
-        if "skill" in self.references:
-            return "skill-fallback-isolated"
-        return "none"
+        return "default-shared"
 
 
 def capability_assembly_issues(

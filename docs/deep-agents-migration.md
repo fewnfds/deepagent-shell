@@ -44,6 +44,10 @@ schema 和 description 由 Deep Agents 管理，不再保存项目自定义的 `
 - 同步 child 使用当前 Primary 的有效能力解析结果和可选覆写，再以官方 `CompiledSubAgent` 进入 Primary 的
   原生 `subagents=` 装配链；Primary 的命名 bindings 不递归复制到 child，child 仍保留上游默认
   `general-purpose` 委派。
+- Filesystem 不属于 Subagent 可覆写能力；同一次请求的 Primary 与所有同步 child 通过上游 `task` state
+  transfer 双向共享完整虚拟 `files` state、一次性初始文件和 mapped routes。Skill 仍可按 Agent 选择
+  提示与 sources；每个 Agent 只读 `/skills/` overlay 只暴露其最终选中的 Skill，但不得据此创建第二套
+  普通 workspace。
 - 不新增 Agent Group、外层 supervisor、调度循环、graph cache、checkpointer、store、memory 平台或通用 migration
   框架；API、持久化、Provider、输出观察和 UI 可以继续复用。
 
