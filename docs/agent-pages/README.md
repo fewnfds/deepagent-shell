@@ -1,14 +1,8 @@
-# Agent 页面
+# Agent 配置
 
-【Agent】包含两个子页面：
+- [Primary Agent](primary-agents.md)：选择组件并定义公开 model ID。
+- [Subagent](subagents.md)：为同步子代理定义继承、替换、关闭和子绑定。
+- [术语](terminology.md)：管理台常用中英文名称。
 
-1. [Primary Agent](primary-agents.md)：选择十一类组件，并维护同步 Subagent binding。
-2. [Subagent](subagents.md)：保存可复用的能力覆写策略。
-
-历史会话属于运行观察功能，入口位于【系统 / 历史会话】；它不参与 Agent 装配或 memory。
-
-[术语](terminology.md) 是独立一级只读页面。
-
-两个装配页使用相同的能力选择卡和下拉框样式；Subagent 对允许覆写的能力提供“继承”。配置名称用于
-阅读和选择，真实引用由服务端维护。
-页面标题区提供新建和保存；删除配置统一前往【配置仓库】。
+Primary 与 Subagent 都通过 UUID 引用组件。模型与输出模式是 Primary 必选项；Subagent 必须保留一个
+有效模型，输出模式只属于顶层 Primary，文件系统在同一次请求的整个代理树中共享。

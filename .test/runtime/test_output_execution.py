@@ -1,0 +1,171 @@
+from __future__ import annotations
+
+from .support import *
+
+
+def test_execution_yields_each_completed_semantic_event_once() -> None:
+    async def scenario() -> tuple[list[str], dict[str, int]]:
+        settings = config(mode="blocklist")
+        settings["event_templates"]["assistant_text"] = {
+            "enabled": True,
+            "template": "[T]{{message}}[/T]",
+        }
+        settings["event_templates"]["reasoning"] = {
+            "enabled": True,
+            "template": "[R]{{message}}[/R]",
+        }
+        settings["event_templates"]["custom"] = {
+            "enabled": True,
+            "template": "[C]{{message}}[/C]",
+        }
+        events = [
+            message_envelope(
+                {"event": "message-start", "role": "ai", "id": "message-1"}
+            ),
+            message_envelope(
+                {
+                    "event": "content-block-start",
+                    "index": 0,
+                    "content": {"type": "reasoning", "reasoning": ""},
+                }
+            ),
+            message_envelope(
+                {
+                    "event": "content-block-delta",
+                    "index": 0,
+                    "delta": {
+                        "type": "reasoning-delta",
+                        "reasoning": "partial",
+                    },
+                }
+            ),
+            message_envelope(
+                {
+                    "event": "content-block-finish",
+                    "index": 0,
+                    "content": {"type": "reasoning", "reasoning": "thought"},
+                }
+            ),
+            {
+                "method": "custom",
+                "params": {"namespace": [], "timestamp": 2, "data": "working"},
+            },
+            message_envelope(
+                {
+                    "event": "content-block-finish",
+                    "index": 1,
+                    "content": {"type": "text", "text": "answer"},
+                }
+            ),
+            message_envelope(
+                {
+                    "event": "message-finish",
+                    "usage": {
+                        "input_tokens": 2,
+                        "output_tokens": 4,
+                        "total_tokens": 6,
+                    },
+                }
+            ),
+        ]
+        execution = AgentExecution(
+            graph=EventGraph(events),
+            input_state={"messages": []},
+            rectifier=OutputEventRectifier(OutputProjector(settings)),
+            normalizer=V3EventNormalizer("Primary"),
+        )
+        parts = [part async for part in execution.stream_text()]
+        return parts, execution.usage
+
+    parts, usage = asyncio.run(scenario())
+
+    assert parts == [
+        "[R]",
+        "partial",
+        "[/R]",
+        "[C]&quot;working&quot;[/C]",
+        "[T]answer[/T]",
+    ]
+    assert usage == {"input_tokens": 2, "output_tokens": 4, "total_tokens": 6}
+
+
+def test_model_response_observer_keeps_full_safe_source_data_per_call() -> None:
+    responses = []
+    normalizer = V3EventNormalizer(
+        "Primary", model_response_observers=(responses.append,)
+    )
+    normalizer.feed(
+        message_envelope(
+            {
+                "event": "message-start",
+                "role": "ai",
+                "id": "message-1",
+                "metadata": {"provider": "deepseek", "model": "reasoner"},
+            }
+        )
+    )
+    normalizer.feed(
+        message_envelope(
+            {
+                "event": "content-block-finish",
+                "index": 0,
+                "content": {"type": "reasoning", "reasoning": "full thought"},
+            }
+        )
+    )
+    normalizer.feed(
+        message_envelope(
+            {
+                "event": "message-finish",
+                "usage": {
+                    "input_tokens": 7,
+                    "output_tokens": 3,
+                    "total_tokens": 10,
+                    "output_token_details": {"reasoning": 2},
+                },
+                "metadata": {
+                    "finish_reason": "length",
+                    "model_name": "reasoner",
+                    "system_fingerprint": "fp-1",
+                    "logprobs": {"content": []},
+                },
+                "additional_kwargs": {"reasoning_content": "full thought"},
+            }
+        )
+    )
+
+    assert len(responses) == 1
+    response = responses[0]
+    assert response.provider_finish_reason == "length"
+    assert response.finish_reason_source == "response_metadata.finish_reason"
+    assert response.usage["output_token_details"] == {"reasoning": 2}
+    assert response.response_metadata["system_fingerprint"] == "fp-1"
+    assert response.additional_kwargs == {"reasoning_content": "full thought"}
+    assert response.content_blocks == [
+        {"type": "reasoning", "reasoning": "full thought"}
+    ]
+    assert normalizer.finish_reason == "length"
+
+
+def test_last_primary_model_call_owns_external_finish_reason() -> None:
+    normalizer = V3EventNormalizer("Primary")
+    for run_id, reason in (("run-tools", "tool_calls"), ("run-final", "stop")):
+        normalizer.feed(
+            message_envelope(
+                {"event": "message-start", "role": "ai", "id": run_id},
+                run_id=run_id,
+            )
+        )
+        normalizer.feed(
+            message_envelope(
+                {
+                    "event": "message-finish",
+                    "usage": {},
+                    "metadata": {"finish_reason": reason},
+                },
+                run_id=run_id,
+            )
+        )
+
+    assert normalizer.finish_reason == "stop"
+    assert normalizer.finish_reason_source == "response_metadata.finish_reason"

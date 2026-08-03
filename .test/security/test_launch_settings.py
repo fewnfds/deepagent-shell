@@ -1,0 +1,364 @@
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from agent_shell.app import create_app
+from agent_shell.settings import SettingsError, get_settings
+from agent_shell.storage.api_server import ApiServerStore
+from agent_shell.storage.database import SQLiteDatabase
+from agent_shell.storage import permissions as storage_permissions
+from agent_shell.storage.permissions import PermissionStatus
+
+
+def _write_environment_file(root: Path, content: str) -> Path:
+    path = root / "data" / "config" / "agent-shell.env"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+    return path
+
+
+@pytest.fixture(autouse=True)
+def clean_agent_shell_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    for key in tuple(os.environ):
+        if key.upper().startswith("AGENT_SHELL_"):
+            monkeypatch.delenv(key, raising=False)
+
+
+def test_create_app_installs_minimal_cors_and_runtime_directories(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    runtime_dir = tmp_path / "runtime"
+    data_root = tmp_path / "data"
+    middleware_dir = data_root / "resources" / "custom_middlewares"
+    monkeypatch.setenv("AGENT_SHELL_CORS_ORIGINS", "https://console.example")
+    monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "management-secret")
+
+    with TestClient(create_app()) as client:
+        allowed = client.options(
+            "/api/catalog",
+            headers={
+                "Origin": "https://console.example",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "Authorization, X-Request-ID",
+            },
+        )
+        rejected = client.options(
+            "/api/catalog",
+            headers={
+                "Origin": "https://other.example",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+
+    assert allowed.status_code == 200
+    assert allowed.headers["access-control-allow-origin"] == "https://console.example"
+    assert "access-control-allow-credentials" not in allowed.headers
+    assert rejected.status_code == 400
+    assert "access-control-allow-origin" not in rejected.headers
+    assert (runtime_dir / "cache").is_dir()
+    assert (runtime_dir / "tmp").is_dir()
+    assert (runtime_dir / "home").is_dir()
+    assert (data_root / "state").is_dir()
+    assert (data_root / "files").is_dir()
+    assert (data_root / "logs").is_dir()
+    assert middleware_dir.is_dir()
+
+
+def test_official_launcher_uses_only_validated_settings_and_disables_proxy_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent_shell import __main__ as launcher
+
+    calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    monkeypatch.setenv("AGENT_SHELL_HOST", "127.0.0.2")
+    monkeypatch.setenv("AGENT_SHELL_PORT", "9123")
+    monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "management-secret")
+    monkeypatch.setattr(
+        launcher.uvicorn,
+        "run",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    assert launcher.main(serve_frontend=False) == 0
+    assert len(calls) == 1
+    assert calls[0][0][0].title == "agent-shell"
+    assert calls[0][1] == {
+        "host": "127.0.0.2",
+        "port": 9123,
+        "proxy_headers": False,
+        "ws": "websockets-sansio",
+    }
+
+
+def test_official_launcher_prints_effective_settings_for_windows_script(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    from agent_shell import __main__ as launcher
+
+    _write_environment_file(
+        tmp_path,
+        "AGENT_SHELL_HOST=::1\n"
+        "AGENT_SHELL_PORT=9123\n"
+        "AGENT_SHELL_MANAGEMENT_TOKEN=management-secret\n",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        launcher.uvicorn,
+        "run",
+        lambda *args, **kwargs: pytest.fail("settings query must not start uvicorn"),
+    )
+
+    assert (
+        launcher.run_cli(
+            ["--home", str(tmp_path), "--print-launch-settings"]
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert captured.out == "::1|9123|http://[::1]:9123/admin\n"
+    assert captured.err == ""
+
+
+def test_official_launcher_warns_when_remote_http_backend_is_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    from agent_shell import __main__ as launcher
+
+    management_token = "management-secret-sentinel"
+    api_key = "api-secret-sentinel"
+    monkeypatch.setenv("AGENT_SHELL_ALLOW_REMOTE", "true")
+    monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", management_token)
+    database = SQLiteDatabase(tmp_path / "data" / "state" / "agent-shell.sqlite3")
+    ApiServerStore(database).update_settings(
+        api_key_operation="replace",
+        api_key=api_key,
+    )
+    monkeypatch.setattr(launcher.uvicorn, "run", lambda *_args, **_kwargs: None)
+
+    assert launcher.main(serve_frontend=False) == 0
+    captured = capsys.readouterr()
+    assert "Remote HTTP backend enabled" in captured.err
+    assert "TLS reverse proxy and firewall" in captured.err
+    assert management_token not in captured.err
+    assert api_key not in captured.err
+
+
+def test_official_launcher_reports_safe_startup_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from agent_shell import __main__ as launcher
+
+    sentinel = "launcher-inference-secret"
+    monkeypatch.setenv("AGENT_SHELL_INFERENCE_TOKEN", sentinel)
+    monkeypatch.setattr(
+        launcher.uvicorn,
+        "run",
+        lambda *args, **kwargs: pytest.fail(
+            "invalid settings must not start uvicorn"
+        ),
+    )
+
+    assert launcher.main() == 2
+    captured = capsys.readouterr()
+    assert "AGENT_SHELL_INFERENCE_TOKEN" in captured.err
+    assert sentinel not in captured.err
+
+
+def test_windows_launcher_initializes_missing_local_management_password(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    from agent_shell import __main__ as launcher
+
+    sentinel = "local-admin-2026"
+    (tmp_path / ".env.example").write_text(
+        "AGENT_SHELL_HOST=127.0.0.1\n"
+        "AGENT_SHELL_PORT=9123\n"
+        "# AGENT_SHELL_MANAGEMENT_TOKEN=<generate-a-management-token>\n",
+        encoding="utf-8",
+    )
+    answers = iter((sentinel, sentinel))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(launcher.getpass, "getpass", lambda _prompt: next(answers))
+
+    result = launcher.run_cli(
+        ["--home", str(tmp_path), "--initialize-local-settings"]
+    )
+    if result != 0:
+        env_path = tmp_path / "data" / "config" / "agent-shell.env"
+        permission = launcher.secure_file(env_path)
+        dacl = storage_permissions._read_windows_dacl(env_path)
+        pytest.fail(
+            "local settings initialization failed: "
+            f"env_exists={env_path.exists()}, "
+            f"permission={permission.mechanism}/{permission.boundary}, "
+            f"dacl={dacl or '<unreadable>'}"
+        )
+
+    env_text = (
+        tmp_path / "data" / "config" / "agent-shell.env"
+    ).read_text(encoding="utf-8")
+    assert "AGENT_SHELL_HOST=127.0.0.1" in env_text
+    assert "AGENT_SHELL_PORT=9123" in env_text
+    assert f"AGENT_SHELL_MANAGEMENT_TOKEN={sentinel}" in env_text
+    assert "# AGENT_SHELL_MANAGEMENT_TOKEN=" not in env_text
+    assert get_settings().management_token.get_secret_value() == sentinel
+    captured = capsys.readouterr()
+    assert "不会改变 /v1 OpenAI API 使用的 Key" in captured.out
+    assert sentinel not in captured.out
+    assert captured.err == ""
+
+
+def test_windows_launcher_keeps_existing_management_password(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from agent_shell import __main__ as launcher
+
+    original = "AGENT_SHELL_MANAGEMENT_TOKEN=existing-admin-password\n"
+    env_path = _write_environment_file(tmp_path, original)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        launcher.getpass,
+        "getpass",
+        lambda _prompt: pytest.fail("an existing password must not be prompted for"),
+    )
+
+    assert (
+        launcher.run_cli(
+            ["--home", str(tmp_path), "--initialize-local-settings"]
+        )
+        == 0
+    )
+    assert env_path.read_text(encoding="utf-8") == original
+
+
+def test_windows_launcher_does_not_overwrite_invalid_existing_settings(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    from agent_shell import __main__ as launcher
+
+    original = "AGENT_SHELL_PORT=not-a-port\n"
+    env_path = _write_environment_file(tmp_path, original)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        launcher.getpass,
+        "getpass",
+        lambda _prompt: pytest.fail("invalid settings must not enter password setup"),
+    )
+
+    assert (
+        launcher.run_cli(
+            ["--home", str(tmp_path), "--initialize-local-settings"]
+        )
+        == 2
+    )
+    assert env_path.read_text(encoding="utf-8") == original
+    captured = capsys.readouterr()
+    assert "AGENT_SHELL_PORT" in captured.err
+    assert "not-a-port" not in captured.err
+
+
+def test_windows_launcher_does_not_initialize_remote_deployment(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    from agent_shell import __main__ as launcher
+
+    original = (
+        "AGENT_SHELL_HOST=0.0.0.0\n"
+        "AGENT_SHELL_ALLOW_REMOTE=true\n"
+    )
+    env_path = _write_environment_file(tmp_path, original)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        launcher.getpass,
+        "getpass",
+        lambda _prompt: pytest.fail("remote deployment must be configured explicitly"),
+    )
+
+    assert (
+        launcher.run_cli(
+            ["--home", str(tmp_path), "--initialize-local-settings"]
+        )
+        == 2
+    )
+    assert env_path.read_text(encoding="utf-8") == original
+    captured = capsys.readouterr()
+    assert "AGENT_SHELL_MANAGEMENT_TOKEN" in captured.err
+
+
+def test_docker_initializer_creates_one_valid_remote_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from agent_shell import __main__ as launcher
+
+    password = "admin"
+    api_key = "api"
+    answers = iter((password, password, api_key, api_key))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(launcher.getpass, "getpass", lambda _prompt: next(answers))
+
+    result = launcher.run_cli(
+        ["--home", str(tmp_path), "--initialize-docker-settings"]
+    )
+
+    assert result == 0
+    settings = get_settings(
+        application_home=tmp_path,
+        include_process_environment=False,
+    )
+    assert settings.host == "0.0.0.0"
+    assert settings.port == 19100
+    assert settings.allow_remote is True
+    assert settings.management_token is not None
+    assert settings.management_token.get_secret_value() == password
+    store = ApiServerStore(
+        SQLiteDatabase(tmp_path / "data" / "state" / "agent-shell.sqlite3")
+    )
+    assert store.api_key() == api_key
+    assert api_key not in (
+        tmp_path / "data" / "config" / "agent-shell.env"
+    ).read_text(encoding="utf-8")
+
+
+def test_docker_initializer_does_not_overwrite_invalid_existing_file(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from agent_shell import __main__ as launcher
+
+    original = "AGENT_SHELL_PORT=invalid\n"
+    env_path = _write_environment_file(tmp_path, original)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        launcher.getpass,
+        "getpass",
+        lambda _prompt: pytest.fail("invalid existing settings must not be replaced"),
+    )
+
+    result = launcher.run_cli(
+        ["--home", str(tmp_path), "--initialize-docker-settings"]
+    )
+
+    assert result == 2
+    assert env_path.read_text(encoding="utf-8") == original

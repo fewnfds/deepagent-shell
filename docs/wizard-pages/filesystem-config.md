@@ -1,9 +1,6 @@
 # 文件系统
 
-文件系统 block 构造 DeepAgents `CompositeBackend(default=StateBackend(), routes=...)`、
-`FilesystemMiddleware` 和请求级 `initial_files`。
-
-## Payload
+文件系统组件配置请求级 workspace、宿主目录映射、初始虚拟文件和模型可见文件工具。
 
 ```json
 {
@@ -32,93 +29,29 @@
 }
 ```
 
-三类路径各最多 100 项，路径最长 4096 字符。提示词和工具 description 覆写最多 100,000
-字符。卸载阈值必须是正整数或 `null`；`null` 关闭 DeepAgents 的大工具结果文件卸载。
+## 两档运行模式
 
-这里的 100 项只限制配置中填写的来源条目，不限制一个来源目录展开后的文件数量，也不限制文件
-内容体积。本版不设置单文件、展开文件数或请求级总字节硬上限。
+- 未选择项目 Filesystem：使用请求级默认 StateBackend，模型只获得 `read_file`。是否选择 Skill 只改变
+  当前 Agent 可读的 `/skills/` 内容；普通 workspace 初始为空。
+- 选择项目 Filesystem：使用配置的共享 workspace，并按 `tool_configs` 开放 `ls`、`read_file`、
+  `write_file`、`edit_file`、`delete`、`glob`、`grep`。`read_file` 固定可见；`execute` 固定不可见；
+  `delete` 默认关闭。
 
-## 路径语义
+同一次请求中的 Primary 与同步 Subagent 共享普通 StateBackend、初始文件和 mapped routes；文件系统不在
+Subagent 覆写中单独替换。每个 Agent 的 `/skills/` 仍按最终 Skill 选择建立只读视图。
 
-- `mapped_directories`：虚拟路径与现有本地绝对目录实时映射；Agent 修改会写入磁盘。
-- `virtual_directories`：保存时检查现有本地目录；每次推理请求构造时重新扫描并把文件复制到
-  本次请求的内存 state；不复制空目录，后续修改不回写源目录。源目录及其扫描到的所有条目都必须
-  是普通目录或普通文件，符号链接、junction 和其他 reparse point 会使本次请求在读取前失败。
-- `virtual_files`：每次推理请求复制一个现有本地文件到内存 state；虚拟文件名必须与源文件名
-  相同，后续修改不回写源文件。读取使用不跟随链接的安全文件描述符，并要求普通文件。
+## 来源类型
 
-虚拟目录以 `/` 开头和结尾，虚拟文件以 `/` 开头但不能以 `/` 结尾；不允许 `..`。虚拟路径
-按 POSIX 形式归一化。
+- `mapped_directories`：把虚拟目录实时映射到现有宿主绝对目录；写入直接落盘；
+- `virtual_directories`：每次请求开始时把现有目录文件复制到内存 workspace，不回写来源；
+- `virtual_files`：每次请求复制一个现有普通文件，不回写来源。
 
-保存时拒绝重叠映射、重复本地映射、映射与临时目标重叠、重复目标、文件/目录冲突和不存在的
-源路径。运行时会再次扫描，因为磁盘可能在保存后变化。冲突直接失败，不定义覆盖顺序。
+虚拟目录必须以 `/` 开头和结尾；虚拟文件以 `/` 开头且文件名与来源相同。不允许 `..`、重叠 route、
+重复目标、文件/目录冲突、符号链接、junction 或其他 reparse point。以下 namespace 保留：
+`/large_tool_results/`、`/conversation_history/`、`/skills/`、`/memory/`、`/memories/`。
 
-以下虚拟命名空间保留给 LangChain/DeepAgents 的文件能力、Skill 和 Memory 等上游用途，不能作为
-用户映射或临时目标：
+`system_prompt_override=null` 使用当前 Deep Agents 默认行为；工具 `description_override=null` 保留默认说明。
+`tool_token_limit_before_evict` 为正整数或 `null`，`null` 关闭大工具结果卸载。
 
-```text
-/large_tool_results/
-/conversation_history/
-/skills/
-/memory/
-/memories/
-```
-
-Agent Shell 只在 filesystem 配置入口阻止用户来源误占这些名称；它不提供 Memory 配置，也不创建、
-挂载、读取、写入或管理这些上游目录。自定义 Middleware 的内部 backend 和目录生命周期仍由该
-Middleware 与 LangChain/DeepAgents 自己负责。
-
-## 工具与提示词
-
-`read_file` 是 DeepAgents 0.7 filesystem 的必需工具，固定可见；`execute` 固定不可见。
-`ls`、`write_file`、`edit_file`、`delete`、`glob`、`grep` 可以独立开关，其中具有递归删除能力的
-`delete` 默认关闭，其余默认开启。后端保存 contract 和运行时构造期 allowlist 是最终权限边界；
-disabled 控件或旧记录中的相反值不会改变 `read_file` / `execute` 的固定状态。
-
-`description_override=null` 表示省略工具说明覆写。`system_prompt_override=null` 表示不向
-`FilesystemMiddleware` 传入自定义提示词；DeepAgents 0.7 默认不再额外注入旧的通用 filesystem
-使用 prose，工具用途由各自 schema description 说明。这不清空 Primary 的系统提示词、Skill 或 Todo
-提示词。页面从服务端管理 catalog 取得与当前锁定依赖一致的默认文本，直接显示并按逐字比较自动保存
-`null|string`；浏览器不再保存第二份 DeepAgents 默认快照。
-`execute` 的说明覆写也会随完整配置保存，但当前 backend 固定不暴露该工具；修改说明不会启用
-命令执行，也不会改变任何运行结果。
-
-`write_file` 用于新建文件或完整替换已有文件，不要求先读；只修改局部内容时使用要求精确匹配的
-`edit_file`。`delete` 会永久删除文件，或递归删除目录及其全部内容，无法撤销。显式启用后，它和
-write/edit 一样覆盖该 Agent 的普通可写虚拟命名空间：请求级 StateBackend 和 mapped directory；
-`/skills/` 由每个 Agent 的 consumer-specific 只读 backend overlay 接管，任何写、改、删或上传都被
-拒绝。`delete` 不是只
-清理临时文件的开关。
-
-`read_file` 的分页结果会说明总行数、剩余行数和下一次 `offset`。空 `ls` / `glob` 返回
-`No files found`；`glob` / `grep` 在超时或达到结果上限时返回已经找到的部分结果和截断说明。
-`grep` 默认最多 1,000 个匹配，模型可通过工具参数传入更小或更大的 `max_count`；管理台不再建立
-第二个阈值字段。Agent Shell 不解析或转换这些上游工具正文，只把完整 ToolMessage 交给模型和既定
-事件投影。当前页面不修改其他工具参数 schema。
-
-filesystem 是可选的项目能力。没有项目 Filesystem 时，`create_deep_agent()` 仍保留必需的默认
-StateBackend，但 Shell 用同名 FilesystemMiddleware replacement 把模型可见工具限制为 `read_file`，
-并把这一虚拟 state 作为当前请求的共享 workspace。选择项目 Filesystem 后，
-StateBackend 与临时文件只活在本次 API 请求；映射目录的磁盘内容按本地文件系统自然持久。Skill 的
-只读 `/skills/` overlay 复用同一普通 workspace backend，但每个 Agent 只暴露最终选中的 Skill，不创建
-消费者独立的普通文件空间。
-
-## 请求内共享与资源成本
-
-filesystem 不能被 Subagent 覆写。一次请求只由根 Primary 读取并创建一份初始虚拟文件 state；全部同步
-Subagent 通过 Deep Agents 的 `task` state transfer 使用同一个 workspace，不会在 child 启动时再次复制、
-清空或替换文件。这里共享完整虚拟 `files` state 和 mapped routes；每个 Agent 的 `/skills/` 提示与
-sources 仍按最终 Skill 配置解析，并用独立只读 overlay 隐藏未选路径；overlay 不创建第二套普通
-workspace。Primary 未选择项目 Filesystem 时，全链仍共享 Deep Agents 默认 StateBackend，但只暴露
-`read_file`。选择项目 Filesystem 并开启相应写工具后，顺序调用的后续 Primary/Subagent 可以看到前序
-调用者新建、覆盖、修改或删除的普通虚拟文件；child 的更新返回后 Primary 也能继续读取。
-
-并行 Subagent 从同一父状态快照开始；不同路径的更新由现有 state 通道合并，但本版不为同一路径
-增加锁或冲突仲裁。不要让并行 Subagent 同时修改同一个临时文件。命中 `mapped_directories` route
-的路径始终直接读写磁盘，不属于这份内存临时文件。
-
-每个新的 `/v1/chat/completions` 请求都会重新构造 Agent，并重新从磁盘完整读取配置的临时来源；
-上一请求在内存中创建的文件不会恢复。读取不是流式，二进制内容还会编码为 Base64，通常比原始
-字节再大约三分之一。由于本版没有文件体积或展开数量硬上限，请谨慎选择目录，避免媒体文件、
-依赖缓存、构建产物和大型工程；即使多数文档目录只有几十 MB，重复请求仍会反复承担读取时间与
-内存成本。
+虚拟来源会在每个新请求中重新完整读取，当前没有单文件、展开文件数或总字节配额。不要选择依赖缓存、
+构建产物、媒体目录或其他大型路径。并行 Subagent 不应同时修改同一临时文件。
