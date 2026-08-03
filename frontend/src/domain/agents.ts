@@ -115,7 +115,7 @@ export function normalizePrimaryAgent(value: unknown): PrimaryAgentProfile {
     name: text(source.name),
     capability_refs: references.map((item) => {
       const reference = record(item)
-      return { type: text(reference.type) as CapabilityType, block_id: text(reference.block_id) }
+      return { type: text(reference.type), block_id: text(reference.block_id) }
     }),
     subagents: subagents.map(normalizeSubagentReference),
     automation: {
@@ -189,7 +189,7 @@ export function normalizeSubagent(value: unknown): SubagentProfile {
       capability_overrides: overrides.map((item): CapabilityOverride => {
         const override = record(item)
         return {
-          type: text(override.type) as CapabilityType,
+          type: text(override.type),
           mode: text(override.mode) as StoredOverrideMode,
           block_id: text(override.block_id),
         }

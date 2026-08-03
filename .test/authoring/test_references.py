@@ -307,40 +307,83 @@ def test_repository_validation_reports_unknown_stored_block_type(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
+    required = create_blocks(
+        client,
+        "unknown-type-owner",
+        ("model", "output-mode"),
+    )
+    primary = client.post(
+        "/api/primary-agents",
+        json={
+            "name": "Historical Primary",
+            "capability_refs": references(required, ("model", "output-mode")),
+        },
+    ).json()
+    subagent = client.post(
+        "/api/subagents",
+        json=subagent_payload("Historical Subagent", name="historical_worker"),
+    ).json()
     database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
     block_id = "00000000-0000-0000-0000-000000000014"
     with closing(sqlite3.connect(database_path)) as connection, connection:
         connection.execute(
             "INSERT INTO blocks (id, block_type, name, payload) VALUES (?, ?, ?, ?)",
-            (block_id, "context-assembler", "Historical assembler", "{}"),
+            (block_id, "removed-capability", "Historical component", "{}"),
+        )
+        primary_payload = json.loads(
+            connection.execute(
+                "SELECT payload FROM primary_agents WHERE id = ?",
+                (primary["id"],),
+            ).fetchone()[0]
+        )
+        primary_payload["capability_refs"].append(
+            {"type": "removed-capability", "block_id": block_id}
+        )
+        connection.execute(
+            "UPDATE primary_agents SET payload = ? WHERE id = ?",
+            (json.dumps(primary_payload, ensure_ascii=False), primary["id"]),
+        )
+        subagent_payload_json = json.loads(
+            connection.execute(
+                "SELECT payload FROM subagents WHERE id = ?",
+                (subagent["id"],),
+            ).fetchone()[0]
+        )
+        subagent_payload_json["settings"]["capability_overrides"].append(
+            {
+                "type": "removed-capability",
+                "mode": "replace",
+                "block_id": block_id,
+            }
+        )
+        connection.execute(
+            "UPDATE subagents SET payload = ? WHERE id = ?",
+            (json.dumps(subagent_payload_json, ensure_ascii=False), subagent["id"]),
         )
 
     report = client.get("/api/validation/repository")
 
     assert report.status_code == 200
-    assert report.json() == {
-        "valid": False,
-        "stage": "repository_load",
-        "issues": [
-            {
-                "code": "storage.unknown_block_type",
-                "scope": "block",
-                "owner_id": block_id,
-                "owner_name": "Historical assembler",
-                "owner_type": "context-assembler",
-                "path": "block_type",
-                "message": (
-                    "Stored configuration type 'context-assembler' is not supported."
-                ),
-                "message_key": "errors.unknownConfigurationType",
-                "message_args": {"type": "context-assembler"},
-            }
-        ],
-    }
+    assert any(
+        issue["code"] == "storage.unknown_block_type"
+        and issue["owner_id"] == block_id
+        and issue["owner_type"] == "removed-capability"
+        for issue in report.json()["issues"]
+    )
 
     deleted = client.delete(f"/api/unsupported-blocks/{block_id}")
     assert deleted.status_code == 200
     assert deleted.json() == {"ok": True}
+    stored_primary = client.get(f"/api/primary-agents/{primary['id']}").json()
+    stored_subagent = client.get(f"/api/subagents/{subagent['id']}").json()
+    assert all(
+        item["type"] != "removed-capability"
+        for item in stored_primary["capability_refs"]
+    )
+    assert all(
+        item["type"] != "removed-capability"
+        for item in stored_subagent["settings"]["capability_overrides"]
+    )
     assert client.get("/api/validation/repository").json() == {
         "valid": True,
         "stage": "repository_load",

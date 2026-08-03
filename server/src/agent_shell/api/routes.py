@@ -16,7 +16,11 @@ from agent_shell.contracts import (
     BLOCK_MODELS,
     validate_provider_credential,
 )
-from agent_shell.api.agent_configs import ConfigurationBulkDelete, block_reference_owner
+from agent_shell.api.agent_configs import (
+    ConfigurationBulkDelete,
+    primary_block_reference_owner,
+)
+from agent_shell.capability_manifest import CAPABILITY_BY_TYPE
 from agent_shell.registries.custom_middlewares import scan_custom_middlewares
 from agent_shell.registries.custom_tools import scan_custom_tools
 from agent_shell.registries.skills import scan_skills
@@ -236,21 +240,11 @@ def build_router(
                 message="An unsupported component configuration does not exist.",
             )
         block_type = block["block_type"]
-        owner = block_reference_owner(config_store, block_type, block_id)
-        if owner:
-            owner_type, owner_name = owner
-            raise management_error(
-                409,
-                code="configuration_referenced",
-                message_key=(
-                    "errors.configurationReferencedByPrimary"
-                    if owner_type == "primary"
-                    else "errors.configurationReferencedBySubagent"
-                ),
-                message="The configuration is still referenced.",
-                message_args={"owner": owner_name},
-            )
-        if not block_store.delete_block(block_type, block_id):
+        if not block_store.delete_block(
+            block_type,
+            block_id,
+            detach_references=True,
+        ):
             raise management_error(
                 404,
                 code="unsupported_block_not_found",
@@ -274,21 +268,29 @@ def build_router(
                     message_key="errors.blockNotFound",
                     message="A component configuration does not exist.",
                 )
-            owner = block_reference_owner(config_store, block_type, block_id)
-            if owner:
-                owner_type, owner_name = owner
+            if CAPABILITY_BY_TYPE[block_type].required:
+                owner = primary_block_reference_owner(
+                    config_store,
+                    block_type,
+                    block_id,
+                )
+                if owner is None:
+                    continue
+                _, owner_name = owner
                 raise management_error(
                     409,
                     code="configuration_referenced",
-                    message_key=(
-                        "errors.configurationReferencedByPrimary"
-                        if owner_type == "primary"
-                        else "errors.configurationReferencedBySubagent"
-                    ),
+                    message_key="errors.configurationReferencedByPrimary",
                     message="The configuration is still referenced.",
                     message_args={"owner": owner_name},
                 )
-        return {"deleted": block_store.delete_blocks(block_type, ids)}
+        return {
+            "deleted": block_store.delete_blocks(
+                block_type,
+                ids,
+                detach_references=True,
+            )
+        }
 
     @router.get("/api/blocks/{block_type}/{block_id}")
     async def get_block(block_type: str, block_id: str) -> dict:
@@ -397,21 +399,22 @@ def build_router(
     @router.delete("/api/blocks/{block_type}/{block_id}")
     async def delete_block(block_type: str, block_id: str) -> dict[str, bool]:
         check_type(block_type)
-        owner = block_reference_owner(config_store, block_type, block_id)
-        if owner:
-            owner_type, owner_name = owner
-            raise management_error(
-                409,
-                code="configuration_referenced",
-                message_key=(
-                    "errors.configurationReferencedByPrimary"
-                    if owner_type == "primary"
-                    else "errors.configurationReferencedBySubagent"
-                ),
-                message="The configuration is still referenced.",
-                message_args={"owner": owner_name},
-            )
-        if not block_store.delete_block(block_type, block_id):
+        if CAPABILITY_BY_TYPE[block_type].required:
+            owner = primary_block_reference_owner(config_store, block_type, block_id)
+            if owner is not None:
+                _, owner_name = owner
+                raise management_error(
+                    409,
+                    code="configuration_referenced",
+                    message_key="errors.configurationReferencedByPrimary",
+                    message="The configuration is still referenced.",
+                    message_args={"owner": owner_name},
+                )
+        if not block_store.delete_block(
+            block_type,
+            block_id,
+            detach_references=True,
+        ):
             raise management_error(
                 404,
                 code="block_not_found",

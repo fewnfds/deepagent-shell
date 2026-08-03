@@ -54,6 +54,13 @@ const selectedProfileId = ref('')
 const form = ref(blankPrimaryAgent())
 let profileLoadSequence = 0
 
+const obsoleteReferences = computed(() => {
+  const supported = new Set<string>(manifests.value.map((manifest) => manifest.type))
+  return form.value.capability_refs
+    .map((reference, index) => ({ index, reference }))
+    .filter(({ reference }) => !supported.has(reference.type))
+})
+
 const { markClean, runAfterDiscard } = useUnsavedChanges(
   () => primaryAgentPayload(form.value),
   () => ({
@@ -95,6 +102,10 @@ function capabilityBlocks(type: CapabilityType): StoredBlock[] {
 
 function updateReference(type: CapabilityType, value: string): void {
   setReference(form.value, type, value)
+}
+
+function removeObsoleteReference(index: number): void {
+  form.value.capability_refs.splice(index, 1)
 }
 
 async function startNew(): Promise<void> {
@@ -265,6 +276,44 @@ watch(
             @update:name="form.name = $event"
           />
         </div>
+
+        <section
+          v-if="obsoleteReferences.length"
+          class="card card-danger card-outline mb-3"
+          data-testid="obsolete-capability-references"
+        >
+          <header class="card-header">
+            <h2 class="card-title h5 mb-0 fw-semibold">
+              {{ t('agents.obsoleteReferences.title') }}
+            </h2>
+          </header>
+          <ul class="list-group list-group-flush">
+            <li
+              v-for="item in obsoleteReferences"
+              :key="`${item.reference.type}:${item.reference.block_id}:${item.index}`"
+              class="list-group-item d-flex align-items-center justify-content-between gap-2"
+            >
+              <div class="text-break">
+                <strong>{{ item.reference.type }}</strong>
+                <small class="d-block font-monospace text-body-secondary">
+                  {{ item.reference.block_id }}
+                </small>
+              </div>
+              <LteButton
+                :aria-label="t('agents.obsoleteReferences.remove')"
+                :title="t('agents.obsoleteReferences.remove')"
+                class="ms-auto"
+                data-action="remove-obsolete-capability-reference"
+                size="sm"
+                theme="danger"
+                type="button"
+                @click="removeObsoleteReference(item.index)"
+              >
+                <i class="bi bi-trash" aria-hidden="true" />
+              </LteButton>
+            </li>
+          </ul>
+        </section>
 
         <section class="mb-3" :aria-label="t('agents.primary.capabilitiesTitle')">
           <div class="row g-3">

@@ -36,25 +36,6 @@ def capability_reference_id(payload: dict, capability_type: str) -> str:
     return str(reference.get("block_id", "")) if reference else ""
 
 
-def capability_override(payload: dict, capability_type: str) -> dict:
-    settings = payload.get("settings", {})
-    overrides = (
-        settings.get("capability_overrides", [])
-        if isinstance(settings, dict)
-        else []
-    )
-    if not isinstance(overrides, list):
-        return {"type": capability_type, "mode": "inherit", "block_id": ""}
-    return next(
-        (
-            item
-            for item in overrides
-            if isinstance(item, dict) and item.get("type") == capability_type
-        ),
-        {"type": capability_type, "mode": "inherit", "block_id": ""},
-    )
-
-
 def _raise_if_invalid(report: ValidationReport) -> None:
     if not report.valid:
         raise HTTPException(
@@ -104,52 +85,12 @@ def _copy_component_name(payload: dict) -> str:
         )
     return component_name
 
-def block_reference_owner(
+def primary_block_reference_owner(
     config_store: AgentConfigStore, block_type: str, block_id: str
 ) -> tuple[str, str] | None:
     for item in config_store.list_items(PRIMARY_TABLE):
         if capability_reference_id(item, block_type) == block_id:
             return "primary", str(item.get("name", ""))
-
-    for item in config_store.list_items(SUBAGENT_TABLE):
-        selection = capability_override(item, block_type)
-        if selection.get("mode") == "replace" and selection.get("block_id") == block_id:
-            return "subagent", str(item.get("component_name", ""))
-    return None
-
-
-def subagent_reference_owner(
-    config_store: AgentConfigStore,
-    *,
-    target_id: str,
-    ignored_subagent_ids: frozenset[str] = frozenset(),
-) -> tuple[str, str] | None:
-    """Return a configuration that keeps a Subagent entity alive, if any."""
-    for owner in config_store.list_items(PRIMARY_TABLE):
-        references = owner.get("subagents", [])
-        if not isinstance(references, list):
-            continue
-        if any(
-            isinstance(reference, dict)
-            and reference.get("subagent_id") == target_id
-            for reference in references
-        ):
-            return "primary", str(owner.get("name", ""))
-
-    for owner in config_store.list_items(SUBAGENT_TABLE):
-        owner_id = str(owner.get("id", ""))
-        if owner_id in ignored_subagent_ids:
-            continue
-        settings = owner.get("settings", {})
-        references = settings.get("subagents", []) if isinstance(settings, dict) else []
-        if not isinstance(references, list):
-            continue
-        if any(
-            isinstance(reference, dict)
-            and reference.get("subagent_id") == target_id
-            for reference in references
-        ):
-            return "subagent", str(owner.get("component_name", ""))
     return None
 
 
@@ -290,7 +231,6 @@ def build_agent_config_router(
         payload: ConfigurationBulkDelete,
     ) -> dict[str, int]:
         ids = list(dict.fromkeys(payload.ids))
-        deleting_ids = frozenset(ids)
         for item_id in ids:
             if config_store.get_item(SUBAGENT_TABLE, item_id) is None:
                 raise management_error(
@@ -299,29 +239,13 @@ def build_agent_config_router(
                     message_key="errors.subagentNotFound",
                     message="A Subagent entity does not exist.",
                 )
-            owner = subagent_reference_owner(
-                config_store,
-                target_id=item_id,
-                ignored_subagent_ids=deleting_ids,
+        return {
+            "deleted": config_store.delete_items(
+                SUBAGENT_TABLE,
+                ids,
+                detach_references=True,
             )
-            if owner:
-                owner_type, owner_name = owner
-                raise management_error(
-                    409,
-                    code="configuration_referenced",
-                    message_key=(
-                        "errors.configurationReferencedByPrimary"
-                        if owner_type == "primary"
-                        else "errors.configurationReferencedBySubagent"
-                    ),
-                    message=(
-                        "The configuration is still referenced by a Primary Agent."
-                        if owner_type == "primary"
-                        else "The Subagent is still referenced by another Subagent."
-                    ),
-                    message_args={"owner": owner_name},
-                )
-        return {"deleted": config_store.delete_items(SUBAGENT_TABLE, ids)}
+        }
 
     @router.get("/api/subagents/{item_id}")
     async def get_subagent(item_id: str) -> dict:
@@ -423,29 +347,11 @@ def build_agent_config_router(
                 message_key="errors.subagentNotFound",
                 message="The Subagent entity does not exist.",
             )
-        owner = subagent_reference_owner(
-            config_store,
-            target_id=item_id,
-            ignored_subagent_ids=frozenset({item_id}),
+        config_store.delete_item(
+            SUBAGENT_TABLE,
+            item_id,
+            detach_references=True,
         )
-        if owner:
-            owner_type, owner_name = owner
-            raise management_error(
-                409,
-                code="configuration_referenced",
-                message_key=(
-                    "errors.configurationReferencedByPrimary"
-                    if owner_type == "primary"
-                    else "errors.configurationReferencedBySubagent"
-                ),
-                message=(
-                    "The configuration is still referenced by a Primary Agent."
-                    if owner_type == "primary"
-                    else "The Subagent is still referenced by another Subagent."
-                ),
-                message_args={"owner": owner_name},
-            )
-        config_store.delete_item(SUBAGENT_TABLE, item_id)
         return {"ok": True}
 
     return router

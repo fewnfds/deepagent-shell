@@ -87,7 +87,70 @@ class AutomationStore:
             entity_id=item_id,
         )
 
-    def delete_items(self, workflow_type: str, item_ids: list[str]) -> int:
+    @staticmethod
+    def _detach_agent_references(
+        connection: sqlite3.Connection,
+        workflow_type: str,
+        target_ids: set[str],
+    ) -> None:
+        primary_field = (
+            "hook_workflow_id"
+            if workflow_type == "hook-workflow"
+            else "lifecycle_workflow_id"
+        )
+        subagent_field = (
+            "hook_workflow"
+            if workflow_type == "hook-workflow"
+            else "lifecycle_workflow"
+        )
+        for table in ("primary_agents", "subagents"):
+            rows = connection.execute(f"SELECT id, payload FROM {table}").fetchall()
+            for row in rows:
+                payload = json.loads(row["payload"])
+                changed = False
+                if table == "primary_agents":
+                    automation = payload.get("automation")
+                    if (
+                        isinstance(automation, dict)
+                        and automation.get(primary_field) in target_ids
+                    ):
+                        automation[primary_field] = ""
+                        changed = True
+                else:
+                    settings = payload.get("settings")
+                    automation = (
+                        settings.get("automation")
+                        if isinstance(settings, dict)
+                        else None
+                    )
+                    selection = (
+                        automation.get(subagent_field)
+                        if isinstance(automation, dict)
+                        else None
+                    )
+                    if (
+                        isinstance(selection, dict)
+                        and selection.get("mode") == "replace"
+                        and selection.get("workflow_id") in target_ids
+                    ):
+                        automation[subagent_field] = {
+                            "mode": "inherit",
+                            "workflow_id": "",
+                        }
+                        changed = True
+                if changed:
+                    connection.execute(
+                        f"UPDATE {table} SET payload = ? WHERE id = ?",
+                        (json.dumps(payload, ensure_ascii=False), row["id"]),
+                    )
+
+    def delete_items(
+        self,
+        workflow_type: str,
+        item_ids: list[str],
+        *,
+        detach_references: bool = False,
+    ) -> int:
         table = self._table(workflow_type)
         unique_ids = list(dict.fromkeys(item_ids))
         if not unique_ids:
@@ -102,6 +165,12 @@ class AutomationStore:
                     unique_ids,
                 ).fetchall()
             }
+            if detach_references:
+                self._detach_agent_references(
+                    connection,
+                    workflow_type,
+                    existing,
+                )
             connection.execute(
                 f"DELETE FROM {table} WHERE id IN ({placeholders})", unique_ids
             )
@@ -116,6 +185,16 @@ class AutomationStore:
                 )
         return len(existing)
 
-    def delete_item(self, workflow_type: str, item_id: str) -> bool:
-        return self.delete_items(workflow_type, [item_id]) == 1
+    def delete_item(
+        self,
+        workflow_type: str,
+        item_id: str,
+        *,
+        detach_references: bool = False,
+    ) -> bool:
+        return self.delete_items(
+            workflow_type,
+            [item_id],
+            detach_references=detach_references,
+        ) == 1
 

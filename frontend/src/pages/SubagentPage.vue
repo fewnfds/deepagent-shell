@@ -61,6 +61,13 @@ const recordOptions = computed(() => profiles.value.map((profile) => ({
 })))
 let profileLoadSequence = 0
 
+const obsoleteOverrides = computed(() => {
+  const supported = new Set<string>(manifests.value.map((manifest) => manifest.type))
+  return form.value.settings.capability_overrides
+    .map((override, index) => ({ index, override }))
+    .filter(({ override }) => !supported.has(override.type))
+})
+
 const { markClean, runAfterDiscard } = useUnsavedChanges(
   () => subagentPayload(form.value),
   () => ({
@@ -122,6 +129,10 @@ function updateSelection(capability: CapabilityManifest, value: string): void {
     return
   }
   setOverrideSelection(form.value, capability.type, 'replace', value)
+}
+
+function removeObsoleteOverride(index: number): void {
+  form.value.settings.capability_overrides.splice(index, 1)
 }
 
 function workflowSelection(type: 'hook_workflow' | 'lifecycle_workflow'): string {
@@ -328,6 +339,44 @@ watch(
               <textarea v-model="form.description" class="form-control" rows="3" />
             </FormField>
           </div>
+        </section>
+
+        <section
+          v-if="obsoleteOverrides.length"
+          class="card card-danger card-outline mb-3"
+          data-testid="obsolete-capability-overrides"
+        >
+          <header class="card-header">
+            <h2 class="card-title h5 mb-0 fw-semibold">
+              {{ t('agents.obsoleteReferences.title') }}
+            </h2>
+          </header>
+          <ul class="list-group list-group-flush">
+            <li
+              v-for="item in obsoleteOverrides"
+              :key="`${item.override.type}:${item.override.block_id}:${item.index}`"
+              class="list-group-item d-flex align-items-center justify-content-between gap-2"
+            >
+              <div class="text-break">
+                <strong>{{ item.override.type }}</strong>
+                <small class="d-block font-monospace text-body-secondary">
+                  {{ item.override.block_id }}
+                </small>
+              </div>
+              <LteButton
+                :aria-label="t('agents.obsoleteReferences.remove')"
+                :title="t('agents.obsoleteReferences.remove')"
+                class="ms-auto"
+                data-action="remove-obsolete-capability-override"
+                size="sm"
+                theme="danger"
+                type="button"
+                @click="removeObsoleteOverride(item.index)"
+              >
+                <i class="bi bi-trash" aria-hidden="true" />
+              </LteButton>
+            </li>
+          </ul>
         </section>
 
         <section class="mb-3" :aria-label="t('agents.override.capabilitiesTitle')">

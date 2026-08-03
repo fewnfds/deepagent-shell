@@ -430,7 +430,6 @@ def create_app(
     app.include_router(
         build_automation_router(
             automation_store,
-            config_store,
             automation_validation,
             automation_scripts_dir,
         )

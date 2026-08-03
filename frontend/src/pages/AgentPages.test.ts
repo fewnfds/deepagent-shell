@@ -175,6 +175,79 @@ async function mountSubagentPage(
 }
 
 describe('agent authoring pages', () => {
+  it('lets current editors remove an obsolete capability type before saving', async () => {
+    const obsoleteType = 'removed-capability'
+    const obsoleteBlockId = '00000000-0000-0000-0000-000000000099'
+    const primaryId = '00000000-0000-0000-0000-000000000010'
+    const primaryApi = service({
+      getPrimaryAgent: vi.fn(async () => ({
+        id: primaryId,
+        name: 'Historical Primary',
+        capability_refs: [{ type: obsoleteType, block_id: obsoleteBlockId }],
+        subagents: [],
+        automation: { hook_workflow_id: '', lifecycle_workflow_id: '' },
+      })),
+    })
+    const primaryPage = await mountPrimaryPage(
+      primaryApi,
+      `/agents/primary?id=${primaryId}`,
+    )
+
+    expect(primaryPage.wrapper.get('[data-testid="obsolete-capability-references"]').text())
+      .toContain(obsoleteType)
+    await primaryPage.wrapper.get('[data-action="remove-obsolete-capability-reference"]')
+      .trigger('click')
+    await buttonByText(primaryPage.wrapper, 'common.save').trigger('click')
+    await flushPromises()
+
+    expect(primaryApi.updatePrimaryAgent).toHaveBeenCalledWith(
+      primaryId,
+      expect.objectContaining({ capability_refs: [] }),
+    )
+    primaryPage.wrapper.unmount()
+
+    const subagentId = '00000000-0000-0000-0000-000000000020'
+    const subagentApi = service({
+      getSubagent: vi.fn(async () => ({
+        id: subagentId,
+        component_name: 'Historical Subagent',
+        name: 'historical_worker',
+        description: 'Historical worker.',
+        settings: {
+          capability_overrides: [{
+            type: obsoleteType,
+            mode: 'replace',
+            block_id: obsoleteBlockId,
+          }],
+          subagents: [],
+          automation: {
+            hook_workflow: { mode: 'inherit', workflow_id: '' },
+            lifecycle_workflow: { mode: 'inherit', workflow_id: '' },
+          },
+        },
+      })),
+    })
+    const subagentPage = await mountSubagentPage(
+      subagentApi,
+      `/agents/subagents?id=${subagentId}`,
+    )
+
+    expect(subagentPage.wrapper.get('[data-testid="obsolete-capability-overrides"]').text())
+      .toContain(obsoleteType)
+    await subagentPage.wrapper.get('[data-action="remove-obsolete-capability-override"]')
+      .trigger('click')
+    await buttonByText(subagentPage.wrapper, 'common.save').trigger('click')
+    await flushPromises()
+
+    expect(subagentApi.updateSubagent).toHaveBeenCalledWith(
+      subagentId,
+      expect.objectContaining({
+        settings: expect.objectContaining({ capability_overrides: [] }),
+      }),
+    )
+    subagentPage.wrapper.unmount()
+  })
+
   it('updates a Primary only after loading its explicit UUID', async () => {
     const api = service()
     const id = '00000000-0000-0000-0000-000000000010'

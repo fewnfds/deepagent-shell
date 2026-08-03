@@ -7,7 +7,7 @@ from uuid import UUID
 from .reference_support import *
 
 
-def test_primary_reference_create_update_and_delete_protection_cover_every_type(
+def test_primary_reference_delete_detaches_optional_and_protects_required_types(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
@@ -35,8 +35,9 @@ def test_primary_reference_create_update_and_delete_protection_cover_every_type(
     assert [item["type"] for item in primary["capability_refs"]] == list(PUBLIC_TYPES)
 
     for capability_type, block in original.items():
-        blocked = client.delete(f"/api/blocks/{capability_type}/{block['id']}")
-        assert blocked.status_code == 409, (capability_type, blocked.text)
+        deleted = client.delete(f"/api/blocks/{capability_type}/{block['id']}")
+        expected = 409 if capability_type in REQUIRED_TYPES else 200
+        assert deleted.status_code == expected, (capability_type, deleted.text)
 
     updated = client.put(
         f"/api/primary-agents/{primary['id']}",
@@ -48,20 +49,23 @@ def test_primary_reference_create_update_and_delete_protection_cover_every_type(
     )
     assert updated.status_code == 200, updated.text
 
-    for capability_type, block in original.items():
+    for capability_type in REQUIRED_TYPES:
+        block = original[capability_type]
         released = client.delete(f"/api/blocks/{capability_type}/{block['id']}")
         assert released.status_code == 200, (capability_type, released.text)
     for capability_type, block in replacement.items():
-        blocked = client.delete(f"/api/blocks/{capability_type}/{block['id']}")
-        assert blocked.status_code == 409, (capability_type, blocked.text)
+        deleted = client.delete(f"/api/blocks/{capability_type}/{block['id']}")
+        expected = 409 if capability_type in REQUIRED_TYPES else 200
+        assert deleted.status_code == expected, (capability_type, deleted.text)
 
     assert client.delete(f"/api/primary-agents/{primary['id']}").status_code == 200
-    for capability_type, block in replacement.items():
+    for capability_type in REQUIRED_TYPES:
+        block = replacement[capability_type]
         released = client.delete(f"/api/blocks/{capability_type}/{block['id']}")
         assert released.status_code == 200, (capability_type, released.text)
 
 
-def test_subagent_replace_update_modes_and_delete_protection_cover_every_type(
+def test_subagent_replace_references_are_detached_when_blocks_are_deleted(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
@@ -86,8 +90,10 @@ def test_subagent_replace_update_modes_and_delete_protection_cover_every_type(
     subagent = response.json()
 
     for capability_type, block in original.items():
-        blocked = client.delete(f"/api/blocks/{capability_type}/{block['id']}")
-        assert blocked.status_code == 409, (capability_type, blocked.text)
+        deleted = client.delete(f"/api/blocks/{capability_type}/{block['id']}")
+        assert deleted.status_code == 200, (capability_type, deleted.text)
+    stored = client.get(f"/api/subagents/{subagent['id']}").json()
+    assert stored["settings"]["capability_overrides"] == []
 
     passive_modes = [
         {
@@ -115,13 +121,10 @@ def test_subagent_replace_update_modes_and_delete_protection_cover_every_type(
         item["mode"] for item in passive_modes
     ]
 
-    for capability_type, block in original.items():
-        released = client.delete(f"/api/blocks/{capability_type}/{block['id']}")
-        assert released.status_code == 200, (capability_type, released.text)
     assert client.delete(f"/api/subagents/{subagent['id']}").status_code == 200
 
 
-def test_subagent_delete_protection_tracks_entity_references(
+def test_subagent_delete_detaches_entity_references(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
@@ -155,20 +158,15 @@ def test_subagent_delete_protection_tracks_entity_references(
     independent = independent_response.json()
     assert client.delete(f"/api/primary-agents/{independent['id']}").status_code == 200
 
-    subagent_blocked = client.delete(f"/api/subagents/{subagent['id']}")
-    assert subagent_blocked.status_code == 409, subagent_blocked.text
-    assert subagent_blocked.json()["detail"] == {
-        "code": "configuration_referenced",
-        "message": "The configuration is still referenced by a Primary Agent.",
-        "message_key": "errors.configurationReferencedByPrimary",
-        "message_args": {"owner": "Override owner"},
-    }
+    deleted = client.delete(f"/api/subagents/{subagent['id']}")
+    assert deleted.status_code == 200, deleted.text
+    stored_owner = client.get(f"/api/primary-agents/{owner['id']}").json()
+    assert stored_owner["subagents"] == []
 
     assert client.delete(f"/api/primary-agents/{owner['id']}").status_code == 200
-    assert client.delete(f"/api/subagents/{subagent['id']}").status_code == 200
 
 
-def test_subagent_self_reference_and_external_delete_protection(
+def test_subagent_delete_detaches_self_and_external_references(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
@@ -199,21 +197,19 @@ def test_subagent_self_reference_and_external_delete_protection(
     )
     assert external.status_code == 200, external.text
 
-    blocked = client.delete(f"/api/subagents/{target['id']}")
-    assert blocked.status_code == 409, blocked.text
-    assert blocked.json()["detail"] == {
-        "code": "configuration_referenced",
-        "message": "The Subagent is still referenced by another Subagent.",
-        "message_key": "errors.configurationReferencedBySubagent",
-        "message_args": {"owner": "External owner"},
-    }
+    deleted = client.delete(f"/api/subagents/{target['id']}")
+    assert deleted.status_code == 200, deleted.text
+    stored_external = client.get(
+        f"/api/subagents/{external.json()['id']}"
+    ).json()
+    assert stored_external["settings"]["subagents"] == []
 
     released = client.post(
         "/api/subagents/delete",
-        json={"ids": [target["id"], external.json()["id"]]},
+        json={"ids": [external.json()["id"]]},
     )
     assert released.status_code == 200, released.text
-    assert released.json() == {"deleted": 2}
+    assert released.json() == {"deleted": 1}
 
 
 def test_primary_subagent_reference_only_stores_entity_id(

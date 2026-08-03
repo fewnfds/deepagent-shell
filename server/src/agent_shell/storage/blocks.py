@@ -292,7 +292,65 @@ class BlockStore:
         )
         return self.get_block(block_type, new_id)
 
-    def delete_blocks(self, block_type: str, block_ids: list[str]) -> int:
+    @staticmethod
+    def _detach_agent_block_references(
+        connection: sqlite3.Connection,
+        block_type: str,
+        block_ids: set[str],
+    ) -> None:
+        for table in ("primary_agents", "subagents"):
+            rows = connection.execute(f"SELECT id, payload FROM {table}").fetchall()
+            for row in rows:
+                payload = json.loads(row["payload"])
+                changed = False
+                if table == "primary_agents":
+                    references = payload.get("capability_refs")
+                    if isinstance(references, list):
+                        retained = [
+                            item
+                            for item in references
+                            if not (
+                                isinstance(item, dict)
+                                and item.get("type") == block_type
+                                and item.get("block_id") in block_ids
+                            )
+                        ]
+                        if len(retained) != len(references):
+                            payload["capability_refs"] = retained
+                            changed = True
+                else:
+                    settings = payload.get("settings")
+                    overrides = (
+                        settings.get("capability_overrides")
+                        if isinstance(settings, dict)
+                        else None
+                    )
+                    if isinstance(overrides, list):
+                        retained = [
+                            item
+                            for item in overrides
+                            if not (
+                                isinstance(item, dict)
+                                and item.get("type") == block_type
+                                and item.get("block_id") in block_ids
+                            )
+                        ]
+                        if len(retained) != len(overrides):
+                            settings["capability_overrides"] = retained
+                            changed = True
+                if changed:
+                    connection.execute(
+                        f"UPDATE {table} SET payload = ? WHERE id = ?",
+                        (json.dumps(payload, ensure_ascii=False), row["id"]),
+                    )
+
+    def delete_blocks(
+        self,
+        block_type: str,
+        block_ids: list[str],
+        *,
+        detach_references: bool = False,
+    ) -> int:
         unique_ids = list(dict.fromkeys(block_ids))
         if not unique_ids:
             return 0
@@ -310,6 +368,12 @@ class BlockStore:
                 for row in rows
                 if block_type == "model"
             }
+            if detach_references:
+                self._detach_agent_block_references(
+                    connection,
+                    block_type,
+                    {str(row["id"]) for row in rows},
+                )
             connection.execute(
                 "DELETE FROM blocks "
                 f"WHERE block_type = ? AND id IN ({placeholders})",
@@ -341,5 +405,15 @@ class BlockStore:
                 )
         return len(existing_ids)
 
-    def delete_block(self, block_type: str, block_id: str) -> bool:
-        return self.delete_blocks(block_type, [block_id]) == 1
+    def delete_block(
+        self,
+        block_type: str,
+        block_id: str,
+        *,
+        detach_references: bool = False,
+    ) -> bool:
+        return self.delete_blocks(
+            block_type,
+            [block_id],
+            detach_references=detach_references,
+        ) == 1

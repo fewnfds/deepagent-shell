@@ -54,7 +54,7 @@ def test_primary_and_subagent_copy_create_server_ids_and_preserve_sources(
     assert client.get(f"/api/subagents/{subagent['id']}").json() == subagent
 
 
-def test_component_bulk_delete_is_atomic_when_any_target_is_referenced(
+def test_component_bulk_delete_detaches_optional_references(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
@@ -76,16 +76,16 @@ def test_component_bulk_delete_is_atomic_when_any_target_is_referenced(
     ).json()
     ids = [required["filesystem"]["id"], second["id"]]
 
-    blocked = client.post("/api/blocks/filesystem/delete", json={"ids": ids})
-    assert blocked.status_code == 409
-    assert all(
-        client.get(f"/api/blocks/filesystem/{item_id}").status_code == 200
-        for item_id in ids
-    )
-
-    assert client.delete(f"/api/primary-agents/{primary['id']}").status_code == 200
     deleted = client.post("/api/blocks/filesystem/delete", json={"ids": ids})
     assert deleted.json() == {"deleted": 2}
+    assert all(
+        client.get(f"/api/blocks/filesystem/{item_id}").status_code == 404
+        for item_id in ids
+    )
+    stored = client.get(f"/api/primary-agents/{primary['id']}").json()
+    assert all(item["type"] != "filesystem" for item in stored["capability_refs"])
+
+    assert client.delete(f"/api/primary-agents/{primary['id']}").status_code == 200
     assert client.get("/api/blocks/filesystem").json() == []
 
 

@@ -1025,6 +1025,10 @@ export const en: MessageSchema = {
     automation: {
       title: 'Automation workflows',
     },
+    obsoleteReferences: {
+      title: 'Obsolete capability references',
+      remove: 'Remove obsolete reference',
+    },
     policy: {
       inherit: 'Subagents inherit this capability from the current Primary by default.',
       'force-remove': 'Subagents do not retain this capability.',

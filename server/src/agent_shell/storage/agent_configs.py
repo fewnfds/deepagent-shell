@@ -106,7 +106,52 @@ class AgentConfigStore:
             entity_id=item_id,
         )
 
-    def delete_items(self, table: str, item_ids: list[str]) -> int:
+    @staticmethod
+    def _detach_subagent_references(
+        connection: sqlite3.Connection,
+        target_ids: set[str],
+    ) -> None:
+        for table in ("primary_agents", "subagents"):
+            rows = connection.execute(f"SELECT id, payload FROM {table}").fetchall()
+            for row in rows:
+                payload = json.loads(row["payload"])
+                if table == "primary_agents":
+                    references = payload.get("subagents")
+                else:
+                    settings = payload.get("settings")
+                    references = (
+                        settings.get("subagents")
+                        if isinstance(settings, dict)
+                        else None
+                    )
+                if not isinstance(references, list):
+                    continue
+                retained = [
+                    reference
+                    for reference in references
+                    if not (
+                        isinstance(reference, dict)
+                        and reference.get("subagent_id") in target_ids
+                    )
+                ]
+                if len(retained) == len(references):
+                    continue
+                if table == "primary_agents":
+                    payload["subagents"] = retained
+                else:
+                    settings["subagents"] = retained
+                connection.execute(
+                    f"UPDATE {table} SET payload = ? WHERE id = ?",
+                    (json.dumps(payload, ensure_ascii=False), row["id"]),
+                )
+
+    def delete_items(
+        self,
+        table: str,
+        item_ids: list[str],
+        *,
+        detach_references: bool = False,
+    ) -> int:
         table = self._table(table)
         unique_ids = list(dict.fromkeys(item_ids))
         if not unique_ids:
@@ -121,6 +166,8 @@ class AgentConfigStore:
                     unique_ids,
                 ).fetchall()
             }
+            if table == "subagents" and detach_references:
+                self._detach_subagent_references(connection, existing)
             connection.execute(
                 f"DELETE FROM {table} WHERE id IN ({placeholders})",
                 unique_ids,
@@ -141,5 +188,15 @@ class AgentConfigStore:
             )
         return len(existing)
 
-    def delete_item(self, table: str, item_id: str) -> bool:
-        return self.delete_items(table, [item_id]) == 1
+    def delete_item(
+        self,
+        table: str,
+        item_id: str,
+        *,
+        detach_references: bool = False,
+    ) -> bool:
+        return self.delete_items(
+            table,
+            [item_id],
+            detach_references=detach_references,
+        ) == 1

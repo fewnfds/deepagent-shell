@@ -150,8 +150,8 @@ export interface ResourceCatalog<TItem> {
   errors: Record<string, LocalizedMessagePayload>
 }
 
-interface CapabilityReference {
-  type: BlockType
+export interface CapabilityReference {
+  type: string
   block_id: string
 }
 
@@ -218,7 +218,7 @@ export interface PrimaryAgentPayload {
 export type PrimaryAgent = PrimaryAgentPayload & { id: string }
 
 export interface CapabilityOverride {
-  type: BlockType
+  type: string
   mode: 'disabled' | 'replace'
   block_id: string
 }

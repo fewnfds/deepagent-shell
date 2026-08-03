@@ -3,7 +3,7 @@ from __future__ import annotations
 from .support import *
 
 
-def test_automation_crud_validation_and_agent_reference_protection(
+def test_automation_crud_validation_and_reference_cleanup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
@@ -48,24 +48,10 @@ def test_automation_crud_validation_and_agent_reference_protection(
                 },
             },
         )
-        protected = client.delete(
-            f"/api/automation/hook-workflow/{hook['id']}"
-        )
-        detached = client.put(
-            f"/api/primary-agents/{primary['id']}",
-            json={
-                "name": primary["name"],
-                "capability_refs": primary["capability_refs"],
-                "subagents": [],
-                "automation": {
-                    "hook_workflow_id": "",
-                    "lifecycle_workflow_id": "",
-                },
-            },
-        )
         removed = client.delete(
             f"/api/automation/hook-workflow/{hook['id']}"
         )
+        stored_primary = client.get(f"/api/primary-agents/{primary['id']}")
 
     assert scripts.status_code == 200
     assert [item["id"] for item in scripts.json()["catalog"]] == ["open-script"]
@@ -75,10 +61,11 @@ def test_automation_crud_validation_and_agent_reference_protection(
     assert copied.status_code == 200, copied.text
     assert copied.json()["name"] == "Request preparation copy"
     assert attached.status_code == 200, attached.text
-    assert protected.status_code == 409
-    assert protected.json()["detail"]["code"] == "configuration_referenced"
-    assert detached.status_code == 200, detached.text
     assert removed.status_code == 200
+    assert stored_primary.json()["automation"] == {
+        "hook_workflow_id": "",
+        "lifecycle_workflow_id": lifecycle.json()["id"],
+    }
 
 
 def test_repository_validation_rechecks_changed_script_resources(

@@ -11,7 +11,6 @@ from agent_shell.api.errors import management_error
 from agent_shell.automation.contracts import WORKFLOW_MODELS
 from agent_shell.automation.scripts import scan_automation_scripts
 from agent_shell.automation.validation import AutomationValidationService
-from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.automation import AutomationStore
 from agent_shell.validation.models import validation_failure_detail
 
@@ -42,47 +41,8 @@ def _copy_name(payload: dict[str, Any]) -> str:
     return name
 
 
-def _agent_workflow_reference(
-    agent_configs: AgentConfigStore,
-    workflow_type: str,
-    workflow_id: str,
-    *,
-    ignored_subagent_ids: frozenset[str] = frozenset(),
-) -> tuple[str, str] | None:
-    field = (
-        "hook_workflow_id"
-        if workflow_type == "hook-workflow"
-        else "lifecycle_workflow_id"
-    )
-    selection_field = (
-        "hook_workflow"
-        if workflow_type == "hook-workflow"
-        else "lifecycle_workflow"
-    )
-    for primary in agent_configs.list_items("primary_agents"):
-        automation = primary.get("automation", {})
-        if isinstance(automation, dict) and automation.get(field) == workflow_id:
-            return "primary", str(primary.get("name", ""))
-    for subagent in agent_configs.list_items("subagents"):
-        if str(subagent.get("id", "")) in ignored_subagent_ids:
-            continue
-        settings = subagent.get("settings", {})
-        automation = settings.get("automation", {}) if isinstance(settings, dict) else {}
-        selection = (
-            automation.get(selection_field, {}) if isinstance(automation, dict) else {}
-        )
-        if (
-            isinstance(selection, dict)
-            and selection.get("mode") == "replace"
-            and selection.get("workflow_id") == workflow_id
-        ):
-            return "subagent", str(subagent.get("component_name", ""))
-    return None
-
-
 def build_automation_router(
     store: AutomationStore,
-    agent_configs: AgentConfigStore,
     validation: AutomationValidationService,
     scripts_dir: Path,
 ) -> APIRouter:
@@ -237,21 +197,11 @@ def build_automation_router(
                 message_key="errors.workflowNotFound",
                 message="The automation workflow does not exist.",
             )
-        owner = _agent_workflow_reference(agent_configs, workflow_type, item_id)
-        if owner is not None:
-            owner_type, owner_name = owner
-            raise management_error(
-                409,
-                code="configuration_referenced",
-                message_key=(
-                    "errors.configurationReferencedByPrimary"
-                    if owner_type == "primary"
-                    else "errors.configurationReferencedBySubagent"
-                ),
-                message="The workflow is still referenced by an Agent.",
-                message_args={"owner": owner_name},
-            )
-        store.delete_item(workflow_type, item_id)
+        store.delete_item(
+            workflow_type,
+            item_id,
+            detach_references=True,
+        )
         return {"ok": True}
 
     @router.post("/api/automation/{workflow_type}/delete")
@@ -268,20 +218,12 @@ def build_automation_router(
                     message_key="errors.workflowNotFound",
                     message="An automation workflow does not exist.",
                 )
-            owner = _agent_workflow_reference(agent_configs, workflow_type, item_id)
-            if owner is not None:
-                owner_type, owner_name = owner
-                raise management_error(
-                    409,
-                    code="configuration_referenced",
-                    message_key=(
-                        "errors.configurationReferencedByPrimary"
-                        if owner_type == "primary"
-                        else "errors.configurationReferencedBySubagent"
-                    ),
-                    message="The workflow is still referenced by an Agent.",
-                    message_args={"owner": owner_name},
-                )
-        return {"deleted": store.delete_items(workflow_type, ids)}
+        return {
+            "deleted": store.delete_items(
+                workflow_type,
+                ids,
+                detach_references=True,
+            )
+        }
 
     return router

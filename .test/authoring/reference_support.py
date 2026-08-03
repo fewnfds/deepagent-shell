@@ -17,6 +17,9 @@ PUBLIC_TYPES = tuple(manifest.type for manifest in CAPABILITY_MANIFESTS)
 OVERRIDEABLE_TYPES = tuple(
     manifest.type for manifest in CAPABILITY_MANIFESTS if manifest.subagent_overrideable
 )
+REQUIRED_TYPES = tuple(
+    manifest.type for manifest in CAPABILITY_MANIFESTS if manifest.required
+)
 
 
 def subagent_payload(

@@ -1023,6 +1023,10 @@ export const zhCN = {
     automation: {
       title: '自动化工作流',
     },
+    obsoleteReferences: {
+      title: '失效能力引用',
+      remove: '移除失效引用',
+    },
     policy: {
       inherit: 'Subagent 默认继承当前 Primary 的此项能力。',
       'force-remove': 'Subagent 不保留此项能力。',

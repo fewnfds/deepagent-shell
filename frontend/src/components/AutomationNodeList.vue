@@ -55,6 +55,7 @@ function patch(index: number, values: Partial<AutomationNodeDraft>): void {
       <LteButton
         :aria-label="t('automation.nodes.add')"
         :title="t('automation.nodes.add')"
+        class="ms-auto"
         size="sm"
         theme="success"
         type="button"
