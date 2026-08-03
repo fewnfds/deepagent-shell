@@ -47,6 +47,22 @@ def test_windows_launcher_prepares_plugin_dependencies_before_server() -> None:
     assert "goto plugin_dependencies_failed" in launcher
 
 
+def test_windows_runtime_removes_uv_python_aliases_after_pip_install() -> None:
+    bootstrap = (
+        REPOSITORY_ROOT / "packaging" / "windows" / "bootstrap_runtime.ps1"
+    ).read_text(encoding="utf-8")
+
+    cleanup = (
+        "Remove-UvPythonInstallArtifacts $pythonInstallRoot "
+        "$pythonExe.Directory.FullName"
+    )
+    pip_install = '"pip", "install", "--target", $installTarget'
+
+    assert bootstrap.count(cleanup) == 2
+    assert bootstrap.index(cleanup) < bootstrap.index(pip_install)
+    assert bootstrap.rindex(cleanup) > bootstrap.index(pip_install)
+
+
 def test_listen_probe_reports_an_occupied_port_without_starting_the_app(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

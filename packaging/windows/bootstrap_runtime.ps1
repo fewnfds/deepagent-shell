@@ -110,6 +110,32 @@ function Wait-PortablePythonReady {
     }
 }
 
+function Remove-UvPythonInstallArtifacts {
+    param(
+        [Parameter(Mandatory = $true)][string]$InstallRoot,
+        [Parameter(Mandatory = $true)][string]$PythonDirectory
+    )
+    foreach ($entry in Get-ChildItem -LiteralPath $InstallRoot -Force) {
+        if ($entry.FullName -eq $PythonDirectory) {
+            continue
+        }
+        if (($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            if ($entry.PSIsContainer) {
+                [System.IO.Directory]::Delete($entry.FullName)
+            }
+            else {
+                [System.IO.File]::Delete($entry.FullName)
+            }
+        }
+        elseif ($entry.PSIsContainer) {
+            Remove-Item -LiteralPath $entry.FullName -Recurse -Force
+        }
+        else {
+            Remove-Item -LiteralPath $entry.FullName -Force
+        }
+    }
+}
+
 function Get-RuntimeBuildFingerprint {
     param([Parameter(Mandatory = $true)][string]$ProjectRoot)
 
@@ -282,25 +308,7 @@ try {
     if ($pythonExe.Directory.Parent.FullName -ne $pythonInstallFullPath) {
         throw "The portable Python layout is not supported by this builder."
     }
-    foreach ($entry in Get-ChildItem -LiteralPath $pythonInstallRoot -Force) {
-        if ($entry.FullName -eq $pythonExe.Directory.FullName) {
-            continue
-        }
-        if (($entry.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
-            if ($entry.PSIsContainer) {
-                [System.IO.Directory]::Delete($entry.FullName)
-            }
-            else {
-                [System.IO.File]::Delete($entry.FullName)
-            }
-        }
-        elseif ($entry.PSIsContainer) {
-            Remove-Item -LiteralPath $entry.FullName -Recurse -Force
-        }
-        else {
-            Remove-Item -LiteralPath $entry.FullName -Force
-        }
-    }
+    Remove-UvPythonInstallArtifacts $pythonInstallRoot $pythonExe.Directory.FullName
     Wait-PortablePythonReady $pythonExe.FullName
 
     $buildMetadata = Join-Path $buildRoot ".build"
@@ -321,6 +329,9 @@ try {
         "--only-binary", ":all:",
         "--no-deps", "--require-hashes", "--requirements", $requirementsPath
     ) $project
+    # uv may recreate version aliases while discovering an interpreter for pip.
+    # Keep only the fully-versioned physical runtime selected above.
+    Remove-UvPythonInstallArtifacts $pythonInstallRoot $pythonExe.Directory.FullName
     Get-ChildItem -LiteralPath $installTarget -Filter "direct_url.json" -File -Recurse |
         Remove-Item -Force
 
