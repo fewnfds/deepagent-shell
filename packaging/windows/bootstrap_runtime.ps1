@@ -74,7 +74,8 @@ function Move-DirectoryWithRetry {
         [Parameter(Mandatory = $true)][string]$Source,
         [Parameter(Mandatory = $true)][string]$Destination
     )
-    for ($attempt = 1; $attempt -le 20; $attempt++) {
+    $maxAttempts = 120
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
         try {
             [System.IO.Directory]::Move($Source, $Destination)
             return
@@ -82,9 +83,15 @@ function Move-DirectoryWithRetry {
         catch {
             if (
                 -not (Test-IsRetryableFileSystemException $_.Exception) -or
-                $attempt -eq 20
+                $attempt -eq $maxAttempts
             ) {
+                if ($attempt -eq $maxAttempts) {
+                    throw "A runtime directory remained in use for 30 seconds. Close any running Agent Shell or Python process and retry: $Source"
+                }
                 throw
+            }
+            if ($attempt -eq 1) {
+                Write-Warning "A runtime directory is temporarily in use; waiting up to 30 seconds."
             }
             Start-Sleep -Milliseconds 250
         }

@@ -72,6 +72,8 @@ def test_windows_runtime_unwraps_powershell_file_system_exceptions_for_retry() -
     assert "$current = $current.InnerException" in bootstrap
     assert bootstrap.count("Test-IsRetryableFileSystemException $_.Exception") == 2
     assert "catch [System.IO.IOException]" not in bootstrap
+    assert "$maxAttempts = 120" in bootstrap
+    assert "remained in use for 30 seconds" in bootstrap
 
 
 def test_listen_probe_reports_an_occupied_port_without_starting_the_app(
