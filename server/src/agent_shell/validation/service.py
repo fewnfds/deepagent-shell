@@ -890,7 +890,7 @@ class ConfigurationValidationService:
                     or CAPABILITY_BY_TYPE[capability_type].subagent_policy == "inherit"
                 )
             }
-            child_bindings: list[dict[str, Any]] = []
+            override_bindings: list[dict[str, Any]] = []
             if override_id:
                 override, override_issue = self._subagent_override(
                     override_id,
@@ -909,7 +909,11 @@ class ConfigurationValidationService:
                         child_references[capability_type] = selection["block_id"]
                     elif selection["mode"] == "disabled":
                         child_references.pop(capability_type, None)
-                child_bindings = list(override.get("subagents", []))
+                override_bindings = list(override.get("subagents", []))
+
+            child_bindings = (
+                override_bindings if "subagent" in child_references else []
+            )
 
             issues.extend(
                 subagent_binding_issues(

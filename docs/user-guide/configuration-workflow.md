@@ -21,8 +21,7 @@
 - 关闭：最终移除该能力。
 
 model 只能继承或替换。filesystem 不可覆写；同一次请求中 Primary 与全部同步 Subagent 固定共享
-同一个 workspace。output mode 与 Subagent 按 manifest 策略从 child 移除；提示词预设可以继承、替换
-或关闭。
+同一个 workspace。output mode 只用于 Primary；同步 Subagent 与提示词预设都可以继承、替换或关闭。
 
 ## 绑定
 

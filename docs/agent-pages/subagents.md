@@ -20,14 +20,15 @@
 - `disabled`：必须没有 `block_id`。
 
 model 允许 inherit/replace，但不能 disabled。system-prompt、todo-list、custom-tool、skill、
-custom-middleware、exception-retry 和 prompt-preset 支持三种模式。filesystem 不出现在覆写策略中；
-一次请求的 Primary 与全部同步 Subagent 固定使用同一个 workspace。output-mode 和 subagent 不由
-Deep Agents Subagent 覆写，按 manifest 策略移除。
+custom-middleware、exception-retry、prompt-preset 和 subagent 支持三种模式。filesystem 不出现在覆写
+策略中；一次请求的 Primary 与全部同步 Subagent 固定使用同一个 workspace。output-mode 只用于 Primary。
+subagent 选择继承时使用本次请求 Primary 的同步子代理组件，选择替换时使用指定组件，选择关闭时该 child
+不装配 `task`。
 
-`subagents[]` 是该 Subagent 自己的命名 child catalog，字段与 Primary binding 相同。列表为空表示没有
-`task`；可以引用任意已保存覆写，也可以引用当前覆写自身。平台不增加 inherit/custom/none 模式：每条
-binding 的目标、名称和说明就是完整配置。名称只要求在当前 catalog 内唯一；不同 Primary/Subagent 的
-catalog 可以使用相同的模型可见名称，例如都叫 `worker`。
+`subagents[]` 是该 Subagent 自己的命名 child catalog，字段与 Primary binding 相同。最终 subagent 能力
+被关闭或列表为空时没有 `task`；可以引用任意已保存覆写，也可以引用当前覆写自身。每条 binding 的目标、
+名称和说明就是完整配置。名称只要求在当前 catalog 内唯一；不同 Primary/Subagent 的 catalog 可以使用
+相同的模型可见名称，例如都叫 `worker`。
 
 覆写策略只在与 binding 所在的当前 Primary 组合后才有最终含义。model 丢失、引用失效或资源无法
 物化仍会由集中装配校验拒绝保存、启动或真实 Agent 构建。
@@ -54,13 +55,9 @@ Provider/model 决定。
 ## 页面
 
 页面与 Primary Agent 使用相同的双列能力选择板和下拉框样式，并按相同顺序显示全部十一类能力。
-允许覆写的能力在对应的 Primary 选项基础上增加“继承”；选择已有配置表示 replace，可选能力还可
-选择“关闭”表示 disabled。文件系统固定显示“继承（固定）”，因为同一次请求的全部 Agent 共用一个
-workspace；输出模式固定显示“对此 Subagent 无效”，因为一轮对话只使用 Primary 的输出投影。
-
-同步 Subagent 能力以可选下拉框显示，其真实状态由下方 `subagents[]` 绑定列表决定：选择“拥有同步
-Subagent”会添加第一条空绑定，移除全部绑定后会回到“不拥有同步 Subagent”；选择后者会清空当前绑定。
-配置选择显示名称，payload 仍保存 UUID。页面只提供新建/载入/保存，删除在配置仓库执行。
+文件系统使用禁用的“继承”，输出模式使用禁用的“无效”。同步子代理和其他允许覆写的可选能力一样提供
+“继承”“关闭”和现有配置；配置名称只用于显示，payload 保存 UUID。页面只提供新建/载入/保存，删除在
+配置仓库执行。
 
 桌面宽度下，右侧草稿校验区占页面三分之一，显示后端对覆写结构、替换引用和必需能力策略发现的问题；
 窄屏下恢复为整行。全部正常时显示通过摘要。

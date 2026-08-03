@@ -14,7 +14,6 @@ import { useToasts } from '@/composables/useToasts'
 import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
 import {
   agentAuthoringServiceKey,
-  blankSubagentBinding,
   blankSubagentOverride,
   managementAgentAuthoringService,
   normalizeSubagentOverride,
@@ -30,8 +29,7 @@ import {
 
 const INHERIT_VALUE = '__inherit__'
 const DISABLED_VALUE = '__disabled__'
-const ENABLED_VALUE = '__enabled__'
-const NOT_APPLICABLE_VALUE = '__not_applicable__'
+const INVALID_VALUE = '__invalid__'
 
 const props = defineProps<{
   service?: AgentAuthoringService
@@ -95,12 +93,9 @@ function capabilityBlocks(type: CapabilityType): StoredBlock[] {
 }
 
 function selectionValue(type: CapabilityType): string {
-  if (type === 'subagent') {
-    return form.value.subagents.length > 0 ? ENABLED_VALUE : DISABLED_VALUE
-  }
   const manifest = manifests.value.find((item) => item.type === type)
   if (!manifest?.subagent_overrideable) {
-    return manifest?.subagent_policy === 'inherit' ? INHERIT_VALUE : NOT_APPLICABLE_VALUE
+    return manifest?.subagent_policy === 'inherit' ? INHERIT_VALUE : INVALID_VALUE
   }
   const selection = overrideSelection(form.value, type)
   if (selection.mode === 'inherit') return INHERIT_VALUE
@@ -109,14 +104,6 @@ function selectionValue(type: CapabilityType): string {
 }
 
 function updateSelection(capability: CapabilityManifest, value: string): void {
-  if (capability.type === 'subagent') {
-    if (value === ENABLED_VALUE && form.value.subagents.length === 0) {
-      form.value.subagents.push(blankSubagentBinding())
-    } else if (value === DISABLED_VALUE) {
-      form.value.subagents.splice(0)
-    }
-    return
-  }
   if (!capability.subagent_overrideable) return
   if (value === INHERIT_VALUE) {
     setOverrideSelection(form.value, capability.type, 'inherit')
@@ -312,38 +299,28 @@ watch(
                 >
                   {{ t(`capabilities.${capability.type}.label`) }}
                 </label>
-                  <span
-                    v-if="!capability.subagent_overrideable && capability.type !== 'subagent'"
-                    class="badge text-bg-secondary ms-auto"
-                  >
-                    {{ capability.subagent_policy === 'inherit'
-                      ? t('agents.capability.fixed')
-                      : t('agents.capability.notApplicable') }}
-                  </span>
-                  <span v-else-if="capability.required" class="badge text-bg-primary ms-auto">
+                  <span v-if="capability.subagent_overrideable && capability.required" class="badge text-bg-primary ms-auto">
                     {{ t('agents.capability.required') }}
                   </span>
-                  <span v-else class="badge text-bg-info ms-auto">{{ t('agents.capability.optional') }}</span>
+                  <span v-else-if="capability.subagent_overrideable" class="badge text-bg-info ms-auto">
+                    {{ t('agents.capability.optional') }}
+                  </span>
                 </header>
                 <div class="card-body">
                 <select
                   :id="`subagent-capability-${capability.type}`"
                   class="form-select"
                   :data-testid="`subagent-capability-${capability.type}`"
-                  :disabled="!capability.subagent_overrideable && capability.type !== 'subagent'"
+                  :disabled="!capability.subagent_overrideable"
                   :value="selectionValue(capability.type)"
                   @change="updateSelection(capability, ($event.target as HTMLSelectElement).value)"
                 >
-                  <template v-if="capability.type === 'subagent'">
-                    <option :value="DISABLED_VALUE">{{ t('agents.override.mode.noSubagents') }}</option>
-                    <option :value="ENABLED_VALUE">{{ t('agents.override.mode.hasSubagents') }}</option>
-                  </template>
-                  <template v-else-if="!capability.subagent_overrideable">
+                  <template v-if="!capability.subagent_overrideable">
                     <option v-if="capability.subagent_policy === 'inherit'" :value="INHERIT_VALUE">
-                      {{ t('agents.override.mode.fixedInherit') }}
+                      {{ t('agents.override.mode.inherit') }}
                     </option>
-                    <option v-else :value="NOT_APPLICABLE_VALUE">
-                      {{ t('agents.override.mode.notApplicable') }}
+                    <option v-else :value="INVALID_VALUE">
+                      {{ t('agents.override.mode.invalid') }}
                     </option>
                   </template>
                   <template v-else>
@@ -356,12 +333,6 @@ watch(
                     </option>
                   </template>
                 </select>
-                <p v-if="capability.type === 'subagent'" class="form-text mb-0">
-                  {{ t('agents.override.subagentSelectionHint') }}
-                </p>
-                <p v-else-if="!capability.subagent_overrideable" class="form-text mb-0">
-                  {{ t(`agents.policy.${capability.subagent_policy}`) }}
-                </p>
                 </div>
               </section>
             </div>

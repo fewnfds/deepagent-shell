@@ -86,9 +86,9 @@ const subagentManifest: CapabilityManifest = {
   type: 'subagent',
   terminology_key: 'delegation',
   order: 11,
-  subagent_overrideable: false,
+  subagent_overrideable: true,
   required: false,
-  subagent_policy: 'force-remove',
+  subagent_policy: 'inherit',
 }
 
 function service(overrides: Partial<AgentAuthoringService> = {}): AgentAuthoringService {
@@ -262,7 +262,7 @@ describe('agent authoring pages', () => {
     wrapper.unmount()
   })
 
-  it('shows fixed filesystem and output-mode policies while keeping synchronous Subagents optional', async () => {
+  it('shows fixed filesystem and output-mode values and the full synchronous Subagent override choices', async () => {
     const api = service({
       getCatalog: vi.fn(async () => ({
         block_types: [
@@ -282,23 +282,32 @@ describe('agent authoring pages', () => {
     const filesystem = wrapper.get('[data-testid="subagent-capability-filesystem"]')
     expect(filesystem.attributes('disabled')).toBeDefined()
     expect((filesystem.element as HTMLSelectElement).value).toBe('__inherit__')
-    expect(filesystem.text()).toContain('agents.override.mode.fixedInherit')
-    expect(filesystem.element.parentElement?.textContent).toContain('agents.policy.inherit')
+    expect(filesystem.text()).toContain('agents.override.mode.inherit')
 
     const outputMode = wrapper.get('[data-testid="subagent-capability-output-mode"]')
     expect(outputMode.attributes('disabled')).toBeDefined()
-    expect((outputMode.element as HTMLSelectElement).value).toBe('__not_applicable__')
-    expect(outputMode.text()).toContain('agents.override.mode.notApplicable')
-    expect(outputMode.element.parentElement?.textContent).toContain('agents.policy.top-level-only')
+    expect((outputMode.element as HTMLSelectElement).value).toBe('__invalid__')
+    expect(outputMode.text()).toContain('agents.override.mode.invalid')
 
     const subagent = wrapper.get('[data-testid="subagent-capability-subagent"]')
     expect(subagent.attributes('disabled')).toBeUndefined()
-    expect((subagent.element as HTMLSelectElement).value).toBe('__disabled__')
-    await subagent.setValue('__enabled__')
-    expect(wrapper.findAll('[data-testid="binding-card"]')).toHaveLength(1)
-    expect((subagent.element as HTMLSelectElement).value).toBe('__enabled__')
+    expect((subagent.element as HTMLSelectElement).value).toBe('__inherit__')
+    expect(subagent.find('option[value="__inherit__"]').exists()).toBe(true)
+    expect(subagent.find('option[value="__disabled__"]').exists()).toBe(true)
+    expect(subagent.findAll('option')).toHaveLength(3)
+    await subagent.setValue('00000000-0000-0000-0000-000000000002')
+    expect((subagent.element as HTMLSelectElement).value).toBe('00000000-0000-0000-0000-000000000002')
+    await buttonByText(wrapper, 'common.save').trigger('click')
+    await flushPromises()
+    expect(api.createSubagentOverride).toHaveBeenCalledWith(expect.objectContaining({
+      capability_overrides: [{
+        type: 'subagent',
+        mode: 'replace',
+        block_id: '00000000-0000-0000-0000-000000000002',
+      }],
+    }))
     await subagent.setValue('__disabled__')
-    expect(wrapper.findAll('[data-testid="binding-card"]')).toHaveLength(0)
+    expect((subagent.element as HTMLSelectElement).value).toBe('__disabled__')
 
     wrapper.unmount()
   })

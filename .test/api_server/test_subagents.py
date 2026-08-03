@@ -65,10 +65,30 @@ def test_subagent_runs_without_project_filesystem(
                         "type": "model",
                         "mode": "replace",
                         "block_id": child_model_block["id"],
-                    }
+                    },
+                    {
+                        "type": "subagent",
+                        "mode": "disabled",
+                        "block_id": "",
+                    },
                 ],
             },
         ).json()
+        disabled_delegation_override = client.put(
+            f"/api/subagent-overrides/{override['id']}",
+            json={
+                "name": override["name"],
+                "capability_overrides": override["capability_overrides"],
+                "subagents": [{
+                    "name": "disabled_nested_worker",
+                    "description": "Must not be exposed while delegation is disabled.",
+                    "subagent_override_id": override["id"],
+                }],
+            },
+        )
+        assert disabled_delegation_override.status_code == 200, (
+            disabled_delegation_override.text
+        )
         delegation = client.post(
             "/api/blocks/subagent",
             json={"name": "No filesystem delegation"},
@@ -950,22 +970,14 @@ def test_named_subagent_can_reference_itself_with_matching_task_schema(
             "/api/subagent-overrides",
             json={"name": "Recursive profile", "capability_overrides": []},
         ).json()
-        recursive_override = client.put(
-            f"/api/subagent-overrides/{override['id']}",
-            json={
-                "name": override["name"],
-                "capability_overrides": [],
-                "subagents": [{
-                    **binding,
-                    "subagent_override_id": override["id"],
-                }],
-            },
-        )
-        assert recursive_override.status_code == 200, recursive_override.text
         custom_task_description = (
             "Delegate one complete task to this catalog:\n"
             "{available_agents}\n"
             "Return one final report."
+        )
+        child_task_description = (
+            "Delegate recursively with this child catalog:\n"
+            "{available_agents}"
         )
         delegation = client.post(
             "/api/blocks/subagent",
@@ -974,6 +986,29 @@ def test_named_subagent_can_reference_itself_with_matching_task_schema(
                 "task_description_override": custom_task_description,
             },
         ).json()
+        child_delegation = client.post(
+            "/api/blocks/subagent",
+            json={
+                "name": "Child recursive delegation",
+                "task_description_override": child_task_description,
+            },
+        ).json()
+        recursive_override = client.put(
+            f"/api/subagent-overrides/{override['id']}",
+            json={
+                "name": override["name"],
+                "capability_overrides": [{
+                    "type": "subagent",
+                    "mode": "replace",
+                    "block_id": child_delegation["id"],
+                }],
+                "subagents": [{
+                    **binding,
+                    "subagent_override_id": override["id"],
+                }],
+            },
+        )
+        assert recursive_override.status_code == 200, recursive_override.text
         updated = client.put(
             f"/api/primary-agents/{primary['id']}",
             json={
@@ -1003,8 +1038,10 @@ def test_named_subagent_can_reference_itself_with_matching_task_schema(
     )
     parent_task = next(item for item in ParentModel.tool_signatures if item[0] == "task")
     child_task = next(item for item in ChildModel.tool_signatures if item[0] == "task")
-    assert child_task == parent_task
     assert parent_task[1] == custom_task_description.format(
+        available_agents="- recursive_worker: Continues the recursive task."
+    )
+    assert child_task[1] == child_task_description.format(
         available_agents="- recursive_worker: Continues the recursive task."
     )
     assert len(ChildModel.seen_messages) == 3

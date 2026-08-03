@@ -106,7 +106,7 @@ CAPABILITY_MANIFESTS = (
     CapabilityManifest(
         "subagent", "delegation", "委派能力", 11,
         "users", "subagent",
-        subagent_overrideable=False, required=False, subagent_policy="force-remove",
+        subagent_overrideable=True, required=False, subagent_policy="inherit",
     ),
 )
 

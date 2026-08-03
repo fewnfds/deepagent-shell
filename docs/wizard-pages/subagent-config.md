@@ -22,8 +22,9 @@
 每条 binding 的 child graph 都由 `create_deep_agent()` 构造，再以官方 `CompiledSubAgent` 交给父 Agent
 的 `subagents=` 参数。Agent Shell 全局关闭隐式 `general-purpose`；Primary 与每个 Subagent 覆写分别保存
 自己的命名 bindings，空 catalog 没有 `task`。Subagent 可引用自身或其他覆写形成循环，调用和终止仍由
-Deep Agents/LangGraph 管理。同一 Subagent block 的 task description 同时用于 Primary 和本次可达且
-拥有 `task` 的 child；各 Agent 仍按自己的命名 catalog 展开 `{available_agents}`。
+Deep Agents/LangGraph 管理。命名 child 可以继承 Primary 的本次配置、替换为另一 Subagent block 或关闭；
+最终拥有 `task` 的每个 Agent 使用自己的 task description，并按自己的命名 catalog 展开
+`{available_agents}`。
 
 项目 Filesystem 不进入 Subagent 覆写策略。同一次请求只装配一个 workspace，Primary 与所有同步 child
 双向共享虚拟 `files` state、初始虚拟文件和 mapped routes；未选择项目 Filesystem 时也共享上游默认

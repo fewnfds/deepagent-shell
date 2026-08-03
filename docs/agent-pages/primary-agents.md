@@ -41,7 +41,7 @@ binding 的名称必须匹配 `[A-Za-z_][A-Za-z0-9_-]*`，同一 Primary 内唯�
 ```text
 当前 Primary 的 capability_refs
 + 可选 Subagent capability_overrides
-- output mode 与 Subagent block
+- output mode
 = 一个由 `create_deep_agent()` 构造的同步 child graph
 ```
 

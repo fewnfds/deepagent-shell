@@ -642,9 +642,6 @@ class AgentBuilder:
                 validate_tool_names=self._validate_model_visible_tool_names,
                 report_error=self._reported_error,
                 agent_input_observer=agent_input_observer,
-                task_description_override=selected_blocks["subagent"][
-                    "task_description_override"
-                ],
             )
             delegation_instruction = selected_blocks["subagent"][
                 "instruction_override"

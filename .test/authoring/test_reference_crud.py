@@ -559,7 +559,6 @@ def test_reference_contracts_reject_unknown_duplicate_wrong_type_and_force_remov
 
     invalid_overrides = [
         [{"type": "unknown-capability", "mode": "inherit", "block_id": ""}],
-        [{"type": "subagent", "mode": "disabled", "block_id": ""}],
         [{"type": "filesystem", "mode": "disabled", "block_id": ""}],
         [{"type": "model", "mode": "unsupported", "block_id": ""}],
         [{"type": "model", "mode": "replace", "block_id": ""}],

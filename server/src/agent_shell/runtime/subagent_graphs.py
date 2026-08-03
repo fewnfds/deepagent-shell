@@ -44,7 +44,6 @@ def build_subagent_graphs(
     validate_tool_names: Callable[..., None],
     report_error: Callable[..., Exception],
     agent_input_observer: Callable[[dict[str, object]], Any] | None,
-    task_description_override: str | None,
 ) -> list[dict[str, Any]]:
     """Compile every reachable named Subagent once and bind cyclic edges."""
 
@@ -87,6 +86,12 @@ def build_subagent_graphs(
         compiled_children = [
             _compiled_spec(edge, runnables) for edge in node.subagents
         ]
+        delegation = node.blocks.get("subagent")
+        task_description_override = (
+            delegation.get("task_description_override")
+            if delegation is not None
+            else None
+        )
         try:
             if compiled_children and task_description_override is not None:
                 from agent_shell.runtime.subagent_middleware import (
@@ -140,6 +145,15 @@ def build_subagent_graphs(
         }
         if child["system_prompt"] is not None:
             constructor["system_prompt"] = child["system_prompt"]
+        if compiled_children and delegation is not None:
+            delegation_instruction = delegation.get("instruction_override")
+            if delegation_instruction is not None:
+                existing_prompt = str(constructor.get("system_prompt") or "")
+                constructor["system_prompt"] = "\n\n".join(
+                    part
+                    for part in (existing_prompt, delegation_instruction)
+                    if part
+                )
         if child["tools"]:
             constructor["tools"] = child["tools"]
         if child["response_format"] is not None:

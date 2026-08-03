@@ -66,7 +66,8 @@ def test_manifest_matches_current_blocks_and_form_order() -> None:
     assert manifests["exception-retry"].subagent_overrideable is True
     assert manifests["exception-retry"].subagent_policy == "inherit"
     assert manifests["exception-retry"].tool_names == ()
-    assert manifests["subagent"].subagent_overrideable is False
+    assert manifests["subagent"].subagent_overrideable is True
+    assert manifests["subagent"].subagent_policy == "inherit"
     assert manifests["todo-list"].subagent_overrideable is True
     assert manifests["todo-list"].tool_names == ("write_todos",)
     assert manifests["prompt-preset"].subagent_overrideable is True

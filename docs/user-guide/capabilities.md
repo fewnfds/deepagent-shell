@@ -170,6 +170,6 @@ Preset 在原生 `before_agent` 节点中运行，并决定是否注入冻结客
 catalog 没有 `task`；非空 catalog 仍由官方 `SubAgentMiddleware` 生成工具。不同 catalog 可以复用相同的
 模型可见 binding 名称，名称只在各自 catalog 内唯一。普通自由覆写是基线，不保证跨 Agent Prompt
 Caching；只有冻结客户端消息处理结果、model、system prompt、按序 tool schema、response schema 等
-Startup conversation 之前的最终表面都一致时，才具备共享较长前缀的条件。同一 Subagent block 的 task description 会进入 Primary
-和拥有 `task` 的 child，但 `{available_agents}` 只有在两侧 catalog 也相同时才展开为相同文本；实际缓存
-命中仍由 Provider/model 决定。
+Startup conversation 之前的最终表面都一致时，才具备共享较长前缀的条件。Subagent block 可以由 child
+继承、替换或关闭；只有两侧最终选择同一 task description 且 catalog 也相同时，`{available_agents}` 才会
+展开为相同文本。实际缓存命中仍由 Provider/model 决定。

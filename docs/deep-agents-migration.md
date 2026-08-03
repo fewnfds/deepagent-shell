@@ -35,10 +35,10 @@ model Provider 的 Harness Profile 中关闭该默认项，只向模型暴露用
 `SubAgentMiddleware` 生成 `task`。递归只能来自显式自引用或循环引用，仍受 LangGraph recursion limit
 约束。
 
-同步 Subagent block 保存 `instruction_override` 和 `task_description_override`。前者非空时追加到 Primary
-system prompt；后者非空时构造官方 `SubAgentMiddleware(task_description=...)`，通过上游同名 Middleware
-替换同时进入 Primary 与拥有 `task` 的命名 child。真实 `subagents=`、工具参数 schema 和执行行为仍由
-Deep Agents 管理，空值使用上游默认说明。
+同步 Subagent block 保存 `instruction_override` 和 `task_description_override`。Primary 使用自己的选择；
+命名 child 可继承本次请求 Primary 的选择、替换为另一配置或关闭。最终拥有命名 catalog 的 Agent 才应用
+自己的 instruction，并在 task description 非空时通过同名 `SubAgentMiddleware` 替换进入官方装配链。
+真实 `subagents=`、工具参数 schema 和执行行为仍由 Deep Agents 管理，空值使用上游默认说明。
 
 ## 本项目的装配边界
 
