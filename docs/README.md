@@ -7,11 +7,12 @@
 1. [启动并认识管理台](user-guide/getting-started.md)
 2. [创建组件](user-guide/capabilities.md)
 3. [装配 Primary 与 Subagent](user-guide/configuration-workflow.md)
-4. [管理配置仓库](user-guide/configuration-library.md)
-5. [调用 API Server](user-guide/api-server.md)
-6. [查看日志与历史会话](user-guide/runtime-observability.md)
-7. [管理数据、文件与系统设置](user-guide/system-management.md)
-8. [安全与部署](security-and-deployment.md)
+4. [使用自动化工作流](user-guide/automation.md)
+5. [管理配置仓库](user-guide/configuration-library.md)
+6. [调用 API Server](user-guide/api-server.md)
+7. [查看日志与历史会话](user-guide/runtime-observability.md)
+8. [管理数据、文件与系统设置](user-guide/system-management.md)
+9. [安全与部署](security-and-deployment.md)
 
 页面字段索引见[组件说明](wizard-pages/README.md)与 [Agent 说明](agent-pages/README.md)。
 

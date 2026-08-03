@@ -20,9 +20,18 @@
 模型不能关闭，文件系统固定共享，输出模式只用于 Primary。Subagent 页面还可选择 child 自己的有序实体
 引用，形成多层同步委派。允许显式循环；同一个实体在一次请求中只构造一次，不会因递归层级重复构造。
 
-Prompt Preset 在 Agent graph 启动前处理该 Agent 的输入。Subagent 选择 Preset 后，启动消息排在
-delegated task 之前；不选择时 child 只接收 task 输入。不同 Agent 可以自由选择模型、提示词、工具和
-Middleware；Provider prompt caching 是否命中取决于最终请求前缀与 Provider 规则。
+不同 Agent 可以自由选择模型、提示词、工具和 Middleware；Provider prompt caching 是否命中取决于最终
+请求前缀与 Provider 规则。
+
+## 自动化装配
+
+事件工作流和定时工作流不是组件。Primary 可分别选择零或一个工作流；Subagent 对两类工作流分别选择继承、
+替换或关闭。同一个 Subagent 实体在一次请求中只有一套自动化运行态，即使被多条路径或递归调用；每次真实
+委派仍会单独触发该 Subagent 的启动前 Hook。
+
+Primary 和每个 Subagent 都有自己的客户端消息副本。事件脚本可以在构造 Primary 前或每次启动 Subagent 前
+修改对应 `ctx.messages`，不会修改其他 Agent 的副本。详细脚本格式与边界见
+[使用自动化工作流](automation.md)。
 
 ## 校验与生效
 

@@ -344,6 +344,7 @@ def test_agent_execution_closes_v3_stream_when_consumer_is_cancelled() -> None:
             input_state={"messages": [{"role": "user", "content": "cancel me"}]},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
             normalizer=V3EventNormalizer("Primary"),
+            automation=noop_automation(),
         )
         stream = execution.stream_text()
         assert await anext(stream) == "running"
@@ -404,6 +405,7 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch) -> None:
             input_state={"messages": [{"role": "user", "content": "wait"}]},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
             normalizer=V3EventNormalizer("Primary"),
+            automation=noop_automation(),
         )
         stream = execution.stream_text()
         assert await anext(stream) == "running"
@@ -430,6 +432,7 @@ def test_graph_recursion_failure_uses_step_limit_error() -> None:
                 OutputProjector(config(mode="blocklist"))
             ),
             normalizer=V3EventNormalizer("Primary"),
+            automation=noop_automation(),
         )
         with pytest.raises(AgentRuntimeError) as captured:
             await anext(execution.stream_text())
@@ -481,6 +484,7 @@ def test_unclassified_graph_failure_is_not_mislabeled_as_provider() -> None:
             input_state={"messages": [{"role": "user", "content": "fail"}]},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
             normalizer=V3EventNormalizer("Primary"),
+            automation=noop_automation(),
         )
         stream = execution.stream_text()
         assert await anext(stream) == "running"
@@ -513,6 +517,7 @@ def test_classified_graph_failure_emits_matching_lifecycle_error() -> None:
             input_state={"messages": [{"role": "user", "content": "fail"}]},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
             normalizer=V3EventNormalizer("Primary"),
+            automation=noop_automation(),
         )
         stream = execution.stream_text()
         assert await anext(stream) == "start:"

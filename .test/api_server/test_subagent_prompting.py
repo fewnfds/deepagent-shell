@@ -205,54 +205,63 @@ def test_subagent_prompt_override_builds_from_frozen_client_messages(
             return response.json()
 
         override_model = create_model("Override child model")
-        override_preset_response = client.post(
-            "/api/blocks/prompt-preset",
-            json={
-                "name": "Delegated task startup",
-                "tag_replacements": [],
-                "startup_messages": [
-                    {
-                        "role": "user",
-                        "content_template": "Delegated: {task}",
-                    },
-                    {
-                        "role": "assistant",
-                        "content_template": "Ready for delegated work.",
-                    },
-                ],
-            },
+        write_automation_script(
+            tmp_path,
+            "append-subagent-startup",
+            "async def run(ctx):\n"
+            "    ctx.messages.extend(dict(message) for message in ctx.config['messages'])\n",
         )
-        assert override_preset_response.status_code == 200, (
-            override_preset_response.text
+        startup_workflow = create_hook_workflow(
+            client,
+            "Delegated task startup",
+            subagent_before_invoke=[
+                {
+                    "script_id": "append-subagent-startup",
+                    "config": {
+                        "messages": [
+                            {"role": "user", "content": "Delegated work."},
+                            {
+                                "role": "assistant",
+                                "content": "Ready for delegated work.",
+                            },
+                        ]
+                    },
+                }
+            ],
         )
-        override_preset = override_preset_response.json()
 
         def create_subagent(
             component_name: str,
             routing_name: str,
             description: str,
             model: dict,
-            prompt_preset: dict | None = None,
+            hook_workflow: dict | None = None,
         ) -> dict:
             capability_overrides = [{
                 "type": "model",
                 "mode": "replace",
                 "block_id": model["id"],
             }]
-            if prompt_preset is not None:
-                capability_overrides.append({
-                    "type": "prompt-preset",
-                    "mode": "replace",
-                    "block_id": prompt_preset["id"],
-                })
+            payload = subagent_payload(
+                component_name,
+                name=routing_name,
+                description=description,
+                capability_overrides=capability_overrides,
+            )
+            if hook_workflow is not None:
+                payload["settings"]["automation"] = {
+                    "hook_workflow": {
+                        "mode": "replace",
+                        "workflow_id": hook_workflow["id"],
+                    },
+                    "lifecycle_workflow": {
+                        "mode": "inherit",
+                        "workflow_id": "",
+                    },
+                }
             response = client.post(
                 "/api/subagents",
-                json=subagent_payload(
-                    component_name,
-                    name=routing_name,
-                    description=description,
-                    capability_overrides=capability_overrides,
-                ),
+                json=payload,
             )
             assert response.status_code == 200, response.text
             return response.json()
@@ -260,9 +269,9 @@ def test_subagent_prompt_override_builds_from_frozen_client_messages(
         prompt_subagent = create_subagent(
             "Override prompt child",
             "override_worker",
-            "Uses a child-only Prompt Preset.",
+            "Uses child-only startup automation.",
             override_model,
-            override_preset,
+            startup_workflow,
         )
         delegation_response = client.post(
             "/api/blocks/subagent",
@@ -322,7 +331,7 @@ def test_subagent_prompt_override_builds_from_frozen_client_messages(
         ("human", "Earlier request"),
         ("ai", "Earlier response"),
         ("human", "Current request"),
-        ("human", "Delegated: Run the override prompt."),
+        ("human", "Delegated work."),
         ("ai", "Ready for delegated work."),
         ("human", "Run the override prompt."),
     ]

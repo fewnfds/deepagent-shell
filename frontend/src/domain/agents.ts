@@ -10,9 +10,11 @@ import type {
   PrimaryAgent,
   PrimaryAgentPayload as ApiPrimaryAgentPayload,
   SavedBlock,
+  SavedAutomationWorkflow,
   Subagent,
   SubagentPayload as ApiSubagentPayload,
   SubagentReference as ApiSubagentReference,
+  WorkflowOverride,
   ValidationReport as ApiValidationReport,
 } from '@/api'
 
@@ -47,6 +49,7 @@ export type DraftValidationRequest = ApiDraftValidationRequest
 export interface AgentAuthoringService {
   getCatalog(): Promise<AgentCatalog>
   listBlocks(type: CapabilityType): Promise<StoredBlock[]>
+  listAutomationWorkflows(type: 'hook-workflow' | 'lifecycle-workflow'): Promise<SavedAutomationWorkflow[]>
   listPrimaryAgents(): Promise<PrimaryAgent[]>
   getPrimaryAgent(id: string): Promise<PrimaryAgent>
   createPrimaryAgent(payload: PrimaryAgentPayload): Promise<PrimaryAgent>
@@ -63,6 +66,7 @@ export const agentAuthoringServiceKey: InjectionKey<AgentAuthoringService> = Sym
 export const managementAgentAuthoringService: AgentAuthoringService = {
   getCatalog: () => managementApi.getCatalog(),
   listBlocks: (type) => managementApi.listBlocks(type),
+  listAutomationWorkflows: (type) => managementApi.listAutomationWorkflows(type),
   listPrimaryAgents: () => managementApi.listPrimaryAgents(),
   getPrimaryAgent: (id) => managementApi.getPrimaryAgent(id),
   createPrimaryAgent: (payload) => managementApi.savePrimaryAgent(payload),
@@ -97,6 +101,7 @@ export function blankPrimaryAgent(): PrimaryAgentProfile {
     name: '',
     capability_refs: [],
     subagents: [],
+    automation: { hook_workflow_id: '', lifecycle_workflow_id: '' },
   }
 }
 
@@ -104,6 +109,7 @@ export function normalizePrimaryAgent(value: unknown): PrimaryAgentProfile {
   const source = record(value)
   const references = Array.isArray(source.capability_refs) ? source.capability_refs : []
   const subagents = Array.isArray(source.subagents) ? source.subagents : []
+  const automation = record(source.automation)
   return {
     id: text(source.id),
     name: text(source.name),
@@ -112,6 +118,10 @@ export function normalizePrimaryAgent(value: unknown): PrimaryAgentProfile {
       return { type: text(reference.type) as CapabilityType, block_id: text(reference.block_id) }
     }),
     subagents: subagents.map(normalizeSubagentReference),
+    automation: {
+      hook_workflow_id: text(automation.hook_workflow_id),
+      lifecycle_workflow_id: text(automation.lifecycle_workflow_id),
+    },
   }
 }
 
@@ -123,6 +133,7 @@ export function primaryAgentPayload(value: PrimaryAgentProfile): PrimaryAgentPay
     subagents: value.subagents.map((reference) => ({
       subagent_id: reference.subagent_id,
     })),
+    automation: { ...value.automation },
   }
 }
 
@@ -144,6 +155,10 @@ export function blankSubagent(): SubagentProfile {
     settings: {
       capability_overrides: [],
       subagents: [],
+      automation: {
+        hook_workflow: { mode: 'inherit', workflow_id: '' },
+        lifecycle_workflow: { mode: 'inherit', workflow_id: '' },
+      },
     },
   }
 }
@@ -155,6 +170,16 @@ export function normalizeSubagent(value: unknown): SubagentProfile {
     ? settings.capability_overrides
     : []
   const subagents = Array.isArray(settings.subagents) ? settings.subagents : []
+  const automation = record(settings.automation)
+
+  const workflowOverride = (value: unknown): WorkflowOverride => {
+    const selection = record(value)
+    const mode = text(selection.mode)
+    return {
+      mode: mode === 'replace' || mode === 'disabled' ? mode : 'inherit',
+      workflow_id: text(selection.workflow_id),
+    }
+  }
   return {
     id: text(source.id),
     component_name: text(source.component_name),
@@ -170,6 +195,10 @@ export function normalizeSubagent(value: unknown): SubagentProfile {
         }
       }),
       subagents: subagents.map(normalizeSubagentReference),
+      automation: {
+        hook_workflow: workflowOverride(automation.hook_workflow),
+        lifecycle_workflow: workflowOverride(automation.lifecycle_workflow),
+      },
     },
   }
 }
@@ -207,6 +236,10 @@ export function subagentPayload(value: SubagentProfile): SubagentPayload {
       subagents: value.settings.subagents.map((reference) => ({
         subagent_id: reference.subagent_id,
       })),
+      automation: {
+        hook_workflow: { ...value.settings.automation.hook_workflow },
+        lifecycle_workflow: { ...value.settings.automation.lifecycle_workflow },
+      },
     },
   }
 }

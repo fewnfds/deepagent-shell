@@ -4,7 +4,6 @@ export const blockTypes = [
   'custom-middleware',
   'output-mode',
   'exception-retry',
-  'prompt-preset',
   'filesystem',
   'skill',
   'system-prompt',
@@ -168,51 +167,6 @@ export interface ExceptionRetryDefaults {
   default_value: ExceptionRetryValue
 }
 
-interface PromptTagReplacementDraft {
-  _key: string
-  tag: string
-  replacement: string
-}
-
-interface PromptTagReplacement {
-  tag: string
-  replacement: string
-}
-
-type PromptStartupRole = 'user' | 'assistant'
-
-interface PromptStartupMessageDraft {
-  _key: string
-  role: PromptStartupRole
-  content_template: string
-  name: string
-}
-
-interface PromptStartupMessage {
-  role: PromptStartupRole
-  content_template: string
-  name: string | null
-}
-
-export interface PromptPresetDraft extends BlockDraftBase {
-  tag_replacements: PromptTagReplacementDraft[]
-  startup_messages: PromptStartupMessageDraft[]
-}
-
-interface PromptPresetApiRecord extends BlockDraftBase {
-  tag_replacements: PromptTagReplacement[]
-  startup_messages: PromptStartupMessage[]
-}
-
-interface PromptPresetPayload extends BlockPayloadBase {
-  tag_replacements: PromptTagReplacement[]
-  startup_messages: PromptStartupMessage[]
-}
-
-export interface PromptPresetDefaults {
-  template_variables: string[]
-}
-
 interface MappedDirectory {
   virtual_path: string
   local_path: string
@@ -350,16 +304,10 @@ export interface TodoListDefaults {
 }
 
 let middlewareEntrySequence = 0
-let promptPresetEntrySequence = 0
 
 function nextMiddlewareKey(): string {
   middlewareEntrySequence += 1
   return `middleware-entry-${middlewareEntrySequence}`
-}
-
-function nextPromptPresetKey(): string {
-  promptPresetEntrySequence += 1
-  return `prompt-preset-entry-${promptPresetEntrySequence}`
 }
 
 function cleanName(value: string): string {
@@ -631,69 +579,6 @@ export const exceptionRetryAdapter = {
   },
 }
 
-export function createPromptTagReplacement(
-  value: Partial<PromptTagReplacement> = {},
-): PromptTagReplacementDraft {
-  return {
-    _key: nextPromptPresetKey(),
-    tag: value.tag ?? '',
-    replacement: value.replacement ?? '',
-  }
-}
-
-export function createPromptStartupMessage(
-  value: Partial<PromptStartupMessage> = {},
-): PromptStartupMessageDraft {
-  return {
-    _key: nextPromptPresetKey(),
-    role: value.role === 'assistant' ? 'assistant' : 'user',
-    content_template: value.content_template ?? '',
-    name: value.name ?? '',
-  }
-}
-
-export const promptPresetAdapter = {
-  blank(): PromptPresetDraft {
-    return { id: '', name: '', tag_replacements: [], startup_messages: [] }
-  },
-  fromApi(value: PromptPresetApiRecord): PromptPresetDraft {
-    return {
-      ...identity(value),
-      tag_replacements: Array.isArray(value.tag_replacements)
-        ? value.tag_replacements.flatMap((item) => isRecord(item)
-          ? [createPromptTagReplacement({
-              tag: stringValue(item.tag),
-              replacement: stringValue(item.replacement),
-            })]
-          : [])
-        : [],
-      startup_messages: Array.isArray(value.startup_messages)
-        ? value.startup_messages.flatMap((item) => isRecord(item)
-          ? [createPromptStartupMessage({
-              role: item.role === 'assistant' ? 'assistant' : 'user',
-              content_template: stringValue(item.content_template),
-              name: stringValue(item.name),
-            })]
-          : [])
-        : [],
-    }
-  },
-  toPayload(value: PromptPresetDraft): PromptPresetPayload {
-    return {
-      name: cleanName(value.name),
-      tag_replacements: value.tag_replacements.map((item) => ({
-        tag: item.tag,
-        replacement: item.replacement,
-      })),
-      startup_messages: value.startup_messages.map((item) => ({
-        role: item.role,
-        content_template: item.content_template,
-        name: item.name.trim() || null,
-      })),
-    }
-  },
-}
-
 function filesystemToolDraft(
   source: unknown,
   fallback: FilesystemToolDefault,
@@ -907,7 +792,6 @@ export const blockAdapters = {
   'custom-middleware': customMiddlewareAdapter,
   'output-mode': outputModeAdapter,
   'exception-retry': exceptionRetryAdapter,
-  'prompt-preset': promptPresetAdapter,
   filesystem: filesystemAdapter,
   skill: skillAdapter,
   'system-prompt': systemPromptAdapter,

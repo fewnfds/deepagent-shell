@@ -66,7 +66,13 @@ def test_file_manager_completes_common_file_and_text_workflows(
 
     assert scopes.status_code == 200
     assert scopes.json() == {
-        "scopes": ["files", "skills", "custom_tools", "custom_middlewares"]
+        "scopes": [
+            "files",
+            "skills",
+            "custom_tools",
+            "custom_middlewares",
+            "automation_scripts",
+        ]
     }
     assert empty.status_code == 200
     assert empty.json() == {"scope": "files", "path": "", "items": []}

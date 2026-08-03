@@ -639,7 +639,7 @@ def build_api_server_router(
                     )
 
             try:
-                execution = request_snapshot.start_agent(
+                execution = await request_snapshot.start_agent(
                     str(primary["id"]),
                     payload.get("messages"),
                     model_request_interceptor=model_request_interceptor,

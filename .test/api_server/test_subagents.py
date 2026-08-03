@@ -139,7 +139,7 @@ def test_selected_subagent_applies_effective_overrides_and_returns_result(
         message.text
         for message in ChildModel.seen_messages[0]
         if message.type == "human"
-    ] == ["Solve the delegated check."]
+    ] == ["Delegate this.", "Solve the delegated check."]
     task_result = next(
         message
         for message in ParentModel.seen_messages[1]

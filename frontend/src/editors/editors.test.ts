@@ -10,7 +10,6 @@ import {
   filesystemAdapter,
   modelAdapter,
   outputModeAdapter,
-  promptPresetAdapter,
   skillAdapter,
   subagentAdapter,
   systemPromptAdapter,
@@ -31,7 +30,6 @@ import {
   FilesystemEditor,
   ModelEditor,
   OutputModeEditor,
-  PromptPresetEditor,
   SkillEditor,
   SubagentCapabilityEditor,
   SystemPromptEditor,
@@ -84,9 +82,6 @@ const subagentDefaults: SubagentDefaults = {
 const todoDefaults: TodoListDefaults = {
   system_prompt: 'todo default', tool_description: 'write_todos default',
 }
-const promptPresetDefaults = {
-  template_variables: ['{task}'],
-}
 const i18n = createI18n({
   legacy: false,
   locale: 'en',
@@ -123,9 +118,6 @@ describe('dedicated block editors', () => {
         modelValue: exceptionRetryAdapter.blank(exceptionRetryDefaults),
         defaults: exceptionRetryDefaults,
       }),
-      mountEditor(PromptPresetEditor, {
-        modelValue: promptPresetAdapter.blank(), defaults: promptPresetDefaults,
-      }),
       mountEditor(FilesystemEditor, {
         modelValue: filesystemAdapter.blank(filesystemDefaults), defaults: filesystemDefaults,
       }),
@@ -142,7 +134,7 @@ describe('dedicated block editors', () => {
     ]
 
     expect(wrappers.map((wrapper) => wrapper.attributes('data-editor'))).toEqual([
-      'model', 'custom-tool', 'custom-middleware', 'output-mode', 'exception-retry', 'prompt-preset',
+      'model', 'custom-tool', 'custom-middleware', 'output-mode', 'exception-retry',
       'filesystem', 'skill', 'system-prompt', 'subagent', 'todo-list',
     ])
   })
@@ -198,19 +190,6 @@ describe('dedicated block editors', () => {
     expect(editor.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({
       system_prompt_enabled: false,
     })
-  })
-
-  it('edits literal replacements and ordered startup messages without an activation switch', async () => {
-    const editor = mountEditor(PromptPresetEditor, {
-      modelValue: promptPresetAdapter.blank(),
-      defaults: promptPresetDefaults,
-    })
-
-    await editor.get('[data-action="add-tag"]').trigger('click')
-    await editor.get('[data-action="add-message"]').trigger('click')
-    expect(editor.findAll('textarea')).toHaveLength(2)
-    expect(editor.find('.form-switch').exists()).toBe(false)
-    expect(editor.findAll('.badge').map((item) => item.text())).toEqual(['{task}'])
   })
 
   it('renders queried models as selectable cards', async () => {

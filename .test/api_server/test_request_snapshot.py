@@ -94,11 +94,19 @@ def test_captured_agent_build_never_falls_back_to_live_configuration_database(
             connection.execute("DELETE FROM blocks")
             connection.execute("DELETE FROM provider_secrets")
 
-        execution = snapshot.start_agent(
-            primary["id"],
-            [{"role": "user", "content": "Use only the captured configuration."}],
-        )
-        content, _usage = asyncio.run(execution.run())
+        async def run_captured_agent() -> tuple[str, dict[str, int]]:
+            execution = await snapshot.start_agent(
+                primary["id"],
+                [
+                    {
+                        "role": "user",
+                        "content": "Use only the captured configuration.",
+                    }
+                ],
+            )
+            return await execution.run()
+
+        content, _usage = asyncio.run(run_captured_agent())
 
     assert content == "runtime reply"
 

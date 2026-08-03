@@ -3,6 +3,7 @@ import { LteAlert, LteButton } from '@adminlte/vue'
 import { computed, inject, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
+import type { SavedAutomationWorkflow, WorkflowOverride } from '@/api'
 
 import PageShell from '@/components/PageShell.vue'
 import RecordPicker from '@/components/RecordPicker.vue'
@@ -50,6 +51,8 @@ const feedbackDetail = ref('')
 const manifests = ref<CapabilityManifest[]>([])
 const blocks = ref<Record<string, StoredBlock[]>>({})
 const profiles = ref<SubagentProfile[]>([])
+const hookWorkflows = ref<SavedAutomationWorkflow[]>([])
+const lifecycleWorkflows = ref<SavedAutomationWorkflow[]>([])
 const selectedProfileId = ref('')
 const form = ref(blankSubagent())
 const recordOptions = computed(() => profiles.value.map((profile) => ({
@@ -119,6 +122,24 @@ function updateSelection(capability: CapabilityManifest, value: string): void {
     return
   }
   setOverrideSelection(form.value, capability.type, 'replace', value)
+}
+
+function workflowSelection(type: 'hook_workflow' | 'lifecycle_workflow'): string {
+  const selection = form.value.settings.automation[type]
+  if (selection.mode === 'inherit') return INHERIT_VALUE
+  if (selection.mode === 'disabled') return DISABLED_VALUE
+  return selection.workflow_id
+}
+
+function updateWorkflow(
+  type: 'hook_workflow' | 'lifecycle_workflow',
+  value: string,
+): void {
+  let selection: WorkflowOverride
+  if (value === INHERIT_VALUE) selection = { mode: 'inherit', workflow_id: '' }
+  else if (value === DISABLED_VALUE) selection = { mode: 'disabled', workflow_id: '' }
+  else selection = { mode: 'replace', workflow_id: value }
+  form.value.settings.automation[type] = selection
 }
 
 async function startNew(): Promise<void> {
@@ -214,12 +235,16 @@ async function loadWorkspace(): Promise<void> {
   }
   loading.value = true
   try {
-    const [catalog, profileItems] = await Promise.all([
+    const [catalog, profileItems, hooks, lifecycles] = await Promise.all([
       service.value.getCatalog(),
       service.value.listSubagents(),
+      service.value.listAutomationWorkflows('hook-workflow'),
+      service.value.listAutomationWorkflows('lifecycle-workflow'),
     ])
     manifests.value = [...catalog.block_types].sort((left, right) => left.order - right.order)
     profiles.value = profileItems.map(normalizeSubagent)
+    hookWorkflows.value = hooks
+    lifecycleWorkflows.value = lifecycles
     const entries = await Promise.all(manifests.value
       .filter((manifest) => manifest.subagent_overrideable)
       .map(async (manifest) => [
@@ -355,6 +380,56 @@ watch(
                     </option>
                   </template>
                 </select>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+        <section class="mb-3" :aria-label="t('agents.automation.title')">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <section class="card h-100">
+                <header class="card-header">
+                  <label class="card-title mb-0" for="subagent-hook-workflow">
+                    {{ t('automation.hook.title') }}
+                  </label>
+                </header>
+                <div class="card-body">
+                  <select
+                    id="subagent-hook-workflow"
+                    class="form-select"
+                    :value="workflowSelection('hook_workflow')"
+                    @change="updateWorkflow('hook_workflow', ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option :value="INHERIT_VALUE">{{ t('agents.override.mode.inherit') }}</option>
+                    <option :value="DISABLED_VALUE">{{ t('agents.override.mode.disabled') }}</option>
+                    <option v-for="workflow in hookWorkflows" :key="workflow.id" :value="workflow.id">
+                      {{ workflow.name }}
+                    </option>
+                  </select>
+                </div>
+              </section>
+            </div>
+            <div class="col-md-6">
+              <section class="card h-100">
+                <header class="card-header">
+                  <label class="card-title mb-0" for="subagent-lifecycle-workflow">
+                    {{ t('automation.lifecycle.title') }}
+                  </label>
+                </header>
+                <div class="card-body">
+                  <select
+                    id="subagent-lifecycle-workflow"
+                    class="form-select"
+                    :value="workflowSelection('lifecycle_workflow')"
+                    @change="updateWorkflow('lifecycle_workflow', ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option :value="INHERIT_VALUE">{{ t('agents.override.mode.inherit') }}</option>
+                    <option :value="DISABLED_VALUE">{{ t('agents.override.mode.disabled') }}</option>
+                    <option v-for="workflow in lifecycleWorkflows" :key="workflow.id" :value="workflow.id">
+                      {{ workflow.name }}
+                    </option>
+                  </select>
                 </div>
               </section>
             </div>

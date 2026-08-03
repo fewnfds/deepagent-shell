@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from string import Formatter
 from typing import Any
 
 from pydantic import ValidationError
@@ -23,7 +22,9 @@ from agent_shell.registries.custom_tools import (
     scan_custom_tool_file,
 )
 from agent_shell.storage.agent_configs import AgentConfigStore
+from agent_shell.storage.automation import AutomationStore
 from agent_shell.storage.blocks import BlockStore
+from agent_shell.automation.validation import AutomationValidationService
 from agent_shell.validation.capability_assembly import (
     CapabilityAssemblySubject,
     FilesystemMode,
@@ -51,6 +52,8 @@ class ResolvedSubagent:
     references: dict[str, str]
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
+    hook_workflow: dict[str, Any] | None
+    lifecycle_workflow: dict[str, Any] | None
     subagents: tuple[ResolvedSubagentEdge, ...]
 
 
@@ -60,6 +63,8 @@ class StaticAssembly:
     references: dict[str, str]
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
+    hook_workflow: dict[str, Any] | None
+    lifecycle_workflow: dict[str, Any] | None
     subagents: tuple[ResolvedSubagentEdge, ...]
     subagent_nodes: dict[SubagentNodeKey, ResolvedSubagent]
 
@@ -77,11 +82,15 @@ class ConfigurationValidationService:
         self,
         blocks: BlockStore,
         agent_configs: AgentConfigStore,
+        automation: AutomationStore,
+        automation_validation: AutomationValidationService,
         *,
         custom_tools_dir: Path,
     ) -> None:
         self._blocks = blocks
         self._agent_configs = agent_configs
+        self._automation = automation
+        self._automation_validation = automation_validation
         self._custom_tools_dir = custom_tools_dir
 
     def validate_primary(
@@ -263,6 +272,24 @@ class ConfigurationValidationService:
             owner_name=validated["component_name"],
             path_prefix="settings.capability_overrides",
         )
+        automation = settings.get("automation", {})
+        for workflow_type, selection_name in (
+            ("hook-workflow", "hook_workflow"),
+            ("lifecycle-workflow", "lifecycle_workflow"),
+        ):
+            selection = automation.get(selection_name, {})
+            if selection.get("mode") != "replace":
+                continue
+            _workflow, workflow_issue = self._workflow_reference(
+                workflow_type,
+                str(selection.get("workflow_id", "")),
+                scope="subagent",
+                owner_id=owner_id,
+                owner_name=validated["component_name"],
+                path=f"settings.automation.{selection_name}.workflow_id",
+            )
+            if workflow_issue is not None:
+                issues.append(workflow_issue)
         child_references = list(settings.get("subagents", []))
         child_profiles: dict[str, dict[str, Any]] = {}
         for index, reference in enumerate(child_references):
@@ -356,6 +383,16 @@ class ConfigurationValidationService:
                         stage=stage,
                     ).issues
                 )
+        for workflow_type in ("hook-workflow", "lifecycle-workflow"):
+            for workflow in self._automation.list_items(workflow_type):
+                report, _ = self._automation_validation.validate_workflow(
+                    workflow_type,
+                    workflow,
+                    stage=stage,
+                    owner_id=str(workflow.get("id", "")),
+                    stored=True,
+                )
+                issues.extend(report.issues)
         for profile in self._agent_configs.list_items("subagents"):
             report, _ = self.validate_subagent(
                 profile,
@@ -748,70 +785,41 @@ class ConfigurationValidationService:
             )
         return model.model_dump(mode="json"), None
 
-    @staticmethod
-    def _prompt_preset_issue(
-        block: dict[str, Any] | None,
+    def _workflow_reference(
+        self,
+        workflow_type: str,
+        workflow_id: str,
         *,
-        allowed_fields: frozenset[str],
-        required_field: str | None,
         scope: str,
         owner_id: str,
         owner_name: str,
         path: str,
-    ) -> ValidationIssue | None:
-        if block is None:
-            if required_field is None:
-                return None
-            return ValidationIssue(
-                code="assembly.prompt_preset_required",
-                scope=scope,
-                owner_id=owner_id,
-                owner_name=owner_name,
-                path=path,
-                message="A Prompt Preset is required for this Agent configuration.",
-                message_key="validation.issue.assembly.promptPresetRequired",
-                message_args={},
+    ) -> tuple[dict[str, Any] | None, ValidationIssue | None]:
+        if not workflow_id:
+            return None, None
+        workflow = self._automation.get_item(workflow_type, workflow_id)
+        if workflow is not None:
+            report, validated = self._automation_validation.validate_workflow(
+                workflow_type,
+                workflow,
+                stage="request_prepare",
+                owner_id=workflow_id,
+                stored=True,
             )
-        used: set[str] = set()
-        for message in block.get("startup_messages", []):
-            template = str(message.get("content_template", ""))
-            used.update(
-                field_name
-                for _literal, field_name, _format, _conversion in Formatter().parse(
-                    template
-                )
-                if field_name is not None
-            )
-        unsupported = sorted(used - allowed_fields)
-        if unsupported:
-            return ValidationIssue(
-                code="assembly.prompt_preset_scope_invalid",
-                scope=scope,
-                owner_id=owner_id,
-                owner_name=owner_name,
-                path=path,
-                message=(
-                    "The selected Prompt Preset uses variables unavailable to this "
-                    f"Agent: {', '.join(unsupported)}."
-                ),
-                message_key="validation.issue.assembly.promptPresetScopeInvalid",
-                message_args={"variables": ", ".join(unsupported)},
-            )
-        if required_field is not None and required_field not in used:
-            return ValidationIssue(
-                code="assembly.prompt_preset_variable_required",
-                scope=scope,
-                owner_id=owner_id,
-                owner_name=owner_name,
-                path=path,
-                message=(
-                    f"The selected Prompt Preset must use {{{required_field}}} in a "
-                    "startup message."
-                ),
-                message_key="validation.issue.assembly.promptPresetVariableRequired",
-                message_args={"variable": required_field},
-            )
-        return None
+            if report.valid:
+                assert validated is not None
+                return {"id": workflow_id, **validated}, None
+            return None, report.issues[0]
+        return None, ValidationIssue(
+            code="assembly.workflow_not_found",
+            scope=scope,
+            owner_id=owner_id,
+            owner_name=owner_name,
+            path=path,
+            message="The referenced automation workflow does not exist.",
+            message_key="validation.issue.assembly.workflowNotFound",
+            message_args={"workflow_type": workflow_type},
+        )
 
     def _assemble_primary(
         self,
@@ -832,6 +840,24 @@ class ConfigurationValidationService:
             owner_name=owner_name,
             block_overrides=block_overrides,
         )
+        primary_automation = primary.get("automation", {})
+        primary_hook, hook_issue = self._workflow_reference(
+            "hook-workflow",
+            str(primary_automation.get("hook_workflow_id", "")),
+            scope="primary",
+            owner_id=owner_id,
+            owner_name=owner_name,
+            path="automation.hook_workflow_id",
+        )
+        primary_lifecycle, lifecycle_issue = self._workflow_reference(
+            "lifecycle-workflow",
+            str(primary_automation.get("lifecycle_workflow_id", "")),
+            scope="primary",
+            owner_id=owner_id,
+            owner_name=owner_name,
+            path="automation.lifecycle_workflow_id",
+        )
+        issues.extend(issue for issue in (hook_issue, lifecycle_issue) if issue)
 
         delegation_selected = selected.get("subagent") is not None
         root_references = list(primary.get("subagents", []))
@@ -920,6 +946,35 @@ class ConfigurationValidationService:
             )
             subagent_name = str(profile["name"])
 
+            child_automation = settings.get("automation", {})
+
+            def resolve_child_workflow(
+                workflow_type: str,
+                selection_name: str,
+                inherited: dict[str, Any] | None,
+            ) -> tuple[dict[str, Any] | None, ValidationIssue | None]:
+                selection = child_automation.get(selection_name, {})
+                mode = selection.get("mode", "inherit")
+                if mode == "inherit":
+                    return inherited, None
+                if mode == "disabled":
+                    return None, None
+                return self._workflow_reference(
+                    workflow_type,
+                    str(selection.get("workflow_id", "")),
+                    scope="subagent",
+                    owner_id=profile_id,
+                    owner_name=subagent_name,
+                    path=f"settings.automation.{selection_name}.workflow_id",
+                )
+
+            child_hook, child_hook_issue = resolve_child_workflow(
+                "hook-workflow", "hook_workflow", primary_hook
+            )
+            child_lifecycle, child_lifecycle_issue = resolve_child_workflow(
+                "lifecycle-workflow", "lifecycle_workflow", primary_lifecycle
+            )
+
             (
                 child_blocks,
                 child_issues,
@@ -943,17 +998,11 @@ class ConfigurationValidationService:
             )
             if child_tool_issue is not None:
                 child_issues.append(child_tool_issue)
-            child_preset_issue = self._prompt_preset_issue(
-                child_blocks.get("prompt-preset"),
-                allowed_fields=frozenset({"task"}),
-                required_field=None,
-                scope="subagent",
-                owner_id=profile_id,
-                owner_name=subagent_name,
-                path="capability_refs.prompt-preset",
+            child_issues.extend(
+                issue
+                for issue in (child_hook_issue, child_lifecycle_issue)
+                if issue is not None
             )
-            if child_preset_issue is not None:
-                child_issues.append(child_preset_issue)
             issues.extend(child_issues)
             child_edges: list[ResolvedSubagentEdge] = []
             if len(issues) == issue_count:
@@ -986,6 +1035,8 @@ class ConfigurationValidationService:
                     references=child_references,
                     blocks=child_blocks,
                     filesystem_mode=child_filesystem_mode,
+                    hook_workflow=child_hook,
+                    lifecycle_workflow=child_lifecycle,
                     subagents=tuple(child_edges),
                 )
             resolving_nodes.remove(profile_id)
@@ -1028,18 +1079,6 @@ class ConfigurationValidationService:
             )
         )
 
-        primary_preset_issue = self._prompt_preset_issue(
-            selected.get("prompt-preset"),
-            allowed_fields=frozenset(),
-            required_field=None,
-            scope="primary",
-            owner_id=owner_id,
-            owner_name=owner_name,
-            path="capability_refs.prompt-preset",
-        )
-        if primary_preset_issue is not None:
-            issues.append(primary_preset_issue)
-
         report = ValidationReport(stage=stage, issues=tuple(issues))
         if not report.valid:
             return report, None
@@ -1048,6 +1087,8 @@ class ConfigurationValidationService:
             references=references,
             blocks=selected,
             filesystem_mode=filesystem_mode,
+            hook_workflow=primary_hook,
+            lifecycle_workflow=primary_lifecycle,
             subagents=resolved_subagents,
             subagent_nodes=subagent_nodes,
         )

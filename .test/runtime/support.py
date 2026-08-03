@@ -128,3 +128,15 @@ class EventGraph:
         assert config == {"recursion_limit": 100}
         assert version == "v3"
         return EventRun(self._events)
+
+
+class NoopAutomation:
+    async def start(self) -> None:
+        pass
+
+    async def finish(self, _terminal) -> None:
+        pass
+
+
+def noop_automation() -> NoopAutomation:
+    return NoopAutomation()

@@ -8,7 +8,6 @@ import {
   filesystemAdapter,
   modelAdapter,
   outputModeAdapter,
-  promptPresetAdapter,
   skillAdapter,
   subagentAdapter,
   systemPromptAdapter,
@@ -194,16 +193,6 @@ describe('block adapters', () => {
       assistant_text: { enabled: false, template: 'kept {{message}}' },
     })
 
-    expect(promptPresetAdapter.fromApi({
-      id: 'prompt', name: 'Prompt',
-      tag_replacements: [{ tag: '|||tag|||', replacement: 42 }, 'discarded'],
-      startup_messages: [{ role: 'assistant', content_template: 'Ready', name: null }],
-    } as never)).toMatchObject({
-      id: 'prompt', name: 'Prompt',
-      tag_replacements: [{ tag: '|||tag|||', replacement: '' }],
-      startup_messages: [{ role: 'assistant', content_template: 'Ready', name: '' }],
-    })
-
     const filesystem = filesystemAdapter.fromApi({
       id: 'files', name: 'Files',
       mapped_directories: [{ virtual_path: '/kept/', local_path: 'H:\\kept' }, 42],
@@ -274,18 +263,6 @@ describe('block adapters', () => {
   })
 
   it('round-trips the remaining simple editors and removes displayed defaults', () => {
-    const prompt = promptPresetAdapter.blank()
-    prompt.name = ' Prompt '
-    prompt.tag_replacements.push({ _key: 'tag', tag: '|||tag|||', replacement: '' })
-    prompt.startup_messages.push({
-      _key: 'message', role: 'user', content_template: 'Do {task}', name: '',
-    })
-    expect(promptPresetAdapter.toPayload(prompt)).toEqual({
-      name: 'Prompt',
-      tag_replacements: [{ tag: '|||tag|||', replacement: '' }],
-      startup_messages: [{ role: 'user', content_template: 'Do {task}', name: null }],
-    })
-
     const skill = skillAdapter.blank(skillDefaults)
     skill.name = ' Skill '
     skill.skills = ['alpha', 'alpha']

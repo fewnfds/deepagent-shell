@@ -90,16 +90,6 @@ def block_payload(capability_type: str, name: str) -> dict:
         "system-prompt": {"name": name, "system_prompt": "Fixture prompt."},
         "subagent": {"name": name},
         "todo-list": {"name": name},
-        "prompt-preset": {
-            "name": name,
-            "tag_replacements": [],
-            "startup_messages": [
-                {
-                    "role": "user",
-                    "content_template": "Begin work.",
-                }
-            ],
-        },
         "exception-retry": {
             "name": name,
             "strategy": "provider_native",

@@ -51,8 +51,6 @@ class AgentRunCapture:
                 "agent_name",
                 "tool_call_id",
                 "message_count",
-                "matched_tag_count",
-                "startup_message_count",
             )
         }
         self._append("agent_input", safe)

@@ -7,7 +7,8 @@ Primary Agent 与同步 Subagent。
 ## 功能
 
 - 管理模型、系统提示词、文件系统、待办计划、自定义工具、Skill、自定义 Middleware、输出模式、
-  异常重试、提示词预设和委派能力；
+  异常重试和委派能力；
+- 用自定义 Python 脚本配置启动前事件工作流和请求生命周期定时工作流；
 - 通过 Primary Agent 组合组件，通过可复用 Subagent 实体定义路由身份、能力策略和下级引用；
 - 提供 `GET /v1/models` 与流式/非流式 `POST /v1/chat/completions`；
 - 支持 OpenAI、Anthropic、Google GenAI、Google Vertex AI、DeepSeek 和 xAI；
@@ -45,7 +46,7 @@ git pull --ff-only
 ## 配置第一份 Agent
 
 1. 在【组件】创建一个模型和一个输出模式；这两项是 Primary 的必选组件。
-2. 按需创建系统提示词、文件系统、工具、Skill、Middleware、重试、提示词预设或委派能力。
+2. 按需创建系统提示词、文件系统、工具、Skill、Middleware、重试或委派能力。
 3. 在【Agent / Primary Agent】选择组件并保存。Primary 名称就是公开 model ID。
 4. 在首页设置 `/v1/*` 使用的 API Key，并启动 API Server。
 
@@ -89,7 +90,7 @@ data/
   config/       启动配置
   state/        SQLite 数据库
   files/        用户文件
-  resources/    Skill、自定义工具和自定义 Middleware
+  resources/    Skill、自定义工具、自定义 Middleware 和自动化脚本
   logs/         系统与 Agent 运行日志
 runtime/        可重建的 Python runtime、缓存与临时文件
 frontend/       Vue 3 前端源码
@@ -104,6 +105,7 @@ docs/           当前版本公开说明
 - [用户指南](docs/user-guide/README.md)
 - [组件说明](docs/wizard-pages/README.md)
 - [Agent 说明](docs/agent-pages/README.md)
+- [自动化工作流](docs/user-guide/automation.md)
 - [安全与部署](docs/security-and-deployment.md)
 - [开发与发布](docs/development-and-release.md)
 - [全部文档](docs/README.md)

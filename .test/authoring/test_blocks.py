@@ -20,13 +20,12 @@ def test_health_catalog_and_readiness_are_small_and_current(
         "filesystem",
         "skill",
         "subagent",
-            "todo_list",
-            "output_mode",
-            "exception_retry",
-            "prompt_preset",
-        }
+        "todo_list",
+        "output_mode",
+        "exception_retry",
+    }
     assert [item["type"] for item in catalog["block_types"]] == list(PUBLIC_TYPES)
-    assert [item["order"] for item in catalog["block_types"]] == list(range(1, 12))
+    assert [item["order"] for item in catalog["block_types"]] == list(range(1, 11))
     by_type = {item["type"]: item for item in catalog["block_types"]}
     assert set(by_type["model"]) == {
         "type",
@@ -56,8 +55,6 @@ def test_health_catalog_and_readiness_are_small_and_current(
     assert by_type["todo-list"]["tool_names"] == ["write_todos"]
     assert by_type["output-mode"]["subagent_policy"] == "top-level-only"
     assert by_type["output-mode"]["subagent_overrideable"] is False
-    assert by_type["prompt-preset"]["subagent_overrideable"] is True
-    assert by_type["prompt-preset"]["subagent_policy"] == "inherit"
     readiness = client.get("/api/readiness").json()
     assert readiness["status"] == "configuration_ready"
     assert set(readiness["sections"]) == {

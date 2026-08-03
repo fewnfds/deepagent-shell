@@ -71,7 +71,7 @@ describe('ValidationChecklist', () => {
       },
     })
 
-    expect(wrapper.text()).toContain('Subagent 名称')
+    expect(wrapper.text()).toContain('配置名称')
     expect(wrapper.find('details').exists()).toBe(false)
     expect(wrapper.get('header').text()).toContain('2 个问题，展开查看完整内容')
     expect(wrapper.find('[data-testid="validation-status"]').exists()).toBe(false)
@@ -90,7 +90,7 @@ describe('ValidationChecklist', () => {
     expect(issueButtons[1].attributes('aria-expanded')).toBe('false')
     expect(wrapper.text()).toContain('subagents[0].name')
     expect(wrapper.text()).toContain('配置名称不能为空。')
-    expect(wrapper.text()).toContain('Subagent 名称未通过当前配置规则')
+    expect(wrapper.text()).toContain('配置名称未通过当前配置规则')
     expect(wrapper.text()).not.toContain('backend report message')
     expect(wrapper.text()).toContain('当前编辑的 Primary Agent 配置')
   })
@@ -263,7 +263,7 @@ describe('ValidationChecklist', () => {
     const card = wrapper.get('[data-testid="validation-issue"]')
     expect(card.get('[data-testid="validation-owner"]').text()).toContain('test-primary-agent 的 Primary Agent 配置')
     expect(card.get('dl').text()).toContain('问题位置')
-    expect(card.get('[data-testid="validation-location"]').text()).toContain('Subagent 绑定中的第 1 项下的inherit_all 字段')
+    expect(card.get('[data-testid="validation-location"]').text()).toContain('Subagent 引用中的第 1 项下的inherit_all 字段')
     const technicalPath = card.get('[data-testid="validation-technical-path"]')
     expect(technicalPath.text()).toBe('subagents[0].inherit_all')
     expect(technicalPath.element.tagName).toBe('DD')

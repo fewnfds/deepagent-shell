@@ -249,6 +249,8 @@ def test_new_database_contains_current_authoring_and_api_server_tables(
         }
     assert tables == {
         "blocks",
+        "hook_workflows",
+        "lifecycle_workflows",
         "primary_agents",
         "subagents",
         "provider_secrets",

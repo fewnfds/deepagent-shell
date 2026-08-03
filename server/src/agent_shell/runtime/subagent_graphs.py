@@ -86,16 +86,14 @@ class SubagentGraphCompiler:
             workspace=self._workspace,
         )
         middleware = [ToolErrorBoundaryMiddleware(), *child.middleware]
-        preset = node.blocks.get("prompt-preset")
-        if preset is not None:
-            middleware.insert(
-                1,
-                SubagentInputMiddleware(
-                    agent_name=node.name,
-                    preset=preset,
-                    observer=self._agent_input_observer,
-                ),
-            )
+        middleware.insert(
+            1,
+            SubagentInputMiddleware(
+                owner_id=node.key,
+                agent_name=node.name,
+                observer=self._agent_input_observer,
+            ),
+        )
         if child.tool_choice is not None or child.model_settings:
             middleware.append(
                 make_model_request_settings_middleware(

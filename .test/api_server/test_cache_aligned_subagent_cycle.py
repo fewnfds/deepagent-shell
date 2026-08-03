@@ -115,30 +115,42 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
             },
         ).json()
 
-        def create_preset(name: str, role: str, ready: str) -> dict:
-            response = client.post(
-                "/api/blocks/prompt-preset",
-                json={
-                    "name": name,
-                    "tag_replacements": [{
+        write_automation_script(
+            tmp_path,
+            "prepare-shared-prefix",
+            "async def run(ctx):\n"
+            "    tag = str(ctx.config['tag'])\n"
+            "    replacement = str(ctx.config['replacement'])\n"
+            "    for message in ctx.messages:\n"
+            "        if message.get('role') == 'user':\n"
+            "            message['content'] = message['content'].replace(tag, replacement)\n"
+            "    ctx.messages.extend([\n"
+            "        {'role': 'user', 'content': str(ctx.config['role'])},\n"
+            "        {'role': 'assistant', 'content': str(ctx.config['ready'])},\n"
+            "    ])\n",
+        )
+
+        def create_startup_workflow(name: str, role: str, ready: str) -> dict:
+            return create_hook_workflow(
+                client,
+                name,
+                request_prepare=[{
+                    "script_id": "prepare-shared-prefix",
+                    "config": {
                         "tag": "[[SHARED_CONTEXT]]",
                         "replacement": shared_replacement,
-                    }],
-                    "startup_messages": [
-                        {"role": "user", "content_template": role},
-                        {"role": "assistant", "content_template": ready},
-                    ],
-                },
+                        "role": role,
+                        "ready": ready,
+                    },
+                }],
             )
-            assert response.status_code == 200, response.text
-            return response.json()
 
-        primary_preset = create_preset(
+        primary_workflow = create_startup_workflow(
             "Primary Xiao Ai startup",
             "PRIMARY ROLE: read files, plan the work, and delegate units.",
             "PRIMARY READY",
         )
-        worker_preset = create_preset(
+        worker_workflow = create_startup_workflow(
             "Worker Xiao Ai startup",
             "WORKER ROLE: execute the delegated unit using the shared context.",
             "WORKER READY",
@@ -150,49 +162,49 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
                 "task_description_override": task_description,
             },
         ).json()
-        worker_override = [{
-            "type": "prompt-preset",
-            "mode": "replace",
-            "block_id": worker_preset["id"],
-        }]
+        def worker_payload(children: list[dict[str, str]] | None = None) -> dict:
+            payload = subagent_payload(
+                "worker-placeholder",
+                name="worker",
+                description=worker_description,
+                subagents=children,
+            )
+            payload["settings"]["automation"] = {
+                "hook_workflow": {
+                    "mode": "replace",
+                    "workflow_id": worker_workflow["id"],
+                },
+                "lifecycle_workflow": {
+                    "mode": "inherit",
+                    "workflow_id": "",
+                },
+            }
+            return payload
+
+        b_payload = worker_payload()
+        b_payload["component_name"] = "B"
         b = client.post(
             "/api/subagents",
-            json=subagent_payload(
-                "B",
-                name="worker",
-                description=worker_description,
-                capability_overrides=worker_override,
-            ),
+            json=b_payload,
         ).json()
+        c_payload = worker_payload()
+        c_payload["component_name"] = "C"
         c = client.post(
             "/api/subagents",
-            json=subagent_payload(
-                "C",
-                name="worker",
-                description=worker_description,
-                capability_overrides=worker_override,
-            ),
+            json=c_payload,
         ).json()
+        b_payload = worker_payload([{"subagent_id": c["id"]}])
+        b_payload["component_name"] = "B"
         b_response = client.put(
             f"/api/subagents/{b['id']}",
-            json=subagent_payload(
-                "B",
-                name="worker",
-                description=worker_description,
-                capability_overrides=worker_override,
-                subagents=[{"subagent_id": c["id"]}],
-            ),
+            json=b_payload,
         )
         assert b_response.status_code == 200, b_response.text
+        c_payload = worker_payload([{"subagent_id": b["id"]}])
+        c_payload["component_name"] = "C"
         c_response = client.put(
             f"/api/subagents/{c['id']}",
-            json=subagent_payload(
-                "C",
-                name="worker",
-                description=worker_description,
-                capability_overrides=worker_override,
-                subagents=[{"subagent_id": b["id"]}],
-            ),
+            json=c_payload,
         )
         assert c_response.status_code == 200, c_response.text
         a_response = client.put(
@@ -202,10 +214,13 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
                 "capability_refs": [
                     *primary["capability_refs"],
                     {"type": "system-prompt", "block_id": system_prompt["id"]},
-                    {"type": "prompt-preset", "block_id": primary_preset["id"]},
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
                 "subagents": [{"subagent_id": b["id"]}],
+                "automation": {
+                    "hook_workflow_id": primary_workflow["id"],
+                    "lifecycle_workflow_id": "",
+                },
             },
         )
         assert a_response.status_code == 200, a_response.text

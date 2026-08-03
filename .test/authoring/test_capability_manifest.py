@@ -34,7 +34,6 @@ from agent_shell.contracts import (
     OUTPUT_EVENT_NAMES,
     OUTPUT_EVENT_TEMPLATE_VARIABLES,
     OutputModeBlock,
-    PROMPT_PRESET_TEMPLATE_FIELDS,
 )
 
 
@@ -49,7 +48,6 @@ def test_manifest_matches_current_blocks_and_form_order() -> None:
         "custom-middleware",
         "output-mode",
         "exception-retry",
-        "prompt-preset",
         "subagent",
     ]
     assert {manifest.type for manifest in CAPABILITY_MANIFESTS} == set(BLOCK_MODELS)
@@ -70,8 +68,6 @@ def test_manifest_matches_current_blocks_and_form_order() -> None:
     assert manifests["subagent"].subagent_policy == "inherit"
     assert manifests["todo-list"].subagent_overrideable is True
     assert manifests["todo-list"].tool_names == ("write_todos",)
-    assert manifests["prompt-preset"].subagent_overrideable is True
-    assert manifests["prompt-preset"].subagent_policy == "inherit"
 
 
 def test_manifest_rejects_invalid_catalog_structure() -> None:
@@ -87,7 +83,6 @@ def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
     defaults = editor_defaults()
     filesystem = defaults["filesystem"]
     output = defaults["output_mode"]
-    prompt_preset = defaults["prompt_preset"]
 
     assert [tool["name"] for tool in filesystem["tools"]] == list(
         CAPABILITY_BY_TYPE["filesystem"].tool_names
@@ -135,9 +130,6 @@ def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
     OutputModeBlock.model_validate(
         {"name": "Output default", **output["default_value"]}
     )
-    assert prompt_preset == {
-        "template_variables": [f"{{{field}}}" for field in PROMPT_PRESET_TEMPLATE_FIELDS],
-    }
 
 
 def test_editor_text_snapshots_match_locked_upstream_defaults() -> None:

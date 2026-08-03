@@ -1,6 +1,6 @@
 # 创建组件
 
-【组件】提供十一类可复用配置。保存组件后，还要在 Primary 或 Subagent 实体 settings 中引用才会参与运行。
+【组件】提供十类可复用配置。保存组件后，还要在 Primary 或 Subagent 实体 settings 中引用才会参与运行。
 
 | 组件 | 用途 | Primary 要求 | Subagent 策略 |
 | --- | --- | --- | --- |
@@ -13,7 +13,6 @@
 | 自定义 Middleware | 有序构造 LangChain Middleware | 可选 | 继承、替换或关闭 |
 | 输出模式 | 把 v3 事件投影为响应文本 | 必选 | 只用于顶层 Primary |
 | 异常重试 | Provider 或 ModelRetryMiddleware 重试 | 可选 | 继承、替换或关闭 |
-| 提示词预设 | 标签替换和启动消息 | 可选 | 继承、替换或关闭 |
 | 委派能力 | 同步 Subagent 的提示与 `task` 说明 | 可选 | 继承、替换或关闭 |
 
 组件编辑页从服务端 catalog 取得字段、默认值和资源发现结果。草稿校验与保存校验都以后端 contract
@@ -21,3 +20,6 @@
 
 详细字段见[组件说明](../wizard-pages/README.md)。Agent 组合方式见
 [装配 Primary 与 Subagent](configuration-workflow.md)。
+
+自定义的启动前消息处理和生命周期文件更新不属于组件，统一在顶层【自动化】配置。见
+[使用自动化工作流](automation.md)。

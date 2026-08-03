@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from agent_shell.runtime.agent_builder import AgentBuilder
+from agent_shell.automation.runtime import AutomationRuntime
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.model_response import ModelResponse
@@ -30,6 +31,7 @@ class AgentExecution:
     input_state: dict[str, Any]
     rectifier: OutputEventRectifier
     normalizer: V3EventNormalizer
+    automation: AutomationRuntime
     context: dict[str, Any] = field(default_factory=dict)
     event_observers: tuple[Callable[[OutputEvent], None], ...] = ()
     _started: bool = False
@@ -50,6 +52,31 @@ class AgentExecution:
         if self._started:
             raise RuntimeError("AgentExecution can only be consumed once")
         self._started = True
+        terminal: dict[str, Any] = {
+            "status": "failed",
+            "error_code": "execution_aborted",
+        }
+        await self.automation.start()
+        try:
+            async for part in self._stream_text_inner():
+                yield part
+            terminal = {
+                "status": "completed",
+                "finish_reason": self.normalizer.finish_reason,
+            }
+        except asyncio.CancelledError:
+            terminal = {"status": "cancelled", "error_code": "request_cancelled"}
+            raise
+        except AgentRuntimeError as exc:
+            terminal = {"status": "failed", "error_code": exc.code}
+            raise
+        except Exception:
+            terminal = {"status": "failed", "error_code": "agent_execution_failed"}
+            raise
+        finally:
+            await self.automation.finish(terminal)
+
+    async def _stream_text_inner(self) -> AsyncIterator[str]:
 
         def project_event(event: OutputEvent) -> list[str]:
             for observer in self.event_observers:
@@ -191,7 +218,7 @@ class AgentRuntime:
         self._builder = builder
         self._diagnostics = diagnostics
 
-    def start(
+    async def start(
         self,
         primary_id: str,
         raw_messages: object,
@@ -204,14 +231,19 @@ class AgentRuntime:
         request_id: str = "",
         public_model: str = "",
     ) -> AgentExecution:
-        built = self._builder.build(
-            primary_id,
-            raw_messages,
-            model_request_interceptor=model_request_interceptor,
-            model_request_observer=model_request_observer,
-            agent_input_observer=agent_input_observer,
-            model_response_observer=model_response_observer,
-        )
+        try:
+            built = await self._builder.build(
+                primary_id,
+                raw_messages,
+                model_request_interceptor=model_request_interceptor,
+                model_request_observer=model_request_observer,
+                agent_input_observer=agent_input_observer,
+                model_response_observer=model_response_observer,
+                request_id=request_id,
+            )
+        except Exception:
+            await self._builder.finish_failed_build()
+            raise
         observers = []
         if event_observer is not None:
             observers.append(event_observer)
@@ -225,6 +257,7 @@ class AgentRuntime:
             graph=built.graph,
             input_state=built.input_state,
             context=built.context,
+            automation=built.automation,
             rectifier=OutputEventRectifier(OutputProjector(built.output_config)),
             normalizer=V3EventNormalizer(
                 built.agent_name,

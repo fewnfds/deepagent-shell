@@ -10,7 +10,6 @@ export type BlockType =
   | 'custom-middleware'
   | 'output-mode'
   | 'exception-retry'
-  | 'prompt-preset'
   | 'subagent'
 
 export interface CapabilityManifest {
@@ -69,7 +68,7 @@ export interface CustomMiddlewareResource {
   source: string
 }
 
-export type FileManagerScope = 'files' | 'skills' | 'custom_tools' | 'custom_middlewares'
+export type FileManagerScope = 'files' | 'skills' | 'custom_tools' | 'custom_middlewares' | 'automation_scripts'
 type ManagedFileKind = 'directory' | 'file' | 'unsupported'
 
 export interface ManagedFileScopeCatalog {
@@ -156,6 +155,55 @@ interface CapabilityReference {
   block_id: string
 }
 
+export type AutomationWorkflowType = 'hook-workflow' | 'lifecycle-workflow'
+
+export interface AutomationNode {
+  script_id: string
+  config: Record<string, unknown>
+}
+
+export interface HookWorkflowPayload {
+  name: string
+  hooks: {
+    request_prepare: AutomationNode[]
+    subagent_before_invoke: AutomationNode[]
+    request_end: AutomationNode[]
+  }
+}
+
+export interface LifecycleWorkflowPayload {
+  name: string
+  interval_seconds: number
+  nodes: AutomationNode[]
+}
+
+export type AutomationWorkflowPayload = HookWorkflowPayload | LifecycleWorkflowPayload
+export type SavedAutomationWorkflow = AutomationWorkflowPayload & { id: string }
+
+export interface AutomationScriptResource {
+  api_version: 1
+  id: string
+  name: string
+  description: string
+  triggers: ('hook' | 'lifecycle')[]
+  folder: string
+}
+
+export interface PrimaryAutomation {
+  hook_workflow_id: string
+  lifecycle_workflow_id: string
+}
+
+export interface WorkflowOverride {
+  mode: 'inherit' | 'replace' | 'disabled'
+  workflow_id: string
+}
+
+export interface SubagentAutomation {
+  hook_workflow: WorkflowOverride
+  lifecycle_workflow: WorkflowOverride
+}
+
 export interface SubagentReference {
   subagent_id: string
 }
@@ -164,6 +212,7 @@ export interface PrimaryAgentPayload {
   name: string
   capability_refs: CapabilityReference[]
   subagents: SubagentReference[]
+  automation: PrimaryAutomation
 }
 
 export type PrimaryAgent = PrimaryAgentPayload & { id: string }
@@ -177,6 +226,7 @@ export interface CapabilityOverride {
 export interface SubagentSettings {
   capability_overrides: CapabilityOverride[]
   subagents: SubagentReference[]
+  automation: SubagentAutomation
 }
 
 export interface SubagentPayload {
@@ -192,6 +242,7 @@ type ValidationTarget =
   | { kind: 'block'; type: BlockType; id?: string }
   | { kind: 'primary'; type?: ''; id?: string }
   | { kind: 'subagent'; type?: ''; id?: string }
+  | { kind: 'automation'; type: AutomationWorkflowType; id?: string }
 
 export interface DraftValidationRequest {
   target: ValidationTarget

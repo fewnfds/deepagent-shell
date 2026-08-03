@@ -31,7 +31,6 @@ CAPABILITY_TYPES = (
     "custom-middleware",
     "output-mode",
     "exception-retry",
-    "prompt-preset",
     "subagent",
 )
 OUTPUT_EVENT_TYPES = (
@@ -129,11 +128,6 @@ def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> d
             "force_non_streaming": False,
             "max_retries": 2,
             "retry_on": ["transport_error", "timeout", "rate_limit", "server_error"],
-        },
-        "prompt-preset": {
-            "name": name,
-            "tag_replacements": [{"tag": "|||smoke|||", "replacement": ""}],
-            "startup_messages": [],
         },
     }
     return payloads[capability_type]

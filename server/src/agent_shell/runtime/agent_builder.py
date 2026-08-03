@@ -8,6 +8,7 @@ from langchain.chat_models import init_chat_model
 from pydantic import SecretStr
 
 from agent_shell import __version__
+from agent_shell.automation.runtime import AutomationRuntime
 from agent_shell.capability_manifest import FILESYSTEM_TOOL_NAMES
 from agent_shell.contracts import FilesystemBlock, OutputModeBlock, SkillBlock
 from agent_shell.provider_http import PROVIDER_HTTP_TIMEOUT, ProviderHttpClients
@@ -151,6 +152,7 @@ class BuiltAgent:
     output_config: dict[str, Any]
     agent_name: str
     context: AgentRequestContext
+    automation: AutomationRuntime
 
 
 class AgentBuilder:
@@ -159,15 +161,27 @@ class AgentBuilder:
         secrets: ProviderSecretResolver,
         *,
         custom_tools_dir: Path,
+        automation_scripts_dir: Path,
+        runtime_dir: Path,
         skills_dir: Path,
         validation: ConfigurationValidationService,
         provider_http_clients: ProviderHttpClients,
     ) -> None:
         self._secrets = secrets
         self._custom_tools_dir = custom_tools_dir
+        self._automation_scripts_dir = automation_scripts_dir
+        self._runtime_dir = runtime_dir
         self._skills_dir = skills_dir
         self._validation = validation
         self._provider_http_clients = provider_http_clients
+        self._automation_runtime: AutomationRuntime | None = None
+
+    async def finish_failed_build(self) -> None:
+        if self._automation_runtime is None:
+            return
+        await self._automation_runtime.finish(
+            {"status": "failed", "error_code": "agent_construction_failed"}
+        )
 
     def _materialize_profile(
         self,
@@ -293,11 +307,21 @@ class AgentBuilder:
                 if skill is not None
                 else None
             )
+            selected_skill_names = (
+                list(skill_block.skills) if skill_block is not None else []
+            )
+            effective_skills_dir = (
+                self._automation_runtime.effective_skills_dir(
+                    owner_id, selected_skill_names
+                )
+                if self._automation_runtime is not None
+                else self._skills_dir
+            )
             deepagents = build_deepagents_capabilities(
                 filesystem_block,
                 skill_block,
                 filesystem_mode=filesystem_mode,
-                skills_dir=self._skills_dir,
+                skills_dir=effective_skills_dir,
                 workspace=workspace,
             )
         except DeepAgentsCapabilityError as exc:
@@ -331,6 +355,35 @@ class AgentBuilder:
         backend = deepagents.backend
         middleware.extend(deepagents.middleware)
         initial_files.update(deepagents.initial_files)
+        if self._automation_runtime is not None:
+            automation_files = self._automation_runtime.initial_files_for(owner_id)
+            if automation_files:
+                from deepagents.backends.utils import create_file_data
+
+                for path, content in automation_files.items():
+                    if not isinstance(path, str) or not path.startswith("/"):
+                        raise AgentRuntimeError(
+                            "automation_initial_file_invalid",
+                            "Automation initial file paths must be absolute virtual paths.",
+                            status_code=422,
+                        )
+                    if isinstance(content, bytes):
+                        import base64
+
+                        value = create_file_data(
+                            base64.b64encode(content).decode("ascii"),
+                            encoding="base64",
+                        )
+                    elif isinstance(content, str):
+                        value = create_file_data(content)
+                    else:
+                        raise AgentRuntimeError(
+                            "automation_initial_file_invalid",
+                            "Automation initial file values must be text or bytes.",
+                            status_code=422,
+                        )
+                    initial_files[path] = value
+                    deepagents.workspace.initial_files[path] = value
         skill_sources = deepagents.skill_sources
 
         custom_middleware: list[Any] = []
@@ -375,7 +428,7 @@ class AgentBuilder:
             workspace=deepagents.workspace,
         )
 
-    def build(
+    async def build(
         self,
         primary_id: str,
         raw_messages: object,
@@ -384,6 +437,7 @@ class AgentBuilder:
         model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
         agent_input_observer: Callable[[dict[str, object]], Any] | None = None,
         model_response_observer: Callable[[ModelResponse], Any] | None = None,
+        request_id: str = "",
     ) -> BuiltAgent:
         # Validate the immutable request snapshot before any selected user module
         # can be imported or any optional capability can be materialized.
@@ -421,12 +475,19 @@ class AgentBuilder:
 
         primary_id = str(primary.get("id", primary_id))
         primary_name = str(primary["name"])
-        from agent_shell.runtime.prompt_preset import prepare_agent_input
-
-        prepared_input = prepare_agent_input(
+        automation = AutomationRuntime.from_assembly(
+            assembly,
             messages,
-            selected_blocks.get("prompt-preset"),
-            variables={},
+            primary_id=primary_id,
+            request_id=request_id,
+            scripts_dir=self._automation_scripts_dir,
+            skills_dir=self._skills_dir,
+            runtime_root=self._runtime_dir,
+        )
+        self._automation_runtime = automation
+        await automation.prepare()
+        prepared_messages = validate_openai_messages(
+            automation.messages_for(primary_id)
         )
         if agent_input_observer is not None:
             agent_input_observer(
@@ -434,9 +495,7 @@ class AgentBuilder:
                     "agent_type": "primary",
                     "agent_name": primary_name,
                     "tool_call_id": "",
-                    "message_count": len(prepared_input.messages),
-                    "matched_tag_count": prepared_input.matched_tag_count,
-                    "startup_message_count": prepared_input.startup_message_count,
+                    "message_count": len(prepared_messages),
                 }
             )
         materialized = self._materialize_profile(
@@ -471,11 +530,10 @@ class AgentBuilder:
                     model_settings=materialized.model_settings,
                 )
             )
-        input_state: dict[str, Any] = {"messages": prepared_input.messages}
+        input_state: dict[str, Any] = {"messages": prepared_messages}
         request_context: AgentRequestContext = {
-            "client_messages": [dict(message) for message in messages]
+            "automation_runtime": automation
         }
-        initial_files = dict(materialized.initial_files)
 
         compiled_subagents: list[dict[str, Any]] = []
         task_description_override: str | None = None
@@ -526,6 +584,7 @@ class AgentBuilder:
         middleware.append(ProviderErrorBoundaryMiddleware())
         if exception_retry_runtime is not None:
             middleware.extend(exception_retry_runtime.after_provider_boundary)
+        initial_files = dict(materialized.workspace.initial_files)
         if initial_files or resolved_subagents:
             input_state["files"] = initial_files
 
@@ -592,4 +651,5 @@ class AgentBuilder:
             output_config=output_config,
             agent_name=str(primary["name"]),
             context=request_context,
+            automation=automation,
         )

@@ -25,7 +25,7 @@ describe('FormField', () => {
       global: { plugins: [i18n] },
     })
 
-    expect(wrapper.get('.form-label').text()).toBe('Subagent name')
+    expect(wrapper.get('.form-label').text()).toBe('Configuration name')
   })
 
   it('shows the exact payload key for a technical field', () => {

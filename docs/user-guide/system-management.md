@@ -9,7 +9,7 @@ data/
   config/agent-shell.env
   state/agent-shell.sqlite3*
   files/
-  resources/{skills,custom_tools,custom_middlewares}/
+  resources/{skills,custom_tools,custom_middlewares,automation_scripts}/
   logs/
 ```
 
@@ -21,7 +21,7 @@ data/
 
 ## 文件管理
 
-【系统 / 文件管理】只开放四个 scope：普通文件、Skill、自定义工具和自定义 Middleware。支持浏览、
+【系统 / 文件管理】只开放五个 scope：普通文件、Skill、自定义工具、自定义 Middleware 和自动化脚本。支持浏览、
 新建目录/文本文件、上传、下载、ZIP 打包、重命名、文本编辑和递归删除。
 
 - 文本编辑上限 2 MiB，并使用 revision 防止静默覆盖；

@@ -40,7 +40,6 @@ import {
   FilesystemEditor,
   ModelEditor,
   OutputModeEditor,
-  PromptPresetEditor,
   SkillEditor,
   SubagentCapabilityEditor,
   SystemPromptEditor,
@@ -63,7 +62,6 @@ const editorComponents: Record<BlockType, Component> = {
   'custom-middleware': CustomMiddlewareEditor,
   'output-mode': OutputModeEditor,
   'exception-retry': ExceptionRetryEditor,
-  'prompt-preset': PromptPresetEditor,
   subagent: SubagentCapabilityEditor,
 }
 
@@ -163,7 +161,6 @@ const editorProps = computed<Record<string, unknown>>(() => {
     case 'todo-list':
     case 'output-mode':
     case 'exception-retry':
-    case 'prompt-preset':
     case 'subagent':
       return { defaults: activeDefaults.value }
     default:

@@ -85,7 +85,7 @@ const subagentManifest: CapabilityManifest = {
   ...modelManifest,
   type: 'subagent',
   terminology_key: 'delegation',
-  order: 11,
+  order: 10,
   subagent_overrideable: true,
   required: false,
   subagent_policy: 'inherit',
@@ -114,6 +114,7 @@ function service(overrides: Partial<AgentAuthoringService> = {}): AgentAuthoring
       id: `00000000-0000-0000-0000-${type === 'model' ? '000000000001' : '000000000002'}`,
       name: `${type} block`,
     }]),
+    listAutomationWorkflows: vi.fn(async () => []),
     listPrimaryAgents: vi.fn(async () => [primary]),
     getPrimaryAgent: vi.fn(async () => primary),
     createPrimaryAgent: vi.fn(async (payload) => ({ ...primary, ...payload, id: 'created-primary' })),
@@ -330,6 +331,10 @@ describe('agent authoring pages', () => {
           { type: 'system-prompt', mode: 'disabled', block_id: '' },
         ],
         subagents: [],
+        automation: {
+          hook_workflow: { mode: 'inherit', workflow_id: '' },
+          lifecycle_workflow: { mode: 'inherit', workflow_id: '' },
+        },
       },
     })
     wrapper.unmount()

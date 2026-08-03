@@ -27,4 +27,7 @@ Deep Agents/LangGraph 管理。
 
 保存时服务端检查必选项、UUID、组件结构、实体引用、同父路由名冲突、可静态确定的工具名冲突和完整
 Subagent 组合。
+
+`automation` 可分别引用零或一个事件工作流、零或一个定时工作流。两者不属于 `capability_refs`；事件工作流
+可在构造前修改 Primary 自己的消息副本，定时工作流只在本次请求生命周期运行。
 磁盘资源、Python import 和 Provider 连接在真实请求中再次检查。配置变更只影响之后开始的请求。

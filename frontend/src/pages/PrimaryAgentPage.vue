@@ -3,6 +3,7 @@ import { LteAlert, LteButton } from '@adminlte/vue'
 import { computed, inject, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
+import type { SavedAutomationWorkflow } from '@/api'
 
 import PageShell from '@/components/PageShell.vue'
 import RecordPicker from '@/components/RecordPicker.vue'
@@ -47,6 +48,8 @@ const manifests = ref<CapabilityManifest[]>([])
 const blocks = ref<Record<string, StoredBlock[]>>({})
 const profiles = ref<PrimaryAgentProfile[]>([])
 const subagentProfiles = ref<SubagentProfile[]>([])
+const hookWorkflows = ref<SavedAutomationWorkflow[]>([])
+const lifecycleWorkflows = ref<SavedAutomationWorkflow[]>([])
 const selectedProfileId = ref('')
 const form = ref(blankPrimaryAgent())
 let profileLoadSequence = 0
@@ -185,14 +188,18 @@ async function loadWorkspace(): Promise<void> {
   }
   loading.value = true
   try {
-    const [catalog, primaryItems, subagentItems] = await Promise.all([
+    const [catalog, primaryItems, subagentItems, hooks, lifecycles] = await Promise.all([
       service.value.getCatalog(),
       service.value.listPrimaryAgents(),
       service.value.listSubagents(),
+      service.value.listAutomationWorkflows('hook-workflow'),
+      service.value.listAutomationWorkflows('lifecycle-workflow'),
     ])
     manifests.value = [...catalog.block_types].sort((left, right) => left.order - right.order)
     profiles.value = primaryItems.map(normalizePrimaryAgent)
     subagentProfiles.value = subagentItems
+    hookWorkflows.value = hooks
+    lifecycleWorkflows.value = lifecycles
     const entries = await Promise.all(manifests.value.map(async (manifest) => [
       manifest.type,
       await service.value?.listBlocks(manifest.type) ?? [],
@@ -293,6 +300,45 @@ watch(
                     {{ block.name }}
                   </option>
                 </select>
+                </div>
+              </section>
+            </div>
+          </div>
+        </section>
+
+        <section class="mb-3" :aria-label="t('agents.automation.title')">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <section class="card h-100">
+                <header class="card-header">
+                  <label class="card-title mb-0" for="primary-hook-workflow">
+                    {{ t('automation.hook.title') }}
+                  </label>
+                </header>
+                <div class="card-body">
+                  <select id="primary-hook-workflow" v-model="form.automation.hook_workflow_id" class="form-select">
+                    <option value="">{{ t('agents.capability.notAttached') }}</option>
+                    <option v-for="workflow in hookWorkflows" :key="workflow.id" :value="workflow.id">
+                      {{ workflow.name }}
+                    </option>
+                  </select>
+                </div>
+              </section>
+            </div>
+            <div class="col-md-6">
+              <section class="card h-100">
+                <header class="card-header">
+                  <label class="card-title mb-0" for="primary-lifecycle-workflow">
+                    {{ t('automation.lifecycle.title') }}
+                  </label>
+                </header>
+                <div class="card-body">
+                  <select id="primary-lifecycle-workflow" v-model="form.automation.lifecycle_workflow_id" class="form-select">
+                    <option value="">{{ t('agents.capability.notAttached') }}</option>
+                    <option v-for="workflow in lifecycleWorkflows" :key="workflow.id" :value="workflow.id">
+                      {{ workflow.name }}
+                    </option>
+                  </select>
                 </div>
               </section>
             </div>

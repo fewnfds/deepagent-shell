@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from agent_shell.api.routes import build_router
 from agent_shell.api.agent_configs import build_agent_config_router
 from agent_shell.api.agent_sessions import build_agent_session_router
+from agent_shell.api.automation import build_automation_router
 from agent_shell.api.errors import localized_error_detail
 from agent_shell.api.system import build_system_router
 from agent_shell.api.api_server import ApiServerEventHub, build_api_server_router
@@ -38,6 +39,7 @@ from agent_shell.security import (
     validate_api_key_policy,
 )
 from agent_shell.storage.agent_configs import AgentConfigStore
+from agent_shell.storage.automation import AutomationStore
 from agent_shell.storage.agent_sessions import AgentSessionStore
 from agent_shell.storage.api_server import ApiServerStore
 from agent_shell.storage.blocks import BlockStore
@@ -48,6 +50,7 @@ from agent_shell.storage.runtime_diagnostics import RuntimeDiagnosticStore
 from agent_shell.storage.system_log_settings import MIB_BYTES, SystemLogSettingsStore
 from agent_shell.storage.event_feed import EventFeedStore
 from agent_shell.validation.service import ConfigurationValidationService
+from agent_shell.automation.validation import AutomationValidationService
 from agent_shell.file_manager import FileManagerService
 from agent_shell.system_settings import SystemSettingsService
 from agent_shell.storage.permissions import secure_directory, secure_file
@@ -77,6 +80,7 @@ def create_app(
         environment_permissions = (environment_permission,)
     custom_tools_dir = settings.resolved_custom_tools_dir()
     custom_middlewares_dir = settings.resolved_custom_middlewares_dir()
+    automation_scripts_dir = settings.resolved_automation_scripts_dir()
     skills_dir = settings.resolved_skills_dir()
 
     runtime_dir = settings.resolved_runtime_dir()
@@ -101,9 +105,15 @@ def create_app(
     runtime_diagnostic_store = RuntimeDiagnosticStore(database, history_retention)
     block_store = BlockStore(database, event_logger)
     config_store = AgentConfigStore(database, event_logger)
+    automation_store = AutomationStore(database, event_logger)
+    automation_validation = AutomationValidationService(
+        scripts_dir=automation_scripts_dir
+    )
     configuration_validation = ConfigurationValidationService(
         block_store,
         config_store,
+        automation_store,
+        automation_validation,
         custom_tools_dir=custom_tools_dir,
     )
     api_server_store = ApiServerStore(database, event_logger, history_retention)
@@ -149,6 +159,7 @@ def create_app(
             "skills": skills_dir,
             "custom_tools": custom_tools_dir,
             "custom_middlewares": custom_middlewares_dir,
+            "automation_scripts": automation_scripts_dir,
         },
         settings.resolved_runtime_dir() / "tmp",
     )
@@ -156,6 +167,8 @@ def create_app(
     agent_runtime = RequestSnapshotRuntime(
         database,
         custom_tools_dir=custom_tools_dir,
+        automation_scripts_dir=automation_scripts_dir,
+        runtime_dir=runtime_dir,
         skills_dir=skills_dir,
         diagnostics=runtime_diagnostics,
         provider_http_clients=provider_http_clients,
@@ -414,6 +427,14 @@ def create_app(
         )
     )
     app.include_router(build_validation_router(configuration_validation))
+    app.include_router(
+        build_automation_router(
+            automation_store,
+            config_store,
+            automation_validation,
+            automation_scripts_dir,
+        )
+    )
     app.include_router(build_agent_session_router(agent_session_store))
     app.include_router(build_runtime_diagnostics_router(runtime_diagnostics))
     app.include_router(

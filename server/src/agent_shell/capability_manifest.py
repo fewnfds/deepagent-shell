@@ -99,12 +99,7 @@ CAPABILITY_MANIFESTS = (
         subagent_overrideable=True, required=False, subagent_policy="inherit",
     ),
     CapabilityManifest(
-        "prompt-preset", "prompt-preset", "提示词预设", 10,
-        "messages-square", "prompt_preset",
-        subagent_overrideable=True, required=False, subagent_policy="inherit",
-    ),
-    CapabilityManifest(
-        "subagent", "delegation", "委派能力", 11,
+        "subagent", "delegation", "委派能力", 10,
         "users", "subagent",
         subagent_overrideable=True, required=False, subagent_policy="inherit",
     ),

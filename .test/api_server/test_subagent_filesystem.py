@@ -123,7 +123,10 @@ def test_subagent_runs_without_project_filesystem(
         (message.type, message.text)
         for message in ChildModel.seen_messages[0]
         if message.type != "system"
-    ] == [("human", "Complete the isolated task.")]
+    ] == [
+        ("human", "Delegate this."),
+        ("human", "Complete the isolated task."),
+    ]
 
 
 def test_unconfigured_filesystem_keeps_skill_reads_agent_scoped(

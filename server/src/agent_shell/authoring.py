@@ -13,7 +13,6 @@ from agent_shell.contracts import (
     OUTPUT_COMMON_TEMPLATE_VARIABLES,
     OUTPUT_EVENT_NAMES,
     OUTPUT_EVENT_TEMPLATE_VARIABLES,
-    PROMPT_PRESET_TEMPLATE_FIELDS,
     SKILL_PROMPT_FIELDS,
 )
 
@@ -413,11 +412,6 @@ _EDITOR_DEFAULTS = {
             "max_retries": ExceptionRetryBlock.model_fields["max_retries"].default,
             "retry_on": list(DEFAULT_EXCEPTION_RETRY_CONDITIONS),
         },
-    },
-    "prompt_preset": {
-        "template_variables": [
-            f"{{{field}}}" for field in PROMPT_PRESET_TEMPLATE_FIELDS
-        ],
     },
 }
 

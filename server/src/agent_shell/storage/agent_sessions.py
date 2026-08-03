@@ -116,8 +116,6 @@ def _timeline_event_summary(
             "agent_name",
             "tool_call_id",
             "message_count",
-            "matched_tag_count",
-            "startup_message_count",
         ):
             summary_data[key] = event_data.get(key, "" if key.endswith("id") else 0)
     elif kind == "model_response":

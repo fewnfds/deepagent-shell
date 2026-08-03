@@ -234,6 +234,7 @@
         "name": "validation-sidebar",
         "paths": [
           "src/pages/ApiServerSettingsPage.vue",
+          "src/pages/AutomationPage.vue",
           "src/pages/ComponentsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/PrimaryAgentPage.vue",
@@ -267,7 +268,7 @@
   "icons": {
     "cssImportPaths": ["src/main.ts"],
     "allowed": [
-      "archive", "arrow-clockwise", "book", "boxes", "check-circle", "check-lg", "chevron-left", "circle",
+      "archive", "arrow-clockwise", "arrow-down", "arrow-up", "book", "boxes", "check-circle", "check-lg", "chevron-left", "circle",
       "chevron-right", "circle-half", "copy", "download", "exclamation-triangle", "eye", "eye-slash",
       "file-earmark", "folder", "gear", "hdd-network", "house", "info-circle", "key", "list", "moon-fill", "pencil",
       "play-fill", "plus-lg", "robot", "search", "sliders", "stop-fill", "sun-fill", "three-dots",
@@ -326,6 +327,7 @@
         "callers": [
           "src/pages/AgentSessionsPage.vue",
           "src/pages/ApiServerSettingsPage.vue",
+          "src/pages/AutomationPage.vue",
           "src/pages/ComponentsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/EventFeedPage.vue",
@@ -343,6 +345,7 @@
         "kind": "domain-composition",
         "reason": "Owns localized backend field labels, technical field names and contextual hints without wrapping controls",
         "callers": [
+          "src/components/AutomationNodeList.vue",
           "src/components/RecordPicker.vue",
           "src/components/SubagentReferencesEditor.vue",
           "src/editors/CustomMiddlewareEditor.vue",
@@ -350,10 +353,17 @@
           "src/editors/FilesystemEditor.vue",
           "src/editors/ModelEditor.vue",
           "src/editors/OutputModeEditor.vue",
-          "src/editors/PromptPresetEditor.vue",
+          "src/pages/AutomationPage.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/SubagentPage.vue"
         ]
+      },
+      {
+        "name": "AutomationNodeList",
+        "path": "src/components/AutomationNodeList.vue",
+        "kind": "domain-composition",
+        "reason": "Owns ordered custom-script node editing shared by event and timed workflows",
+        "callers": ["src/pages/AutomationPage.vue"]
       },
       {
         "name": "SubagentReferencesEditor",
@@ -371,6 +381,7 @@
         "kind": "domain-composition",
         "reason": "Owns record selection, identity and create/copy/delete interaction",
         "callers": [
+          "src/pages/AutomationPage.vue",
           "src/pages/ComponentsPage.vue",
           "src/pages/PrimaryAgentPage.vue",
           "src/pages/SubagentPage.vue"
@@ -383,6 +394,7 @@
         "reason": "Owns the stable inline or stacked child-page and category button navigation semantics",
         "callers": [
           "src/components/PageShell.vue",
+          "src/pages/AutomationPage.vue",
           "src/pages/ComponentsPage.vue",
           "src/pages/ConfigLibraryPage.vue"
         ]
@@ -394,6 +406,7 @@
         "reason": "Owns presentation of the backend-authoritative validation states and issues",
         "callers": [
           "src/pages/ApiServerSettingsPage.vue",
+          "src/pages/AutomationPage.vue",
           "src/pages/ComponentsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/PrimaryAgentPage.vue",

@@ -21,9 +21,12 @@ def test_real_provider_finish_reason_reaches_both_api_transports(
         async def stream_text(self):
             yield "partial answer"
 
+    async def start_incomplete(*_args, **_kwargs):
+        return IncompleteExecution()
+
     monkeypatch.setattr(
         "agent_shell.runtime.agent_runtime.AgentRuntime.start",
-        lambda *_args, **_kwargs: IncompleteExecution(),
+        start_incomplete,
     )
     with make_client(tmp_path, monkeypatch) as client:
         primary = create_primary(client)
@@ -287,9 +290,13 @@ def test_closing_non_stream_request_cancels_execution_and_records_disconnect(
     with make_client(tmp_path, monkeypatch) as client:
         primary = create_primary(client)
         execution = WaitingExecution()
+
+        async def start_waiting(*_args, **_kwargs):
+            return execution
+
         monkeypatch.setattr(
             "agent_shell.runtime.agent_runtime.AgentRuntime.start",
-            lambda *_args, **_kwargs: execution,
+            start_waiting,
         )
         response = asyncio.run(close_after_body(client, primary["name"], execution))
         session_id = response.headers["x-agent-session-id"]
@@ -538,6 +545,29 @@ def test_global_interception_captures_final_moved_prompt_tools_and_raw_request(
             ),
         )
         primary = create_primary(client)
+        write_automation_script(
+            tmp_path,
+            "capture-message-rewrite",
+            "async def run(ctx):\n"
+            "    tag = str(ctx.config.get('tag', ''))\n"
+            "    replacement = str(ctx.config.get('replacement', ''))\n"
+            "    for message in ctx.messages:\n"
+            "        if message.get('role') == 'user':\n"
+            "            message['content'] = message['content'].replace(tag, replacement)\n",
+        )
+        workflow = create_hook_workflow(
+            client,
+            "Captured message preparation",
+            request_prepare=[
+                {
+                    "script_id": "capture-message-rewrite",
+                    "config": {
+                        "tag": "|||agent_prompt|||",
+                        "replacement": "PRESET",
+                    },
+                }
+            ],
+        )
         prompt = client.post(
             "/api/blocks/system-prompt",
             json={"name": "Captured prompt", "system_prompt": "PRIMARY"},
@@ -559,16 +589,6 @@ def test_global_interception_captures_final_moved_prompt_tools_and_raw_request(
             "/api/blocks/output-mode",
             json=output_mode_payload("Interception timeline"),
         ).json()
-        preset = client.post(
-            "/api/blocks/prompt-preset",
-            json={
-                "name": "Captured prompt preset",
-                "tag_replacements": [
-                    {"tag": "|||agent_prompt|||", "replacement": "PRESET"}
-                ],
-                "startup_messages": [],
-            },
-        ).json()
         updated = client.put(
             f"/api/primary-agents/{primary['id']}",
             json={
@@ -583,9 +603,12 @@ def test_global_interception_captures_final_moved_prompt_tools_and_raw_request(
                     {"type": "todo-list", "block_id": todo["id"]},
                     {"type": "custom-middleware", "block_id": custom["id"]},
                     {"type": "output-mode", "block_id": output_mode["id"]},
-                    {"type": "prompt-preset", "block_id": preset["id"]},
                 ],
                 "subagents": [],
+                "automation": {
+                    "hook_workflow_id": workflow["id"],
+                    "lifecycle_workflow_id": "",
+                },
             },
         )
         assert updated.status_code == 200, updated.text

@@ -44,10 +44,8 @@ SKILL_PROMPT_FIELDS = (
     "skills_load_warnings",
     "skills_list",
 )
+from agent_shell.automation.contracts import PrimaryAutomation, SubagentAutomation
 TASK_DESCRIPTION_FIELDS = ("available_agents",)
-PROMPT_PRESET_TEMPLATE_FIELDS = (
-    "task",
-)
 
 
 BlockName = Annotated[str, Field(min_length=1, max_length=120)]
@@ -775,89 +773,6 @@ class TodoListBlock(StrictBlock):
     tool_description_override: PromptOverrideText | None = None
 
 
-PromptPresetTag = Annotated[
-    str,
-    StringConstraints(strip_whitespace=False),
-    Field(min_length=1, max_length=4096),
-]
-PromptPresetText = Annotated[
-    str,
-    StringConstraints(strip_whitespace=False),
-    Field(max_length=100_000),
-]
-PromptPresetMessageName = Annotated[
-    str,
-    StringConstraints(strip_whitespace=True),
-    Field(min_length=1, max_length=120),
-]
-
-
-class PromptTagReplacement(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
-
-    tag: PromptPresetTag
-    replacement: PromptPresetText = ""
-
-    @field_validator("tag")
-    @classmethod
-    def validate_tag(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("tag must contain at least one visible character")
-        if "\n" in value or "\r" in value:
-            raise ValueError("tag must be a single line")
-        return value
-
-
-class PromptStartupMessage(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
-
-    role: Literal["user", "assistant"]
-    content_template: Annotated[
-        str,
-        StringConstraints(strip_whitespace=False),
-        Field(min_length=1, max_length=100_000),
-    ]
-    name: PromptPresetMessageName | None = None
-
-    @field_validator("content_template")
-    @classmethod
-    def validate_content_template(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("startup message content must contain visible text")
-        return _validate_format_template(
-            value,
-            allowed_fields=PROMPT_PRESET_TEMPLATE_FIELDS,
-            required_fields=(),
-            label="Prompt Preset startup message",
-        )
-
-
-class PromptPresetBlock(StrictBlock):
-    tag_replacements: list[PromptTagReplacement] = Field(
-        default_factory=list, max_length=100
-    )
-    startup_messages: list[PromptStartupMessage] = Field(
-        default_factory=list, max_length=20
-    )
-
-    @model_validator(mode="after")
-    def validate_preset(self) -> "PromptPresetBlock":
-        if not self.tag_replacements and not self.startup_messages:
-            raise ValueError(
-                "Prompt Preset requires at least one tag replacement or startup message"
-            )
-        tags = [item.tag for item in self.tag_replacements]
-        if len(tags) != len(set(tags)):
-            raise ValueError("Prompt Preset tags must be unique")
-        for index, left in enumerate(tags):
-            for right in tags[index + 1 :]:
-                if left in right or right in left:
-                    raise ValueError(
-                        "Prompt Preset tags must not contain or overlap each other"
-                    )
-        return self
-
-
 class SubagentReference(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -882,6 +797,7 @@ class CapabilityReference(BaseModel):
 class PrimaryAgentProfile(StrictBlock):
     capability_refs: list[CapabilityReference] = Field(default_factory=list, max_length=100)
     subagents: list[SubagentReference] = Field(default_factory=list, max_length=100)
+    automation: PrimaryAutomation = Field(default_factory=PrimaryAutomation)
 
     @model_validator(mode="after")
     def validate_profile(self) -> "PrimaryAgentProfile":
@@ -925,6 +841,7 @@ class SubagentSettings(BaseModel):
         default_factory=list, max_length=100
     )
     subagents: list[SubagentReference] = Field(default_factory=list, max_length=100)
+    automation: SubagentAutomation = Field(default_factory=SubagentAutomation)
 
     @model_validator(mode="after")
     def validate_overrides(self) -> "SubagentSettings":
@@ -963,7 +880,6 @@ BLOCK_MODELS: dict[str, type[StrictBlock]] = {
     "output-mode": OutputModeBlock,
     "exception-retry": ExceptionRetryBlock,
     "subagent": SubagentBlock,
-    "prompt-preset": PromptPresetBlock,
 }
 
 validate_capability_manifests(CAPABILITY_MANIFESTS, BLOCK_MODELS)

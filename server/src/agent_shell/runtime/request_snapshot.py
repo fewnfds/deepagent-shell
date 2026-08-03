@@ -14,9 +14,11 @@ from agent_shell.runtime.agent_builder import AgentBuilder
 from agent_shell.runtime.agent_runtime import AgentExecution, AgentRuntime
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.storage.agent_configs import AgentConfigStore
+from agent_shell.storage.automation import AutomationStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.database import SQLiteDatabase
 from agent_shell.storage.schema import SCHEMA_SQL
+from agent_shell.automation.validation import AutomationValidationService
 from agent_shell.validation.service import ConfigurationValidationService
 
 
@@ -28,6 +30,8 @@ class _SnapshotDatabase:
         ("blocks", ("id", "block_type", "name", "payload")),
         ("primary_agents", ("id", "name", "payload")),
         ("subagents", ("id", "component_name", "payload")),
+        ("hook_workflows", ("id", "name", "payload")),
+        ("lifecycle_workflows", ("id", "name", "payload")),
     )
 
     def __init__(self, source: SQLiteDatabase) -> None:
@@ -86,14 +90,14 @@ class RequestRuntimeSnapshot:
     def primary_by_name(self, name: str) -> dict[str, Any] | None:
         return self._configs.get_item_by_name("primary_agents", name)
 
-    def start_agent(
+    async def start_agent(
         self,
         primary_id: str,
         raw_messages: object,
         **kwargs: Any,
     ) -> AgentExecution:
         try:
-            return self._runtime.start(primary_id, raw_messages, **kwargs)
+            return await self._runtime.start(primary_id, raw_messages, **kwargs)
         finally:
             # Agent construction has materialized every database-backed dependency.
             # Closing here makes any accidental lazy configuration read fail.
@@ -108,12 +112,16 @@ class RequestSnapshotRuntime:
         database: SQLiteDatabase,
         *,
         custom_tools_dir: Path,
+        automation_scripts_dir: Path,
+        runtime_dir: Path,
         skills_dir: Path,
         diagnostics: RuntimeDiagnostics,
         provider_http_clients: ProviderHttpClients,
     ) -> None:
         self._database = database
         self._custom_tools_dir = custom_tools_dir
+        self._automation_scripts_dir = automation_scripts_dir
+        self._runtime_dir = runtime_dir
         self._skills_dir = skills_dir
         self._diagnostics = diagnostics
         self._provider_http_clients = provider_http_clients
@@ -123,16 +131,24 @@ class RequestSnapshotRuntime:
         try:
             blocks = BlockStore(database)  # type: ignore[arg-type]
             configs = AgentConfigStore(database)  # type: ignore[arg-type]
+            automation = AutomationStore(database)  # type: ignore[arg-type]
             secrets = ProviderSecretResolver(database)  # type: ignore[arg-type]
+            automation_validation = AutomationValidationService(
+                scripts_dir=self._automation_scripts_dir
+            )
             validation = ConfigurationValidationService(
                 blocks,
                 configs,
+                automation,
+                automation_validation,
                 custom_tools_dir=self._custom_tools_dir,
             )
             runtime = AgentRuntime(
                 AgentBuilder(
                     secrets,
                     custom_tools_dir=self._custom_tools_dir,
+                    automation_scripts_dir=self._automation_scripts_dir,
+                    runtime_dir=self._runtime_dir,
                     skills_dir=self._skills_dir,
                     validation=validation,
                     provider_http_clients=self._provider_http_clients,

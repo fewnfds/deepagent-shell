@@ -146,16 +146,6 @@ def test_selected_custom_tool_can_run_in_two_consecutive_model_steps(
             "/api/blocks/system-prompt",
             json={"name": "Loop prompt", "system_prompt": "AGENT LOOP"},
         ).json()
-        preset = client.post(
-            "/api/blocks/prompt-preset",
-            json={
-                "name": "Loop prompt preset",
-                "tag_replacements": [
-                    {"tag": "|||agent_prompt|||", "replacement": ""}
-                ],
-                "startup_messages": [],
-            },
-        ).json()
         updated = client.put(
             f"/api/primary-agents/{primary['id']}",
             json={
@@ -164,7 +154,6 @@ def test_selected_custom_tool_can_run_in_two_consecutive_model_steps(
                     *primary["capability_refs"],
                     {"type": "custom-tool", "block_id": tools["id"]},
                     {"type": "system-prompt", "block_id": prompt["id"]},
-                    {"type": "prompt-preset", "block_id": preset["id"]},
                 ],
                 "subagents": [],
             },
@@ -178,7 +167,7 @@ def test_selected_custom_tool_can_run_in_two_consecutive_model_steps(
                     {"role": "system", "content": "CLIENT HEAD"},
                     {
                         "role": "user",
-                        "content": "before|||agent_prompt|||Use ping twice.",
+                        "content": "Use ping twice.",
                     },
                 ],
             },
@@ -193,7 +182,6 @@ def test_selected_custom_tool_can_run_in_two_consecutive_model_steps(
         assert system_messages[1] == "CLIENT HEAD"
         assert "Filesystem Tools" not in system_messages[0]
         assert sum(item.text == "AGENT LOOP" for item in seen) == 1
-        assert "|||agent_prompt|||" not in "".join(item.text for item in seen)
     first_result = next(
         item
         for item in ToolCallingFakeModel.seen_messages[1]

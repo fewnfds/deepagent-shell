@@ -21,7 +21,6 @@ PUBLIC_TYPES = (
     "custom-middleware",
     "output-mode",
     "exception-retry",
-    "prompt-preset",
     "subagent",
 )
 
@@ -174,19 +173,6 @@ def block_cases(tmp_path: Path) -> list[tuple[str, dict]]:
                 "name": "Complex task planning",
                 "system_prompt_override": "Track complex work and update each completed step.",
                 "tool_description_override": None,
-            },
-        ),
-        (
-            "prompt-preset",
-            {
-                "name": "Writing startup",
-                "tag_replacements": [],
-                "startup_messages": [
-                    {
-                        "role": "user",
-                        "content_template": "Begin work.",
-                    }
-                ],
             },
         ),
     ]
