@@ -269,7 +269,7 @@ describe('system pages', () => {
 
     const breadcrumb = wrapper.get('[data-testid="file-manager-breadcrumb"]')
     expect(breadcrumb.text()).toContain('fileManager.title')
-    expect(breadcrumb.text()).toContain('fileManager.scopes.files')
+    expect(breadcrumb.text()).toContain('files')
     expect(breadcrumb.text()).toContain('notes')
     expect(breadcrumb.findAll('button')).toHaveLength(0)
     expect(breadcrumb.findAll('a')).toHaveLength(2)

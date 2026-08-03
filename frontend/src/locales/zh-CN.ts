@@ -219,12 +219,6 @@ export const zhCN = {
     empty: '当前文件夹为空。',
     emptyScopes: '没有可访问的根目录。',
     requestFailed: '文件操作失败',
-    scopes: {
-      files: '用户文件',
-      skills: 'Skill',
-      custom_tools: '自定义工具',
-      custom_middlewares: '自定义 Middleware',
-    },
     columns: {
       name: '名称',
       kind: '类型',

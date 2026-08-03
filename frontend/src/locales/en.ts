@@ -221,12 +221,6 @@ export const en: MessageSchema = {
     empty: 'This folder is empty.',
     emptyScopes: 'No file roots are available.',
     requestFailed: 'File operation failed',
-    scopes: {
-      files: 'User files',
-      skills: 'Skills',
-      custom_tools: 'Custom tools',
-      custom_middlewares: 'Custom Middleware',
-    },
     columns: {
       name: 'Name',
       kind: 'Type',

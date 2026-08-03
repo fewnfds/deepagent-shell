@@ -100,7 +100,7 @@ let editorRequestSequence = 0
 const breadcrumbs = computed(() => {
   const result: Array<{ label: string, path: string | null }> = [
     { label: t('fileManager.title'), path: null },
-    { label: t(`fileManager.scopes.${scope.value}`), path: '' },
+    { label: scope.value, path: '' },
   ]
   const parts = directory.value.path ? directory.value.path.split('/') : []
   parts.forEach((part, index) => {
@@ -541,7 +541,7 @@ onMounted(() => { void loadScopes() })
                 <td>
                   <a href="#" class="d-flex align-items-center gap-2" @click.prevent="openScope(item)">
                     <i class="bi bi-folder" aria-hidden="true" />
-                    {{ t(`fileManager.scopes.${item}`) }}
+                    {{ item }}
                   </a>
                 </td>
                 <td>{{ t('fileManager.kinds.directory') }}</td>
