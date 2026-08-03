@@ -38,6 +38,10 @@ git pull --ff-only
 
 依赖和前端使用输入指纹刷新。普通 Python、文档或配置修改不会无条件重建整个 runtime。
 
+自动化插件的 `requirements.txt` 不进入项目 `pyproject.toml`。Windows 启动器在核心 runtime 准备完成后，
+单独按当前实例的插件需求指纹生成 `runtime/automation_plugins/site-packages`；输入未变化时复用。插件层只能
+增加与核心锁兼容的二进制 wheel，不能修改 `runtime/app`。
+
 ## 前端 Debug
 
 只有需要 HMR 时使用隔离启动器。它分配临时 loopback 端口和临时 data，不读取正常实例数据：

@@ -3,14 +3,16 @@
 【自动化】让实例维护者把自定义 Python 脚本按顺序挂到 Primary 或 Subagent。它运行在 Agent 构造前和请求
 生命周期外围，不是 LangChain Middleware，也不会包裹 model call 或 tool call。
 
-## 1. 创建脚本
+## 1. 创建插件
 
-在【系统 / 文件管理 / 自动化脚本】下创建一个目录。目录名必须与脚本 ID 相同：
+每个自动化脚本目录就是一个插件包。在【系统 / 文件管理 / 自动化脚本】下创建目录，目录名必须与脚本 ID
+相同：
 
 ```text
 automation_scripts/add-context/
   script.json
   main.py
+  requirements.txt  # 可选
 ```
 
 `script.json`：
@@ -35,10 +37,46 @@ async def run(ctx) -> None:
     })
 ```
 
-扫描资源时只静态检查文件，不执行 `main.py`。脚本被有效 Agent 装配使用时才会 import；代码可引用服务当前
-Python 环境已经安装的模块，平台不为脚本安装依赖或创建虚拟环境。
+扫描资源时只静态检查文件，不执行 `main.py`。插件被有效 Agent 装配使用时才会 import。插件可包含辅助
+Python 文件和资产；`main.py` 使用相对导入读取同目录模块：
 
-## 2. 创建工作流
+```python
+from .image_helpers import read_size
+```
+
+## 2. Python 依赖（Windows）
+
+Windows 源码 Clone 和 Windows ZIP 支持可选 `requirements.txt`。每行声明一个普通 PyPI requirement：
+
+```text
+Pillow>=11,<13
+openpyxl==3.1.5
+```
+
+插件依赖安装到 `runtime/automation_plugins/site-packages/`，Agent Shell 启动时把该目录追加到同一个 Python
+解释器。因此 `main.py` 可以直接 import 第三方包并继续使用完整 `ctx`，不创建独立虚拟环境。核心依赖路径
+始终优先，插件不能升级或降级 Agent Shell 已锁定的包。
+
+双击 `start_server.bat` 时，启动器根据所有有效插件的 requirements 指纹决定是否重建共享依赖层。首次安装
+或 requirements 变化需要访问 PyPI；只接受当前 Windows/Python 可用的二进制 wheel。解析或安装失败不会
+修改核心 runtime，管理台会把相关插件标记为依赖失败。修改 `requirements.txt` 后必须停止并重新启动 Agent
+Shell，运行中的服务不会热安装。
+
+首版 requirements 规则：
+
+- 允许普通 PEP 508 包名、版本、extras、environment marker、UTF-8 注释和空行；
+- 最多 100 个包，文件最大 64 KiB，同一个包只能声明一次；
+- 不接受 `-r`、`--index-url`、editable、URL、VCS、本地路径或续行；
+- 固定使用公开 PyPI，不从 requirements 读取索引地址或凭据；
+- 不支持源码构建、系统软件和系统库。FFmpeg、Tesseract、LibreOffice 等不属于 Python wheel 依赖。
+
+不要在 `main.py` 中调用 pip 或 uv。插件目录和 requirements 都在 `data/` 中持久化；实际安装结果属于
+可重建 `runtime/`，不会修改 Git 文件，源码 Clone 仍使用 `git pull --ff-only` 更新。
+
+Docker 当前不准备动态插件依赖。带非空 `requirements.txt` 的插件在 Docker 中会显示为依赖未就绪，不能
+被工作流装配；无第三方依赖的插件行为不变。
+
+## 3. 创建工作流
 
 在【自动化 / 事件工作流】或【定时工作流】新建配置。节点按页面顺序串行执行，每个节点选择脚本并填写一个
 JSON object 作为 `ctx.config`。
@@ -57,7 +95,7 @@ JSON object 作为 `ctx.config`。
 事件工作流至少要有一个节点，定时工作流至少要有一个节点。v1 没有 DAG、条件表达式、cron、自动重试或回滚；
 复杂分支直接写在脚本中。
 
-## 3. 装配 Agent
+## 4. 装配 Agent
 
 Primary 页面可分别选择一个事件工作流和一个定时工作流。Subagent 页面分别使用继承、替换或关闭：
 
@@ -110,8 +148,9 @@ agent 变量只属于当前 Primary/Subagent 实体；workflow 变量属于当�
 
 ## 安全与冲突
 
-自动化脚本以 Agent Shell 服务进程的完整权限执行，没有 sandbox。它可以访问网络、文件、环境和进程，也可能
-删除或泄露实例与操作系统数据。只有实例维护者能管理这些资源，并应在运行前审查代码。
+自动化插件及其第三方依赖以 Agent Shell 服务进程的完整权限执行，没有 sandbox。它们可以访问网络、文件、
+环境和进程，也可能删除或泄露实例与操作系统数据。只有实例维护者能管理这些资源，并应在运行前审查代码、
+requirements、包名和版本来源。
 
 平台不协调脚本冲突：多个 owner 或工作流同时修改同一个文件或变量时，结果由真实执行时序决定。持久 Skill
 修改也不备份、不回滚、不加锁。

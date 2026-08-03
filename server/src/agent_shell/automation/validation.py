@@ -13,8 +13,9 @@ from agent_shell.validation.models import ValidationIssue, ValidationReport
 
 
 class AutomationValidationService:
-    def __init__(self, *, scripts_dir: Path) -> None:
+    def __init__(self, *, scripts_dir: Path, runtime_root: Path | None = None) -> None:
         self._scripts_dir = scripts_dir
+        self._runtime_root = runtime_root
 
     def validate_workflow(
         self,
@@ -67,7 +68,11 @@ class AutomationValidationService:
         for node, path in nodes:
             script_id = str(node["script_id"])
             try:
-                resolved = resolve_automation_script(script_id, self._scripts_dir)
+                resolved = resolve_automation_script(
+                    script_id,
+                    self._scripts_dir,
+                    runtime_root=self._runtime_root,
+                )
             except ResourceScanError as exc:
                 issues.append(
                     self._script_issue(
@@ -104,6 +109,29 @@ class AutomationValidationService:
                         "The automation script does not support this workflow type.",
                     )
                 )
+                continue
+            dependency_status = str(metadata["dependency_status"])
+            if dependency_status != "ready":
+                code = (
+                    "automation.script_dependencies_failed"
+                    if dependency_status == "failed"
+                    else "automation.script_dependencies_restart_required"
+                )
+                message = (
+                    "The automation plugin dependencies could not be prepared."
+                    if dependency_status == "failed"
+                    else "Restart Agent Shell to prepare the automation plugin dependencies."
+                )
+                issues.append(
+                    self._script_issue(
+                        code,
+                        owner_id,
+                        str(validated["name"]),
+                        path,
+                        script_id,
+                        message,
+                    )
+                )
         return ValidationReport(stage=stage, issues=tuple(issues)), validated
 
     @staticmethod
@@ -119,6 +147,10 @@ class AutomationValidationService:
             "automation.script_invalid": "scriptInvalid",
             "automation.script_not_found": "scriptNotFound",
             "automation.script_trigger_unsupported": "scriptTriggerUnsupported",
+            "automation.script_dependencies_failed": "scriptDependenciesFailed",
+            "automation.script_dependencies_restart_required": (
+                "scriptDependenciesRestartRequired"
+            ),
         }
         return ValidationIssue(
             code=code,

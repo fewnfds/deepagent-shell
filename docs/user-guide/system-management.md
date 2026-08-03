@@ -16,6 +16,10 @@ data/
 它包含管理密码、API Key、Provider credential、配置、用户文件和历史，应作为敏感数据整体备份。
 `runtime/` 只保存可重建运行态。
 
+自动化插件的可选 `requirements.txt` 随插件保存在 `data/resources/automation_scripts/`；Windows 根据这些
+声明生成的共享 Python 依赖层位于 `runtime/automation_plugins/`，不属于备份。恢复或迁移 data 后，在
+Windows 上重新运行 `start_server.bat` 即可准备依赖。
+
 迁移时先完全停止服务或容器，再复制完整 `data/`，包括 SQLite 的 WAL/SHM。外部 filesystem 映射不在
 `data/` 内，需要单独迁移并更新路径。
 

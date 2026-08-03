@@ -97,6 +97,13 @@ if defined PORT_FOUND (
 )
 
 :after_port_prompt
+echo Preparing automation plugin dependencies...
+pushd "%SCRIPT_DIR%"
+"!PYTHON_EXE!" !PYTHON_FLAGS! -m agent_shell.automation.dependencies --home "%SCRIPT_DIR%."
+set "PLUGIN_DEPENDENCY_EXIT=%ERRORLEVEL%"
+popd
+if not "!PLUGIN_DEPENDENCY_EXIT!"=="0" goto plugin_dependencies_failed
+
 echo Starting Agent Shell...
 echo   !MANAGEMENT_URL!
 echo.
@@ -107,6 +114,13 @@ popd
 
 if not "%EXIT_CODE%"=="0" pause
 goto end
+
+:plugin_dependencies_failed
+echo.
+echo Automation plugin dependencies could not be prepared safely.
+echo The existing Agent Shell runtime was not modified.
+pause
+exit /b 2
 
 :port_kill
 echo Closing PID !OCCUPYING_PID!...

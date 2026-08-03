@@ -956,6 +956,13 @@ export const en: MessageSchema = {
         asyncRunRequired: 'main.py must define exactly one module-level async def run(ctx).',
         runSignatureInvalid: 'The run entrypoint must accept only one positional ctx argument.',
         idDuplicate: 'Automation script ids must be unique.',
+        requirementsLinkUnsupported: 'requirements.txt must be an ordinary file, not a link or reparse point.',
+        requirementsReadFailed: 'requirements.txt could not be read.',
+        requirementsTooLarge: 'requirements.txt may not exceed 64 KiB.',
+        requirementsInvalidEncoding: 'requirements.txt must use UTF-8 encoding.',
+        requirementsInvalid: 'requirements.txt line {line} is not a supported Python package requirement.',
+        requirementsDuplicate: 'requirements.txt may not declare the same Python package more than once.',
+        requirementsTooMany: 'requirements.txt may declare at most 100 Python packages.',
       },
       skill: {
         nameLength: 'The Skill name must contain 1 to {max_length} characters.',
@@ -989,15 +996,21 @@ export const en: MessageSchema = {
       nodes: 'Loop nodes',
     },
     nodes: {
-      add: 'Add script node',
-      script: 'Custom script',
+      add: 'Add plugin node',
+      script: 'Automation plugin',
       config: 'Node config (JSON)',
       moveUp: 'Move up',
       moveDown: 'Move down',
-      empty: 'No script node has been added.',
+      empty: 'No plugin node has been added.',
     },
     scripts: {
       invalid: '{count} automation scripts failed static validation.',
+      dependenciesFailed: '{count} automation plugins failed Python dependency preparation.',
+      dependenciesRestartRequired: 'Restart Agent Shell to prepare Python dependencies for {count} automation plugins.',
+      status: {
+        failed: 'dependency failed',
+        restartRequired: 'restart required',
+      },
     },
     feedback: {
       saved: 'The workflow was saved.',
@@ -1154,6 +1167,8 @@ export const en: MessageSchema = {
         scriptNotFound: 'Automation script {script_id} does not exist.',
         scriptInvalid: 'Automation script {script_id} failed static validation.',
         scriptTriggerUnsupported: 'Automation script {script_id} does not support this workflow type.',
+        scriptDependenciesFailed: 'Python dependencies for automation plugin {script_id} could not be prepared.',
+        scriptDependenciesRestartRequired: 'Restart Agent Shell to prepare Python dependencies for automation plugin {script_id}.',
       },
       storage: {
         credentialMetadataInvalid: 'The saved credential state for this model configuration is damaged.',

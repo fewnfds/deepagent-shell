@@ -12,6 +12,7 @@ from pathlib import Path
 
 import uvicorn
 
+from agent_shell.automation.dependencies import activate_plugin_site
 from agent_shell.app import create_app
 from agent_shell.security import ApiKeyPolicyError, validate_api_key_policy
 from agent_shell.settings import (
@@ -338,6 +339,7 @@ def main(
             file=sys.stderr,
         )
 
+    activate_plugin_site(settings.resolved_runtime_dir())
     app = create_app(settings=settings, serve_frontend=serve_frontend)
     uvicorn.run(
         app,

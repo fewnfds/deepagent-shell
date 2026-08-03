@@ -9,6 +9,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from agent_shell.registries.errors import ResourceScanError
+from agent_shell.automation.dependencies import (
+    dependency_metadata,
+    read_plugin_requirements,
+)
 
 
 class AutomationScriptManifest(BaseModel):
@@ -53,7 +57,11 @@ def _read_text(path: Path, *, label: str) -> str:
         ) from exc
 
 
-def scan_automation_script_folder(folder: Path) -> dict[str, object]:
+def scan_automation_script_folder(
+    folder: Path,
+    *,
+    runtime_root: Path | None = None,
+) -> dict[str, object]:
     if _is_link(folder):
         raise ResourceScanError(
             "resource.error.automationScript.linkUnsupported",
@@ -123,25 +131,33 @@ def scan_automation_script_folder(folder: Path) -> dict[str, object]:
             "resource.error.automationScript.runSignatureInvalid",
             "The run entrypoint must accept exactly one positional ctx argument.",
         )
+    requirements = read_plugin_requirements(folder)
     return {
         **manifest.model_dump(mode="json"),
         "folder": folder.name,
+        **dependency_metadata(manifest.id, requirements, runtime_root),
     }
 
 
 def resolve_automation_script(
     script_id: str,
     directory: Path,
+    *,
+    runtime_root: Path | None = None,
 ) -> tuple[dict[str, object], Path] | None:
     if not script_id or Path(script_id).name != script_id:
         return None
     folder = directory / script_id
     if not folder.is_dir():
         return None
-    return scan_automation_script_folder(folder), folder
+    return scan_automation_script_folder(folder, runtime_root=runtime_root), folder
 
 
-def scan_automation_scripts(directory: Path) -> dict[str, object]:
+def scan_automation_scripts(
+    directory: Path,
+    *,
+    runtime_root: Path | None = None,
+) -> dict[str, object]:
     catalog: list[dict[str, object]] = []
     errors: dict[str, dict[str, object]] = {}
     seen_ids: set[str] = set()
@@ -151,7 +167,7 @@ def scan_automation_scripts(directory: Path) -> dict[str, object]:
         if not folder.is_dir():
             continue
         try:
-            item = scan_automation_script_folder(folder)
+            item = scan_automation_script_folder(folder, runtime_root=runtime_root)
             script_id = str(item["id"])
             if script_id in seen_ids:
                 raise ResourceScanError(
@@ -163,4 +179,3 @@ def scan_automation_scripts(directory: Path) -> dict[str, object]:
         except ResourceScanError as exc:
             errors[folder.name] = exc.as_dict()
     return {"catalog": catalog, "errors": errors}
-

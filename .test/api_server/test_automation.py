@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from agent_shell.automation.dependencies import dependency_state_path
+
 from .support import *
 
 
@@ -106,3 +108,73 @@ def test_repository_validation_rechecks_changed_script_resources(
         and issue["code"] == "automation.script_invalid"
         for issue in issues
     )
+
+
+def test_workflow_requires_current_plugin_dependency_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        write_automation_script(
+            tmp_path,
+            "image-reader",
+            "async def run(ctx):\n    return None\n",
+        )
+        plugin = (
+            tmp_path
+            / "data"
+            / "resources"
+            / "automation_scripts"
+            / "image-reader"
+        )
+        (plugin / "requirements.txt").write_text("Pillow>=11,<13\n", encoding="utf-8")
+        catalog = client.get("/api/automation/scripts").json()["catalog"]
+        pending = client.post(
+            "/api/automation/hook-workflow",
+            json={
+                "name": "Image preparation",
+                "hooks": {
+                    "request_prepare": [
+                        {"script_id": "image-reader", "config": {}}
+                    ]
+                },
+            },
+        )
+        state_path = dependency_state_path(tmp_path / "runtime")
+        state_path.parent.mkdir(parents=True)
+        state_path.write_text(
+            json.dumps(
+                {
+                    "schema": 1,
+                    "platform": "windows-x64",
+                    "status": "ready",
+                    "plugins": {
+                        "image-reader": {
+                            "requirements_fingerprint": catalog[0][
+                                "requirements_fingerprint"
+                            ],
+                            "status": "ready",
+                            "error_code": "",
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        ready = client.post(
+            "/api/automation/hook-workflow",
+            json={
+                "name": "Image preparation",
+                "hooks": {
+                    "request_prepare": [
+                        {"script_id": "image-reader", "config": {}}
+                    ]
+                },
+            },
+        )
+
+    assert catalog[0]["dependency_status"] == "restart_required"
+    assert pending.status_code == 422
+    assert pending.json()["detail"]["validation"]["issues"][0]["code"] == (
+        "automation.script_dependencies_restart_required"
+    )
+    assert ready.status_code == 200, ready.text

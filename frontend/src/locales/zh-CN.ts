@@ -954,6 +954,13 @@ export const zhCN = {
         asyncRunRequired: 'main.py 必须只定义一个模块级 async def run(ctx)。',
         runSignatureInvalid: 'run 入口必须只接收一个位置参数 ctx。',
         idDuplicate: '自动化脚本 ID 必须唯一。',
+        requirementsLinkUnsupported: 'requirements.txt 必须是普通文件，不能使用链接或 reparse point。',
+        requirementsReadFailed: '无法读取 requirements.txt。',
+        requirementsTooLarge: 'requirements.txt 不能超过 64 KiB。',
+        requirementsInvalidEncoding: 'requirements.txt 必须使用 UTF-8 编码。',
+        requirementsInvalid: 'requirements.txt 第 {line} 行不是受支持的 Python 包需求。',
+        requirementsDuplicate: 'requirements.txt 不能重复声明同一个 Python 包。',
+        requirementsTooMany: 'requirements.txt 最多声明 100 个 Python 包。',
       },
       skill: {
         nameLength: 'Skill 名称长度必须为 1 到 {max_length} 个字符。',
@@ -987,15 +994,21 @@ export const zhCN = {
       nodes: '循环节点',
     },
     nodes: {
-      add: '添加脚本节点',
-      script: '自定义脚本',
+      add: '添加插件节点',
+      script: '自动化插件',
       config: '节点配置（JSON）',
       moveUp: '上移',
       moveDown: '下移',
-      empty: '尚未添加脚本节点。',
+      empty: '尚未添加插件节点。',
     },
     scripts: {
       invalid: '{count} 个自动化脚本未通过静态检查。',
+      dependenciesFailed: '{count} 个自动化插件的 Python 依赖准备失败。',
+      dependenciesRestartRequired: '{count} 个自动化插件需要重启 Agent Shell 以准备 Python 依赖。',
+      status: {
+        failed: '依赖失败',
+        restartRequired: '需要重启',
+      },
     },
     feedback: {
       saved: '工作流已保存。',
@@ -1152,6 +1165,8 @@ export const zhCN = {
         scriptNotFound: '引用的自动化脚本 {script_id} 不存在。',
         scriptInvalid: '自动化脚本 {script_id} 未通过静态检查。',
         scriptTriggerUnsupported: '自动化脚本 {script_id} 不支持当前工作流类型。',
+        scriptDependenciesFailed: '自动化插件 {script_id} 的 Python 依赖准备失败。',
+        scriptDependenciesRestartRequired: '请重启 Agent Shell，以准备自动化插件 {script_id} 的 Python 依赖。',
       },
       storage: {
         credentialMetadataInvalid: '该模型配置保存的访问凭据状态已损坏。',

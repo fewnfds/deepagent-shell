@@ -65,6 +65,57 @@ def test_script_scan_is_static_and_reports_invalid_entrypoints(tmp_path: Path) -
     assert not marker.exists()
 
 
+def test_plugin_main_supports_relative_helper_imports(tmp_path: Path) -> None:
+    scripts = tmp_path / "scripts"
+    folder = write_script(
+        scripts,
+        "package-script",
+        "from .helper import VALUE\n"
+        "async def run(ctx):\n"
+        "    ctx.messages.append({'role': 'user', 'content': VALUE})\n",
+    )
+    (folder / "helper.py").write_text("VALUE = 'from-helper'\n", encoding="utf-8")
+    workflow = {
+        "id": "workflow",
+        "name": "Package workflow",
+        "hooks": {
+            "request_prepare": [{"script_id": "package-script", "config": {}}],
+            "subagent_before_invoke": [],
+            "request_end": [],
+        },
+    }
+    runtime = AutomationRuntime(
+        request_id="package-request",
+        owners=[
+            AutomationOwner(
+                id="owner",
+                type="primary",
+                name="Primary",
+                hook_workflow=workflow,
+                lifecycle_workflow=None,
+                mapped_paths={},
+            )
+        ],
+        client_messages=[],
+        scripts_dir=scripts,
+        skills_dir=tmp_path / "skills",
+        runtime_root=tmp_path / "runtime",
+    )
+
+    async def scenario() -> None:
+        await runtime.prepare()
+        assert runtime.messages_for("owner") == [
+            {"role": "user", "content": "from-helper"}
+        ]
+        module_names = set(runtime._module_names)
+        assert module_names
+        assert all(name in __import__("sys").modules for name in module_names)
+        await runtime.finish({"status": "completed"})
+        assert all(name not in __import__("sys").modules for name in module_names)
+
+    asyncio.run(scenario())
+
+
 def test_variables_are_json_copied_scoped_and_size_limited() -> None:
     request_values: dict[str, object] = {}
     agent_values: dict[str, object] = {}

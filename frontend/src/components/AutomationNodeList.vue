@@ -46,6 +46,16 @@ function patch(index: number, values: Partial<AutomationNodeDraft>): void {
     nodeIndex === index ? { ...node, ...values } : node
   )))
 }
+
+function dependencyLabel(script: AutomationScriptResource): string {
+  if (script.dependency_status === 'failed') {
+    return t('automation.scripts.status.failed')
+  }
+  if (script.dependency_status === 'restart_required') {
+    return t('automation.scripts.status.restartRequired')
+  }
+  return ''
+}
 </script>
 
 <template>
@@ -75,8 +85,13 @@ function patch(index: number, values: Partial<AutomationNodeDraft>): void {
                 @change="patch(index, { script_id: ($event.target as HTMLSelectElement).value })"
               >
                 <option disabled value="">{{ t('common.chooseConfiguration') }}</option>
-                <option v-for="script in scripts" :key="script.id" :value="script.id">
-                  {{ script.name }}
+                <option
+                  v-for="script in scripts"
+                  :key="script.id"
+                  :disabled="script.dependency_status !== 'ready'"
+                  :value="script.id"
+                >
+                  {{ script.name }}{{ dependencyLabel(script) ? ` · ${dependencyLabel(script)}` : '' }}
                 </option>
               </select>
             </FormField>

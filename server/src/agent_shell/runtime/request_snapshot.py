@@ -134,7 +134,8 @@ class RequestSnapshotRuntime:
             automation = AutomationStore(database)  # type: ignore[arg-type]
             secrets = ProviderSecretResolver(database)  # type: ignore[arg-type]
             automation_validation = AutomationValidationService(
-                scripts_dir=self._automation_scripts_dir
+                scripts_dir=self._automation_scripts_dir,
+                runtime_root=self._runtime_dir,
             )
             validation = ConfigurationValidationService(
                 blocks,

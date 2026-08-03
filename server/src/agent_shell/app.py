@@ -109,7 +109,8 @@ def create_app(
     config_store = AgentConfigStore(database, event_logger)
     automation_store = AutomationStore(database, event_logger)
     automation_validation = AutomationValidationService(
-        scripts_dir=automation_scripts_dir
+        scripts_dir=automation_scripts_dir,
+        runtime_root=runtime_dir,
     )
     configuration_validation = ConfigurationValidationService(
         block_store,
@@ -440,6 +441,7 @@ def create_app(
             automation_store,
             automation_validation,
             automation_scripts_dir,
+            runtime_dir,
         )
     )
     app.include_router(build_agent_session_router(agent_session_store))

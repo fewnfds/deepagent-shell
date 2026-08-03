@@ -45,6 +45,7 @@ def build_automation_router(
     store: AutomationStore,
     validation: AutomationValidationService,
     scripts_dir: Path,
+    runtime_root: Path,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -79,7 +80,7 @@ def build_automation_router(
 
     @router.get("/api/automation/scripts")
     async def scripts() -> dict[str, object]:
-        return scan_automation_scripts(scripts_dir)
+        return scan_automation_scripts(scripts_dir, runtime_root=runtime_root)
 
     @router.get("/api/automation/{workflow_type}")
     async def list_workflows(workflow_type: str) -> list[dict]:

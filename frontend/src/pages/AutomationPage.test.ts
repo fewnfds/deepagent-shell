@@ -35,6 +35,10 @@ describe('AutomationPage', () => {
         description: 'Updates prepared messages.',
         triggers: ['hook'],
         folder: 'message-script',
+        python_requirements: [],
+        requirements_fingerprint: 'empty-fingerprint',
+        dependency_status: 'ready',
+        dependency_error_code: '',
       }],
       errors: {},
     })
@@ -105,6 +109,45 @@ describe('AutomationPage', () => {
       tone: 'success',
       title: 'automation.feedback.saved',
     })
+    wrapper.unmount()
+  })
+
+  it('marks plugins that need a dependency restart as unavailable', async () => {
+    vi.spyOn(managementApi, 'listAutomationWorkflows').mockResolvedValue([])
+    vi.spyOn(managementApi, 'listAutomationScripts').mockResolvedValue({
+      catalog: [{
+        api_version: 1,
+        id: 'image-reader',
+        name: 'Image reader',
+        description: 'Reads image metadata.',
+        triggers: ['hook'],
+        folder: 'image-reader',
+        python_requirements: ['Pillow>=11'],
+        requirements_fingerprint: 'pillow-fingerprint',
+        dependency_status: 'restart_required',
+        dependency_error_code: '',
+      }],
+      errors: {},
+    })
+    vi.spyOn(managementApi, 'validateDraft').mockResolvedValue({
+      valid: false,
+      stage: 'workflow_draft',
+      issues: [],
+    })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/automation/:type', component: AutomationPage }],
+    })
+    await router.push('/automation/hook-workflow')
+    await router.isReady()
+    const wrapper = mount(AutomationPage, { global: { plugins: [router] } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('automation.scripts.dependenciesRestartRequired')
+    await wrapper.findAll('button[aria-label="automation.nodes.add"]')[0]?.trigger('click')
+    const pluginOption = wrapper.find('option[value="image-reader"]')
+    expect(pluginOption.attributes('disabled')).toBeDefined()
+    expect(pluginOption.text()).toContain('automation.scripts.status.restartRequired')
     wrapper.unmount()
   })
 })

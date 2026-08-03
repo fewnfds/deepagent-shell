@@ -62,6 +62,12 @@ const recordOptions = computed(() => records.value.map((record) => ({
 const compatibleScripts = computed(() => scripts.value.filter((script) => (
   script.triggers.includes(workflowType.value === 'hook-workflow' ? 'hook' : 'lifecycle')
 )))
+const dependencyFailureCount = computed(() => scripts.value.filter(
+  (script) => script.dependency_status === 'failed',
+).length)
+const dependencyRestartCount = computed(() => scripts.value.filter(
+  (script) => script.dependency_status === 'restart_required',
+).length)
 const hookDraft = computed(() => draft.value as HookWorkflowDraft)
 const lifecycleDraft = computed(() => draft.value as LifecycleWorkflowDraft)
 
@@ -241,6 +247,16 @@ watch(
         v-else-if="Object.keys(scriptErrors).length"
         theme="warning"
         :title="t('automation.scripts.invalid', { count: Object.keys(scriptErrors).length })"
+      />
+      <LteAlert
+        v-else-if="dependencyFailureCount"
+        theme="danger"
+        :title="t('automation.scripts.dependenciesFailed', { count: dependencyFailureCount })"
+      />
+      <LteAlert
+        v-else-if="dependencyRestartCount"
+        theme="warning"
+        :title="t('automation.scripts.dependenciesRestartRequired', { count: dependencyRestartCount })"
       />
     </template>
 

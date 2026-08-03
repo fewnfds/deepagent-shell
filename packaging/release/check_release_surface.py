@@ -138,8 +138,10 @@ def _portable_path_issue(path_text: str) -> str | None:
     inside_site_packages = "site-packages" in path.parts
     is_python_ca_bundle = (
         inside_python_runtime
-        and path.name == "cacert.pem"
-        and "certifi" in path.parts
+        and (
+            (path.name == "cacert.pem" and "certifi" in path.parts)
+            or path.parts[-4:] == ("grpc", "_cython", "_credentials", "roots.pem")
+        )
     )
     if path.parts[0] not in PORTABLE_TOP_LEVEL:
         return "unexpected top-level release content"

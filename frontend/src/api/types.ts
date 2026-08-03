@@ -193,6 +193,10 @@ export interface AutomationScriptResource {
   description: string
   triggers: ('hook' | 'lifecycle')[]
   folder: string
+  python_requirements: string[]
+  requirements_fingerprint: string
+  dependency_status: 'ready' | 'restart_required' | 'failed'
+  dependency_error_code: string
 }
 
 export interface PrimaryAutomation {

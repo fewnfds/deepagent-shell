@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import shutil
 import stat
+import sys
 from types import MappingProxyType, ModuleType, SimpleNamespace
 from typing import Any
 from uuid import uuid4
@@ -208,6 +209,7 @@ class AutomationRuntime:
             runtime_root / "automation" / self.request_id
         ).resolve()
         self._modules: dict[_NodeKey, tuple[ModuleType, Callable[[Any], Any], Path]] = {}
+        self._module_names: set[str] = set()
         self._overlay_owners: set[str] = set()
         self._tasks: list[asyncio.Task[None]] = []
         self._started = False
@@ -388,6 +390,12 @@ class AutomationRuntime:
                     self.request_id,
                     owner.id,
                 )
+        for module_name in self._module_names:
+            for loaded_name in tuple(sys.modules):
+                if loaded_name == module_name or loaded_name.startswith(
+                    f"{module_name}."
+                ):
+                    sys.modules.pop(loaded_name, None)
         if self._request_runtime_dir.exists():
             shutil.rmtree(self._request_runtime_dir, ignore_errors=True)
 
@@ -517,7 +525,11 @@ class AutomationRuntime:
             "_agent_shell_automation_"
             f"{self.request_id.replace('-', '_')}_{len(self._modules)}"
         )
-        spec = importlib.util.spec_from_file_location(module_name, plugin_dir / "main.py")
+        spec = importlib.util.spec_from_file_location(
+            module_name,
+            plugin_dir / "main.py",
+            submodule_search_locations=[str(plugin_dir)],
+        )
         if spec is None or spec.loader is None:
             raise AgentRuntimeError(
                 "automation_script_load_failed",
@@ -525,9 +537,15 @@ class AutomationRuntime:
                 status_code=422,
             )
         module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
         try:
             spec.loader.exec_module(module)
         except Exception as exc:
+            for loaded_name in tuple(sys.modules):
+                if loaded_name == module_name or loaded_name.startswith(
+                    f"{module_name}."
+                ):
+                    sys.modules.pop(loaded_name, None)
             raise AgentRuntimeError(
                 "automation_script_load_failed",
                 f"Automation script {script_id!r} could not be loaded.",
@@ -541,4 +559,5 @@ class AutomationRuntime:
                 status_code=422,
             )
         self._modules[key] = (module, run, plugin_dir)
+        self._module_names.add(module_name)
         return run, plugin_dir

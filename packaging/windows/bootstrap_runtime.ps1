@@ -380,7 +380,11 @@ try {
             }
     )
     if ($reparsePoints.Count -gt 0) {
-        throw "The portable runtime contains path-linked reparse points."
+        $reparsePointDetails = $reparsePoints | ForEach-Object {
+            $relativePath = $_.FullName.Substring($buildRoot.TrimEnd("\").Length + 1)
+            "$relativePath ($($_.LinkType))"
+        }
+        throw "The portable runtime contains path-linked reparse points: $($reparsePointDetails -join ', ')"
     }
 
     $relativePythonHome = "python\$($pythonExe.Directory.Name)"
@@ -392,6 +396,8 @@ try {
         python = [string]$lock.python
         python_home = $relativePythonHome.Replace("\", "/")
         uv = $expectedUvVersion
+        uv_url = [string]$lock.uv.url
+        uv_sha256 = ([string]$lock.uv.sha256).ToLowerInvariant()
         build_fingerprint = $buildFingerprint
     }
     $runtimeManifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $buildRoot "runtime-manifest.json") -Encoding utf8
