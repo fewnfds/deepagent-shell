@@ -63,6 +63,17 @@ def test_windows_runtime_removes_uv_python_aliases_after_pip_install() -> None:
     assert bootstrap.rindex(cleanup) > bootstrap.index(pip_install)
 
 
+def test_windows_runtime_unwraps_powershell_file_system_exceptions_for_retry() -> None:
+    bootstrap = (
+        REPOSITORY_ROOT / "packaging" / "windows" / "bootstrap_runtime.ps1"
+    ).read_text(encoding="utf-8")
+
+    assert "function Test-IsRetryableFileSystemException" in bootstrap
+    assert "$current = $current.InnerException" in bootstrap
+    assert bootstrap.count("Test-IsRetryableFileSystemException $_.Exception") == 2
+    assert "catch [System.IO.IOException]" not in bootstrap
+
+
 def test_listen_probe_reports_an_occupied_port_without_starting_the_app(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

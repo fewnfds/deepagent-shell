@@ -54,6 +54,21 @@ function Invoke-Native {
     }
 }
 
+function Test-IsRetryableFileSystemException {
+    param([Parameter(Mandatory = $true)][System.Exception]$Exception)
+    $current = $Exception
+    while ($null -ne $current) {
+        if (
+            $current -is [System.IO.IOException] -or
+            $current -is [System.UnauthorizedAccessException]
+        ) {
+            return $true
+        }
+        $current = $current.InnerException
+    }
+    return $false
+}
+
 function Move-DirectoryWithRetry {
     param(
         [Parameter(Mandatory = $true)][string]$Source,
@@ -64,8 +79,11 @@ function Move-DirectoryWithRetry {
             [System.IO.Directory]::Move($Source, $Destination)
             return
         }
-        catch [System.IO.IOException] {
-            if ($attempt -eq 20) {
+        catch {
+            if (
+                -not (Test-IsRetryableFileSystemException $_.Exception) -or
+                $attempt -eq 20
+            ) {
                 throw
             }
             Start-Sleep -Milliseconds 250
@@ -80,13 +98,10 @@ function Remove-DirectoryWithRetry {
             Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
             return $true
         }
-        catch [System.IO.IOException] {
-            if ($attempt -eq 80) {
-                return $false
+        catch {
+            if (-not (Test-IsRetryableFileSystemException $_.Exception)) {
+                throw
             }
-            Start-Sleep -Milliseconds 250
-        }
-        catch [System.UnauthorizedAccessException] {
             if ($attempt -eq 80) {
                 return $false
             }
