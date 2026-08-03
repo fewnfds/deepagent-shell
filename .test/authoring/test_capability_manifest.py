@@ -16,6 +16,7 @@ from agent_shell.authoring import (
     READ_FILE_TOOL_DESCRIPTION,
     SKILLS_SYSTEM_PROMPT,
     SUBAGENT_EDITOR_SYSTEM_PROMPT,
+    TASK_TOOL_DESCRIPTION,
     WRITE_FILE_TOOL_DESCRIPTION,
     WRITE_TODOS_SYSTEM_PROMPT,
     WRITE_TODOS_TOOL_DESCRIPTION,
@@ -99,7 +100,7 @@ def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
     assert tools["execute"]["visible"] is False
     assert filesystem["system_prompt"] == ""
     assert defaults["subagent"]["system_prompt"] == ""
-    assert set(defaults["subagent"]) == {"system_prompt"}
+    assert set(defaults["subagent"]) == {"system_prompt", "tool_description"}
     assert set(defaults["todo_list"]) == {"system_prompt", "tool_description"}
     assert filesystem["tool_token_limit_before_evict"] == (
         FilesystemBlock.model_fields["tool_token_limit_before_evict"].default
@@ -139,7 +140,7 @@ def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
 
 
 def test_editor_text_snapshots_match_locked_upstream_defaults() -> None:
-    from deepagents.middleware import filesystem, skills
+    from deepagents.middleware import filesystem, skills, subagents
     from langchain.agents.middleware import todo
 
     assert FILESYSTEM_EDITOR_SYSTEM_PROMPT == ""
@@ -158,6 +159,7 @@ def test_editor_text_snapshots_match_locked_upstream_defaults() -> None:
     assert "do not assume they are installed" in EXECUTE_TOOL_DESCRIPTION
     assert SKILLS_SYSTEM_PROMPT == skills.SKILLS_SYSTEM_PROMPT
     assert SUBAGENT_EDITOR_SYSTEM_PROMPT == ""
+    assert TASK_TOOL_DESCRIPTION == subagents.TASK_TOOL_DESCRIPTION
     assert WRITE_TODOS_SYSTEM_PROMPT == todo.WRITE_TODOS_SYSTEM_PROMPT
     assert WRITE_TODOS_TOOL_DESCRIPTION == todo.WRITE_TODOS_TOOL_DESCRIPTION
 

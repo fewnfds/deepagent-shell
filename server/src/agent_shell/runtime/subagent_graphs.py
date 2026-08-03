@@ -44,6 +44,7 @@ def build_subagent_graphs(
     validate_tool_names: Callable[..., None],
     report_error: Callable[..., Exception],
     agent_input_observer: Callable[[dict[str, object]], Any] | None,
+    task_description_override: str | None,
 ) -> list[dict[str, Any]]:
     """Compile every reachable named Subagent once and bind cyclic edges."""
 
@@ -84,7 +85,23 @@ def build_subagent_graphs(
         if child["exception_retry"] is not None:
             middleware.extend(child["exception_retry"].after_provider_boundary)
 
+        compiled_children = [
+            _compiled_spec(edge, runnables) for edge in node.subagents
+        ]
         try:
+            if compiled_children and task_description_override is not None:
+                from agent_shell.runtime.subagent_middleware import (
+                    make_subagent_middleware_override,
+                )
+
+                replacement = make_subagent_middleware_override(
+                    backend=child["backend"],
+                    subagents=compiled_children,
+                    task_description=task_description_override,
+                    middleware=middleware,
+                )
+                if replacement is not None:
+                    middleware.append(replacement)
             validate_middleware_names(
                 middleware,
                 owner=f"Subagent {node.name}",
@@ -101,7 +118,11 @@ def build_subagent_graphs(
                     if "FilesystemMiddleware" in middleware_names
                     else FILESYSTEM_TOOL_NAMES
                 )
-                + (("task",) if node.subagents else ()),
+                + (
+                    ("task",)
+                    if node.subagents and "SubAgentMiddleware" not in middleware_names
+                    else ()
+                ),
             )
         except AgentRuntimeError as exc:
             raise report_error(
@@ -128,13 +149,13 @@ def build_subagent_graphs(
             constructor["backend"] = child["backend"]
         if child["skill_sources"]:
             constructor["skills"] = list(child["skill_sources"])
-        if node.subagents:
-            constructor["subagents"] = [
-                _compiled_spec(edge, runnables) for edge in node.subagents
-            ]
+        if compiled_children:
+            constructor["subagents"] = compiled_children
 
         graph = construct_deep_agent(
             constructor,
+            model_provider=child["model_provider"],
+            model_name=child["model_name"],
             scope="subagent",
             owner_id=primary_id,
             owner_name=node.name,

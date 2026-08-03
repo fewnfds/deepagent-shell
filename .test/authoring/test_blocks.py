@@ -90,6 +90,7 @@ def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) 
             assert created["instruction_override"] is None
         if block_type == "subagent":
             assert created["instruction_override"] is None
+            assert created["task_description_override"] is None
         if block_type == "custom-middleware":
             assert created["middlewares"] == payload["middlewares"]
         if block_type == "todo-list":
@@ -423,7 +424,31 @@ def test_prompt_templates_reject_unsupported_single_brace_fields(
             ),
         },
     )
+    subagent = client.post(
+        "/api/blocks/subagent",
+        json={
+            "name": "Invalid task description",
+            "task_description_override": "{available_agents}\n{unknown}",
+        },
+    )
+    missing_catalog = client.post(
+        "/api/blocks/subagent",
+        json={
+            "name": "Missing available agents",
+            "task_description_override": "Delegate a complete task.",
+        },
+    )
+    empty_format_spec = client.post(
+        "/api/blocks/subagent",
+        json={
+            "name": "Empty format spec",
+            "task_description_override": "Agents: {available_agents:}",
+        },
+    )
     assert skill.status_code == 422
+    assert subagent.status_code == 422
+    assert missing_catalog.status_code == 422
+    assert empty_format_spec.status_code == 422
 
 def test_prompt_templates_accept_escaped_literal_braces(
     tmp_path: Path, monkeypatch
@@ -440,7 +465,17 @@ def test_prompt_templates_accept_escaped_literal_braces(
             ),
         },
     )
+    subagent = client.post(
+        "/api/blocks/subagent",
+        json={
+            "name": "Escaped task description",
+            "task_description_override": (
+                'JSON {{"answer": "value"}}\n{available_agents}'
+            ),
+        },
+    )
     assert skill.status_code == 200, skill.text
+    assert subagent.status_code == 200, subagent.text
     assert (
         client.post(
             "/api/blocks/custom-tool",

@@ -100,6 +100,17 @@ export const en: MessageSchema = {
       warning: 'Warning',
       error: 'Error',
     },
+    systemSummaries: {
+      service_started: 'Service started',
+      service_stopped: 'Service stopped',
+      security_configuration_loaded: 'Security configuration loaded',
+      configuration_updated: 'Configuration updated',
+      configuration_deleted: 'Configuration deleted',
+      provider_secret_rotated: 'Provider secret updated',
+      provider_secret_cleared: 'Provider secret cleared',
+      management_request_failed: 'Management API request failed',
+      authentication_failed: 'Authentication failed',
+    },
     controls: {
       title: 'Capture controls',
       interception: 'Interception test',
@@ -321,6 +332,7 @@ export const en: MessageSchema = {
     enabled: 'Enabled',
     skills: 'Skills',
     instruction_override: 'Instruction override',
+    task_description_override: 'Task tool description override',
     middlewares: {
       label: 'Middleware',
       item: {
@@ -541,6 +553,7 @@ export const en: MessageSchema = {
     subagent: {
       namePlaceholder: 'For example: Synchronous research team',
       instructionTitle: 'Delegation instructions',
+      taskDescriptionTitle: 'task tool description',
     },
     todoList: {
       namePlaceholder: 'For example: Complex task planning',

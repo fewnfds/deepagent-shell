@@ -56,7 +56,7 @@ interface EventFeedApi {
 
 const props = defineProps<{ api?: EventFeedApi }>()
 
-const { locale, t } = useI18n()
+const { locale, t, te } = useI18n()
 const api: EventFeedApi = props.api ?? managementApi
 const route = useRoute()
 const confirmation = useConfirmation()
@@ -140,6 +140,11 @@ function formatTime(value: string): string {
     dateStyle: 'short',
     timeStyle: 'medium',
   }).format(date)
+}
+
+function displaySummary(item: EventFeedItem): string {
+  const key = `eventFeed.systemSummaries.${item.summary}`
+  return item.source === 'system' && te(key) ? t(key) : item.summary
 }
 
 function downloadFilename(item: EventFeedItem, view: 'raw' | 'debug'): string {
@@ -246,7 +251,7 @@ const eventTableConfig: DataTableConfig<EventFeedItem> = {
     { key: 'time', label: () => t('eventFeed.columns.time'), value: (item) => formatTime(item.occurred_at) },
     { key: 'source', label: () => t('eventFeed.columns.source'), value: (item) => t(`eventFeed.sources.${item.source}`) },
     { key: 'level', label: () => t('eventFeed.columns.level'), value: (item) => t(`eventFeed.levels.${item.level}`) },
-    { key: 'summary', label: () => t('eventFeed.columns.summary'), value: (item) => item.summary },
+    { key: 'summary', label: () => t('eventFeed.columns.summary'), value: displaySummary },
   ],
   detail: true,
   rowActions: [

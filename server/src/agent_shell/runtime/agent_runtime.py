@@ -18,7 +18,6 @@ from agent_shell.runtime.output_stream import (
     OutputEvent,
     V3EventNormalizer,
 )
-from langchain_core._api import LangChainBetaWarning
 from langgraph.errors import GraphRecursionError
 
 EXECUTION_TIMEOUT_SECONDS = 600
@@ -81,7 +80,12 @@ class AgentExecution:
         try:
             async with asyncio.timeout(EXECUTION_TIMEOUT_SECONDS):
                 with warnings.catch_warnings():
-                    warnings.simplefilter("ignore", LangChainBetaWarning)
+                    warnings.filterwarnings(
+                        "ignore",
+                        message=(
+                            r"The v3 streaming protocol on Pregel is experimental\."
+                        ),
+                    )
                     stream_options: dict[str, Any] = {"version": "v3"}
                     if self.context:
                         stream_options["context"] = self.context

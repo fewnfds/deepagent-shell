@@ -957,9 +957,17 @@ def test_named_subagent_can_reference_itself_with_matching_task_schema(
             },
         )
         assert recursive_override.status_code == 200, recursive_override.text
+        custom_task_description = (
+            "Delegate one complete task to this catalog:\n"
+            "{available_agents}\n"
+            "Return one final report."
+        )
         delegation = client.post(
             "/api/blocks/subagent",
-            json={"name": "Recursive delegation"},
+            json={
+                "name": "Recursive delegation",
+                "task_description_override": custom_task_description,
+            },
         ).json()
         updated = client.put(
             f"/api/primary-agents/{primary['id']}",
@@ -991,6 +999,9 @@ def test_named_subagent_can_reference_itself_with_matching_task_schema(
     parent_task = next(item for item in ParentModel.tool_signatures if item[0] == "task")
     child_task = next(item for item in ChildModel.tool_signatures if item[0] == "task")
     assert child_task == parent_task
+    assert parent_task[1] == custom_task_description.format(
+        available_agents="- recursive_worker: Continues the recursive task."
+    )
     assert len(ChildModel.seen_messages) == 3
 
 
@@ -1104,7 +1115,13 @@ def test_subagent_prompt_override_builds_from_frozen_client_messages(
         )
         delegation_response = client.post(
             "/api/blocks/subagent",
-            json={"name": "Prompt construction delegation"},
+            json={
+                "name": "Prompt construction delegation",
+                "task_description_override": (
+                    "Run a fully specified task with this catalog:\n"
+                    "{available_agents}"
+                ),
+            },
         )
         assert delegation_response.status_code == 200, delegation_response.text
         updated = client.put(
@@ -1147,6 +1164,9 @@ def test_subagent_prompt_override_builds_from_frozen_client_messages(
         "parent completed"
     )
     assert "task" not in ChildModel.bound_tool_names
+    assert ParentModel.bound_tool_descriptions["task"].startswith(
+        "Run a fully specified task with this catalog:"
+    )
 
     def messages_from_client_prefix(messages: list[object]) -> list[tuple[str, str]]:
         pairs = [(message.type, message.text) for message in messages]

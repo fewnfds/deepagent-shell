@@ -5,18 +5,9 @@ from pathlib import Path
 from agent_shell.provider_integrations import (
     bundled_provider_integrations,
     bundled_provider_ids,
-    official_provider_integrations,
 )
 
-from app_support import make_client
-
-
-def test_langchain_registry_is_the_provider_package_authority() -> None:
-    integrations = {item.provider: item for item in official_provider_integrations()}
-
-    assert integrations["openrouter"].package == "langchain-openrouter"
-    assert integrations["google_vertexai"].package == "langchain-google-vertexai"
-    assert integrations["anthropic"].class_name == "ChatAnthropic"
+from .app_support import make_client
 
 
 def test_catalog_contains_only_release_managed_provider_integrations(
@@ -52,9 +43,11 @@ def test_runtime_has_no_user_provider_install_endpoint(
     assert response.status_code == 404
 
 
-def test_bundled_provider_set_is_backed_by_current_langchain_registry() -> None:
+def test_bundled_provider_set_is_owned_by_the_release() -> None:
     integrations = {item.provider: item for item in bundled_provider_integrations()}
 
     assert integrations["openai"].package == "langchain-openai"
+    assert integrations["openai"].module == "langchain_openai"
+    assert integrations["openai"].class_name == "ChatOpenAI"
     assert integrations["deepseek"].package == "langchain-deepseek"
     assert integrations["xai"].package == "langchain-xai"

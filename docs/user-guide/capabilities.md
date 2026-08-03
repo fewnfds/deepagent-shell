@@ -156,10 +156,10 @@ Primary 在 graph 启动前准备自己的输入。Subagent 的最终 Preset 可
 
 ## 11. 同步子代理（Synchronous Subagents）
 
-保存同步委派的附加系统说明。DeepAgents 0.7 的 task 工具 schema 和 description 由原生
-`SubAgentMiddleware` 管理；非空 `instruction_override` 追加到 Primary system prompt。Primary 引用该 block 即启用同步
-委派；具体 Subagent 绑定在 Primary 页面维护。引用后，真实请求中必须至少有一条完整且已启用的
-binding，否则构建失败。
+保存同步委派的附加系统说明和 `task` 工具说明。非空 `instruction_override` 追加到 Primary system prompt；
+`task_description_override=null` 使用 Deep Agents 默认说明，非空时通过官方 `SubAgentMiddleware` 同名替换
+覆盖模型可见说明，并必须保留 `{available_agents}`。Primary 引用该 block 即启用同步委派；具体 Subagent
+绑定在 Primary 页面维护。引用后，真实请求中必须至少有一条完整且已启用的 binding，否则构建失败。
 
 每个 binding 的 child graph 由 `create_deep_agent()` 构造并作为 `CompiledSubAgent` 传入。binding 还可用
 `include_client_messages=true` 让 child 接收冻结客户端消息；child Prompt Preset 在原生
@@ -168,4 +168,6 @@ binding，否则构建失败。
 每个 Subagent 覆写还保存自己的命名 bindings，可以引用自身。隐式 `general-purpose` 已全局关闭，空
 catalog 没有 `task`；非空 catalog 仍由官方 `SubAgentMiddleware` 生成工具。普通自由覆写不保证跨 Agent
 Prompt Caching；只有客户端消息、model、system prompt、Prompt Preset、按序 tool schema、response schema
-等最终前缀都一致时，才具备共享较长前缀的条件，实际命中仍由 Provider/model 决定。
+等最终前缀都一致时，才具备共享较长前缀的条件。同一 Subagent block 的 task description 会进入 Primary
+和拥有 `task` 的 child，但 `{available_agents}` 只有在两侧 catalog 也相同时才展开为相同文本；实际缓存
+命中仍由 Provider/model 决定。

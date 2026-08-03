@@ -371,7 +371,7 @@ describe('dedicated block editors', () => {
     expect(skill.find('.form-switch').exists()).toBe(true)
     expect(editor.find('.subagent-mode-card').exists()).toBe(false)
     expect(editor.find('input[type="checkbox"]').exists()).toBe(false)
-    expect(editor.findAll('textarea')).toHaveLength(1)
+    expect(editor.findAll('textarea')).toHaveLength(2)
     expect(editor.find('.list-group').exists()).toBe(false)
     expect(todo.findAll('textarea')).toHaveLength(2)
     expect(todo.find('.list-group').exists()).toBe(false)
@@ -416,6 +416,7 @@ describe('dedicated block editors', () => {
 
     expect(editors[0]?.text()).toContain('文件系统提示词')
     expect(editors[0]?.text()).not.toContain('文件能力提示词')
+    expect(editors[2]?.text()).toContain('task 工具说明')
     for (const editor of editors) expect(editor.text()).not.toContain('覆写')
   })
 

@@ -5,16 +5,7 @@ import re
 from dataclasses import dataclass
 
 _PACKAGE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
-_BUNDLED_PROVIDER_IDS = frozenset(
-    {
-        "anthropic",
-        "deepseek",
-        "google_genai",
-        "google_vertexai",
-        "openai",
-        "xai",
-    }
-)
+
 
 @dataclass(frozen=True, slots=True)
 class ProviderIntegration:
@@ -24,50 +15,49 @@ class ProviderIntegration:
     class_name: str
 
 
-def official_provider_integrations() -> tuple[ProviderIntegration, ...]:
-    """Read the Provider registry owned by the pinned LangChain version."""
-
-    from langchain.chat_models import base as chat_models_base
-
-    registry = getattr(chat_models_base, "_BUILTIN_PROVIDERS", None)
-    if not isinstance(registry, dict):
-        raise RuntimeError("The installed LangChain Provider registry is unavailable.")
-    integrations = []
-    for provider, entry in registry.items():
-        if (
-            not isinstance(provider, str)
-            or not isinstance(entry, tuple)
-            or len(entry) != 3
-        ):
-            continue
-        module, class_name, _creator = entry
-        if not isinstance(module, str) or not isinstance(class_name, str):
-            continue
-        package = module.partition(".")[0].replace("_", "-")
-        if not _PACKAGE_RE.fullmatch(package):
-            continue
-        integrations.append(
-            ProviderIntegration(
-                provider=provider,
-                package=package,
-                module=module,
-                class_name=class_name,
-            )
-        )
-    return tuple(sorted(integrations, key=lambda item: item.provider))
+_BUNDLED_PROVIDER_INTEGRATIONS = (
+    ProviderIntegration(
+        provider="anthropic",
+        package="langchain-anthropic",
+        module="langchain_anthropic",
+        class_name="ChatAnthropic",
+    ),
+    ProviderIntegration(
+        provider="deepseek",
+        package="langchain-deepseek",
+        module="langchain_deepseek",
+        class_name="ChatDeepSeek",
+    ),
+    ProviderIntegration(
+        provider="google_genai",
+        package="langchain-google-genai",
+        module="langchain_google_genai",
+        class_name="ChatGoogleGenerativeAI",
+    ),
+    ProviderIntegration(
+        provider="google_vertexai",
+        package="langchain-google-vertexai",
+        module="langchain_google_vertexai",
+        class_name="ChatVertexAI",
+    ),
+    ProviderIntegration(
+        provider="openai",
+        package="langchain-openai",
+        module="langchain_openai",
+        class_name="ChatOpenAI",
+    ),
+    ProviderIntegration(
+        provider="xai",
+        package="langchain-xai",
+        module="langchain_xai",
+        class_name="ChatXAI",
+    ),
+)
 
 
 def bundled_provider_integrations() -> tuple[ProviderIntegration, ...]:
-    integrations = {
-        item.provider: item for item in official_provider_integrations()
-    }
-    missing = _BUNDLED_PROVIDER_IDS - integrations.keys()
-    if missing:
-        raise RuntimeError(
-            "Bundled Providers are absent from the installed LangChain registry: "
-            + ", ".join(sorted(missing))
-        )
-    return tuple(integrations[provider] for provider in sorted(_BUNDLED_PROVIDER_IDS))
+    """Return the exact Provider integrations shipped by this release."""
+    return _BUNDLED_PROVIDER_INTEGRATIONS
 
 
 def bundled_provider_ids() -> frozenset[str]:

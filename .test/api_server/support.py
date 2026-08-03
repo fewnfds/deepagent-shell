@@ -38,6 +38,11 @@ def event_feed_query_pairs(*filters: tuple[str, object]) -> list[tuple[str, obje
 
 
 class ToolCompatibleFakeListChatModel(FakeListChatModel):
+    def _get_ls_params(self, stop=None, **kwargs):
+        params = super()._get_ls_params(stop=stop, **kwargs)
+        params["ls_provider"] = "openai"
+        return params
+
     def bind_tools(self, _tools, **_kwargs):
         return self
 
@@ -55,6 +60,11 @@ class ToolCallingFakeModel(FakeMessagesListChatModel):
     seen_messages: ClassVar[list[list[object]]] = []
     bound_tool_names: ClassVar[list[str]] = []
     bound_tool_descriptions: ClassVar[dict[str, str]] = {}
+
+    def _get_ls_params(self, stop=None, **kwargs):
+        params = super()._get_ls_params(stop=stop, **kwargs)
+        params["ls_provider"] = "openai"
+        return params
 
     def bind_tools(self, tools, **_kwargs):
         type(self).bound_tool_names = [tool.name for tool in tools]

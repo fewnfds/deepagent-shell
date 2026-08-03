@@ -413,6 +413,8 @@ class AgentBuilder:
         )
         return {
             "model": model,
+            "model_provider": str(model_block["provider"]),
+            "model_name": str(model_block["model"]),
             "tool_choice": model_block.get("tool_choice"),
             "response_format": model_block.get("response_format"),
             "model_settings": dict(model_block.get("model_settings") or {}),
@@ -484,6 +486,8 @@ class AgentBuilder:
         self,
         constructor: dict[str, object],
         *,
+        model_provider: str,
+        model_name: str,
         scope: str,
         owner_id: str,
         owner_name: str,
@@ -496,7 +500,10 @@ class AgentBuilder:
             )
             from deepagents import create_deep_agent
 
-            ensure_agent_shell_harness_profiles(constructor.get("model"))
+            ensure_agent_shell_harness_profiles(
+                provider=model_provider,
+                model=model_name,
+            )
             return create_deep_agent(**constructor)
         except AgentRuntimeError as exc:
             raise self._reported_error(
@@ -620,6 +627,7 @@ class AgentBuilder:
         initial_files = dict(materialized["initial_files"])
 
         compiled_subagents: list[dict[str, Any]] = []
+        task_description_override: str | None = None
         if resolved_subagents:
             from agent_shell.runtime.subagent_graphs import build_subagent_graphs
 
@@ -634,9 +642,15 @@ class AgentBuilder:
                 validate_tool_names=self._validate_model_visible_tool_names,
                 report_error=self._reported_error,
                 agent_input_observer=agent_input_observer,
+                task_description_override=selected_blocks["subagent"][
+                    "task_description_override"
+                ],
             )
             delegation_instruction = selected_blocks["subagent"][
                 "instruction_override"
+            ]
+            task_description_override = selected_blocks["subagent"][
+                "task_description_override"
             ]
             if delegation_instruction is not None:
                 existing_prompt = str(constructor.get("system_prompt") or "")
@@ -674,10 +688,20 @@ class AgentBuilder:
         if initial_files or resolved_subagents:
             input_state["files"] = initial_files
 
-        if middleware:
-            constructor["middleware"] = middleware
-
         try:
+            if compiled_subagents and task_description_override is not None:
+                from agent_shell.runtime.subagent_middleware import (
+                    make_subagent_middleware_override,
+                )
+
+                replacement = make_subagent_middleware_override(
+                    backend=materialized["backend"],
+                    subagents=compiled_subagents,
+                    task_description=task_description_override,
+                    middleware=middleware,
+                )
+                if replacement is not None:
+                    middleware.append(replacement)
             self._validate_middleware_names(middleware, owner="Primary Agent")
             primary_middleware_names = {
                 getattr(item, "name", None) for item in middleware
@@ -691,7 +715,12 @@ class AgentBuilder:
                     if "FilesystemMiddleware" in primary_middleware_names
                     else FILESYSTEM_TOOL_NAMES
                 )
-                + (("task",) if resolved_subagents else ()),
+                + (
+                    ("task",)
+                    if resolved_subagents
+                    and "SubAgentMiddleware" not in primary_middleware_names
+                    else ()
+                ),
             )
         except AgentRuntimeError as exc:
             raise self._reported_error(
@@ -702,8 +731,13 @@ class AgentBuilder:
                 path="capability_refs",
             ) from exc
 
+        if middleware:
+            constructor["middleware"] = middleware
+
         graph = self._construct_deep_agent(
             constructor,
+            model_provider=materialized["model_provider"],
+            model_name=materialized["model_name"],
             scope="primary",
             owner_id=primary_id,
             owner_name=primary_name,

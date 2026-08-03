@@ -98,6 +98,17 @@ export const zhCN = {
       warning: '警告',
       error: '错误',
     },
+    systemSummaries: {
+      service_started: '服务已启动',
+      service_stopped: '服务已停止',
+      security_configuration_loaded: '安全配置已加载',
+      configuration_updated: '配置已更新',
+      configuration_deleted: '配置已删除',
+      provider_secret_rotated: 'Provider 密钥已更新',
+      provider_secret_cleared: 'Provider 密钥已清除',
+      management_request_failed: '管理 API 请求失败',
+      authentication_failed: '认证失败',
+    },
     controls: {
       title: '采集控制',
       interception: '拦截测试',
@@ -319,6 +330,7 @@ export const zhCN = {
     enabled: '启用',
     skills: 'Skill',
     instruction_override: '指令覆写',
+    task_description_override: 'task 工具说明覆写',
     middlewares: {
       label: 'Middleware',
       item: {
@@ -539,6 +551,7 @@ export const zhCN = {
     subagent: {
       namePlaceholder: '例如：同步研究组',
       instructionTitle: '委派指令',
+      taskDescriptionTitle: 'task 工具说明',
     },
     todoList: {
       namePlaceholder: '例如：复杂任务计划',

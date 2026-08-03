@@ -35,8 +35,10 @@ model Provider 的 Harness Profile 中关闭该默认项，只向模型暴露用
 `SubAgentMiddleware` 生成 `task`。递归只能来自显式自引用或循环引用，仍受 LangGraph recursion limit
 约束。
 
-同步 Subagent block 当前只保存 `instruction_override`。非空内容追加到 Primary 的 system prompt；task 工具
-schema 和 description 由 Deep Agents 管理，不再保存项目自定义的 `task_description_override`。
+同步 Subagent block 保存 `instruction_override` 和 `task_description_override`。前者非空时追加到 Primary
+system prompt；后者非空时构造官方 `SubAgentMiddleware(task_description=...)`，通过上游同名 Middleware
+替换同时进入 Primary 与拥有 `task` 的命名 child。真实 `subagents=`、工具参数 schema 和执行行为仍由
+Deep Agents 管理，空值使用上游默认说明。
 
 ## 本项目的装配边界
 
@@ -68,8 +70,9 @@ Prompt Preset、按相同顺序生成的 tool schema、response schema 与相关
 工具不能被假定为“位于消息之后”的无关尾部。Provider 的缓存 wire 和序列化顺序不是本项目 contract；
 如果最终 `task` schema、其他工具的名称/description/参数结构或顺序不同，完整请求前缀可能在工具处就分叉。
 需要让 Primary 与 Subagent 的 `task` schema 相同时，为两者显式配置相同的命名 catalog（名称、说明及顺序
-一致）。Agent Shell 继续把这些 catalog 交给官方 `SubAgentMiddleware`，不自定义工具 schema；实际对齐面
-仍应以最终 `ModelRequest` 为准，不能只比较工具名。
+一致），并让同一 `task_description_override` 在两侧展开为相同文本。Agent Shell 继续把这些 catalog 交给
+官方 `SubAgentMiddleware`，不自定义工具参数 schema；实际对齐面仍应以最终 `ModelRequest` 为准，不能只
+比较工具名。
 
 ## 官方资料
 
