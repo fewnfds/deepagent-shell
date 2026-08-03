@@ -17,7 +17,7 @@ const messages = {
       agentSessions: 'Session history',
       styleLab: 'Style lab',
       primary: 'Primary Agent',
-      subagentOverrides: 'Subagent',
+      subagents: 'Subagent',
     },
   },
 }

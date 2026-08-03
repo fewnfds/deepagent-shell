@@ -8,7 +8,7 @@ Primary Agent 与同步 Subagent。
 
 - 管理模型、系统提示词、文件系统、待办计划、自定义工具、Skill、自定义 Middleware、输出模式、
   异常重试、提示词预设和委派能力；
-- 通过 Primary Agent 组合组件，通过 Subagent 覆写定义子代理的继承、替换和关闭策略；
+- 通过 Primary Agent 组合组件，通过可复用 Subagent 实体定义路由身份、能力策略和下级引用；
 - 提供 `GET /v1/models` 与流式/非流式 `POST /v1/chat/completions`；
 - 支持 OpenAI、Anthropic、Google GenAI、Google Vertex AI、DeepSeek 和 xAI；
 - 使用 SQLite 保存配置、凭据状态、API 调用记录、拦截记录、运行日志和历史会话；

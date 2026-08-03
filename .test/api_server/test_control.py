@@ -349,14 +349,18 @@ def test_api_start_reports_primary_contract_and_referenced_block_issues(
     assert rejected.status_code == 422
     issues = rejected.json()["detail"]["validation"]["issues"]
     assert {issue["path"] for issue in issues} == {
+        "subagents[0].subagent_id",
         "subagents[0].enabled",
+        "subagents[0].name",
+        "subagents[0].description",
+        "subagents[0].subagent_override_id",
         "subagents[0].use_current_primary",
         "subagents[0].primary_agent_id",
         "subagents[0].inherit_all",
         "capability_refs.output-mode",
         "event_templates.other.[key]",
     }
-    assert sum(issue["code"] == "contract.unknown_field" for issue in issues) == 4
+    assert sum(issue["code"] == "contract.unknown_field" for issue in issues) == 7
     assert any(
         issue["code"] == "assembly.referenced_block_invalid"
         and "Published output" in issue["message"]

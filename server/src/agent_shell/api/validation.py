@@ -13,7 +13,7 @@ from agent_shell.validation.service import ConfigurationValidationService
 class DraftValidationTarget(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    kind: Literal["block", "primary", "subagent-override"]
+    kind: Literal["block", "primary", "subagent"]
     type: str = ""
     id: str = Field(default="", max_length=120)
 
@@ -58,8 +58,8 @@ def build_validation_router(
                 stage="draft_validation",
                 owner_id=target.id,
             )
-        elif target.kind == "subagent-override":
-            report, _ = validation.validate_override(
+        elif target.kind == "subagent":
+            report, _ = validation.validate_subagent(
                 request.payload,
                 stage="draft_validation",
                 owner_id=target.id,

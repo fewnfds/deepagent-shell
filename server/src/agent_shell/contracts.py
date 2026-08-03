@@ -858,12 +858,10 @@ class PromptPresetBlock(StrictBlock):
         return self
 
 
-class SubagentBinding(BaseModel):
+class SubagentReference(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    name: Annotated[str, Field(max_length=120)] = ""
-    description: DescriptionDraft = ""
-    subagent_override_id: BlockReference = ""
+    subagent_id: RequiredReference
 
 
 class CapabilityReference(BaseModel):
@@ -883,7 +881,7 @@ class CapabilityReference(BaseModel):
 
 class PrimaryAgentProfile(StrictBlock):
     capability_refs: list[CapabilityReference] = Field(default_factory=list, max_length=100)
-    subagents: list[SubagentBinding] = Field(default_factory=list, max_length=100)
+    subagents: list[SubagentReference] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
     def validate_profile(self) -> "PrimaryAgentProfile":
@@ -920,20 +918,38 @@ class CapabilityOverride(BaseModel):
         return self
 
 
-class SubagentOverrideProfile(StrictBlock):
+class SubagentSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
     capability_overrides: list[CapabilityOverride] = Field(
         default_factory=list, max_length=100
     )
-    subagents: list[SubagentBinding] = Field(default_factory=list, max_length=100)
+    subagents: list[SubagentReference] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
-    def validate_overrides(self) -> "SubagentOverrideProfile":
+    def validate_overrides(self) -> "SubagentSettings":
         capability_types = [item.type for item in self.capability_overrides]
         if len(capability_types) != len(set(capability_types)):
             raise ValueError(
                 "Subagent capability_overrides must contain at most one item per type"
             )
         return self
+
+
+class SubagentProfile(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    component_name: BlockName
+    name: Annotated[
+        str,
+        Field(
+            min_length=1,
+            max_length=120,
+            pattern=r"^[A-Za-z_][A-Za-z0-9_-]*$",
+        ),
+    ]
+    description: Annotated[str, Field(min_length=1, max_length=100_000)]
+    settings: SubagentSettings = Field(default_factory=SubagentSettings)
 
 
 BLOCK_MODELS: dict[str, type[StrictBlock]] = {
@@ -968,6 +984,6 @@ def validate_primary_agent_payload(payload: dict) -> dict:
     return model.model_dump(mode="json")
 
 
-def validate_subagent_override_payload(payload: dict) -> dict:
-    model = SubagentOverrideProfile.model_validate(payload)
+def validate_subagent_payload(payload: dict) -> dict:
+    model = SubagentProfile.model_validate(payload)
     return model.model_dump(mode="json")

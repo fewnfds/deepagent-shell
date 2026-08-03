@@ -128,8 +128,12 @@ async function refreshRepositoryValidation(): Promise<void> {
 
 async function listCategory(category: LibraryCategoryId): Promise<LibraryItem[]> {
   if (category === 'primary-agent') return api.value.listPrimaryAgents()
-  if (category === 'subagent-override') return api.value.listSubagentOverrides()
+  if (category === 'subagent-profile') return api.value.listSubagents()
   return api.value.listBlocks(category)
+}
+
+function libraryItemName(item: LibraryItem): string {
+  return 'component_name' in item ? item.component_name : item.name
 }
 
 async function refresh(): Promise<void> {
@@ -185,8 +189,8 @@ async function copyCurrentItem(): Promise<void> {
   try {
     if (category === 'primary-agent') {
       await api.value.copyPrimaryAgent(source.id, copyName.value)
-    } else if (category === 'subagent-override') {
-      await api.value.copySubagentOverride(source.id, copyName.value)
+    } else if (category === 'subagent-profile') {
+      await api.value.copySubagent(source.id, copyName.value)
     } else {
       await api.value.copyBlock(category, source.id, copyName.value)
     }
@@ -260,9 +264,9 @@ const libraryTableConfig: DataTableConfig<LibraryItem> = {
   search: {
     label: () => t('library.search.label'),
     placeholder: () => t('library.search.placeholder'),
-    values: (item) => [item.name, item.id],
+    values: (item) => [libraryItemName(item), item.id],
   },
-  columns: [{ key: 'name', label: () => t('library.columns.name'), value: (item) => item.name }],
+  columns: [{ key: 'name', label: () => t('library.columns.name'), value: libraryItemName }],
   rowActions: [
     {
       key: 'view-configuration',
@@ -289,7 +293,7 @@ const libraryTableConfig: DataTableConfig<LibraryItem> = {
       tone: 'danger',
       confirm: (item) => ({
         title: t('library.delete.title'),
-        description: t('library.delete.description', { name: item.name, id: item.id }),
+        description: t('library.delete.description', { name: libraryItemName(item), id: item.id }),
         confirmLabel: t('common.delete'),
         cancelLabel: t('common.cancel'),
         dangerous: true,
@@ -298,7 +302,7 @@ const libraryTableConfig: DataTableConfig<LibraryItem> = {
         const category = currentCategory.value
         if (!category) return
         if (category === 'primary-agent') await api.value.deletePrimaryAgent(item.id)
-        else if (category === 'subagent-override') await api.value.deleteSubagentOverride(item.id)
+        else if (category === 'subagent-profile') await api.value.deleteSubagent(item.id)
         else await api.value.deleteBlock(category, item.id)
         if (detailItem.value?.id === item.id) closeDetail()
         await refreshRepositoryValidation()
@@ -325,8 +329,8 @@ const libraryTableConfig: DataTableConfig<LibraryItem> = {
       const ids = context.matchingRows.map((item) => item.id)
       const result = category === 'primary-agent'
         ? await api.value.deletePrimaryAgents(ids)
-        : category === 'subagent-override'
-          ? await api.value.deleteSubagentOverrides(ids)
+        : category === 'subagent-profile'
+          ? await api.value.deleteSubagents(ids)
           : await api.value.deleteBlocks(category, ids)
       closeDetail()
       await refreshRepositoryValidation()

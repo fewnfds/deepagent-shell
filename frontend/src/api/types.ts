@@ -156,16 +156,14 @@ interface CapabilityReference {
   block_id: string
 }
 
-export interface SubagentBinding {
-  name: string
-  description: string
-  subagent_override_id: string
+export interface SubagentReference {
+  subagent_id: string
 }
 
 export interface PrimaryAgentPayload {
   name: string
   capability_refs: CapabilityReference[]
-  subagents: SubagentBinding[]
+  subagents: SubagentReference[]
 }
 
 export type PrimaryAgent = PrimaryAgentPayload & { id: string }
@@ -176,18 +174,24 @@ export interface CapabilityOverride {
   block_id: string
 }
 
-export interface SubagentOverridePayload {
-  name: string
+export interface SubagentSettings {
   capability_overrides: CapabilityOverride[]
-  subagents: SubagentBinding[]
+  subagents: SubagentReference[]
 }
 
-export type SubagentOverride = SubagentOverridePayload & { id: string }
+export interface SubagentPayload {
+  component_name: string
+  name: string
+  description: string
+  settings: SubagentSettings
+}
+
+export type Subagent = SubagentPayload & { id: string }
 
 type ValidationTarget =
   | { kind: 'block'; type: BlockType; id?: string }
   | { kind: 'primary'; type?: ''; id?: string }
-  | { kind: 'subagent-override'; type?: ''; id?: string }
+  | { kind: 'subagent'; type?: ''; id?: string }
 
 export interface DraftValidationRequest {
   target: ValidationTarget

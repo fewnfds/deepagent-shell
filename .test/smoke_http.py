@@ -377,19 +377,24 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
                 "subagents": [],
             },
         ).json()
-        override = _request(
+        subagent = _request(
             client,
             "POST",
-            "/api/subagent-overrides",
+            "/api/subagents",
             headers=management,
             json_body={
-                "name": f"{mode}-override",
-                "capability_overrides": [],
+                "component_name": f"{mode}-subagent",
+                "name": "smoke_worker",
+                "description": "Handles smoke-test delegated work.",
+                "settings": {
+                    "capability_overrides": [],
+                    "subagents": [],
+                },
             },
         ).json()
         for path, item in (
             ("primary-agents", primary),
-            ("subagent-overrides", override),
+            ("subagents", subagent),
         ):
             UUID(item["id"])
             _request(client, "GET", f"/api/{path}", headers=management)
@@ -407,15 +412,15 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
             headers=management,
             json_body=updated_primary,
         )
-        updated_override = dict(override)
-        updated_override.pop("id")
-        updated_override["name"] += "-updated"
+        updated_subagent = dict(subagent)
+        updated_subagent.pop("id")
+        updated_subagent["component_name"] += "-updated"
         _request(
             client,
             "PUT",
-            f"/api/subagent-overrides/{override['id']}",
+            f"/api/subagents/{subagent['id']}",
             headers=management,
-            json_body=updated_override,
+            json_body=updated_subagent,
         )
 
         with closing(sqlite3.connect(database_path)) as connection, connection:
@@ -441,7 +446,7 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
         _request(
             client,
             "DELETE",
-            f"/api/subagent-overrides/{override['id']}",
+            f"/api/subagents/{subagent['id']}",
             headers=management,
         )
         for capability_type, block in blocks.items():

@@ -32,10 +32,12 @@ from agent_shell.validation.service import (
 def _compiled_spec(
     edge: ResolvedSubagentEdge,
     runnables: dict[SubagentNodeKey, DeferredSubagentRunnable],
+    nodes: dict[SubagentNodeKey, ResolvedSubagent],
 ) -> dict[str, Any]:
+    node = nodes[edge.target_key]
     return {
-        "name": str(edge.binding["name"]),
-        "description": str(edge.binding["description"]),
+        "name": node.name,
+        "description": node.description,
         "runnable": runnables[edge.target_key],
     }
 
@@ -46,12 +48,10 @@ class SubagentGraphCompiler:
     def __init__(
         self,
         *,
-        primary_id: str,
         workspace: DeepAgentsWorkspace,
         materialize_profile: ProfileMaterializer,
         agent_input_observer: Callable[[dict[str, object]], Any] | None,
     ) -> None:
-        self._primary_id = primary_id
         self._workspace = workspace
         self._materialize_profile = materialize_profile
         self._agent_input_observer = agent_input_observer
@@ -66,21 +66,22 @@ class SubagentGraphCompiler:
             key: DeferredSubagentRunnable(node.name) for key, node in nodes.items()
         }
         for key, node in nodes.items():
-            self._compile_node(node, runnables[key], runnables)
-        return [_compiled_spec(edge, runnables) for edge in roots]
+            self._compile_node(node, runnables[key], runnables, nodes)
+        return [_compiled_spec(edge, runnables, nodes) for edge in roots]
 
     def _compile_node(
         self,
         node: ResolvedSubagent,
         runnable: DeferredSubagentRunnable,
         runnables: dict[SubagentNodeKey, DeferredSubagentRunnable],
+        nodes: dict[SubagentNodeKey, ResolvedSubagent],
     ) -> None:
         child = self._materialize_profile(
             node.references,
             node.blocks,
             filesystem_mode=node.filesystem_mode,
             scope="subagent",
-            owner_id=self._primary_id,
+            owner_id=node.key,
             owner_name=node.name,
             workspace=self._workspace,
         )
@@ -108,7 +109,7 @@ class SubagentGraphCompiler:
             middleware.extend(child.exception_retry.after_provider_boundary)
 
         compiled_children = [
-            _compiled_spec(edge, runnables) for edge in node.subagents
+            _compiled_spec(edge, runnables, nodes) for edge in node.subagents
         ]
         delegation = node.blocks.get("subagent")
         task_description_override = (
@@ -156,7 +157,7 @@ class SubagentGraphCompiler:
             raise reported_error(
                 exc,
                 scope="subagent",
-                owner_id=self._primary_id,
+                owner_id=node.key,
                 owner_name=node.name,
                 path="capability_refs",
             ) from exc
@@ -194,7 +195,7 @@ class SubagentGraphCompiler:
             model_provider=child.model_provider,
             model_name=child.model_name,
             scope="subagent",
-            owner_id=self._primary_id,
+            owner_id=node.key,
             owner_name=node.name,
             subject=f"Subagent {node.name}",
             path="capability_refs",

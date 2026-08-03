@@ -126,7 +126,7 @@ describe('ValidationChecklist', () => {
     expect(card.text()).not.toMatch(/[\u300c\u300d\u201c\u201d\u00b7\u2192]/)
   })
 
-  it('renders field-level Subagent binding errors with specific reasons and fixes', () => {
+  it('renders field-level Subagent reference errors with specific reasons and fixes', () => {
     const cases = [
       {
         code: 'contract.subagent_name_required',

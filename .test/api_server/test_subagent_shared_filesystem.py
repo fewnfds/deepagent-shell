@@ -200,12 +200,20 @@ def test_shared_filesystem_merges_parallel_children_and_scopes_skill_prompts(
         beta_model = create_child_model("Shared child beta model")
         gamma_model = create_child_model("Shared child gamma model")
 
-        def create_override(name: str, model: dict, skill: dict) -> dict:
+        def create_subagent(
+            component_name: str,
+            routing_name: str,
+            description: str,
+            model: dict,
+            skill: dict,
+        ) -> dict:
             response = client.post(
-                "/api/subagent-overrides",
-                json={
-                    "name": name,
-                    "capability_overrides": [
+                "/api/subagents",
+                json=subagent_payload(
+                    component_name,
+                    name=routing_name,
+                    description=description,
+                    capability_overrides=[
                         {
                             "type": "model",
                             "mode": "replace",
@@ -217,16 +225,24 @@ def test_shared_filesystem_merges_parallel_children_and_scopes_skill_prompts(
                             "block_id": skill["id"],
                         },
                     ],
-                },
+                ),
             )
             assert response.status_code == 200, response.text
             return response.json()
 
-        beta_override = create_override(
-            "Shared beta override", beta_model, skill_blocks["beta"]
+        beta_subagent = create_subagent(
+            "Shared beta Subagent",
+            "beta_worker",
+            "Uses the beta Skill and shared workspace.",
+            beta_model,
+            skill_blocks["beta"],
         )
-        gamma_override = create_override(
-            "Shared gamma override", gamma_model, skill_blocks["gamma"]
+        gamma_subagent = create_subagent(
+            "Shared gamma Subagent",
+            "gamma_worker",
+            "Uses the gamma Skill and shared workspace.",
+            gamma_model,
+            skill_blocks["gamma"],
         )
         delegation_response = client.post(
             "/api/blocks/subagent",
@@ -246,16 +262,8 @@ def test_shared_filesystem_merges_parallel_children_and_scopes_skill_prompts(
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
                 "subagents": [
-                    {
-                        "name": "beta_worker",
-                        "description": "Uses the beta Skill and shared workspace.",
-                        "subagent_override_id": beta_override["id"],
-                    },
-                    {
-                        "name": "gamma_worker",
-                        "description": "Uses the gamma Skill and shared workspace.",
-                        "subagent_override_id": gamma_override["id"],
-                    },
+                    {"subagent_id": beta_subagent["id"]},
+                    {"subagent_id": gamma_subagent["id"]},
                 ],
             },
         )

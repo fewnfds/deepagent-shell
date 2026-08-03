@@ -483,7 +483,6 @@ class AgentBuilder:
             from agent_shell.runtime.subagent_graphs import SubagentGraphCompiler
 
             compiled_subagents = SubagentGraphCompiler(
-                primary_id=primary_id,
                 workspace=materialized.workspace,
                 materialize_profile=self._materialize_profile,
                 agent_input_observer=agent_input_observer,

@@ -9,7 +9,7 @@ const FileManagerPage = () => import('@/pages/FileManagerPage.vue')
 const PrimaryAgentPage = () => import('@/pages/PrimaryAgentPage.vue')
 const StyleLabPage = () => import('@/pages/StyleLabPage.vue')
 const SystemSettingsPage = () => import('@/pages/SystemSettingsPage.vue')
-const SubagentOverridePage = () => import('@/pages/SubagentOverridePage.vue')
+const SubagentPage = () => import('@/pages/SubagentPage.vue')
 const TerminologyPage = () => import('@/pages/TerminologyPage.vue')
 
 export const router = createRouter({
@@ -17,7 +17,7 @@ export const router = createRouter({
   routes: [
     { path: '/', component: ApiServerSettingsPage, meta: { titleKey: 'apiServer.homeTitle' } },
     { path: '/agents/primary', component: PrimaryAgentPage, meta: { titleKey: 'navigation.agents' } },
-    { path: '/agents/subagents', component: SubagentOverridePage, meta: { titleKey: 'navigation.agents' } },
+    { path: '/agents/subagents', component: SubagentPage, meta: { titleKey: 'navigation.agents' } },
     { path: '/components/:type', component: ComponentsPage, meta: { titleKey: 'components.title' } },
     { path: '/library/:type', component: ConfigLibraryPage, meta: { titleKey: 'library.title' } },
     {

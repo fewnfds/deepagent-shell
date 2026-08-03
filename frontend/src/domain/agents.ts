@@ -10,9 +10,9 @@ import type {
   PrimaryAgent,
   PrimaryAgentPayload as ApiPrimaryAgentPayload,
   SavedBlock,
-  SubagentBinding as ApiSubagentBinding,
-  SubagentOverride,
-  SubagentOverridePayload as ApiSubagentOverridePayload,
+  Subagent,
+  SubagentPayload as ApiSubagentPayload,
+  SubagentReference as ApiSubagentReference,
   ValidationReport as ApiValidationReport,
 } from '@/api'
 
@@ -23,11 +23,11 @@ type StoredOverrideMode = Exclude<OverrideMode, 'inherit'>
 export type CapabilityManifest = ApiCapabilityManifest
 type AgentCatalog = CatalogResponse
 export type StoredBlock = SavedBlock
-export type SubagentBinding = ApiSubagentBinding
+export type SubagentReference = ApiSubagentReference
 
 export interface PrimaryAgentProfile extends Omit<PrimaryAgent, 'subagents'> {
   id: string
-  subagents: SubagentBinding[]
+  subagents: SubagentReference[]
 }
 
 type PrimaryAgentPayload = ApiPrimaryAgentPayload
@@ -39,8 +39,8 @@ interface OverrideSelection {
   block_id: string
 }
 
-export type SubagentOverrideProfile = SubagentOverride
-type SubagentOverridePayload = ApiSubagentOverridePayload
+export type SubagentProfile = Subagent
+type SubagentPayload = ApiSubagentPayload
 export type ValidationReport = ApiValidationReport
 export type DraftValidationRequest = ApiDraftValidationRequest
 
@@ -51,10 +51,10 @@ export interface AgentAuthoringService {
   getPrimaryAgent(id: string): Promise<PrimaryAgent>
   createPrimaryAgent(payload: PrimaryAgentPayload): Promise<PrimaryAgent>
   updatePrimaryAgent(id: string, payload: PrimaryAgentPayload): Promise<PrimaryAgent>
-  listSubagentOverrides(): Promise<SubagentOverrideProfile[]>
-  getSubagentOverride(id: string): Promise<SubagentOverrideProfile>
-  createSubagentOverride(payload: SubagentOverridePayload): Promise<SubagentOverrideProfile>
-  updateSubagentOverride(id: string, payload: SubagentOverridePayload): Promise<SubagentOverrideProfile>
+  listSubagents(): Promise<SubagentProfile[]>
+  getSubagent(id: string): Promise<SubagentProfile>
+  createSubagent(payload: SubagentPayload): Promise<SubagentProfile>
+  updateSubagent(id: string, payload: SubagentPayload): Promise<SubagentProfile>
   validateDraft(request: DraftValidationRequest): Promise<ValidationReport>
 }
 
@@ -67,10 +67,10 @@ export const managementAgentAuthoringService: AgentAuthoringService = {
   getPrimaryAgent: (id) => managementApi.getPrimaryAgent(id),
   createPrimaryAgent: (payload) => managementApi.savePrimaryAgent(payload),
   updatePrimaryAgent: (id, payload) => managementApi.savePrimaryAgent({ id, ...payload }),
-  listSubagentOverrides: () => managementApi.listSubagentOverrides(),
-  getSubagentOverride: (id) => managementApi.getSubagentOverride(id),
-  createSubagentOverride: (payload) => managementApi.saveSubagentOverride(payload),
-  updateSubagentOverride: (id, payload) => managementApi.saveSubagentOverride({ id, ...payload }),
+  listSubagents: () => managementApi.listSubagents(),
+  getSubagent: (id) => managementApi.getSubagent(id),
+  createSubagent: (payload) => managementApi.saveSubagent(payload),
+  updateSubagent: (id, payload) => managementApi.saveSubagent({ id, ...payload }),
   validateDraft: (request) => managementApi.validateDraft(request),
 }
 
@@ -82,21 +82,13 @@ function record(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object' ? value as Record<string, unknown> : {}
 }
 
-export function blankSubagentBinding(): SubagentBinding {
-  return {
-    name: '',
-    description: '',
-    subagent_override_id: '',
-  }
+export function blankSubagentReference(): SubagentReference {
+  return { subagent_id: '' }
 }
 
-export function normalizeSubagentBinding(value: unknown): SubagentBinding {
+export function normalizeSubagentReference(value: unknown): SubagentReference {
   const source = record(value)
-  return {
-    name: text(source.name),
-    description: text(source.description),
-    subagent_override_id: text(source.subagent_override_id),
-  }
+  return { subagent_id: text(source.subagent_id) }
 }
 
 export function blankPrimaryAgent(): PrimaryAgentProfile {
@@ -119,21 +111,17 @@ export function normalizePrimaryAgent(value: unknown): PrimaryAgentProfile {
       const reference = record(item)
       return { type: text(reference.type) as CapabilityType, block_id: text(reference.block_id) }
     }),
-    subagents: subagents.map(normalizeSubagentBinding),
+    subagents: subagents.map(normalizeSubagentReference),
   }
 }
 
-export function primaryAgentPayload(
-  value: PrimaryAgentProfile,
-): PrimaryAgentPayload {
+export function primaryAgentPayload(value: PrimaryAgentProfile): PrimaryAgentPayload {
   return {
     name: value.name.trim(),
     capability_refs: value.capability_refs
       .map((reference) => ({ type: reference.type, block_id: reference.block_id })),
-    subagents: value.subagents.map((binding) => ({
-      name: binding.name.trim(),
-      description: binding.description,
-      subagent_override_id: binding.subagent_override_id,
+    subagents: value.subagents.map((reference) => ({
+      subagent_id: reference.subagent_id,
     })),
   }
 }
@@ -147,48 +135,60 @@ export function setReference(value: PrimaryAgentProfile, type: CapabilityType, b
   if (blockId) value.capability_refs.push({ type, block_id: blockId })
 }
 
-export function blankSubagentOverride(): SubagentOverrideProfile {
+export function blankSubagent(): SubagentProfile {
   return {
     id: '',
+    component_name: '',
     name: '',
-    capability_overrides: [],
-    subagents: [],
+    description: '',
+    settings: {
+      capability_overrides: [],
+      subagents: [],
+    },
   }
 }
 
-export function normalizeSubagentOverride(value: unknown): SubagentOverrideProfile {
+export function normalizeSubagent(value: unknown): SubagentProfile {
   const source = record(value)
-  const overrides = Array.isArray(source.capability_overrides) ? source.capability_overrides : []
-  const subagents = Array.isArray(source.subagents) ? source.subagents : []
+  const settings = record(source.settings)
+  const overrides = Array.isArray(settings.capability_overrides)
+    ? settings.capability_overrides
+    : []
+  const subagents = Array.isArray(settings.subagents) ? settings.subagents : []
   return {
     id: text(source.id),
+    component_name: text(source.component_name),
     name: text(source.name),
-    capability_overrides: overrides.map((item): CapabilityOverride => {
-      const override = record(item)
-      return {
-        type: text(override.type) as CapabilityType,
-        mode: text(override.mode) as StoredOverrideMode,
-        block_id: text(override.block_id),
-      }
-    }),
-    subagents: subagents.map(normalizeSubagentBinding),
+    description: text(source.description),
+    settings: {
+      capability_overrides: overrides.map((item): CapabilityOverride => {
+        const override = record(item)
+        return {
+          type: text(override.type) as CapabilityType,
+          mode: text(override.mode) as StoredOverrideMode,
+          block_id: text(override.block_id),
+        }
+      }),
+      subagents: subagents.map(normalizeSubagentReference),
+    },
   }
 }
 
-export function overrideSelection(value: SubagentOverrideProfile, type: CapabilityType): OverrideSelection {
-  return value.capability_overrides.find((item) => item.type === type)
+export function overrideSelection(value: SubagentProfile, type: CapabilityType): OverrideSelection {
+  return value.settings.capability_overrides.find((item) => item.type === type)
     ?? { type, mode: 'inherit', block_id: '' }
 }
 
 export function setOverrideSelection(
-  value: SubagentOverrideProfile,
+  value: SubagentProfile,
   type: CapabilityType,
   mode: OverrideMode,
   blockId = '',
 ): void {
-  value.capability_overrides = value.capability_overrides.filter((item) => item.type !== type)
+  value.settings.capability_overrides = value.settings.capability_overrides
+    .filter((item) => item.type !== type)
   if (mode !== 'inherit') {
-    value.capability_overrides.push({
+    value.settings.capability_overrides.push({
       type,
       mode,
       block_id: mode === 'replace' ? blockId : '',
@@ -196,17 +196,17 @@ export function setOverrideSelection(
   }
 }
 
-export function subagentOverridePayload(
-  value: SubagentOverrideProfile,
-): SubagentOverridePayload {
+export function subagentPayload(value: SubagentProfile): SubagentPayload {
   return {
+    component_name: value.component_name.trim(),
     name: value.name.trim(),
-    capability_overrides: value.capability_overrides
-      .map((selection) => ({ ...selection })),
-    subagents: value.subagents.map((binding) => ({
-      name: binding.name.trim(),
-      description: binding.description,
-      subagent_override_id: binding.subagent_override_id,
-    })),
+    description: value.description,
+    settings: {
+      capability_overrides: value.settings.capability_overrides
+        .map((selection) => ({ ...selection })),
+      subagents: value.settings.subagents.map((reference) => ({
+        subagent_id: reference.subagent_id,
+      })),
+    },
   }
 }

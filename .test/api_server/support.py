@@ -189,6 +189,25 @@ def create_primary(
     return response.json()
 
 
+def subagent_payload(
+    component_name: str,
+    *,
+    name: str = "worker",
+    description: str = "Handles delegated work.",
+    capability_overrides: list[dict[str, object]] | None = None,
+    subagents: list[dict[str, str]] | None = None,
+) -> dict[str, object]:
+    return {
+        "component_name": component_name,
+        "name": name,
+        "description": description,
+        "settings": {
+            "capability_overrides": capability_overrides or [],
+            "subagents": subagents or [],
+        },
+    }
+
+
 def output_mode_payload(
     name: str = "Visible timeline", *, include_lifecycle: bool = True
 ) -> dict:

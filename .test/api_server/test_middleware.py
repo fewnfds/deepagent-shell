@@ -393,6 +393,14 @@ def test_subagent_duplicate_runtime_middleware_name_identifies_owner(
             "/api/blocks/subagent",
             json={"name": "Conflict delegation"},
         ).json()
+        subagent = client.post(
+            "/api/subagents",
+            json=subagent_payload(
+                "Conflicted worker",
+                name="conflicted_worker",
+                description="Uses the inherited conflicting Middleware.",
+            ),
+        ).json()
         updated = client.put(
             f"/api/primary-agents/{primary['id']}",
             json={
@@ -402,13 +410,7 @@ def test_subagent_duplicate_runtime_middleware_name_identifies_owner(
                     {"type": "custom-middleware", "block_id": custom["id"]},
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
-                "subagents": [
-                    {
-                        "name": "conflicted_worker",
-                        "description": "Uses the inherited conflicting Middleware.",
-                        "subagent_override_id": "",
-                    }
-                ],
+                "subagents": [{"subagent_id": subagent["id"]}],
             },
         )
         assert updated.status_code == 200, updated.text

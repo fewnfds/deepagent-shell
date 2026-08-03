@@ -6,7 +6,7 @@ import { useRoute } from 'vue-router'
 
 import PageShell from '@/components/PageShell.vue'
 import RecordPicker from '@/components/RecordPicker.vue'
-import SubagentBindingsEditor from '@/components/SubagentBindingsEditor.vue'
+import SubagentReferencesEditor from '@/components/SubagentReferencesEditor.vue'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
 import { useDraftValidation } from '@/composables/useDraftValidation'
 import { useManagementError } from '@/composables/useManagementError'
@@ -25,7 +25,7 @@ import {
   type CapabilityType,
   type PrimaryAgentProfile,
   type StoredBlock,
-  type SubagentOverrideProfile,
+  type SubagentProfile,
 } from '@/domain/agents'
 
 const props = defineProps<{
@@ -46,7 +46,7 @@ const feedbackDetail = ref('')
 const manifests = ref<CapabilityManifest[]>([])
 const blocks = ref<Record<string, StoredBlock[]>>({})
 const profiles = ref<PrimaryAgentProfile[]>([])
-const overrideProfiles = ref<SubagentOverrideProfile[]>([])
+const subagentProfiles = ref<SubagentProfile[]>([])
 const selectedProfileId = ref('')
 const form = ref(blankPrimaryAgent())
 let profileLoadSequence = 0
@@ -185,14 +185,14 @@ async function loadWorkspace(): Promise<void> {
   }
   loading.value = true
   try {
-    const [catalog, primaryItems, overrideItems] = await Promise.all([
+    const [catalog, primaryItems, subagentItems] = await Promise.all([
       service.value.getCatalog(),
       service.value.listPrimaryAgents(),
-      service.value.listSubagentOverrides(),
+      service.value.listSubagents(),
     ])
     manifests.value = [...catalog.block_types].sort((left, right) => left.order - right.order)
     profiles.value = primaryItems.map(normalizePrimaryAgent)
-    overrideProfiles.value = overrideItems
+    subagentProfiles.value = subagentItems
     const entries = await Promise.all(manifests.value.map(async (manifest) => [
       manifest.type,
       await service.value?.listBlocks(manifest.type) ?? [],
@@ -299,9 +299,9 @@ watch(
           </div>
         </section>
 
-        <SubagentBindingsEditor
-          v-model:bindings="form.subagents"
-          :override-profiles="overrideProfiles"
+        <SubagentReferencesEditor
+          v-model:references="form.subagents"
+          :profiles="subagentProfiles"
         />
 
       </section>

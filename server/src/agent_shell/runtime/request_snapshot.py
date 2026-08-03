@@ -27,7 +27,7 @@ class _SnapshotDatabase:
         ("provider_secrets", ("id", "secret_value")),
         ("blocks", ("id", "block_type", "name", "payload")),
         ("primary_agents", ("id", "name", "payload")),
-        ("subagent_overrides", ("id", "name", "payload")),
+        ("subagents", ("id", "component_name", "payload")),
     )
 
     def __init__(self, source: SQLiteDatabase) -> None:

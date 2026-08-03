@@ -114,7 +114,7 @@ const messages = {
     filesystem: { label: 'Filesystem' },
     model: { label: 'Model' },
     'primary-agent': { label: 'Primary Agent' },
-    'subagent-override': { label: 'Subagent override' },
+    'subagent-profile': { label: 'Subagent' },
   },
   validation: {
     status: {
@@ -188,7 +188,7 @@ function createApi() {
   }))
   const listBlocks = vi.fn(async () => [...stored])
   const listPrimaryAgents = vi.fn(async () => [])
-  const listSubagentOverrides = vi.fn(async () => [])
+  const listSubagents = vi.fn(async () => [])
   const copyBlock = vi.fn(async () => {
     stored = [...stored, copied]
     return copied
@@ -207,17 +207,17 @@ function createApi() {
     validateRepository,
     listBlocks,
     listPrimaryAgents,
-    listSubagentOverrides,
+    listSubagents,
     copyBlock,
     copyPrimaryAgent: vi.fn(),
-    copySubagentOverride: vi.fn(),
+    copySubagent: vi.fn(),
     deleteBlock,
     deleteUnsupportedBlock,
     deleteBlocks: vi.fn(async (_type, ids) => deleteBlocks(ids)),
     deletePrimaryAgent: vi.fn(),
-    deleteSubagentOverride: vi.fn(),
+    deleteSubagent: vi.fn(),
     deletePrimaryAgents: vi.fn(),
-    deleteSubagentOverrides: vi.fn(),
+    deleteSubagents: vi.fn(),
   }
   return {
     service,
@@ -226,7 +226,7 @@ function createApi() {
     validateRepository,
     listBlocks,
     listPrimaryAgents,
-    listSubagentOverrides,
+    listSubagents,
     copyBlock,
     deleteBlock,
     deleteUnsupportedBlock,
@@ -299,7 +299,7 @@ describe('ConfigLibraryPage', () => {
     expect(api.listBlocks).toHaveBeenCalledOnce()
     expect(api.listBlocks).toHaveBeenCalledWith('model')
     expect(api.listPrimaryAgents).not.toHaveBeenCalled()
-    expect(api.listSubagentOverrides).not.toHaveBeenCalled()
+    expect(api.listSubagents).not.toHaveBeenCalled()
     expect(wrapper.get('[data-testid="library-component-group"] > span').text()).toBe('Components')
     expect(wrapper
       .get('[data-testid="library-component-group"] [data-testid="section-nav"]')
@@ -309,7 +309,7 @@ describe('ConfigLibraryPage', () => {
     expect(wrapper
       .get('[data-testid="library-agent-group"] [data-testid="section-nav"]')
       .findAll('button')
-      .map((item) => item.text())).toEqual(['Primary Agent', 'Subagent override'])
+      .map((item) => item.text())).toEqual(['Primary Agent', 'Subagent'])
     expect(wrapper.findAll('[data-testid="section-nav"] button').every((button) => !button.classes().includes('w-100'))).toBe(true)
     expect(wrapper.findAll('[data-testid="section-nav"] button').map((button) => (
       button.classes().includes('btn-primary') ? 'primary' : 'secondary'

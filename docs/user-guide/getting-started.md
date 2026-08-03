@@ -18,7 +18,7 @@
 
 - 【首页】：API Server 地址、API Key、消息上限、启动/停止与配置告警；
 - 【系统】：系统配置、文件管理、日志中心和历史会话；
-- 【Agent】：Primary Agent 与 Subagent 覆写；
+- 【Agent】：Primary Agent 与可复用 Subagent 实体；
 - 【组件】：十一类可复用能力；
 - 【配置仓库】：查看、复制、编辑和删除全部配置；
 - 【术语】：中英文术语；

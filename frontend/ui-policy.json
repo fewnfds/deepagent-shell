@@ -237,7 +237,7 @@
           "src/pages/ComponentsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/PrimaryAgentPage.vue",
-          "src/pages/SubagentOverridePage.vue"
+          "src/pages/SubagentPage.vue"
         ],
         "classes": ["validation-sidebar"]
       },
@@ -332,7 +332,7 @@
           "src/pages/FileManagerPage.vue",
           "src/pages/PrimaryAgentPage.vue",
           "src/pages/StyleLabPage.vue",
-          "src/pages/SubagentOverridePage.vue",
+          "src/pages/SubagentPage.vue",
           "src/pages/SystemSettingsPage.vue",
           "src/pages/TerminologyPage.vue"
         ]
@@ -344,24 +344,25 @@
         "reason": "Owns localized backend field labels, technical field names and contextual hints without wrapping controls",
         "callers": [
           "src/components/RecordPicker.vue",
-          "src/components/SubagentBindingsEditor.vue",
+          "src/components/SubagentReferencesEditor.vue",
           "src/editors/CustomMiddlewareEditor.vue",
           "src/editors/ExceptionRetryEditor.vue",
           "src/editors/FilesystemEditor.vue",
           "src/editors/ModelEditor.vue",
           "src/editors/OutputModeEditor.vue",
           "src/editors/PromptPresetEditor.vue",
-          "src/pages/ConfigLibraryPage.vue"
+          "src/pages/ConfigLibraryPage.vue",
+          "src/pages/SubagentPage.vue"
         ]
       },
       {
-        "name": "SubagentBindingsEditor",
-        "path": "src/components/SubagentBindingsEditor.vue",
+        "name": "SubagentReferencesEditor",
+        "path": "src/components/SubagentReferencesEditor.vue",
         "kind": "domain-composition",
-        "reason": "Owns the shared named Subagent catalog fields and add/remove interaction for Primary and Subagent configurations",
+        "reason": "Owns the shared ordered Subagent entity references for Primary and Subagent configurations",
         "callers": [
           "src/pages/PrimaryAgentPage.vue",
-          "src/pages/SubagentOverridePage.vue"
+          "src/pages/SubagentPage.vue"
         ]
       },
       {
@@ -372,7 +373,7 @@
         "callers": [
           "src/pages/ComponentsPage.vue",
           "src/pages/PrimaryAgentPage.vue",
-          "src/pages/SubagentOverridePage.vue"
+          "src/pages/SubagentPage.vue"
         ]
       },
       {
@@ -396,7 +397,7 @@
           "src/pages/ComponentsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/PrimaryAgentPage.vue",
-          "src/pages/SubagentOverridePage.vue"
+          "src/pages/SubagentPage.vue"
         ]
       },
       {

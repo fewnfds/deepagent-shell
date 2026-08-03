@@ -176,16 +176,18 @@ def test_override_update_rejects_new_conflict_in_bound_subagent(
         "/api/blocks/custom-tool",
         json={"name": "Conflicting child tools", "tools": ["write_todos"]},
     ).json()
-    override = client.post(
-        "/api/subagent-overrides",
-        json={
-            "name": "Bound override",
-            "capability_overrides": [
+    subagent = client.post(
+        "/api/subagents",
+        json=subagent_payload(
+            "Bound Subagent",
+            name="worker",
+            description="Handle delegated work.",
+            capability_overrides=[
                 {"type": "custom-tool", "mode": "replace", "block_id": safe_tool["id"]}
             ],
-        },
+        ),
     )
-    assert override.status_code == 200, override.text
+    assert subagent.status_code == 200, subagent.text
     primary = client.post(
         "/api/primary-agents",
         json={
@@ -194,36 +196,32 @@ def test_override_update_rejects_new_conflict_in_bound_subagent(
                 blocks,
                 ("model", "filesystem", "output-mode", "todo-list", "subagent"),
             ),
-            "subagents": [
-                {
-                    "name": "worker",
-                    "description": "Handle delegated work.",
-                    "subagent_override_id": override.json()["id"],
-                }
-            ],
+            "subagents": [{"subagent_id": subagent.json()["id"]}],
         },
     )
     assert primary.status_code == 200, primary.text
 
     rejected = client.put(
-        f"/api/subagent-overrides/{override.json()['id']}",
-        json={
-            "name": "Bound override",
-            "capability_overrides": [
+        f"/api/subagents/{subagent.json()['id']}",
+        json=subagent_payload(
+            "Bound Subagent",
+            name="worker",
+            description="Handle delegated work.",
+            capability_overrides=[
                 {
                     "type": "custom-tool",
                     "mode": "replace",
                     "block_id": conflict_tool["id"],
                 }
             ],
-        },
+        ),
     )
 
     assert rejected.status_code == 422
     issues = rejected.json()["detail"]["validation"]["issues"]
     assert any(issue["code"] == "assembly.tool_name_conflict" for issue in issues)
-    stored = client.get(f"/api/subagent-overrides/{override.json()['id']}").json()
-    assert stored["capability_overrides"][0]["block_id"] == safe_tool["id"]
+    stored = client.get(f"/api/subagents/{subagent.json()['id']}").json()
+    assert stored["settings"]["capability_overrides"][0]["block_id"] == safe_tool["id"]
 
 def test_block_copy_revalidates_stored_payload_before_writing(
     tmp_path: Path, monkeypatch
@@ -381,13 +379,9 @@ def test_repository_report_owns_invalid_subagent_issue_by_primary(
                 *references(blocks, ("model", "filesystem", "output-mode")),
                 {"type": "subagent", "block_id": delegation["id"]},
             ],
-            "subagents": [
-                {
-                    "name": "owned_worker",
-                    "description": "Proves repository issue ownership.",
-                    "subagent_override_id": "00000000-0000-0000-0000-000000000000",
-                }
-            ],
+            "subagents": [{
+                "subagent_id": "00000000-0000-0000-0000-000000000000"
+            }],
         },
     )
     assert primary.status_code == 422
@@ -411,13 +405,9 @@ def test_repository_report_owns_invalid_subagent_issue_by_primary(
         payload["capability_refs"].append(
             {"type": "subagent", "block_id": delegation["id"]}
         )
-        payload["subagents"] = [
-            {
-                "name": "owned_worker",
-                "description": "Proves repository issue ownership.",
-                "subagent_override_id": "00000000-0000-0000-0000-000000000000",
-            }
-        ]
+        payload["subagents"] = [{
+            "subagent_id": "00000000-0000-0000-0000-000000000000"
+        }]
         connection.execute(
             "UPDATE primary_agents SET payload = ? WHERE id = ?",
             (json.dumps(payload, ensure_ascii=False), valid_primary["id"]),
@@ -427,11 +417,11 @@ def test_repository_report_owns_invalid_subagent_issue_by_primary(
     issue = next(
         item
         for item in issues
-        if item["code"] == "assembly.subagent_override_not_found"
+        if item["code"] == "assembly.subagent_not_found"
     )
     assert issue["scope"] == "subagent"
     assert issue["owner_id"] == valid_primary["id"]
-    assert issue["owner_name"] == "owned_worker"
+    assert issue["owner_name"] == "Subagent owner Primary"
 
 def test_invalid_historical_primary_does_not_break_unrelated_delete_paths(
     tmp_path: Path, monkeypatch
@@ -452,9 +442,12 @@ def test_invalid_historical_primary_does_not_break_unrelated_delete_paths(
             "subagents": [],
         },
     ).json()
-    override = client.post(
-        "/api/subagent-overrides",
-        json={"name": "Unrelated deletable override", "capability_overrides": []},
+    subagent = client.post(
+        "/api/subagents",
+        json=subagent_payload(
+            "Unrelated deletable Subagent",
+            name="unrelated_worker",
+        ),
     ).json()
     database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
     with closing(sqlite3.connect(database_path)) as connection, connection:
@@ -473,12 +466,12 @@ def test_invalid_historical_primary_does_not_break_unrelated_delete_paths(
     deleted_block = client.delete(
         f"/api/blocks/system-prompt/{blocks['system-prompt']['id']}"
     )
-    deleted_override = client.delete(f"/api/subagent-overrides/{override['id']}")
+    deleted_subagent = client.delete(f"/api/subagents/{subagent['id']}")
 
     assert report.status_code == 200
     assert report.json()["valid"] is False
     assert deleted_block.status_code == 200, deleted_block.text
-    assert deleted_override.status_code == 200, deleted_override.text
+    assert deleted_subagent.status_code == 200, deleted_subagent.text
 
 def test_generic_draft_validation_covers_each_target_without_writing(
     tmp_path: Path, monkeypatch
@@ -503,35 +496,36 @@ def test_generic_draft_validation_covers_each_target_without_writing(
             "payload": {"name": "Draft Primary", "capability_refs": []},
         },
     )
-    override_report = client.post(
+    subagent_report = client.post(
         "/api/validation/draft",
         json={
-            "target": {"kind": "subagent-override"},
-            "payload": {
-                "name": "Draft override",
-                "capability_overrides": [
+            "target": {"kind": "subagent"},
+            "payload": subagent_payload(
+                "Draft Subagent",
+                name="draft_worker",
+                capability_overrides=[
                     {
                         "type": "model",
                         "mode": "replace",
                         "block_id": "00000000-0000-0000-0000-000000000000",
                     }
                 ],
-            },
+            ),
         },
     )
 
     assert block_report.status_code == 200
     assert primary_report.status_code == 200
-    assert override_report.status_code == 200
+    assert subagent_report.status_code == 200
     assert block_report.json()["issues"][0]["code"] == "contract.unknown_field"
     assert any(
         issue["code"] == "assembly.required_capability_missing"
         for issue in primary_report.json()["issues"]
     )
-    assert override_report.json()["issues"][0]["code"] == "assembly.reference_not_found"
+    assert subagent_report.json()["issues"][0]["code"] == "assembly.reference_not_found"
     assert client.get("/api/blocks/system-prompt").json() == []
     assert client.get("/api/primary-agents").json() == []
-    assert client.get("/api/subagent-overrides").json() == []
+    assert client.get("/api/subagents").json() == []
 
 
 def test_draft_validation_rejects_unknown_block_type_with_localized_detail(

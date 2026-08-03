@@ -3,36 +3,28 @@ from __future__ import annotations
 from .support import *
 
 
-def test_subagent_binding_semantics_return_all_field_level_issues(
+def test_subagent_references_report_duplicate_entity_name_and_missing_target(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
         primary = create_primary(client)
+        first = client.post(
+            "/api/subagents",
+            json=subagent_payload("First worker", name="worker"),
+        ).json()
+        second = client.post(
+            "/api/subagents",
+            json=subagent_payload("Second worker", name="worker"),
+        ).json()
         payload = {
             "name": primary["name"],
             "capability_refs": primary["capability_refs"],
             "subagents": [
-                {
-                    "name": "",
-                    "description": "Has a description.",
-                    "subagent_override_id": "",
-                },
-                {
-                    "name": "中文名称",
-                    "description": "Has a description.",
-                    "subagent_override_id": "",
-                },
-                {
-                    "name": "worker",
-                    "description": "",
-                    "subagent_override_id": "",
-                },
-                {
-                    "name": "worker",
-                    "description": "Duplicate name.",
-                    "subagent_override_id": "",
-                },
+                {"subagent_id": first["id"]},
+                {"subagent_id": first["id"]},
+                {"subagent_id": second["id"]},
+                {"subagent_id": "00000000-0000-0000-0000-000000000000"},
             ],
         }
 
@@ -40,48 +32,57 @@ def test_subagent_binding_semantics_return_all_field_level_issues(
             "/api/validation/draft",
             json={"target": {"kind": "primary"}, "payload": payload},
         )
-        saved = client.put(
-            f"/api/primary-agents/{primary['id']}",
-            json=payload,
-        )
+        saved = client.put(f"/api/primary-agents/{primary['id']}", json=payload)
 
     expected = {
-        (
-            "contract.subagent_name_required",
-            "subagents[0].name",
-        ),
-        (
-            "contract.subagent_name_format_invalid",
-            "subagents[1].name",
-        ),
-        (
-            "contract.subagent_description_required",
-            "subagents[2].description",
-        ),
-        (
-            "contract.subagent_name_duplicate",
-            "subagents[3].name",
-        ),
+        ("contract.subagent_reference_duplicate", "subagents[1].subagent_id"),
+        ("contract.subagent_name_duplicate", "subagents[2].subagent_id"),
+        ("assembly.subagent_not_found", "subagents[3].subagent_id"),
     }
     assert draft.status_code == 200
-    draft_issues = draft.json()["issues"]
-    assert {(issue["code"], issue["path"]) for issue in draft_issues} == expected
+    assert {
+        (issue["code"], issue["path"]) for issue in draft.json()["issues"]
+    } == expected
     assert saved.status_code == 422
-    saved_issues = saved.json()["detail"]["validation"]["issues"]
-    assert {(issue["code"], issue["path"]) for issue in saved_issues} == expected
-    assert all(issue["scope"] == "primary" for issue in saved_issues)
-    assert not any(
-        issue["code"] == "contract.invalid_value" and not issue["path"]
-        for issue in saved_issues
-    )
+    assert {
+        (issue["code"], issue["path"])
+        for issue in saved.json()["detail"]["validation"]["issues"]
+    } == expected
 
 
-def test_removed_subagent_binding_enabled_field_is_rejected(
+def test_subagent_entity_owns_routing_identity_contract(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        response = client.post(
+            "/api/subagents",
+            json={
+                "component_name": "Invalid routing identity",
+                "name": "中文名称",
+                "description": "",
+                "settings": {"capability_overrides": [], "subagents": []},
+            },
+        )
+
+    assert response.status_code == 422
+    paths = {
+        issue["path"]
+        for issue in response.json()["detail"]["validation"]["issues"]
+    }
+    assert paths == {"name", "description"}
+
+
+def test_removed_subagent_reference_fields_are_rejected(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
         primary = create_primary(client)
+        subagent = client.post(
+            "/api/subagents",
+            json=subagent_payload("Worker", name="worker"),
+        ).json()
         response = client.put(
             f"/api/primary-agents/{primary['id']}",
             json={
@@ -89,19 +90,18 @@ def test_removed_subagent_binding_enabled_field_is_rejected(
                 "capability_refs": primary["capability_refs"],
                 "subagents": [
                     {
+                        "subagent_id": subagent["id"],
                         "enabled": False,
-                        "name": "中文草稿",
-                        "description": "",
-                        "subagent_override_id": "",
+                        "name": "legacy_worker",
                     }
                 ],
             },
         )
 
     assert response.status_code == 422
-    issues = response.json()["detail"]["validation"]["issues"]
-    assert any(
-        issue["code"] == "contract.unknown_field"
-        and issue["path"] == "subagents[0].enabled"
-        for issue in issues
-    )
+    paths = {
+        issue["path"]
+        for issue in response.json()["detail"]["validation"]["issues"]
+        if issue["code"] == "contract.unknown_field"
+    }
+    assert paths == {"subagents[0].enabled", "subagents[0].name"}

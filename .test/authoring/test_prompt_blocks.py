@@ -136,24 +136,24 @@ def test_prompt_templates_accept_escaped_literal_braces(
     )
     assert (
         client.post(
-            "/api/subagent-overrides",
+            "/api/subagents",
             json={
                 "id": "client-id",
-                "name": "bad id",
-                "capability_overrides": [],
+                **subagent_payload("Bad client id", name="bad_id"),
             },
         ).status_code
         == 422
     )
     assert (
         client.post(
-            "/api/subagent-overrides",
-            json={
-                "name": "explicit inherit",
-                "capability_overrides": [
+            "/api/subagents",
+            json=subagent_payload(
+                "Explicit inherit",
+                name="explicit_inherit",
+                capability_overrides=[
                     {"type": "model", "mode": "inherit", "block_id": ""}
                 ],
-            },
+            ),
         ).status_code
         == 422
     )

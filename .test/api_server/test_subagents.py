@@ -66,25 +66,30 @@ def test_selected_subagent_applies_effective_overrides_and_returns_result(
                 "system_prompt": "OVERRIDE CHILD PROMPT",
             },
         ).json()
-        override_response = client.post(
-            "/api/subagent-overrides",
+        subagent_response = client.post(
+            "/api/subagents",
             json={
-                "name": "Child runtime override",
-                "capability_overrides": [
-                    {
-                        "type": "model",
-                        "mode": "replace",
-                        "block_id": child_model_block["id"],
-                    },
-                    {
-                        "type": "system-prompt",
-                        "mode": "replace",
-                        "block_id": override_prompt["id"],
-                    },
-                ],
+                "component_name": "Child runtime profile",
+                "name": "worker",
+                "description": "Handles the delegated check.",
+                "settings": {
+                    "capability_overrides": [
+                        {
+                            "type": "model",
+                            "mode": "replace",
+                            "block_id": child_model_block["id"],
+                        },
+                        {
+                            "type": "system-prompt",
+                            "mode": "replace",
+                            "block_id": override_prompt["id"],
+                        },
+                    ],
+                    "subagents": [],
+                },
             },
         )
-        assert override_response.status_code == 200, override_response.text
+        assert subagent_response.status_code == 200, subagent_response.text
         delegation = client.post(
             "/api/blocks/subagent",
             json={"name": "Runtime delegation"},
@@ -98,11 +103,7 @@ def test_selected_subagent_applies_effective_overrides_and_returns_result(
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
                 "subagents": [
-                    {
-                        "name": "worker",
-                        "description": "Handles the delegated check.",
-                        "subagent_override_id": override_response.json()["id"],
-                    }
+                    {"subagent_id": subagent_response.json()["id"]}
                 ],
             },
         )
@@ -169,7 +170,7 @@ def test_selected_subagent_applies_effective_overrides_and_returns_result(
     )
 
 
-def test_subagent_inherits_current_primary_without_saved_override(
+def test_subagent_entity_can_inherit_current_primary_capabilities(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class ParentModel(ToolCallingFakeModel):
@@ -221,6 +222,15 @@ def test_subagent_inherits_current_primary_without_saved_override(
             "/api/blocks/subagent",
             json={"name": "Self delegation"},
         ).json()
+        subagent = client.post(
+            "/api/subagents",
+            json={
+                "component_name": "Inherited worker",
+                "name": "self_worker",
+                "description": "Uses the current Primary capabilities.",
+                "settings": {"capability_overrides": [], "subagents": []},
+            },
+        ).json()
         updated = client.put(
             f"/api/primary-agents/{primary['id']}",
             json={
@@ -230,17 +240,11 @@ def test_subagent_inherits_current_primary_without_saved_override(
                     {"type": "system-prompt", "block_id": prompt["id"]},
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
-                "subagents": [
-                    {
-                        "name": "self_worker",
-                        "description": "Uses the current Primary without an override profile.",
-                        "subagent_override_id": "",
-                    }
-                ],
+                "subagents": [{"subagent_id": subagent["id"]}],
             },
         )
         assert updated.status_code == 200, updated.text
-        assert client.get("/api/subagent-overrides").json() == []
+        assert client.get("/api/subagents").json() == [subagent]
 
         response = client.post(
             "/v1/chat/completions",
@@ -269,9 +273,14 @@ def test_unknown_subagent_capability_returns_stable_error_and_history(
     database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
     with make_client(tmp_path, monkeypatch) as client:
         parent = create_primary(client)
-        override = client.post(
-            "/api/subagent-overrides",
-            json={"name": "Stale child override", "capability_overrides": []},
+        subagent = client.post(
+            "/api/subagents",
+            json={
+                "component_name": "Stale child profile",
+                "name": "stale_worker",
+                "description": "Exercises stale Subagent capability data.",
+                "settings": {"capability_overrides": [], "subagents": []},
+            },
         ).json()
         delegation = client.post(
             "/api/blocks/subagent",
@@ -285,23 +294,17 @@ def test_unknown_subagent_capability_returns_stable_error_and_history(
                     *parent["capability_refs"],
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
-                "subagents": [
-                    {
-                        "name": "stale_worker",
-                        "description": "Exercises stale Subagent capability data.",
-                        "subagent_override_id": override["id"],
-                    }
-                ],
+                "subagents": [{"subagent_id": subagent["id"]}],
             },
         )
         assert updated.status_code == 200, updated.text
 
         with closing(sqlite3.connect(database_path)) as connection, connection:
             row = connection.execute(
-                "SELECT payload FROM subagent_overrides WHERE id = ?", (override["id"],)
+                "SELECT payload FROM subagents WHERE id = ?", (subagent["id"],)
             ).fetchone()
             payload = json.loads(row[0])
-            payload["capability_overrides"].append(
+            payload["settings"]["capability_overrides"].append(
                 {
                     "type": "context-assembler",
                     "mode": "disabled",
@@ -309,8 +312,8 @@ def test_unknown_subagent_capability_returns_stable_error_and_history(
                 }
             )
             connection.execute(
-                "UPDATE subagent_overrides SET payload = ? WHERE id = ?",
-                (json.dumps(payload), override["id"]),
+                "UPDATE subagents SET payload = ? WHERE id = ?",
+                (json.dumps(payload), subagent["id"]),
             )
             connection.commit()
 
@@ -327,7 +330,7 @@ def test_unknown_subagent_capability_returns_stable_error_and_history(
         ).json()
 
     assert response.status_code == 409
-    assert response.json()["error"]["code"] == "assembly.subagent_override_invalid"
+    assert response.json()["error"]["code"] == "assembly.subagent_invalid"
     assert "context-assembler" in response.json()["error"]["message"]
     assert len(history["items"]) == 1
-    assert "assembly.subagent_override_invalid" in history["items"][0]["summary"]
+    assert "assembly.subagent_invalid" in history["items"][0]["summary"]

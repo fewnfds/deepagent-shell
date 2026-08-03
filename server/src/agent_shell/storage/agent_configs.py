@@ -11,7 +11,10 @@ if TYPE_CHECKING:
 
 
 class AgentConfigStore:
-    _TABLES = {"primary_agents", "subagent_overrides"}
+    _IDENTITY_COLUMNS = {
+        "primary_agents": "name",
+        "subagents": "component_name",
+    }
 
     def __init__(
         self,
@@ -22,46 +25,57 @@ class AgentConfigStore:
         self._events = event_logger
 
     @staticmethod
-    def _from_row(row: sqlite3.Row) -> dict:
+    def _from_row(row: sqlite3.Row, identity_column: str) -> dict:
         item = json.loads(row["payload"])
         item["id"] = row["id"]
-        item["name"] = row["name"]
+        item[identity_column] = row[identity_column]
         return item
 
     def _table(self, table: str) -> str:
-        if table not in self._TABLES:
+        if table not in self._IDENTITY_COLUMNS:
             raise ValueError(f"unsupported agent config table: {table}")
         return table
 
+    def _identity_column(self, table: str) -> str:
+        return self._IDENTITY_COLUMNS[self._table(table)]
+
     def list_items(self, table: str) -> list[dict]:
         table = self._table(table)
+        identity_column = self._identity_column(table)
         with self._database.transaction() as connection:
             rows = connection.execute(
-                f"SELECT id, name, payload FROM {table} ORDER BY name COLLATE NOCASE, id"
+                f"SELECT id, {identity_column}, payload FROM {table} "
+                f"ORDER BY {identity_column} COLLATE NOCASE, id"
             ).fetchall()
-        return [self._from_row(row) for row in rows]
+        return [self._from_row(row, identity_column) for row in rows]
 
     def get_item(self, table: str, item_id: str) -> dict | None:
         table = self._table(table)
+        identity_column = self._identity_column(table)
         with self._database.transaction() as connection:
             row = connection.execute(
-                f"SELECT id, name, payload FROM {table} WHERE id = ?", (item_id,)
+                f"SELECT id, {identity_column}, payload FROM {table} WHERE id = ?",
+                (item_id,),
             ).fetchone()
-        return self._from_row(row) if row else None
+        return self._from_row(row, identity_column) if row else None
 
     def get_item_by_name(self, table: str, name: str) -> dict | None:
         table = self._table(table)
+        identity_column = self._identity_column(table)
         with self._database.transaction() as connection:
             row = connection.execute(
-                f"SELECT id, name, payload FROM {table} WHERE name = ?", (name,)
+                f"SELECT id, {identity_column}, payload FROM {table} "
+                f"WHERE {identity_column} = ?",
+                (name,),
             ).fetchone()
-        return self._from_row(row) if row else None
+        return self._from_row(row, identity_column) if row else None
 
     def save_item(self, table: str, item_id: str, data: dict) -> None:
         table = self._table(table)
-        name = data["name"]
+        identity_column = self._identity_column(table)
+        name = data[identity_column]
         payload = json.dumps(
-            {key: value for key, value in data.items() if key != "name"},
+            {key: value for key, value in data.items() if key != identity_column},
             ensure_ascii=False,
         )
         with self._database.transaction() as connection:
@@ -69,20 +83,21 @@ class AgentConfigStore:
                 f"SELECT 1 FROM {table} WHERE id = ?", (item_id,)
             ).fetchone()
             duplicate = connection.execute(
-                f"SELECT id FROM {table} WHERE name = ? AND id != ?",
+                f"SELECT id FROM {table} WHERE {identity_column} = ? AND id != ?",
                 (name, item_id),
             ).fetchone()
             if duplicate:
                 raise ValueError(f"名称「{name}」已存在")
             connection.execute(
-                f"INSERT INTO {table} (id, name, payload) VALUES (?, ?, ?) "
-                "ON CONFLICT(id) DO UPDATE SET name = excluded.name, payload = excluded.payload",
+                f"INSERT INTO {table} (id, {identity_column}, payload) VALUES (?, ?, ?) "
+                f"ON CONFLICT(id) DO UPDATE SET {identity_column} = excluded.{identity_column}, "
+                "payload = excluded.payload",
                 (item_id, name, payload),
             )
             connection.commit()
         entities = {
             "primary_agents": "primary-agent",
-            "subagent_overrides": "subagent-override",
+            "subagents": "subagent",
         }
         emit_configuration_events(
             self._events,
@@ -116,7 +131,7 @@ class AgentConfigStore:
                 continue
             entities = {
                 "primary_agents": "primary-agent",
-                "subagent_overrides": "subagent-override",
+                "subagents": "subagent",
             }
             emit_configuration_events(
                 self._events,

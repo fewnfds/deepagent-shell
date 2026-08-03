@@ -40,8 +40,8 @@ import type {
   RuntimeDiagnostics,
   SavedBlock,
   SkillResource,
-  SubagentOverride,
-  SubagentOverridePayload,
+  Subagent,
+  SubagentPayload,
   SystemLogSettings,
   SystemSettings,
   SystemSettingsUpdate,
@@ -287,20 +287,20 @@ export const managementApi = {
     return managementRequest('/api/primary-agents/delete', jsonBody({ ids }))
   },
 
-  listSubagentOverrides(): Promise<SubagentOverride[]> {
-    return managementRequest('/api/subagent-overrides')
+  listSubagents(): Promise<Subagent[]> {
+    return managementRequest('/api/subagents')
   },
 
-  getSubagentOverride(id: string): Promise<SubagentOverride> {
-    return managementRequest(recordPath('/api/subagent-overrides', id))
+  getSubagent(id: string): Promise<Subagent> {
+    return managementRequest(recordPath('/api/subagents', id))
   },
 
-  saveSubagentOverride(
-    data: SubagentOverridePayload | SubagentOverride,
-  ): Promise<SubagentOverride> {
+  saveSubagent(
+    data: SubagentPayload | Subagent,
+  ): Promise<Subagent> {
     const id = 'id' in data ? data.id : ''
     return managementRequest(
-      id ? recordPath('/api/subagent-overrides', id) : '/api/subagent-overrides',
+      id ? recordPath('/api/subagents', id) : '/api/subagents',
       {
         method: id ? 'PUT' : 'POST',
         body: JSON.stringify(withoutId(data)),
@@ -308,19 +308,19 @@ export const managementApi = {
     )
   },
 
-  copySubagentOverride(id: string, name: string): Promise<SubagentOverride> {
+  copySubagent(id: string, componentName: string): Promise<Subagent> {
     return managementRequest(
-      `${recordPath('/api/subagent-overrides', id)}/copy`,
-      jsonBody({ name }),
+      `${recordPath('/api/subagents', id)}/copy`,
+      jsonBody({ component_name: componentName }),
     )
   },
 
-  deleteSubagentOverride(id: string): Promise<{ ok: boolean }> {
-    return managementRequest(recordPath('/api/subagent-overrides', id), { method: 'DELETE' })
+  deleteSubagent(id: string): Promise<{ ok: boolean }> {
+    return managementRequest(recordPath('/api/subagents', id), { method: 'DELETE' })
   },
 
-  deleteSubagentOverrides(ids: string[]): Promise<{ deleted: number }> {
-    return managementRequest('/api/subagent-overrides/delete', jsonBody({ ids }))
+  deleteSubagents(ids: string[]): Promise<{ deleted: number }> {
+    return managementRequest('/api/subagents/delete', jsonBody({ ids }))
   },
 
   getApiServer(): Promise<ApiServerSettings> {

@@ -16,7 +16,7 @@ from agent_shell.contracts import (
     BLOCK_MODELS,
     CapabilityReference,
     PrimaryAgentProfile,
-    SubagentOverrideProfile,
+    SubagentProfile,
 )
 from agent_shell.registries.custom_tools import (
     resolve_custom_tool_file,
@@ -31,22 +31,23 @@ from agent_shell.validation.capability_assembly import (
 )
 from agent_shell.validation.contracts import report_from_validation_error
 from agent_shell.validation.models import ValidationIssue, ValidationReport
-from agent_shell.validation.subagent_bindings import subagent_binding_issues
+from agent_shell.validation.subagent_references import subagent_reference_issues
 
 
-SubagentNodeKey = tuple[str, str]
+SubagentNodeKey = str
 
 
 @dataclass(frozen=True, slots=True)
 class ResolvedSubagentEdge:
-    binding: dict[str, Any]
     target_key: SubagentNodeKey
 
 
 @dataclass(frozen=True, slots=True)
 class ResolvedSubagent:
     key: SubagentNodeKey
+    component_name: str
     name: str
+    description: str
     references: dict[str, str]
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
@@ -91,7 +92,7 @@ class ConfigurationValidationService:
         owner_id: str = "",
         stored: bool = False,
         block_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
-        override_overrides: dict[str, dict[str, Any]] | None = None,
+        profile_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> tuple[ValidationReport, dict[str, Any] | None, StaticAssembly | None]:
         owner_name = str(payload.get("name", ""))
         try:
@@ -130,7 +131,7 @@ class ConfigurationValidationService:
             stage=stage,
             owner_id=owner_id,
             block_overrides=block_overrides,
-            override_overrides=override_overrides,
+            profile_overrides=profile_overrides,
         )
         return report, primary, assembly
 
@@ -221,7 +222,7 @@ class ConfigurationValidationService:
             )
         return ValidationReport(stage=stage)
 
-    def validate_override(
+    def validate_subagent(
         self,
         payload: dict[str, Any],
         *,
@@ -230,7 +231,7 @@ class ConfigurationValidationService:
         stored: bool = False,
     ) -> tuple[ValidationReport, dict[str, Any] | None]:
         try:
-            model = SubagentOverrideProfile.model_validate(
+            model = SubagentProfile.model_validate(
                 (
                     {key: value for key, value in payload.items() if key != "id"}
                     if stored
@@ -242,48 +243,58 @@ class ConfigurationValidationService:
                 report_from_validation_error(
                     exc,
                     stage=stage,
-                    scope="subagent_override",
+                    scope="subagent",
                     owner_id=owner_id,
-                    owner_name=str(payload.get("name", "")),
+                    owner_name=str(payload.get("component_name", "")),
                 ),
                 None,
             )
         validated = model.model_dump(mode="json")
+        settings = validated["settings"]
         references = {
             item["type"]: item["block_id"]
-            for item in validated["capability_overrides"]
+            for item in settings["capability_overrides"]
             if item["mode"] == "replace"
         }
         _, issues = self._load_references(
             references,
-            scope="subagent_override",
+            scope="subagent",
             owner_id=owner_id,
-            owner_name=validated["name"],
-            path_prefix="capability_overrides",
+            owner_name=validated["component_name"],
+            path_prefix="settings.capability_overrides",
         )
-        issues.extend(
-            subagent_binding_issues(
-                list(validated.get("subagents", [])),
-                owner_id=owner_id,
-                owner_name=validated["name"],
-            )
-        )
-        for binding in validated.get("subagents", []):
-            target_id = str(binding.get("subagent_override_id", ""))
-            if not target_id or target_id == owner_id:
+        child_references = list(settings.get("subagents", []))
+        child_profiles: dict[str, dict[str, Any]] = {}
+        for index, reference in enumerate(child_references):
+            target_id = str(reference.get("subagent_id", ""))
+            if target_id == owner_id:
+                child_profiles[target_id] = validated
                 continue
-            _, target_issue = self._subagent_override(
+            target, target_issue = self._subagent_profile(
                 target_id,
-                binding=binding,
                 owner_id=owner_id,
+                owner_name=validated["component_name"],
+                path=f"settings.subagents[{index}].subagent_id",
             )
             if target_issue is not None:
                 issues.append(target_issue)
+            elif target is not None:
+                child_profiles[target_id] = target
+        issues.extend(
+            subagent_reference_issues(
+                child_references,
+                profiles=child_profiles,
+                scope="subagent",
+                owner_id=owner_id,
+                owner_name=validated["component_name"],
+                path_prefix="settings.subagents",
+            )
+        )
         if owner_id and not issues:
             prospective = dict(validated)
             prospective["id"] = owner_id
             issues.extend(
-                self._impact_issues_for_override(
+                self._impact_issues_for_subagent(
                     owner_id,
                     prospective,
                     stage=stage,
@@ -345,11 +356,11 @@ class ConfigurationValidationService:
                         stage=stage,
                     ).issues
                 )
-        for override in self._agent_configs.list_items("subagent_overrides"):
-            report, _ = self.validate_override(
-                override,
+        for profile in self._agent_configs.list_items("subagents"):
+            report, _ = self.validate_subagent(
+                profile,
                 stage=stage,
-                owner_id=str(override.get("id", "")),
+                owner_id=str(profile.get("id", "")),
                 stored=True,
             )
             issues.extend(report.issues)
@@ -676,63 +687,62 @@ class ConfigurationValidationService:
                 seen[name] = capability_type
         return None
 
-    def _subagent_override(
+    def _subagent_profile(
         self,
-        override_id: str,
+        profile_id: str,
         *,
-        binding: dict[str, Any],
         owner_id: str,
-        override_overrides: dict[str, dict[str, Any]] | None = None,
+        owner_name: str,
+        path: str,
+        profile_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> tuple[dict[str, Any] | None, ValidationIssue | None]:
-        override = (
-            override_overrides[override_id]
-            if override_overrides and override_id in override_overrides
-            else self._agent_configs.get_item("subagent_overrides", override_id)
+        profile = (
+            profile_overrides[profile_id]
+            if profile_overrides and profile_id in profile_overrides
+            else self._agent_configs.get_item("subagents", profile_id)
         )
-        if override is None:
+        if profile is None:
             return None, ValidationIssue(
-                code="assembly.subagent_override_not_found",
+                code="assembly.subagent_not_found",
                 scope="subagent",
                 owner_id=owner_id,
-                owner_name=str(binding.get("name", "")),
-                path="subagent_override_id",
-                message="The referenced Subagent override does not exist.",
-                message_key=(
-                    "validation.issue.assembly.subagentOverrideNotFound"
-                ),
+                owner_name=owner_name,
+                path=path,
+                message="The referenced Subagent entity does not exist.",
+                message_key="validation.issue.assembly.subagentNotFound",
                 message_args={},
             )
         try:
-            model = SubagentOverrideProfile.model_validate(
-                {key: value for key, value in override.items() if key != "id"}
+            model = SubagentProfile.model_validate(
+                {key: value for key, value in profile.items() if key != "id"}
             )
         except ValidationError as exc:
             detail_report = report_from_validation_error(
                 exc,
-                stage="referenced_subagent_override",
+                stage="referenced_subagent",
                 scope="subagent",
                 owner_id=owner_id,
-                owner_name=str(binding.get("name", "")),
+                owner_name=owner_name,
             )
             detail = (
                 detail_report.issues[0].message
                 if detail_report.issues
                 else "The configuration structure is invalid."
             )
-            override_name = str(override.get("name", ""))
+            component_name = str(profile.get("component_name", ""))
             return None, ValidationIssue(
-                code="assembly.subagent_override_invalid",
+                code="assembly.subagent_invalid",
                 scope="subagent",
                 owner_id=owner_id,
-                owner_name=str(binding.get("name", "")),
-                path="subagent_override_id",
+                owner_name=owner_name,
+                path=path,
                 message=(
-                    f"Referenced Subagent override {override_name!r} does not "
+                    f"Referenced Subagent {component_name!r} does not "
                     f"satisfy the current contract: {detail}"
                 ),
-                message_key="validation.issue.assembly.subagentOverrideInvalid",
+                message_key="validation.issue.assembly.subagentInvalid",
                 message_args={
-                    "override_name": override_name,
+                    "component_name": component_name,
                     "detail": detail,
                 },
             )
@@ -810,7 +820,7 @@ class ConfigurationValidationService:
         stage: str,
         owner_id: str,
         block_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
-        override_overrides: dict[str, dict[str, Any]] | None = None,
+        profile_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> tuple[ValidationReport, StaticAssembly | None]:
         owner_name = str(primary.get("name", ""))
         references = self._reference_map(primary)
@@ -822,31 +832,24 @@ class ConfigurationValidationService:
             owner_name=owner_name,
             block_overrides=block_overrides,
         )
-        issues = [
-            *subagent_binding_issues(
-                list(primary.get("subagents", [])),
-                owner_id=owner_id,
-                owner_name=owner_name,
-            ),
-            *issues,
-        ]
 
         delegation_selected = selected.get("subagent") is not None
-        bindings = list(primary.get("subagents", [])) if delegation_selected else []
-        if delegation_selected and not bindings:
+        root_references = list(primary.get("subagents", []))
+        active_roots = root_references if delegation_selected else []
+        if delegation_selected and not active_roots:
             issues.append(
                 ValidationIssue(
-                    code="assembly.subagent_binding_required",
+                    code="assembly.subagent_reference_required",
                     scope="primary",
                     owner_id=owner_id,
                     owner_name=owner_name,
                     path="subagents",
                     message=(
-                        "At least one valid Subagent binding is required when "
+                        "At least one valid Subagent reference is required when "
                         "delegation is enabled."
                     ),
                     message_key=(
-                        "validation.issue.assembly.subagentBindingRequired"
+                        "validation.issue.assembly.subagentReferenceRequired"
                     ),
                     message_args={},
                 )
@@ -855,7 +858,7 @@ class ConfigurationValidationService:
         tool_issue = self._static_tool_issue(
             references,
             selected,
-            has_subagents=bool(bindings),
+            has_subagents=bool(active_roots),
             filesystem_mode=filesystem_mode,
             scope="primary",
             owner_id=owner_id,
@@ -866,21 +869,34 @@ class ConfigurationValidationService:
 
         subagent_nodes: dict[SubagentNodeKey, ResolvedSubagent] = {}
         resolving_nodes: set[SubagentNodeKey] = set()
+        known_profiles: dict[str, dict[str, Any]] = {}
 
-        def resolve_binding(
-            binding: dict[str, Any],
+        def resolve_reference(
+            reference: dict[str, Any],
+            *,
+            parent_id: str,
+            parent_name: str,
+            path: str,
         ) -> ResolvedSubagentEdge | None:
-            subagent_name = str(binding.get("name", ""))
-            override_id = str(binding.get("subagent_override_id", ""))
-            node_key: SubagentNodeKey = (
-                override_id,
-                subagent_name,
-            )
-            edge = ResolvedSubagentEdge(binding=binding, target_key=node_key)
-            if node_key in subagent_nodes or node_key in resolving_nodes:
+            profile_id = str(reference.get("subagent_id", ""))
+            edge = ResolvedSubagentEdge(target_key=profile_id)
+            if profile_id in subagent_nodes or profile_id in resolving_nodes:
                 return edge
 
-            resolving_nodes.add(node_key)
+            profile, profile_issue = self._subagent_profile(
+                profile_id,
+                owner_id=parent_id,
+                owner_name=parent_name,
+                path=path,
+                profile_overrides=profile_overrides,
+            )
+            if profile_issue is not None:
+                issues.append(profile_issue)
+                return None
+            assert profile is not None
+            known_profiles[profile_id] = profile
+
+            resolving_nodes.add(profile_id)
             issue_count = len(issues)
             child_references = {
                 capability_type: block_id
@@ -890,38 +906,19 @@ class ConfigurationValidationService:
                     or CAPABILITY_BY_TYPE[capability_type].subagent_policy == "inherit"
                 )
             }
-            override_bindings: list[dict[str, Any]] = []
-            if override_id:
-                override, override_issue = self._subagent_override(
-                    override_id,
-                    binding=binding,
-                    owner_id=owner_id,
-                    override_overrides=override_overrides,
-                )
-                if override_issue is not None:
-                    issues.append(override_issue)
-                    resolving_nodes.remove(node_key)
-                    return None
-                assert override is not None
-                for selection in override["capability_overrides"]:
-                    capability_type = selection["type"]
-                    if selection["mode"] == "replace":
-                        child_references[capability_type] = selection["block_id"]
-                    elif selection["mode"] == "disabled":
-                        child_references.pop(capability_type, None)
-                override_bindings = list(override.get("subagents", []))
-
-            child_bindings = (
-                override_bindings if "subagent" in child_references else []
+            settings = profile["settings"]
+            for selection in settings["capability_overrides"]:
+                capability_type = selection["type"]
+                if selection["mode"] == "replace":
+                    child_references[capability_type] = selection["block_id"]
+                elif selection["mode"] == "disabled":
+                    child_references.pop(capability_type, None)
+            child_profile_references = (
+                list(settings.get("subagents", []))
+                if "subagent" in child_references
+                else []
             )
-
-            issues.extend(
-                subagent_binding_issues(
-                    child_bindings,
-                    owner_id=owner_id,
-                    owner_name=subagent_name,
-                )
-            )
+            subagent_name = str(profile["name"])
 
             (
                 child_blocks,
@@ -931,17 +928,17 @@ class ConfigurationValidationService:
                 child_references,
                 required_types=_SUBAGENT_REQUIRED_CAPABILITY_TYPES,
                 scope="subagent",
-                owner_id=owner_id,
+                owner_id=profile_id,
                 owner_name=subagent_name,
                 block_overrides=block_overrides,
             )
             child_tool_issue = self._static_tool_issue(
                 child_references,
                 child_blocks,
-                has_subagents=bool(child_bindings),
+                has_subagents=bool(child_profile_references),
                 filesystem_mode=child_filesystem_mode,
                 scope="subagent",
-                owner_id=owner_id,
+                owner_id=profile_id,
                 owner_name=subagent_name,
             )
             if child_tool_issue is not None:
@@ -951,7 +948,7 @@ class ConfigurationValidationService:
                 allowed_fields=frozenset({"task"}),
                 required_field=None,
                 scope="subagent",
-                owner_id=owner_id,
+                owner_id=profile_id,
                 owner_name=subagent_name,
                 path="capability_refs.prompt-preset",
             )
@@ -960,27 +957,75 @@ class ConfigurationValidationService:
             issues.extend(child_issues)
             child_edges: list[ResolvedSubagentEdge] = []
             if len(issues) == issue_count:
-                for child_binding in child_bindings:
-                    child_edge = resolve_binding(child_binding)
+                for index, child_reference in enumerate(child_profile_references):
+                    child_edge = resolve_reference(
+                        child_reference,
+                        parent_id=profile_id,
+                        parent_name=str(profile["component_name"]),
+                        path=f"settings.subagents[{index}].subagent_id",
+                    )
                     if child_edge is not None:
                         child_edges.append(child_edge)
+                issues.extend(
+                    subagent_reference_issues(
+                        child_profile_references,
+                        profiles=known_profiles,
+                        scope="subagent",
+                        owner_id=profile_id,
+                        owner_name=str(profile["component_name"]),
+                        path_prefix="settings.subagents",
+                    )
+                )
 
             if len(issues) == issue_count:
-                subagent_nodes[node_key] = ResolvedSubagent(
-                    key=node_key,
+                subagent_nodes[profile_id] = ResolvedSubagent(
+                    key=profile_id,
+                    component_name=str(profile["component_name"]),
                     name=subagent_name,
+                    description=str(profile["description"]),
                     references=child_references,
                     blocks=child_blocks,
                     filesystem_mode=child_filesystem_mode,
                     subagents=tuple(child_edges),
                 )
-            resolving_nodes.remove(node_key)
-            return edge if node_key in subagent_nodes else None
+            resolving_nodes.remove(profile_id)
+            return edge if profile_id in subagent_nodes else None
 
         resolved_subagents = tuple(
             edge
-            for binding in bindings
-            if (edge := resolve_binding(binding)) is not None
+            for index, reference in enumerate(active_roots)
+            if (
+                edge := resolve_reference(
+                    reference,
+                    parent_id=owner_id,
+                    parent_name=owner_name,
+                    path=f"subagents[{index}].subagent_id",
+                )
+            )
+            is not None
+        )
+        if not delegation_selected:
+            for index, reference in enumerate(root_references):
+                profile_id = str(reference.get("subagent_id", ""))
+                profile, profile_issue = self._subagent_profile(
+                    profile_id,
+                    owner_id=owner_id,
+                    owner_name=owner_name,
+                    path=f"subagents[{index}].subagent_id",
+                    profile_overrides=profile_overrides,
+                )
+                if profile_issue is not None:
+                    issues.append(profile_issue)
+                elif profile is not None:
+                    known_profiles[profile_id] = profile
+        issues.extend(
+            subagent_reference_issues(
+                root_references,
+                profiles=known_profiles,
+                scope="primary",
+                owner_id=owner_id,
+                owner_name=owner_name,
+            )
         )
 
         primary_preset_issue = self._prompt_preset_issue(
@@ -1023,7 +1068,7 @@ class ConfigurationValidationService:
         *,
         stage: str,
         block_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
-        override_overrides: dict[str, dict[str, Any]] | None = None,
+        profile_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> list[ValidationIssue]:
         primary_id = str(primary.get("id", ""))
         baseline, _, _ = self.validate_primary(
@@ -1038,7 +1083,7 @@ class ConfigurationValidationService:
             owner_id=primary_id,
             stored=True,
             block_overrides=block_overrides,
-            override_overrides=override_overrides,
+            profile_overrides=profile_overrides,
         )
         baseline_keys = {self._issue_key(issue) for issue in baseline.issues}
         return [
@@ -1066,10 +1111,12 @@ class ConfigurationValidationService:
                 and item.get("block_id") == block_id
                 for item in references
             )
-            bindings = primary.get("subagents", [])
-            if not isinstance(bindings, list):
-                bindings = []
-            indirect = self._bindings_reach_block(bindings, block_type, block_id)
+            subagent_references = primary.get("subagents", [])
+            if not isinstance(subagent_references, list):
+                subagent_references = []
+            indirect = self._subagents_reach_block(
+                subagent_references, block_type, block_id
+            )
             if direct or indirect:
                 issues.extend(
                     self._new_impact_issues(
@@ -1080,51 +1127,54 @@ class ConfigurationValidationService:
                 )
         return issues
 
-    def _impact_issues_for_override(
+    def _impact_issues_for_subagent(
         self,
-        override_id: str,
+        profile_id: str,
         prospective: dict[str, Any],
         *,
         stage: str,
     ) -> list[ValidationIssue]:
         issues: list[ValidationIssue] = []
         for primary in self._agent_configs.list_items("primary_agents"):
-            bindings = primary.get("subagents", [])
-            if not isinstance(bindings, list):
+            subagent_references = primary.get("subagents", [])
+            if not isinstance(subagent_references, list):
                 continue
-            if not self._bindings_reach_override(bindings, override_id):
+            if not self._references_reach_subagent(
+                subagent_references, profile_id
+            ):
                 continue
             issues.extend(
                 self._new_impact_issues(
                     primary,
                     stage=stage,
-                    override_overrides={override_id: prospective},
+                    profile_overrides={profile_id: prospective},
                 )
             )
         return issues
 
-    def _bindings_reach_block(
+    def _subagents_reach_block(
         self,
-        bindings: list[Any],
+        references: list[Any],
         block_type: str,
         block_id: str,
         *,
         visited: set[str] | None = None,
     ) -> bool:
         visited = set() if visited is None else visited
-        for binding in bindings:
-            if not isinstance(binding, dict):
+        for reference in references:
+            if not isinstance(reference, dict):
                 continue
-            override_id = str(binding.get("subagent_override_id", ""))
-            if not override_id or override_id in visited:
+            profile_id = str(reference.get("subagent_id", ""))
+            if not profile_id or profile_id in visited:
                 continue
-            visited.add(override_id)
-            override = self._agent_configs.get_item(
-                "subagent_overrides", override_id
-            )
-            if not override:
+            visited.add(profile_id)
+            profile = self._agent_configs.get_item("subagents", profile_id)
+            if not profile:
                 continue
-            selections = override.get("capability_overrides", [])
+            settings = profile.get("settings", {})
+            if not isinstance(settings, dict):
+                continue
+            selections = settings.get("capability_overrides", [])
             if isinstance(selections, list) and any(
                 isinstance(item, dict)
                 and item.get("type") == block_type
@@ -1133,8 +1183,8 @@ class ConfigurationValidationService:
                 for item in selections
             ):
                 return True
-            nested = override.get("subagents", [])
-            if isinstance(nested, list) and self._bindings_reach_block(
+            nested = settings.get("subagents", [])
+            if isinstance(nested, list) and self._subagents_reach_block(
                 nested,
                 block_type,
                 block_id,
@@ -1143,30 +1193,29 @@ class ConfigurationValidationService:
                 return True
         return False
 
-    def _bindings_reach_override(
+    def _references_reach_subagent(
         self,
-        bindings: list[Any],
+        references: list[Any],
         target_id: str,
         *,
         visited: set[str] | None = None,
     ) -> bool:
         visited = set() if visited is None else visited
-        for binding in bindings:
-            if not isinstance(binding, dict):
+        for reference in references:
+            if not isinstance(reference, dict):
                 continue
-            override_id = str(binding.get("subagent_override_id", ""))
-            if not override_id:
+            profile_id = str(reference.get("subagent_id", ""))
+            if not profile_id:
                 continue
-            if override_id == target_id:
+            if profile_id == target_id:
                 return True
-            if override_id in visited:
+            if profile_id in visited:
                 continue
-            visited.add(override_id)
-            override = self._agent_configs.get_item(
-                "subagent_overrides", override_id
-            )
-            nested = override.get("subagents", []) if override else []
-            if isinstance(nested, list) and self._bindings_reach_override(
+            visited.add(profile_id)
+            profile = self._agent_configs.get_item("subagents", profile_id)
+            settings = profile.get("settings", {}) if profile else {}
+            nested = settings.get("subagents", []) if isinstance(settings, dict) else []
+            if isinstance(nested, list) and self._references_reach_subagent(
                 nested,
                 target_id,
                 visited=visited,

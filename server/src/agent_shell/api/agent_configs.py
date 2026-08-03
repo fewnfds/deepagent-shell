@@ -12,7 +12,7 @@ from agent_shell.validation.service import ConfigurationValidationService
 
 
 PRIMARY_TABLE = "primary_agents"
-OVERRIDE_TABLE = "subagent_overrides"
+SUBAGENT_TABLE = "subagents"
 
 
 class ConfigurationBulkDelete(BaseModel):
@@ -37,7 +37,12 @@ def capability_reference_id(payload: dict, capability_type: str) -> str:
 
 
 def capability_override(payload: dict, capability_type: str) -> dict:
-    overrides = payload.get("capability_overrides", [])
+    settings = payload.get("settings", {})
+    overrides = (
+        settings.get("capability_overrides", [])
+        if isinstance(settings, dict)
+        else []
+    )
     if not isinstance(overrides, list):
         return {"type": capability_type, "mode": "inherit", "block_id": ""}
     return next(
@@ -77,6 +82,28 @@ def _copy_name(payload: dict) -> str:
         )
     return name
 
+
+def _copy_component_name(payload: dict) -> str:
+    if set(payload) != {"component_name"} or not isinstance(
+        payload.get("component_name"), str
+    ):
+        raise management_error(
+            422,
+            code="invalid_copy_request",
+            message_key="errors.copyRequestInvalid",
+            message="The copy request must contain only a component name.",
+        )
+    component_name = payload["component_name"].strip()
+    if not component_name or len(component_name) > 120:
+        raise management_error(
+            422,
+            code="invalid_configuration_name_length",
+            message_key="errors.configurationNameLength",
+            message="The component name must contain 1 to 120 characters.",
+            message_args={"minimum": 1, "maximum": 120},
+        )
+    return component_name
+
 def block_reference_owner(
     config_store: AgentConfigStore, block_type: str, block_id: str
 ) -> tuple[str, str] | None:
@@ -84,44 +111,45 @@ def block_reference_owner(
         if capability_reference_id(item, block_type) == block_id:
             return "primary", str(item.get("name", ""))
 
-    for item in config_store.list_items(OVERRIDE_TABLE):
+    for item in config_store.list_items(SUBAGENT_TABLE):
         selection = capability_override(item, block_type)
         if selection.get("mode") == "replace" and selection.get("block_id") == block_id:
-            return "subagent_override", str(item.get("name", ""))
+            return "subagent", str(item.get("component_name", ""))
     return None
 
 
-def binding_reference_owner(
+def subagent_reference_owner(
     config_store: AgentConfigStore,
     *,
     target_id: str,
-    ignored_override_ids: frozenset[str] = frozenset(),
+    ignored_subagent_ids: frozenset[str] = frozenset(),
 ) -> tuple[str, str] | None:
-    """Return a configuration that keeps a Subagent override alive, if any."""
+    """Return a configuration that keeps a Subagent entity alive, if any."""
     for owner in config_store.list_items(PRIMARY_TABLE):
-        bindings = owner.get("subagents", [])
-        if not isinstance(bindings, list):
+        references = owner.get("subagents", [])
+        if not isinstance(references, list):
             continue
         if any(
-            isinstance(binding, dict)
-            and binding.get("subagent_override_id") == target_id
-            for binding in bindings
+            isinstance(reference, dict)
+            and reference.get("subagent_id") == target_id
+            for reference in references
         ):
             return "primary", str(owner.get("name", ""))
 
-    for owner in config_store.list_items(OVERRIDE_TABLE):
+    for owner in config_store.list_items(SUBAGENT_TABLE):
         owner_id = str(owner.get("id", ""))
-        if owner_id in ignored_override_ids:
+        if owner_id in ignored_subagent_ids:
             continue
-        bindings = owner.get("subagents", [])
-        if not isinstance(bindings, list):
+        settings = owner.get("settings", {})
+        references = settings.get("subagents", []) if isinstance(settings, dict) else []
+        if not isinstance(references, list):
             continue
         if any(
-            isinstance(binding, dict)
-            and binding.get("subagent_override_id") == target_id
-            for binding in bindings
+            isinstance(reference, dict)
+            and reference.get("subagent_id") == target_id
+            for reference in references
         ):
-            return "subagent_override", str(owner.get("name", ""))
+            return "subagent", str(owner.get("component_name", ""))
     return None
 
 
@@ -253,28 +281,28 @@ def build_agent_config_router(
         config_store.delete_item(PRIMARY_TABLE, item_id)
         return {"ok": True}
 
-    @router.get("/api/subagent-overrides")
-    async def list_subagent_overrides() -> list[dict]:
-        return config_store.list_items(OVERRIDE_TABLE)
+    @router.get("/api/subagents")
+    async def list_subagents() -> list[dict]:
+        return config_store.list_items(SUBAGENT_TABLE)
 
-    @router.post("/api/subagent-overrides/delete")
-    async def delete_subagent_overrides(
+    @router.post("/api/subagents/delete")
+    async def delete_subagents(
         payload: ConfigurationBulkDelete,
     ) -> dict[str, int]:
         ids = list(dict.fromkeys(payload.ids))
         deleting_ids = frozenset(ids)
         for item_id in ids:
-            if config_store.get_item(OVERRIDE_TABLE, item_id) is None:
+            if config_store.get_item(SUBAGENT_TABLE, item_id) is None:
                 raise management_error(
                     404,
-                    code="subagent_override_not_found",
-                    message_key="errors.subagentOverrideNotFound",
-                    message="A Subagent override configuration does not exist.",
+                    code="subagent_not_found",
+                    message_key="errors.subagentNotFound",
+                    message="A Subagent entity does not exist.",
                 )
-            owner = binding_reference_owner(
+            owner = subagent_reference_owner(
                 config_store,
                 target_id=item_id,
-                ignored_override_ids=deleting_ids,
+                ignored_subagent_ids=deleting_ids,
             )
             if owner:
                 owner_type, owner_name = owner
@@ -284,40 +312,40 @@ def build_agent_config_router(
                     message_key=(
                         "errors.configurationReferencedByPrimary"
                         if owner_type == "primary"
-                        else "errors.configurationReferencedBySubagentOverride"
+                        else "errors.configurationReferencedBySubagent"
                     ),
                     message=(
                         "The configuration is still referenced by a Primary Agent."
                         if owner_type == "primary"
-                        else "The configuration is still referenced by a Subagent override."
+                        else "The Subagent is still referenced by another Subagent."
                     ),
                     message_args={"owner": owner_name},
                 )
-        return {"deleted": config_store.delete_items(OVERRIDE_TABLE, ids)}
+        return {"deleted": config_store.delete_items(SUBAGENT_TABLE, ids)}
 
-    @router.get("/api/subagent-overrides/{item_id}")
-    async def get_subagent_override(item_id: str) -> dict:
-        item = config_store.get_item(OVERRIDE_TABLE, item_id)
+    @router.get("/api/subagents/{item_id}")
+    async def get_subagent(item_id: str) -> dict:
+        item = config_store.get_item(SUBAGENT_TABLE, item_id)
         if item is None:
             raise management_error(
                 404,
-                code="subagent_override_not_found",
-                message_key="errors.subagentOverrideNotFound",
-                message="The Subagent override configuration does not exist.",
+                code="subagent_not_found",
+                message_key="errors.subagentNotFound",
+                message="The Subagent entity does not exist.",
             )
         return item
 
-    @router.post("/api/subagent-overrides")
-    async def create_subagent_override(payload: dict) -> dict:
-        report, validated = validation.validate_override(
+    @router.post("/api/subagents")
+    async def create_subagent(payload: dict) -> dict:
+        report, validated = validation.validate_subagent(
             payload,
-            stage="subagent_override_save",
+            stage="subagent_save",
         )
         _raise_if_invalid(report)
         assert validated is not None
         item_id = str(uuid4())
         try:
-            config_store.save_item(OVERRIDE_TABLE, item_id, validated)
+            config_store.save_item(SUBAGENT_TABLE, item_id, validated)
         except ValueError as exc:
             raise management_error(
                 409,
@@ -325,31 +353,31 @@ def build_agent_config_router(
                 message_key="errors.configurationNameConflict",
                 message="A configuration with this name already exists.",
             ) from exc
-        return config_store.get_item(OVERRIDE_TABLE, item_id)
+        return config_store.get_item(SUBAGENT_TABLE, item_id)
 
-    @router.post("/api/subagent-overrides/{item_id}/copy")
-    async def copy_subagent_override(item_id: str, payload: dict) -> dict:
-        name = _copy_name(payload)
-        source = config_store.get_item(OVERRIDE_TABLE, item_id)
+    @router.post("/api/subagents/{item_id}/copy")
+    async def copy_subagent(item_id: str, payload: dict) -> dict:
+        component_name = _copy_component_name(payload)
+        source = config_store.get_item(SUBAGENT_TABLE, item_id)
         if source is None:
             raise management_error(
                 404,
-                code="subagent_override_not_found",
-                message_key="errors.subagentOverrideNotFound",
-                message="The Subagent override configuration does not exist.",
+                code="subagent_not_found",
+                message_key="errors.subagentNotFound",
+                message="The Subagent entity does not exist.",
             )
         candidate = dict(source)
-        candidate["name"] = name
-        report, validated = validation.validate_override(
+        candidate["component_name"] = component_name
+        report, validated = validation.validate_subagent(
             candidate,
-            stage="subagent_override_copy",
+            stage="subagent_copy",
             stored=True,
         )
         _raise_if_invalid(report)
         assert validated is not None
         copy_id = str(uuid4())
         try:
-            config_store.save_item(OVERRIDE_TABLE, copy_id, validated)
+            config_store.save_item(SUBAGENT_TABLE, copy_id, validated)
         except ValueError as exc:
             raise management_error(
                 409,
@@ -357,26 +385,26 @@ def build_agent_config_router(
                 message_key="errors.configurationNameConflict",
                 message="A configuration with this name already exists.",
             ) from exc
-        return config_store.get_item(OVERRIDE_TABLE, copy_id)
+        return config_store.get_item(SUBAGENT_TABLE, copy_id)
 
-    @router.put("/api/subagent-overrides/{item_id}")
-    async def update_subagent_override(item_id: str, payload: dict) -> dict:
-        if config_store.get_item(OVERRIDE_TABLE, item_id) is None:
+    @router.put("/api/subagents/{item_id}")
+    async def update_subagent(item_id: str, payload: dict) -> dict:
+        if config_store.get_item(SUBAGENT_TABLE, item_id) is None:
             raise management_error(
                 404,
-                code="subagent_override_not_found",
-                message_key="errors.subagentOverrideNotFound",
-                message="The Subagent override configuration does not exist.",
+                code="subagent_not_found",
+                message_key="errors.subagentNotFound",
+                message="The Subagent entity does not exist.",
             )
-        report, validated = validation.validate_override(
+        report, validated = validation.validate_subagent(
             payload,
-            stage="subagent_override_save",
+            stage="subagent_save",
             owner_id=item_id,
         )
         _raise_if_invalid(report)
         assert validated is not None
         try:
-            config_store.save_item(OVERRIDE_TABLE, item_id, validated)
+            config_store.save_item(SUBAGENT_TABLE, item_id, validated)
         except ValueError as exc:
             raise management_error(
                 409,
@@ -384,21 +412,21 @@ def build_agent_config_router(
                 message_key="errors.configurationNameConflict",
                 message="A configuration with this name already exists.",
             ) from exc
-        return config_store.get_item(OVERRIDE_TABLE, item_id)
+        return config_store.get_item(SUBAGENT_TABLE, item_id)
 
-    @router.delete("/api/subagent-overrides/{item_id}")
-    async def delete_subagent_override(item_id: str) -> dict[str, bool]:
-        if config_store.get_item(OVERRIDE_TABLE, item_id) is None:
+    @router.delete("/api/subagents/{item_id}")
+    async def delete_subagent(item_id: str) -> dict[str, bool]:
+        if config_store.get_item(SUBAGENT_TABLE, item_id) is None:
             raise management_error(
                 404,
-                code="subagent_override_not_found",
-                message_key="errors.subagentOverrideNotFound",
-                message="The Subagent override configuration does not exist.",
+                code="subagent_not_found",
+                message_key="errors.subagentNotFound",
+                message="The Subagent entity does not exist.",
             )
-        owner = binding_reference_owner(
+        owner = subagent_reference_owner(
             config_store,
             target_id=item_id,
-            ignored_override_ids=frozenset({item_id}),
+            ignored_subagent_ids=frozenset({item_id}),
         )
         if owner:
             owner_type, owner_name = owner
@@ -408,16 +436,16 @@ def build_agent_config_router(
                 message_key=(
                     "errors.configurationReferencedByPrimary"
                     if owner_type == "primary"
-                    else "errors.configurationReferencedBySubagentOverride"
+                    else "errors.configurationReferencedBySubagent"
                 ),
                 message=(
                     "The configuration is still referenced by a Primary Agent."
                     if owner_type == "primary"
-                    else "The configuration is still referenced by a Subagent override."
+                    else "The Subagent is still referenced by another Subagent."
                 ),
                 message_args={"owner": owner_name},
             )
-        config_store.delete_item(OVERRIDE_TABLE, item_id)
+        config_store.delete_item(SUBAGENT_TABLE, item_id)
         return {"ok": True}
 
     return router

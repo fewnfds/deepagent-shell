@@ -20,7 +20,8 @@ Agent Shell 不在 graph 创建后改写消息、判断下一步、替模型补�
 ## 装配
 
 - Primary 必须有模型与输出模式；
-- 同步 child 由同一 `create_deep_agent()` 构造，并作为 `CompiledSubAgent` 提供给父 Agent；
+- 同步 child 以持久 Subagent 实体定义；父级只保存实体 UUID 引用，Shell 把实体的 `name`、`description` 和
+  唯一编译 runnable 投影为 `CompiledSubAgent`；diamond 和显式 cycle 复用同一 profile ID 对应的 runnable；
 - 文件 workspace 的可见工具由最终 Filesystem/Skill 组合决定；配置的 workspace 在同一请求的代理树中
   共享，Skill namespace 按 Agent 只读隔离；
 - Subagent 的能力按 inherit/replace/disabled 解析，模型必须保留，输出模式只属于 Primary；

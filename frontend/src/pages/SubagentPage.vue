@@ -6,7 +6,8 @@ import { useRoute } from 'vue-router'
 
 import PageShell from '@/components/PageShell.vue'
 import RecordPicker from '@/components/RecordPicker.vue'
-import SubagentBindingsEditor from '@/components/SubagentBindingsEditor.vue'
+import FormField from '@/components/FormField.vue'
+import SubagentReferencesEditor from '@/components/SubagentReferencesEditor.vue'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
 import { useDraftValidation } from '@/composables/useDraftValidation'
 import { useManagementError } from '@/composables/useManagementError'
@@ -14,17 +15,17 @@ import { useToasts } from '@/composables/useToasts'
 import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
 import {
   agentAuthoringServiceKey,
-  blankSubagentOverride,
+  blankSubagent,
   managementAgentAuthoringService,
-  normalizeSubagentOverride,
+  normalizeSubagent,
   overrideSelection,
   setOverrideSelection,
-  subagentOverridePayload,
+  subagentPayload,
   type AgentAuthoringService,
   type CapabilityManifest,
   type CapabilityType,
   type StoredBlock,
-  type SubagentOverrideProfile,
+  type SubagentProfile,
 } from '@/domain/agents'
 
 const INHERIT_VALUE = '__inherit__'
@@ -48,13 +49,17 @@ const feedbackKey = ref('')
 const feedbackDetail = ref('')
 const manifests = ref<CapabilityManifest[]>([])
 const blocks = ref<Record<string, StoredBlock[]>>({})
-const profiles = ref<SubagentOverrideProfile[]>([])
+const profiles = ref<SubagentProfile[]>([])
 const selectedProfileId = ref('')
-const form = ref(blankSubagentOverride())
+const form = ref(blankSubagent())
+const recordOptions = computed(() => profiles.value.map((profile) => ({
+  id: profile.id,
+  name: profile.component_name,
+})))
 let profileLoadSequence = 0
 
 const { markClean, runAfterDiscard } = useUnsavedChanges(
-  () => subagentOverridePayload(form.value),
+  () => subagentPayload(form.value),
   () => ({
     title: t('unsavedChanges.title'),
     description: t('unsavedChanges.description'),
@@ -67,10 +72,10 @@ const { validation, validateNow } = useDraftValidation(
   form,
   () => ({
     target: {
-      kind: 'subagent-override',
+      kind: 'subagent',
       id: form.value.id,
     },
-    payload: subagentOverridePayload(form.value),
+    payload: subagentPayload(form.value),
   }),
   async (request) => {
     if (!service.value) throw new Error(t('agents.serviceUnavailable'))
@@ -120,7 +125,7 @@ async function startNew(): Promise<void> {
   await runAfterDiscard(() => {
     profileLoadSequence += 1
     selectedProfileId.value = ''
-    form.value = blankSubagentOverride()
+    form.value = blankSubagent()
     feedbackKey.value = ''
     feedbackDetail.value = ''
     notify({ tone: 'info', title: t('agents.feedback.newDraft') })
@@ -132,7 +137,7 @@ async function loadProfile(id: string): Promise<void> {
   const sequence = ++profileLoadSequence
   if (!id) {
     selectedProfileId.value = ''
-    form.value = blankSubagentOverride()
+    form.value = blankSubagent()
     feedbackKey.value = ''
     feedbackDetail.value = ''
     notify({ tone: 'info', title: t('agents.feedback.newDraft') })
@@ -144,8 +149,8 @@ async function loadProfile(id: string): Promise<void> {
   feedbackKey.value = ''
   feedbackDetail.value = ''
   try {
-    const loaded = normalizeSubagentOverride(
-      await service.value.getSubagentOverride(id),
+    const loaded = normalizeSubagent(
+      await service.value.getSubagent(id),
     )
     if (sequence !== profileLoadSequence) return
     form.value = loaded
@@ -166,7 +171,7 @@ async function loadSelected(value?: string): Promise<void> {
   await runAfterDiscard(() => loadProfile(id))
 }
 
-function upsertProfile(saved: SubagentOverrideProfile): void {
+function upsertProfile(saved: SubagentProfile): void {
   const index = profiles.value.findIndex((profile) => profile.id === saved.id)
   if (index === -1) profiles.value.push(saved)
   else profiles.value[index] = saved
@@ -183,11 +188,11 @@ async function save(): Promise<void> {
   feedbackDetail.value = ''
   try {
     await validateNow()
-    const payload = subagentOverridePayload(form.value)
+    const payload = subagentPayload(form.value)
     const saved = form.value.id
-      ? await service.value.updateSubagentOverride(form.value.id, payload)
-      : await service.value.createSubagentOverride(payload)
-    const normalized = normalizeSubagentOverride(saved)
+      ? await service.value.updateSubagent(form.value.id, payload)
+      : await service.value.createSubagent(payload)
+    const normalized = normalizeSubagent(saved)
     form.value = normalized
     selectedProfileId.value = normalized.id
     upsertProfile(normalized)
@@ -211,10 +216,10 @@ async function loadWorkspace(): Promise<void> {
   try {
     const [catalog, profileItems] = await Promise.all([
       service.value.getCatalog(),
-      service.value.listSubagentOverrides(),
+      service.value.listSubagents(),
     ])
     manifests.value = [...catalog.block_types].sort((left, right) => left.order - right.order)
-    profiles.value = profileItems.map(normalizeSubagentOverride)
+    profiles.value = profileItems.map(normalizeSubagent)
     const entries = await Promise.all(manifests.value
       .filter((manifest) => manifest.subagent_overrideable)
       .map(async (manifest) => [
@@ -275,13 +280,30 @@ watch(
         <div class="mb-3">
           <RecordPicker
             :model-value="selectedProfileId"
-            :name="form.name"
-            :records="profiles"
+            :name="form.component_name"
+            :records="recordOptions"
             :disabled="loading"
             @select="loadSelected"
-            @update:name="form.name = $event"
+            @update:name="form.component_name = $event"
           />
         </div>
+
+        <section class="row g-3 mb-3" :aria-label="t('agents.subagent.identityTitle')">
+          <div class="col-md-6">
+            <FormField field-path="name">
+              <input
+                v-model="form.name"
+                autocomplete="off"
+                class="form-control"
+              >
+            </FormField>
+          </div>
+          <div class="col-md-6">
+            <FormField field-path="description">
+              <textarea v-model="form.description" class="form-control" rows="3" />
+            </FormField>
+          </div>
+        </section>
 
         <section class="mb-3" :aria-label="t('agents.override.capabilitiesTitle')">
           <div class="row g-3">
@@ -338,9 +360,10 @@ watch(
             </div>
           </div>
         </section>
-        <SubagentBindingsEditor
-          v-model:bindings="form.subagents"
-          :override-profiles="profiles"
+        <SubagentReferencesEditor
+          v-model:references="form.settings.subagents"
+          :profiles="profiles"
+          path-prefix="settings.subagents"
         />
       </section>
 

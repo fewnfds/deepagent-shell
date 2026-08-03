@@ -56,11 +56,13 @@ def test_subagent_runs_without_project_filesystem(
                 "model_settings": {},
             },
         ).json()
-        override = client.post(
-            "/api/subagent-overrides",
-            json={
-                "name": "No filesystem child model",
-                "capability_overrides": [
+        subagent = client.post(
+            "/api/subagents",
+            json=subagent_payload(
+                "No filesystem child profile",
+                name="worker",
+                description="Works without filesystem tools.",
+                capability_overrides=[
                     {
                         "type": "model",
                         "mode": "replace",
@@ -72,19 +74,17 @@ def test_subagent_runs_without_project_filesystem(
                         "block_id": "",
                     },
                 ],
-            },
+            ),
         ).json()
         disabled_delegation_override = client.put(
-            f"/api/subagent-overrides/{override['id']}",
-            json={
-                "name": override["name"],
-                "capability_overrides": override["capability_overrides"],
-                "subagents": [{
-                    "name": "disabled_nested_worker",
-                    "description": "Must not be exposed while delegation is disabled.",
-                    "subagent_override_id": override["id"],
-                }],
-            },
+            f"/api/subagents/{subagent['id']}",
+            json=subagent_payload(
+                subagent["component_name"],
+                name=subagent["name"],
+                description=subagent["description"],
+                capability_overrides=subagent["settings"]["capability_overrides"],
+                subagents=[{"subagent_id": subagent["id"]}],
+            ),
         )
         assert disabled_delegation_override.status_code == 200, (
             disabled_delegation_override.text
@@ -101,13 +101,7 @@ def test_subagent_runs_without_project_filesystem(
                     *parent["capability_refs"],
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
-                "subagents": [
-                    {
-                        "name": "worker",
-                        "description": "Works without filesystem tools.",
-                        "subagent_override_id": override["id"],
-                    }
-                ],
+                "subagents": [{"subagent_id": subagent["id"]}],
             },
         )
         assert updated.status_code == 200, updated.text
@@ -247,11 +241,13 @@ def test_unconfigured_filesystem_keeps_skill_reads_agent_scoped(
         )
         assert beta_response.status_code == 200, beta_response.text
         beta = beta_response.json()
-        override_response = client.post(
-            "/api/subagent-overrides",
-            json={
-                "name": "Beta fallback override",
-                "capability_overrides": [
+        subagent_response = client.post(
+            "/api/subagents",
+            json=subagent_payload(
+                "Beta fallback profile",
+                name="beta_worker",
+                description="Checks the beta-only Skill boundary.",
+                capability_overrides=[
                     {
                         "type": "model",
                         "mode": "replace",
@@ -263,10 +259,10 @@ def test_unconfigured_filesystem_keeps_skill_reads_agent_scoped(
                         "block_id": beta["id"],
                     },
                 ],
-            },
+            ),
         )
-        assert override_response.status_code == 200, override_response.text
-        override = override_response.json()
+        assert subagent_response.status_code == 200, subagent_response.text
+        subagent = subagent_response.json()
         delegation_response = client.post(
             "/api/blocks/subagent",
             json={"name": "Fallback delegation"},
@@ -282,11 +278,7 @@ def test_unconfigured_filesystem_keeps_skill_reads_agent_scoped(
                     {"type": "skill", "block_id": alpha["id"]},
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
-                "subagents": [{
-                    "name": "beta_worker",
-                    "description": "Checks the beta-only Skill boundary.",
-                    "subagent_override_id": override["id"],
-                }],
+                "subagents": [{"subagent_id": subagent["id"]}],
             },
         )
         assert updated.status_code == 200, updated.text

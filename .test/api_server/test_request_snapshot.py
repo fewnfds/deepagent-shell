@@ -90,7 +90,7 @@ def test_captured_agent_build_never_falls_back_to_live_configuration_database(
         snapshot = client.app.state.agent_runtime.capture()
         with closing(sqlite3.connect(database_path)) as connection, connection:
             connection.execute("DELETE FROM primary_agents")
-            connection.execute("DELETE FROM subagent_overrides")
+            connection.execute("DELETE FROM subagents")
             connection.execute("DELETE FROM blocks")
             connection.execute("DELETE FROM provider_secrets")
 

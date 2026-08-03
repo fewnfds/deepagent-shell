@@ -8,7 +8,7 @@
 - `/admin`：管理台；
 - `/api/health`、`/api/readiness`：存活与就绪状态；
 - `/api/catalog`、`/api/blocks/*`：组件目录与 CRUD；
-- `/api/primary-agents`、`/api/subagent-overrides`：Agent 配置；
+- `/api/primary-agents`、`/api/subagents`：Agent 配置；
 - `/api/tools/custom`、`/api/middlewares/custom`、`/api/skills`：用户资源发现；
 - `/api/file-manager/*`、`/api/system/settings`：数据与实例设置；
 - `/api/event-feed`、`/api/agent-sessions`：日志与历史会话；

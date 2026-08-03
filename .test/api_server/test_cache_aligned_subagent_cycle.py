@@ -95,10 +95,7 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
         "memory and capabilities. Work together to complete the task."
     )
     shared_replacement = "SHARED LONG CONTEXT\n" + ("source material " * 512)
-    shared_binding = {
-        "name": "worker",
-        "description": "Complete one delegated unit of the shared writing task.",
-    }
+    worker_description = "Complete one delegated unit of the shared writing task."
     task_description = (
         "Delegate one complete unit of work to this catalog:\n"
         "{available_agents}"
@@ -159,35 +156,43 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
             "block_id": worker_preset["id"],
         }]
         b = client.post(
-            "/api/subagent-overrides",
-            json={"name": "B", "capability_overrides": worker_override},
+            "/api/subagents",
+            json=subagent_payload(
+                "B",
+                name="worker",
+                description=worker_description,
+                capability_overrides=worker_override,
+            ),
         ).json()
         c = client.post(
-            "/api/subagent-overrides",
-            json={"name": "C", "capability_overrides": worker_override},
+            "/api/subagents",
+            json=subagent_payload(
+                "C",
+                name="worker",
+                description=worker_description,
+                capability_overrides=worker_override,
+            ),
         ).json()
         b_response = client.put(
-            f"/api/subagent-overrides/{b['id']}",
-            json={
-                "name": "B",
-                "capability_overrides": worker_override,
-                "subagents": [{
-                    **shared_binding,
-                    "subagent_override_id": c["id"],
-                }],
-            },
+            f"/api/subagents/{b['id']}",
+            json=subagent_payload(
+                "B",
+                name="worker",
+                description=worker_description,
+                capability_overrides=worker_override,
+                subagents=[{"subagent_id": c["id"]}],
+            ),
         )
         assert b_response.status_code == 200, b_response.text
         c_response = client.put(
-            f"/api/subagent-overrides/{c['id']}",
-            json={
-                "name": "C",
-                "capability_overrides": worker_override,
-                "subagents": [{
-                    **shared_binding,
-                    "subagent_override_id": b["id"],
-                }],
-            },
+            f"/api/subagents/{c['id']}",
+            json=subagent_payload(
+                "C",
+                name="worker",
+                description=worker_description,
+                capability_overrides=worker_override,
+                subagents=[{"subagent_id": b["id"]}],
+            ),
         )
         assert c_response.status_code == 200, c_response.text
         a_response = client.put(
@@ -200,10 +205,7 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
                     {"type": "prompt-preset", "block_id": primary_preset["id"]},
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
-                "subagents": [{
-                    **shared_binding,
-                    "subagent_override_id": b["id"],
-                }],
+                "subagents": [{"subagent_id": b["id"]}],
             },
         )
         assert a_response.status_code == 200, a_response.text

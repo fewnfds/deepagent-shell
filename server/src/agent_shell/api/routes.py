@@ -245,7 +245,7 @@ def build_router(
                 message_key=(
                     "errors.configurationReferencedByPrimary"
                     if owner_type == "primary"
-                    else "errors.configurationReferencedBySubagentOverride"
+                    else "errors.configurationReferencedBySubagent"
                 ),
                 message="The configuration is still referenced.",
                 message_args={"owner": owner_name},
@@ -283,7 +283,7 @@ def build_router(
                     message_key=(
                         "errors.configurationReferencedByPrimary"
                         if owner_type == "primary"
-                        else "errors.configurationReferencedBySubagentOverride"
+                        else "errors.configurationReferencedBySubagent"
                     ),
                     message="The configuration is still referenced.",
                     message_args={"owner": owner_name},
@@ -406,7 +406,7 @@ def build_router(
                 message_key=(
                     "errors.configurationReferencedByPrimary"
                     if owner_type == "primary"
-                    else "errors.configurationReferencedBySubagentOverride"
+                    else "errors.configurationReferencedBySubagent"
                 ),
                 message="The configuration is still referenced.",
                 message_args={"owner": owner_name},

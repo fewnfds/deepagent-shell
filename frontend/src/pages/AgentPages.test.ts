@@ -7,12 +7,12 @@ import type {
   AgentAuthoringService,
   CapabilityManifest,
   PrimaryAgentProfile,
-  SubagentOverrideProfile,
+  SubagentProfile,
   ValidationReport,
 } from '@/domain/agents'
 
 import PrimaryAgentPage from './PrimaryAgentPage.vue'
-import SubagentOverridePage from './SubagentOverridePage.vue'
+import SubagentPage from './SubagentPage.vue'
 
 const toastNotify = vi.hoisted(() => vi.fn())
 
@@ -98,11 +98,12 @@ function service(overrides: Partial<AgentAuthoringService> = {}): AgentAuthoring
     capability_refs: [],
     subagents: [],
   }
-  const subagentOverride: SubagentOverrideProfile = {
+  const subagent: SubagentProfile = {
     id: '00000000-0000-0000-0000-000000000020',
-    name: 'Override',
-    capability_overrides: [],
-    subagents: [],
+    component_name: 'Worker component',
+    name: 'worker',
+    description: 'Handles delegated work.',
+    settings: { capability_overrides: [], subagents: [] },
   }
   return {
     getCatalog: vi.fn(async () => ({
@@ -117,10 +118,10 @@ function service(overrides: Partial<AgentAuthoringService> = {}): AgentAuthoring
     getPrimaryAgent: vi.fn(async () => primary),
     createPrimaryAgent: vi.fn(async (payload) => ({ ...primary, ...payload, id: 'created-primary' })),
     updatePrimaryAgent: vi.fn(async (id, payload) => ({ ...primary, ...payload, id })),
-    listSubagentOverrides: vi.fn(async () => [subagentOverride]),
-    getSubagentOverride: vi.fn(async () => subagentOverride),
-    createSubagentOverride: vi.fn(async (payload) => ({ ...subagentOverride, ...payload, id: 'created-override' })),
-    updateSubagentOverride: vi.fn(async (id, payload) => ({ ...subagentOverride, ...payload, id })),
+    listSubagents: vi.fn(async () => [subagent]),
+    getSubagent: vi.fn(async () => subagent),
+    createSubagent: vi.fn(async (payload) => ({ ...subagent, ...payload, id: 'created-subagent' })),
+    updateSubagent: vi.fn(async (id, payload) => ({ ...subagent, ...payload, id })),
     validateDraft: vi.fn(async () => validReport),
     ...overrides,
   }
@@ -160,11 +161,11 @@ async function mountSubagentPage(
 ) {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/agents/subagents', component: SubagentOverridePage }],
+    routes: [{ path: '/agents/subagents', component: SubagentPage }],
   })
   await router.push(path)
   await router.isReady()
-  const wrapper = mount(SubagentOverridePage, {
+  const wrapper = mount(SubagentPage, {
     props: { service: api },
     global: { plugins: [router] },
   })
@@ -193,33 +194,23 @@ describe('agent authoring pages', () => {
     wrapper.unmount()
   })
 
-  it('adds, edits, overrides, and removes explicit Subagent bindings', async () => {
+  it('adds, selects, and removes ordered Subagent entity references', async () => {
     const api = service()
     const { wrapper } = await mountPrimaryPage(api)
 
-    const addButton = wrapper.findAll('button').find((button) => button.text() === 'agents.primary.addBinding')
-    if (!addButton) throw new Error('add binding button not found')
+    const addButton = wrapper.findAll('button').find((button) => button.text() === 'agents.primary.addReference')
+    if (!addButton) throw new Error('add reference button not found')
     await addButton.trigger('click')
     await addButton.trigger('click')
-    expect(wrapper.findAll('[data-testid="binding-card"]')).toHaveLength(2)
-    expect(wrapper.findAll('[data-action="remove-binding"]').every((button) => (
+    expect(wrapper.findAll('[data-testid="subagent-reference-card"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-action="remove-subagent-reference"]').every((button) => (
       button.classes().includes('ms-auto')
     ))).toBe(true)
 
-    await wrapper.findAll('[data-action="remove-binding"]')[0]?.trigger('click')
-    expect(wrapper.findAll('[data-testid="binding-card"]')).toHaveLength(1)
-    const card = wrapper.get('[data-testid="binding-card"]')
-    expect(card.find('[data-action="toggle-binding"]').exists()).toBe(false)
-    expect(card.get('[data-testid="binding-body"]').exists()).toBe(true)
-    const fields = card.get('[data-testid="binding-body"] .row').element.children
-    expect([...fields].map((field) => field.className)).toEqual([
-      'col-md-6',
-      'col-md-6',
-      'col-12',
-    ])
-    await card.get('[data-testid="binding-body"] input[autocomplete="off"]').setValue('researcher')
-    await card.get('textarea').setValue('Research delegated topics')
-    await card.get('[data-testid="binding-override"]').setValue(
+    await wrapper.findAll('[data-action="remove-subagent-reference"]')[0]?.trigger('click')
+    expect(wrapper.findAll('[data-testid="subagent-reference-card"]')).toHaveLength(1)
+    const card = wrapper.get('[data-testid="subagent-reference-card"]')
+    await card.get('[data-testid="subagent-reference"]').setValue(
       '00000000-0000-0000-0000-000000000020',
     )
     await flushPromises()
@@ -228,9 +219,7 @@ describe('agent authoring pages', () => {
 
     expect(api.createPrimaryAgent).toHaveBeenCalledWith(expect.objectContaining({
       subagents: [{
-        name: 'researcher',
-        description: 'Research delegated topics',
-        subagent_override_id: '00000000-0000-0000-0000-000000000020',
+        subagent_id: '00000000-0000-0000-0000-000000000020',
       }],
     }))
     wrapper.unmount()
@@ -262,7 +251,7 @@ describe('agent authoring pages', () => {
     wrapper.unmount()
   })
 
-  it('shows fixed filesystem and output-mode values and the full synchronous Subagent override choices', async () => {
+  it('shows fixed filesystem and output-mode values and the full Subagent capability choices', async () => {
     const api = service({
       getCatalog: vi.fn(async () => ({
         block_types: [
@@ -299,12 +288,14 @@ describe('agent authoring pages', () => {
     expect((subagent.element as HTMLSelectElement).value).toBe('00000000-0000-0000-0000-000000000002')
     await buttonByText(wrapper, 'common.save').trigger('click')
     await flushPromises()
-    expect(api.createSubagentOverride).toHaveBeenCalledWith(expect.objectContaining({
-      capability_overrides: [{
-        type: 'subagent',
-        mode: 'replace',
-        block_id: '00000000-0000-0000-0000-000000000002',
-      }],
+    expect(api.createSubagent).toHaveBeenCalledWith(expect.objectContaining({
+      settings: expect.objectContaining({
+        capability_overrides: [{
+          type: 'subagent',
+          mode: 'replace',
+          block_id: '00000000-0000-0000-0000-000000000002',
+        }],
+      }),
     }))
     await subagent.setValue('__disabled__')
     expect((subagent.element as HTMLSelectElement).value).toBe('__disabled__')
@@ -329,18 +320,22 @@ describe('agent authoring pages', () => {
     await buttonByText(wrapper, 'common.save').trigger('click')
     await flushPromises()
 
-    expect(api.createSubagentOverride).toHaveBeenCalledWith({
+    expect(api.createSubagent).toHaveBeenCalledWith({
+      component_name: '',
       name: '',
-      capability_overrides: [
-        { type: 'model', mode: 'replace', block_id: '00000000-0000-0000-0000-000000000001' },
-        { type: 'system-prompt', mode: 'disabled', block_id: '' },
-      ],
-      subagents: [],
+      description: '',
+      settings: {
+        capability_overrides: [
+          { type: 'model', mode: 'replace', block_id: '00000000-0000-0000-0000-000000000001' },
+          { type: 'system-prompt', mode: 'disabled', block_id: '' },
+        ],
+        subagents: [],
+      },
     })
     wrapper.unmount()
   })
 
-  it('loads a Subagent override from the configuration-library query UUID', async () => {
+  it('loads a Subagent entity from the configuration-library query UUID', async () => {
     const api = service()
     const id = '00000000-0000-0000-0000-000000000020'
     const { wrapper } = await mountSubagentPage(
@@ -348,37 +343,36 @@ describe('agent authoring pages', () => {
       `/agents/subagents?id=${id}`,
     )
 
-    expect(api.getSubagentOverride).toHaveBeenCalledWith(id)
+    expect(api.getSubagent).toHaveBeenCalledWith(id)
     await buttonByText(wrapper, 'common.save').trigger('click')
     await flushPromises()
-    expect(api.updateSubagentOverride).toHaveBeenCalledWith(
+    expect(api.updateSubagent).toHaveBeenCalledWith(
       id,
-      expect.objectContaining({ name: 'Override' }),
+      expect.objectContaining({
+        component_name: 'Worker component',
+        name: 'worker',
+      }),
     )
     wrapper.unmount()
   })
 
-  it('adds a named child to a Subagent override and can reference itself', async () => {
+  it('adds an entity child to a Subagent and can reference itself', async () => {
     const api = service()
     const id = '00000000-0000-0000-0000-000000000020'
     const { wrapper } = await mountSubagentPage(api, `/agents/subagents?id=${id}`)
 
-    await buttonByText(wrapper, 'agents.primary.addBinding').trigger('click')
-    const binding = wrapper.get('[data-testid="binding-card"]')
-    await binding.get('input[autocomplete="off"]').setValue('self_worker')
-    await binding.get('textarea').setValue('Continue the same role.')
-    await binding.get('[data-testid="binding-override"]').setValue(id)
+    await buttonByText(wrapper, 'agents.primary.addReference').trigger('click')
+    const reference = wrapper.get('[data-testid="subagent-reference-card"]')
+    await reference.get('[data-testid="subagent-reference"]').setValue(id)
     await buttonByText(wrapper, 'common.save').trigger('click')
     await flushPromises()
 
-    expect(api.updateSubagentOverride).toHaveBeenCalledWith(
+    expect(api.updateSubagent).toHaveBeenCalledWith(
       id,
       expect.objectContaining({
-        subagents: [{
-          name: 'self_worker',
-          description: 'Continue the same role.',
-          subagent_override_id: id,
-        }],
+        settings: expect.objectContaining({
+          subagents: [{ subagent_id: id }],
+        }),
       }),
     )
     wrapper.unmount()
@@ -445,40 +439,42 @@ describe('agent authoring pages', () => {
     )
     primaryPage.wrapper.unmount()
 
-    const firstOverrideId = '00000000-0000-0000-0000-000000000041'
-    const secondOverrideId = '00000000-0000-0000-0000-000000000042'
-    const firstOverride = deferred<SubagentOverrideProfile>()
-    const secondOverride = deferred<SubagentOverrideProfile>()
-    const getSubagentOverride = vi.fn((id: string) => (
-      id === firstOverrideId ? firstOverride.promise : secondOverride.promise
+    const firstSubagentId = '00000000-0000-0000-0000-000000000041'
+    const secondSubagentId = '00000000-0000-0000-0000-000000000042'
+    const firstSubagent = deferred<SubagentProfile>()
+    const secondSubagent = deferred<SubagentProfile>()
+    const getSubagent = vi.fn((id: string) => (
+      id === firstSubagentId ? firstSubagent.promise : secondSubagent.promise
     ))
-    const overrideApi = service({ getSubagentOverride })
-    const overridePage = await mountSubagentPage(overrideApi)
+    const subagentApi = service({ getSubagent })
+    const subagentPage = await mountSubagentPage(subagentApi)
 
-    await overridePage.router.push({ path: '/agents/subagents', query: { id: firstOverrideId } })
-    await overridePage.router.push({ path: '/agents/subagents', query: { id: secondOverrideId } })
-    secondOverride.resolve({
-      id: secondOverrideId,
-      name: 'Latest Override',
-      capability_overrides: [],
-      subagents: [],
+    await subagentPage.router.push({ path: '/agents/subagents', query: { id: firstSubagentId } })
+    await subagentPage.router.push({ path: '/agents/subagents', query: { id: secondSubagentId } })
+    secondSubagent.resolve({
+      id: secondSubagentId,
+      component_name: 'Latest Subagent',
+      name: 'latest_worker',
+      description: 'Latest worker.',
+      settings: { capability_overrides: [], subagents: [] },
     })
     await flushPromises()
-    firstOverride.resolve({
-      id: firstOverrideId,
-      name: 'Late Override',
-      capability_overrides: [],
-      subagents: [],
+    firstSubagent.resolve({
+      id: firstSubagentId,
+      component_name: 'Late Subagent',
+      name: 'late_worker',
+      description: 'Late worker.',
+      settings: { capability_overrides: [], subagents: [] },
     })
     await flushPromises()
-    await buttonByText(overridePage.wrapper, 'common.save').trigger('click')
+    await buttonByText(subagentPage.wrapper, 'common.save').trigger('click')
     await flushPromises()
 
-    expect(overrideApi.updateSubagentOverride).toHaveBeenCalledWith(
-      secondOverrideId,
-      expect.objectContaining({ name: 'Latest Override' }),
+    expect(subagentApi.updateSubagent).toHaveBeenCalledWith(
+      secondSubagentId,
+      expect.objectContaining({ component_name: 'Latest Subagent' }),
     )
-    overridePage.wrapper.unmount()
+    subagentPage.wrapper.unmount()
   })
 
   it('keeps the loaded Primary identity when selecting another record fails', async () => {

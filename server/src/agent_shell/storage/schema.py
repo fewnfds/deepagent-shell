@@ -26,9 +26,9 @@ CREATE TABLE IF NOT EXISTS primary_agents (
     payload TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS subagent_overrides (
+CREATE TABLE IF NOT EXISTS subagents (
     id TEXT PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
+    component_name TEXT NOT NULL UNIQUE,
     payload TEXT NOT NULL
 );
 

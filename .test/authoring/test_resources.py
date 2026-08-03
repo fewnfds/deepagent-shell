@@ -250,7 +250,7 @@ def test_new_database_contains_current_authoring_and_api_server_tables(
     assert tables == {
         "blocks",
         "primary_agents",
-        "subagent_overrides",
+        "subagents",
         "provider_secrets",
         "api_server_settings",
         "api_server_request_settings",

@@ -17,6 +17,25 @@ PUBLIC_TYPES = tuple(manifest.type for manifest in CAPABILITY_MANIFESTS)
 OVERRIDEABLE_TYPES = tuple(
     manifest.type for manifest in CAPABILITY_MANIFESTS if manifest.subagent_overrideable
 )
+
+
+def subagent_payload(
+    component_name: str,
+    *,
+    name: str = "worker",
+    description: str = "Handles delegated work.",
+    capability_overrides: list[dict[str, object]] | None = None,
+    subagents: list[dict[str, str]] | None = None,
+) -> dict[str, object]:
+    return {
+        "component_name": component_name,
+        "name": name,
+        "description": description,
+        "settings": {
+            "capability_overrides": capability_overrides or [],
+            "subagents": subagents or [],
+        },
+    }
 OUTPUT_EVENT_TYPES = (
     "assistant_text",
     "reasoning",

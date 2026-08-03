@@ -13,17 +13,21 @@ def test_primary_reference_create_update_and_delete_protection_cover_every_type(
     client = make_client(tmp_path, monkeypatch)
     original = create_blocks(client, "original")
     replacement = create_blocks(client, "replacement")
+    subagent = client.post(
+        "/api/subagents",
+        json=subagent_payload(
+            "Matrix worker",
+            name="matrix_worker",
+            description="Exercises every selected capability reference.",
+        ),
+    ).json()
 
     response = client.post(
         "/api/primary-agents",
         json={
             "name": "Primary matrix",
             "capability_refs": references(original),
-            "subagents": [{
-                "name": "matrix_worker",
-                "description": "Exercises every selected capability reference.",
-                "subagent_override_id": "",
-            }],
+            "subagents": [{"subagent_id": subagent["id"]}],
         },
     )
     assert response.status_code == 200, response.text
@@ -57,17 +61,18 @@ def test_primary_reference_create_update_and_delete_protection_cover_every_type(
         assert released.status_code == 200, (capability_type, released.text)
 
 
-def test_override_replace_update_modes_and_delete_protection_cover_every_type(
+def test_subagent_replace_update_modes_and_delete_protection_cover_every_type(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
     original = create_blocks(client, "override-original", OVERRIDEABLE_TYPES)
 
     response = client.post(
-        "/api/subagent-overrides",
-        json={
-            "name": "Override matrix",
-            "capability_overrides": [
+        "/api/subagents",
+        json=subagent_payload(
+            "Override matrix",
+            name="override_matrix",
+            capability_overrides=[
                 {
                     "type": capability_type,
                     "mode": "replace",
@@ -75,10 +80,10 @@ def test_override_replace_update_modes_and_delete_protection_cover_every_type(
                 }
                 for capability_type in OVERRIDEABLE_TYPES
             ],
-        },
+        ),
     )
     assert response.status_code == 200, response.text
-    override = response.json()
+    subagent = response.json()
 
     for capability_type, block in original.items():
         blocked = client.delete(f"/api/blocks/{capability_type}/{block['id']}")
@@ -94,21 +99,29 @@ def test_override_replace_update_modes_and_delete_protection_cover_every_type(
         if index % 2 == 1
     ]
     updated = client.put(
-        f"/api/subagent-overrides/{override['id']}",
-        json={"name": override["name"], "capability_overrides": passive_modes},
+        f"/api/subagents/{subagent['id']}",
+        json=subagent_payload(
+            subagent["component_name"],
+            name=subagent["name"],
+            description=subagent["description"],
+            capability_overrides=passive_modes,
+        ),
     )
     assert updated.status_code == 200, updated.text
-    assert [item["mode"] for item in updated.json()["capability_overrides"]] == [
+    assert [
+        item["mode"]
+        for item in updated.json()["settings"]["capability_overrides"]
+    ] == [
         item["mode"] for item in passive_modes
     ]
 
     for capability_type, block in original.items():
         released = client.delete(f"/api/blocks/{capability_type}/{block['id']}")
         assert released.status_code == 200, (capability_type, released.text)
-    assert client.delete(f"/api/subagent-overrides/{override['id']}").status_code == 200
+    assert client.delete(f"/api/subagents/{subagent['id']}").status_code == 200
 
 
-def test_binding_delete_protection_only_tracks_override_references(
+def test_subagent_delete_protection_tracks_entity_references(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
@@ -116,25 +129,19 @@ def test_binding_delete_protection_only_tracks_override_references(
         create_blocks(client, "binding-required", ("model", "filesystem", "output-mode")),
         ("model", "filesystem", "output-mode"),
     )
-    override_response = client.post(
-        "/api/subagent-overrides",
-        json={"name": "Shared override", "capability_overrides": []},
+    subagent_response = client.post(
+        "/api/subagents",
+        json=subagent_payload("Shared Subagent", name="draft_worker"),
     )
-    assert override_response.status_code == 200, override_response.text
-    override = override_response.json()
+    assert subagent_response.status_code == 200, subagent_response.text
+    subagent = subagent_response.json()
 
     owner_response = client.post(
         "/api/primary-agents",
         json={
             "name": "Override owner",
             "capability_refs": required_refs,
-            "subagents": [
-                {
-                    "name": "draft_worker",
-                    "description": "Bindings own saved override references.",
-                    "subagent_override_id": override["id"],
-                }
-            ],
+            "subagents": [{"subagent_id": subagent["id"]}],
         },
     )
     assert owner_response.status_code == 200, owner_response.text
@@ -148,9 +155,9 @@ def test_binding_delete_protection_only_tracks_override_references(
     independent = independent_response.json()
     assert client.delete(f"/api/primary-agents/{independent['id']}").status_code == 200
 
-    override_blocked = client.delete(f"/api/subagent-overrides/{override['id']}")
-    assert override_blocked.status_code == 409, override_blocked.text
-    assert override_blocked.json()["detail"] == {
+    subagent_blocked = client.delete(f"/api/subagents/{subagent['id']}")
+    assert subagent_blocked.status_code == 409, subagent_blocked.text
+    assert subagent_blocked.json()["detail"] == {
         "code": "configuration_referenced",
         "message": "The configuration is still referenced by a Primary Agent.",
         "message_key": "errors.configurationReferencedByPrimary",
@@ -158,64 +165,58 @@ def test_binding_delete_protection_only_tracks_override_references(
     }
 
     assert client.delete(f"/api/primary-agents/{owner['id']}").status_code == 200
-    assert client.delete(f"/api/subagent-overrides/{override['id']}").status_code == 200
+    assert client.delete(f"/api/subagents/{subagent['id']}").status_code == 200
 
 
-def test_subagent_override_self_reference_and_external_delete_protection(
+def test_subagent_self_reference_and_external_delete_protection(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
     target = client.post(
-        "/api/subagent-overrides",
-        json={"name": "Recursive target", "capability_overrides": []},
+        "/api/subagents",
+        json=subagent_payload("Recursive target", name="recursive_worker"),
     ).json()
-    self_binding = {
-        "name": "recursive_worker",
-        "description": "Continues the same recursive role.",
-        "subagent_override_id": target["id"],
-    }
+    self_reference = {"subagent_id": target["id"]}
     recursive = client.put(
-        f"/api/subagent-overrides/{target['id']}",
-        json={
-            "name": target["name"],
-            "capability_overrides": [],
-            "subagents": [self_binding],
-        },
+        f"/api/subagents/{target['id']}",
+        json=subagent_payload(
+            target["component_name"],
+            name=target["name"],
+            description=target["description"],
+            subagents=[self_reference],
+        ),
     )
     assert recursive.status_code == 200, recursive.text
-    assert recursive.json()["subagents"] == [self_binding]
+    assert recursive.json()["settings"]["subagents"] == [self_reference]
 
     external = client.post(
-        "/api/subagent-overrides",
-        json={
-            "name": "External owner",
-            "capability_overrides": [],
-            "subagents": [{
-                **self_binding,
-                "name": "target_worker",
-            }],
-        },
+        "/api/subagents",
+        json=subagent_payload(
+            "External owner",
+            name="external_owner",
+            subagents=[self_reference],
+        ),
     )
     assert external.status_code == 200, external.text
 
-    blocked = client.delete(f"/api/subagent-overrides/{target['id']}")
+    blocked = client.delete(f"/api/subagents/{target['id']}")
     assert blocked.status_code == 409, blocked.text
     assert blocked.json()["detail"] == {
         "code": "configuration_referenced",
-        "message": "The configuration is still referenced by a Subagent override.",
-        "message_key": "errors.configurationReferencedBySubagentOverride",
+        "message": "The Subagent is still referenced by another Subagent.",
+        "message_key": "errors.configurationReferencedBySubagent",
         "message_args": {"owner": "External owner"},
     }
 
     released = client.post(
-        "/api/subagent-overrides/delete",
+        "/api/subagents/delete",
         json={"ids": [target["id"], external.json()["id"]]},
     )
     assert released.status_code == 200, released.text
     assert released.json() == {"deleted": 2}
 
 
-def test_binding_uses_current_primary_and_optional_override_only(
+def test_primary_subagent_reference_only_stores_entity_id(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
@@ -223,54 +224,27 @@ def test_binding_uses_current_primary_and_optional_override_only(
         create_blocks(client, "binding-flags-required", ("model", "filesystem", "output-mode")),
         ("model", "filesystem", "output-mode"),
     )
+    subagent = client.post(
+        "/api/subagents",
+        json=subagent_payload("Self worker", name="self_worker"),
+    ).json()
     valid = client.post(
         "/api/primary-agents",
         json={
             "name": "Unsaved self Primary",
             "capability_refs": required_refs,
-            "subagents": [
-                {
-                    "name": "self_worker",
-                    "description": "Inherits the current Primary without an override.",
-                    "subagent_override_id": "",
-                }
-            ],
+            "subagents": [{"subagent_id": subagent["id"]}],
         },
     )
     assert valid.status_code == 200, valid.text
     primary = valid.json()
-    assert set(primary["subagents"][0]) == {
+    assert primary["subagents"] == [{"subagent_id": subagent["id"]}]
+
+    for removed_field in (
         "name",
         "description",
         "subagent_override_id",
-    }
-
-    override = client.post(
-        "/api/subagent-overrides",
-        json={"name": "Optional override", "capability_overrides": []},
-    )
-    assert override.status_code == 200, override.text
-    updated_payload = {
-        "name": primary["name"],
-        "capability_refs": required_refs,
-        "subagents": [
-            {
-                "name": "self_worker",
-                "description": "Applies an optional override to the current Primary.",
-                "subagent_override_id": override.json()["id"],
-            }
-        ],
-    }
-    updated = client.put(f"/api/primary-agents/{primary['id']}", json=updated_payload)
-    assert updated.status_code == 200, updated.text
-    assert updated.json()["subagents"][0]["subagent_override_id"] == override.json()["id"]
-
-    for removed_field in (
         "enabled",
-        "use_current_primary",
-        "primary_agent_id",
-        "inherit_all",
-        "include_client_messages",
     ):
         response = client.post(
             "/api/primary-agents",
@@ -279,9 +253,7 @@ def test_binding_uses_current_primary_and_optional_override_only(
                 "capability_refs": required_refs,
                 "subagents": [
                     {
-                        "name": "worker",
-                        "description": "Removed source fields are not accepted.",
-                        "subagent_override_id": "",
+                        "subagent_id": subagent["id"],
                         removed_field: True,
                     }
                 ],
@@ -335,11 +307,12 @@ def test_reference_contracts_reject_unknown_duplicate_wrong_type_and_force_remov
     ]
     for index, capability_overrides in enumerate(invalid_overrides):
         response = client.post(
-            "/api/subagent-overrides",
-            json={
-                "name": f"Invalid Override {index}",
-                "capability_overrides": capability_overrides,
-            },
+            "/api/subagents",
+            json=subagent_payload(
+                f"Invalid Subagent {index}",
+                name=f"invalid_subagent_{index}",
+                capability_overrides=capability_overrides,
+            ),
         )
         assert response.status_code == 422, response.text
 
@@ -408,21 +381,23 @@ def test_primary_save_enforces_required_and_delegation_contracts_with_skill_fall
     assert delegation_without_binding.status_code == 422
     issues = delegation_without_binding.json()["detail"]["validation"]["issues"]
     assert any(
-        issue["code"] == "assembly.subagent_binding_required" for issue in issues
+        issue["code"] == "assembly.subagent_reference_required" for issue in issues
     )
 
     child_skill_override = client.post(
-        "/api/subagent-overrides",
-        json={
-            "name": "Child skill without filesystem",
-            "capability_overrides": [
+        "/api/subagents",
+        json=subagent_payload(
+            "Child skill without filesystem",
+            name="skill_worker",
+            description="Selects a Skill without a filesystem.",
+            capability_overrides=[
                 {
                     "type": "skill",
                     "mode": "replace",
                     "block_id": blocks["skill"]["id"],
                 }
             ],
-        },
+        ),
     )
     assert child_skill_override.status_code == 200, child_skill_override.text
     child_skill_without_filesystem = client.post(
@@ -433,19 +408,17 @@ def test_primary_save_enforces_required_and_delegation_contracts_with_skill_fall
                 *required_refs,
                 {"type": "subagent", "block_id": delegation["id"]},
             ],
-            "subagents": [
-                {
-                    "name": "skill_worker",
-                    "description": "Selects a Skill without a filesystem.",
-                    "subagent_override_id": child_skill_override.json()["id"],
-                }
-            ],
+            "subagents": [{"subagent_id": child_skill_override.json()["id"]}],
         },
     )
     assert child_skill_without_filesystem.status_code == 200, (
         child_skill_without_filesystem.text
     )
 
+    complete_worker = client.post(
+        "/api/subagents",
+        json=subagent_payload("Complete worker", name="self_worker"),
+    ).json()
     valid = client.post(
         "/api/primary-agents",
         json={
@@ -459,13 +432,7 @@ def test_primary_save_enforces_required_and_delegation_contracts_with_skill_fall
                 {"type": "skill", "block_id": blocks["skill"]["id"]},
                 {"type": "subagent", "block_id": delegation["id"]},
             ],
-            "subagents": [
-                {
-                    "name": "self_worker",
-                    "description": "Uses the complete Primary configuration.",
-                    "subagent_override_id": "",
-                }
-            ],
+            "subagents": [{"subagent_id": complete_worker["id"]}],
         },
     )
     assert valid.status_code == 200, valid.text

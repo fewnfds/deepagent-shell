@@ -39,7 +39,7 @@ const sectionNavigationGroups: SectionNavigationGroup[] = [
     prefix: '/agents',
     items: [
       { path: '/agents/primary', labelKey: 'navigation.sections.primary' },
-      { path: '/agents/subagents', labelKey: 'navigation.sections.subagentOverrides' },
+      { path: '/agents/subagents', labelKey: 'navigation.sections.subagents' },
     ],
   },
 ]

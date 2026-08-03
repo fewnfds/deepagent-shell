@@ -57,10 +57,7 @@ def test_named_subagent_can_reference_itself_with_matching_task_schema(
         ]
     )
     models = iter([parent_model, child_model])
-    binding = {
-        "name": "recursive_worker",
-        "description": "Continues the recursive task.",
-    }
+    recursive_description = "Continues the recursive task."
 
     with make_client(tmp_path, monkeypatch) as client:
         monkeypatch.setattr(
@@ -68,9 +65,13 @@ def test_named_subagent_can_reference_itself_with_matching_task_schema(
             lambda _block, _credential, _http_clients: next(models),
         )
         primary = create_primary(client)
-        override = client.post(
-            "/api/subagent-overrides",
-            json={"name": "Recursive profile", "capability_overrides": []},
+        subagent = client.post(
+            "/api/subagents",
+            json=subagent_payload(
+                "Recursive profile",
+                name="recursive_worker",
+                description=recursive_description,
+            ),
         ).json()
         custom_task_description = (
             "Delegate one complete task to this catalog:\n"
@@ -95,22 +96,21 @@ def test_named_subagent_can_reference_itself_with_matching_task_schema(
                 "task_description_override": child_task_description,
             },
         ).json()
-        recursive_override = client.put(
-            f"/api/subagent-overrides/{override['id']}",
-            json={
-                "name": override["name"],
-                "capability_overrides": [{
+        recursive_profile = client.put(
+            f"/api/subagents/{subagent['id']}",
+            json=subagent_payload(
+                subagent["component_name"],
+                name=subagent["name"],
+                description=recursive_description,
+                capability_overrides=[{
                     "type": "subagent",
                     "mode": "replace",
                     "block_id": child_delegation["id"],
                 }],
-                "subagents": [{
-                    **binding,
-                    "subagent_override_id": override["id"],
-                }],
-            },
+                subagents=[{"subagent_id": subagent["id"]}],
+            ),
         )
-        assert recursive_override.status_code == 200, recursive_override.text
+        assert recursive_profile.status_code == 200, recursive_profile.text
         updated = client.put(
             f"/api/primary-agents/{primary['id']}",
             json={
@@ -119,10 +119,7 @@ def test_named_subagent_can_reference_itself_with_matching_task_schema(
                     *primary["capability_refs"],
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
-                "subagents": [{
-                    **binding,
-                    "subagent_override_id": override["id"],
-                }],
+                "subagents": [{"subagent_id": subagent["id"]}],
             },
         )
         assert updated.status_code == 200, updated.text
@@ -230,8 +227,12 @@ def test_subagent_prompt_override_builds_from_frozen_client_messages(
         )
         override_preset = override_preset_response.json()
 
-        def create_override(
-            name: str, model: dict, prompt_preset: dict | None = None
+        def create_subagent(
+            component_name: str,
+            routing_name: str,
+            description: str,
+            model: dict,
+            prompt_preset: dict | None = None,
         ) -> dict:
             capability_overrides = [{
                 "type": "model",
@@ -245,17 +246,23 @@ def test_subagent_prompt_override_builds_from_frozen_client_messages(
                     "block_id": prompt_preset["id"],
                 })
             response = client.post(
-                "/api/subagent-overrides",
-                json={
-                    "name": name,
-                    "capability_overrides": capability_overrides,
-                },
+                "/api/subagents",
+                json=subagent_payload(
+                    component_name,
+                    name=routing_name,
+                    description=description,
+                    capability_overrides=capability_overrides,
+                ),
             )
             assert response.status_code == 200, response.text
             return response.json()
 
-        prompt_override = create_override(
-            "Override prompt child", override_model, override_preset
+        prompt_subagent = create_subagent(
+            "Override prompt child",
+            "override_worker",
+            "Uses a child-only Prompt Preset.",
+            override_model,
+            override_preset,
         )
         delegation_response = client.post(
             "/api/blocks/subagent",
@@ -279,13 +286,7 @@ def test_subagent_prompt_override_builds_from_frozen_client_messages(
                         "block_id": delegation_response.json()["id"],
                     },
                 ],
-                "subagents": [
-                    {
-                        "name": "override_worker",
-                        "description": "Uses a child-only Prompt Preset.",
-                        "subagent_override_id": prompt_override["id"],
-                    },
-                ],
+                "subagents": [{"subagent_id": prompt_subagent["id"]}],
             },
         )
         assert updated.status_code == 200, updated.text
