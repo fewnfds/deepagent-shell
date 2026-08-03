@@ -231,6 +231,17 @@
         "classes": ["component-editor-region"]
       },
       {
+        "name": "validation-sidebar",
+        "paths": [
+          "src/pages/ApiServerSettingsPage.vue",
+          "src/pages/ComponentsPage.vue",
+          "src/pages/ConfigLibraryPage.vue",
+          "src/pages/PrimaryAgentPage.vue",
+          "src/pages/SubagentOverridePage.vue"
+        ],
+        "classes": ["validation-sidebar"]
+      },
+      {
         "name": "session-timeline",
         "paths": ["src/pages/AgentSessionsPage.vue"],
         "classes": ["session-timeline-json"]

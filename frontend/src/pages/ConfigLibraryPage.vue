@@ -412,7 +412,7 @@ onMounted(async () => {
         </LteAlert>
       </section>
 
-      <aside class="col-lg-4" data-testid="library-validation-region">
+      <aside class="col-lg-4 validation-sidebar" data-testid="library-validation-region">
         <ValidationChecklist
           :title="t('library.validationTitle')"
           :validation="repositoryValidation"

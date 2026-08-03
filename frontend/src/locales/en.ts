@@ -1015,6 +1015,8 @@ export const en: MessageSchema = {
     capability: {
       required: 'Required',
       optional: 'Optional',
+      fixed: 'Fixed',
+      notApplicable: 'Not applicable',
       selection: 'Current selection',
       notAttached: 'Not attached',
     },
@@ -1037,9 +1039,14 @@ export const en: MessageSchema = {
       title: 'Subagent',
       capabilitiesTitle: 'Capability board',
       validationTitle: 'Subagent draft validation',
+      subagentSelectionHint: 'The bindings below determine whether this Subagent has synchronous Subagents. Enabling it adds the first binding.',
       mode: {
         inherit: 'Inherit',
         disabled: 'Disable',
+        fixedInherit: 'Inherit (fixed)',
+        notApplicable: 'Not applicable to this Subagent',
+        noSubagents: 'No synchronous Subagents',
+        hasSubagents: 'Has synchronous Subagents',
       },
     },
   },

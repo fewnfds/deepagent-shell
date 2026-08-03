@@ -10,6 +10,7 @@ import SubagentBindingsEditor from '@/components/SubagentBindingsEditor.vue'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
 import { useDraftValidation } from '@/composables/useDraftValidation'
 import { useManagementError } from '@/composables/useManagementError'
+import { useToasts } from '@/composables/useToasts'
 import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
 import {
   agentAuthoringServiceKey,
@@ -34,6 +35,7 @@ const props = defineProps<{
 const { t } = useI18n()
 const route = useRoute()
 const managementError = useManagementError()
+const { notify } = useToasts()
 const providedService = inject(agentAuthoringServiceKey, managementAgentAuthoringService)
 const service = computed(() => props.service ?? providedService)
 
@@ -48,10 +50,6 @@ const overrideProfiles = ref<SubagentOverrideProfile[]>([])
 const selectedProfileId = ref('')
 const form = ref(blankPrimaryAgent())
 let profileLoadSequence = 0
-const feedbackIsError = computed(() => (
-  feedbackKey.value.endsWith('Failed')
-  || feedbackKey.value === 'agents.serviceUnavailable'
-))
 
 const { markClean, runAfterDiscard } = useUnsavedChanges(
   () => primaryAgentPayload(form.value),
@@ -101,8 +99,9 @@ async function startNew(): Promise<void> {
     profileLoadSequence += 1
     selectedProfileId.value = ''
     form.value = blankPrimaryAgent()
-    feedbackKey.value = 'agents.feedback.newDraft'
+    feedbackKey.value = ''
     feedbackDetail.value = ''
+    notify({ tone: 'info', title: t('agents.feedback.newDraft') })
     markClean()
   })
 }
@@ -112,8 +111,9 @@ async function loadProfile(id: string): Promise<void> {
   if (!id) {
     selectedProfileId.value = ''
     form.value = blankPrimaryAgent()
-    feedbackKey.value = 'agents.feedback.newDraft'
+    feedbackKey.value = ''
     feedbackDetail.value = ''
+    notify({ tone: 'info', title: t('agents.feedback.newDraft') })
     markClean()
     return
   }
@@ -168,8 +168,7 @@ async function save(): Promise<void> {
     selectedProfileId.value = normalized.id
     upsertProfile(normalized)
     markClean()
-    feedbackKey.value = 'agents.feedback.saved'
-    feedbackDetail.value = ''
+    notify({ tone: 'success', title: t('agents.feedback.saved') })
   } catch (error) {
     feedbackKey.value = 'agents.feedback.saveFailed'
     feedbackDetail.value = managementError.describe(error).display
@@ -242,10 +241,7 @@ watch(
     </template>
 
     <template #status>
-      <LteAlert v-if="feedbackKey && feedbackIsError" data-testid="page-feedback" theme="danger">
-        {{ t(feedbackKey) }}<span v-if="feedbackDetail">{{ t('common.detailSeparator') }}{{ feedbackDetail }}</span>
-      </LteAlert>
-      <LteAlert v-else-if="feedbackKey" data-testid="page-feedback" theme="success">
+      <LteAlert v-if="feedbackKey" data-testid="page-feedback" theme="danger">
         {{ t(feedbackKey) }}<span v-if="feedbackDetail">{{ t('common.detailSeparator') }}{{ feedbackDetail }}</span>
       </LteAlert>
     </template>
@@ -310,7 +306,7 @@ watch(
 
       </section>
 
-      <aside class="col-lg-4">
+      <aside class="col-lg-4 validation-sidebar">
         <ValidationChecklist
           :title="t('agents.primary.validationTitle')"
           :validation="displayedValidation"

@@ -602,7 +602,7 @@ onMounted(() => {
         />
       </section>
 
-      <aside class="col-lg-4" data-testid="inspector-region">
+      <aside class="col-lg-4 validation-sidebar" data-testid="inspector-region">
         <ValidationChecklist
           :title="t('components.validationTitle')"
           :validation="displayedValidation"

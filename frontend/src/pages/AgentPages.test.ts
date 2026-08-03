@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMemoryHistory, createRouter } from 'vue-router'
 
 import { ManagementApiError } from '@/api'
@@ -13,6 +13,12 @@ import type {
 
 import PrimaryAgentPage from './PrimaryAgentPage.vue'
 import SubagentOverridePage from './SubagentOverridePage.vue'
+
+const toastNotify = vi.hoisted(() => vi.fn())
+
+vi.mock('@/composables/useToasts', () => ({
+  useToasts: () => ({ notify: toastNotify }),
+}))
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
@@ -56,6 +62,35 @@ const promptManifest: CapabilityManifest = {
   required: false,
 }
 
+const filesystemManifest: CapabilityManifest = {
+  ...modelManifest,
+  type: 'filesystem',
+  terminology_key: 'file-system',
+  order: 3,
+  subagent_overrideable: false,
+  required: false,
+  subagent_policy: 'inherit',
+}
+
+const outputModeManifest: CapabilityManifest = {
+  ...modelManifest,
+  type: 'output-mode',
+  terminology_key: 'output-policy',
+  order: 8,
+  subagent_overrideable: false,
+  subagent_policy: 'top-level-only',
+}
+
+const subagentManifest: CapabilityManifest = {
+  ...modelManifest,
+  type: 'subagent',
+  terminology_key: 'delegation',
+  order: 11,
+  subagent_overrideable: false,
+  required: false,
+  subagent_policy: 'force-remove',
+}
+
 function service(overrides: Partial<AgentAuthoringService> = {}): AgentAuthoringService {
   const primary: PrimaryAgentProfile = {
     id: '00000000-0000-0000-0000-000000000010',
@@ -96,6 +131,10 @@ function buttonByText(wrapper: ReturnType<typeof mount>, text: string) {
   if (!button) throw new Error(`Button not found: ${text}`)
   return button
 }
+
+beforeEach(() => {
+  toastNotify.mockReset()
+})
 
 async function mountPrimaryPage(
   api: AgentAuthoringService,
@@ -171,7 +210,6 @@ describe('agent authoring pages', () => {
     expect(wrapper.findAll('[data-testid="binding-card"]')).toHaveLength(1)
     const card = wrapper.get('[data-testid="binding-card"]')
     expect(card.find('[data-action="toggle-binding"]').exists()).toBe(false)
-    expect(card.find('input[type="checkbox"]').exists()).toBe(true)
     expect(card.get('[data-testid="binding-body"]').exists()).toBe(true)
     const fields = card.get('[data-testid="binding-body"] .row').element.children
     expect([...fields].map((field) => field.className)).toEqual([
@@ -204,9 +242,9 @@ describe('agent authoring pages', () => {
     const { wrapper } = await mountSubagentPage(api)
 
     expect(primaryPage.wrapper.get('section.col-lg-8')).toBeTruthy()
-    expect(primaryPage.wrapper.get('aside.col-lg-4')).toBeTruthy()
+    expect(primaryPage.wrapper.get('aside.col-lg-4').classes()).toContain('validation-sidebar')
     expect(wrapper.get('section.col-lg-8')).toBeTruthy()
-    expect(wrapper.get('aside.col-lg-4')).toBeTruthy()
+    expect(wrapper.get('aside.col-lg-4').classes()).toContain('validation-sidebar')
     expect(wrapper.findAll('[data-capability] input[type="radio"]')).toHaveLength(0)
     expect(wrapper.findAll('[data-capability] select')).toHaveLength(2)
     expect(primaryPage.wrapper.findAll('[data-capability] > .card')).toHaveLength(2)
@@ -221,6 +259,47 @@ describe('agent authoring pages', () => {
     expect(wrapper.find('.card .card').exists()).toBe(false)
 
     primaryPage.wrapper.unmount()
+    wrapper.unmount()
+  })
+
+  it('shows fixed filesystem and output-mode policies while keeping synchronous Subagents optional', async () => {
+    const api = service({
+      getCatalog: vi.fn(async () => ({
+        block_types: [
+          modelManifest,
+          promptManifest,
+          filesystemManifest,
+          outputModeManifest,
+          subagentManifest,
+        ],
+        editor_defaults: {},
+      })),
+    })
+    const { wrapper } = await mountSubagentPage(api)
+
+    expect(wrapper.findAll('[data-capability]')).toHaveLength(5)
+
+    const filesystem = wrapper.get('[data-testid="subagent-capability-filesystem"]')
+    expect(filesystem.attributes('disabled')).toBeDefined()
+    expect((filesystem.element as HTMLSelectElement).value).toBe('__inherit__')
+    expect(filesystem.text()).toContain('agents.override.mode.fixedInherit')
+    expect(filesystem.element.parentElement?.textContent).toContain('agents.policy.inherit')
+
+    const outputMode = wrapper.get('[data-testid="subagent-capability-output-mode"]')
+    expect(outputMode.attributes('disabled')).toBeDefined()
+    expect((outputMode.element as HTMLSelectElement).value).toBe('__not_applicable__')
+    expect(outputMode.text()).toContain('agents.override.mode.notApplicable')
+    expect(outputMode.element.parentElement?.textContent).toContain('agents.policy.top-level-only')
+
+    const subagent = wrapper.get('[data-testid="subagent-capability-subagent"]')
+    expect(subagent.attributes('disabled')).toBeUndefined()
+    expect((subagent.element as HTMLSelectElement).value).toBe('__disabled__')
+    await subagent.setValue('__enabled__')
+    expect(wrapper.findAll('[data-testid="binding-card"]')).toHaveLength(1)
+    expect((subagent.element as HTMLSelectElement).value).toBe('__enabled__')
+    await subagent.setValue('__disabled__')
+    expect(wrapper.findAll('[data-testid="binding-card"]')).toHaveLength(0)
+
     wrapper.unmount()
   })
 
@@ -464,7 +543,11 @@ describe('agent authoring pages', () => {
 
     await buttonByText(wrapper, 'common.save').trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('agents.feedback.saved')
+    expect(toastNotify).toHaveBeenCalledWith({
+      tone: 'success',
+      title: 'agents.feedback.saved',
+    })
+    expect(wrapper.find('[data-testid="page-feedback"]').exists()).toBe(false)
     expect(wrapper.text()).not.toContain('old_save_failure')
     wrapper.unmount()
   })

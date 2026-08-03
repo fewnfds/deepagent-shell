@@ -96,6 +96,24 @@ pre code {
   top: 3.5rem;
 }
 
+@media (min-width: 992px) {
+  .validation-sidebar {
+    position: sticky;
+    top: 4.5rem;
+    max-height: calc(100vh - 5.5rem);
+    max-height: calc(100dvh - 5.5rem);
+    overflow-y: auto;
+  }
+}
+
+@media (min-width: 992px) and (max-width: 1199.98px) {
+  .validation-sidebar.col-xl-5 {
+    position: static;
+    max-height: none;
+    overflow-y: visible;
+  }
+}
+
 .form-check.form-switch {
   display: inline-flex;
   align-items: center;

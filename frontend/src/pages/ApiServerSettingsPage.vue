@@ -117,7 +117,7 @@ onMounted(() => {
           </LteCard>
         </div>
 
-        <div class="col-xl-5" data-testid="configuration-alerts">
+        <div class="col-xl-5 validation-sidebar" data-testid="configuration-alerts">
           <ValidationChecklist
             :title="t('apiServer.alerts.title')"
             :validation="repositoryValidation"
