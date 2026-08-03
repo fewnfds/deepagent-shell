@@ -100,8 +100,8 @@ function moveMessage(index: number, delta: number): void {
             <div class="col-md-6">
               <FormField :field-path="`startup_messages.${index}.role`">
                 <select v-model="message.role" class="form-select">
-                  <option value="user">user</option>
-                  <option value="assistant">assistant</option>
+                  <option value="user">{{ 'user' }}</option>
+                  <option value="assistant">{{ 'assistant' }}</option>
                 </select>
               </FormField>
             </div>

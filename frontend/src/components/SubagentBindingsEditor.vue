@@ -13,15 +13,28 @@ const props = defineProps<{
   bindings: SubagentBinding[]
   overrideProfiles: SubagentOverrideProfile[]
 }>()
+const emit = defineEmits<{
+  'update:bindings': [bindings: SubagentBinding[]]
+}>()
 
 const { t } = useI18n()
 
 function addBinding(): void {
-  props.bindings.push(blankSubagentBinding())
+  emit('update:bindings', [...props.bindings, blankSubagentBinding()])
 }
 
 function removeBinding(index: number): void {
-  props.bindings.splice(index, 1)
+  emit('update:bindings', props.bindings.filter((_, bindingIndex) => bindingIndex !== index))
+}
+
+function inputValue(event: Event): string {
+  return (event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).value
+}
+
+function updateBinding(index: number, patch: Partial<SubagentBinding>): void {
+  emit('update:bindings', props.bindings.map((binding, bindingIndex) => (
+    bindingIndex === index ? { ...binding, ...patch } : binding
+  )))
 }
 </script>
 
@@ -62,12 +75,22 @@ function removeBinding(index: number): void {
         <div class="row g-3">
           <div class="col-md-6">
             <FormField :field-path="`subagents.${index}.name`">
-              <input v-model="binding.name" autocomplete="off" class="form-control">
+              <input
+                autocomplete="off"
+                class="form-control"
+                :value="binding.name"
+                @input="updateBinding(index, { name: inputValue($event) })"
+              >
             </FormField>
           </div>
           <div class="col-md-6">
             <FormField :field-path="`subagents.${index}.subagent_override_id`">
-              <select v-model="binding.subagent_override_id" class="form-select" data-testid="binding-override">
+              <select
+                class="form-select"
+                data-testid="binding-override"
+                :value="binding.subagent_override_id"
+                @change="updateBinding(index, { subagent_override_id: inputValue($event) })"
+              >
                 <option value="">{{ t('agents.primary.inheritPrimary') }}</option>
                 <option v-for="profile in overrideProfiles" :key="profile.id" :value="profile.id">
                   {{ profile.name }}
@@ -77,7 +100,12 @@ function removeBinding(index: number): void {
           </div>
           <div class="col-12">
             <FormField :field-path="`subagents.${index}.description`">
-              <textarea v-model="binding.description" class="form-control" rows="4" />
+              <textarea
+                class="form-control"
+                rows="4"
+                :value="binding.description"
+                @input="updateBinding(index, { description: inputValue($event) })"
+              />
             </FormField>
           </div>
         </div>

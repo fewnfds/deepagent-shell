@@ -1,6 +1,6 @@
 import type { AgentSessionTimeline, AgentSessionTimelineRun } from '@/api'
 
-export type SessionTimelineKind =
+type SessionTimelineKind =
   | 'request_input'
   | 'agent_input'
   | 'model_request'
@@ -60,7 +60,7 @@ export function buildSessionTimeline(session: AgentSessionTimeline): SessionTime
       data: {},
     })
 
-    run.timeline.forEach((event, index) => {
+    run.timeline.forEach((event) => {
       const kind = typeof event.kind === 'string' ? event.kind as SessionTimelineKind : null
       if (!kind || !DISPLAYED_EVENT_KINDS.has(kind)) return
       if (kind === 'model_request') activeModelRequestNumber = ++modelRequestNumber

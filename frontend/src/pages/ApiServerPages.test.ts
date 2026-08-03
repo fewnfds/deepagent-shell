@@ -3,7 +3,8 @@ import { createI18n } from 'vue-i18n'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { ApiServerSettings } from '@/api'
-import { navigationItems, router } from '@/router'
+import { navigationItems } from '@/navigation'
+import { router } from '@/router'
 
 import ApiServerSettingsPage from './ApiServerSettingsPage.vue'
 
@@ -151,6 +152,15 @@ function i18n() {
 describe('ApiServerSettingsPage', () => {
   it('uses the API Server surface as the only home route', () => {
     expect(navigationItems[0]).toMatchObject({ path: '/', labelKey: 'navigation.home' })
+    expect(navigationItems.map((item) => item.path)).toEqual([
+      '/',
+      '/system/config',
+      '/agents/primary',
+      '/components/model',
+      '/library/model',
+      '/terminology',
+      '/style-lab',
+    ])
     expect(router.resolve('/').matched.at(-1)?.components?.default).toBeDefined()
     expect(router.getRoutes().some((route) => route.path === '/api-server/settings')).toBe(false)
   })

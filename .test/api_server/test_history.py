@@ -64,7 +64,7 @@ def test_agent_session_header_groups_multiple_requests_and_deletes_as_one_sessio
             if item["kind"] == "model_response"
         )
         assert response_event["data"]["is_primary"] is True
-        assert isinstance(response_event["data"]["response_metadata"], dict)
+        assert "response_metadata" not in response_event["data"]
         assert isinstance(response_event["data"]["usage"], dict)
         assert deleted.json() == {"deleted": True}
         assert client.get(f"/api/agent-sessions/{session_id}").status_code == 404
@@ -132,9 +132,12 @@ def test_agent_session_timeline_loads_large_step_json_only_from_step_endpoint(
                     "kind": "model_request",
                     "timestamp": "2026-01-02T03:04:01Z",
                     "data": {
-                        "model": {"name": "provider-model"},
-                        "messages": [{"role": "user", "content": large_input}],
-                        "tools": [{"name": "lookup"}],
+                        "agent_type": "primary",
+                        "agent_name": "Primary",
+                        "tool_call_id": "",
+                        "model_name": "provider-model",
+                        "message_count": 1,
+                        "tool_count": 1,
                     },
                 },
                 {
@@ -166,11 +169,14 @@ def test_agent_session_timeline_loads_large_step_json_only_from_step_endpoint(
     assert timeline.status_code == 200
     assert run["input_message_count"] == 1
     assert run["timeline"][0]["data"] == {
+        "agent_type": "primary",
+        "agent_name": "Primary",
+        "tool_call_id": "",
         "model_name": "provider-model",
         "message_count": 1,
         "tool_count": 1,
     }
-    assert run["timeline"][1]["data"]["output"].endswith("…")
+    assert "output" not in run["timeline"][1]["data"]
     assert large_input not in timeline.text
     assert large_result not in timeline.text
     assert large_response not in timeline.text

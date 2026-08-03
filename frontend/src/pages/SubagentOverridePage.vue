@@ -339,7 +339,7 @@ watch(
           </div>
         </section>
         <SubagentBindingsEditor
-          :bindings="form.subagents"
+          v-model:bindings="form.subagents"
           :override-profiles="profiles"
         />
       </section>

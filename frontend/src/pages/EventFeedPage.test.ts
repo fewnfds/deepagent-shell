@@ -3,7 +3,7 @@ import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { EventFeedFilters, EventFeedItem, ManagementEvent } from '@/api'
+import type { EventFeedItem, ManagementEvent } from '@/api'
 import { en } from '@/locales/en'
 import { useConfirmation } from '@/composables/useConfirmation'
 import { useToasts } from '@/composables/useToasts'
@@ -29,7 +29,7 @@ function item(source: EventFeedItem['source'], id: string): EventFeedItem {
 function api(items: EventFeedItem[]) {
   let eventHandler: ((event: ManagementEvent) => void) | undefined
   return {
-    listEventFeed: vi.fn(async (_filters: EventFeedFilters) => ({
+    listEventFeed: vi.fn(async () => ({
       items,
       page: 1,
       page_size: 50,

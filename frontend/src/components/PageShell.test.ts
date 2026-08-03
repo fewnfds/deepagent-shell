@@ -52,7 +52,6 @@ describe('PageShell', () => {
       'File manager',
       'Log center',
       'Session history',
-      'Style lab',
     ])
     expect(buttons[2]?.attributes('aria-current')).toBe('page')
     expect(buttons[2]?.classes()).toContain('btn-primary')

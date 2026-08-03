@@ -4,7 +4,7 @@ import asyncio
 import json
 import re
 import time
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Literal
@@ -15,6 +15,12 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 from agent_shell.api.errors import management_error
+from agent_shell.api.completion_terminal import (
+    CompletionContext,
+    CompletionFinalizer,
+    CompletionTerminal,
+    MessageHistoryRecorder,
+)
 from agent_shell.runtime.agent_runtime import AgentExecution
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.errors import AgentRuntimeError
@@ -26,7 +32,7 @@ from agent_shell.security import ApiKeyPolicyError, validate_api_key_policy
 from agent_shell.settings import Settings, bearer_token_is_valid
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.agent_sessions import AgentRunStatus, AgentSessionStore
-from agent_shell.storage.api_server import ApiServerStore, MessageHistoryStatus
+from agent_shell.storage.api_server import ApiServerStore
 from agent_shell.validation.models import validation_failure_detail
 from agent_shell.validation.service import ConfigurationValidationService
 
@@ -205,6 +211,7 @@ def build_api_server_router(
     validation: ConfigurationValidationService,
 ) -> APIRouter:
     router = APIRouter()
+    history = MessageHistoryRecorder(store, events, diagnostics)
 
     def public_settings(request: Request) -> dict[str, object]:
         current = store.settings()
@@ -220,55 +227,11 @@ def build_api_server_router(
             "runtime": "model_streaming",
         }
 
-    async def record_message_history(
-        *,
-        request: Request,
-        model: str,
-        agent_name: str,
-        started_at: str,
-        status: MessageHistoryStatus,
-        request_body: str,
-        response_body: str | None,
-        response_content_type: str | None,
-        http_status: int | None,
-        error_code: str | None,
-    ) -> bool:
-        try:
-            store.add_message_history(
-                request_id=getattr(request.state, "request_id", ""),
-                model=model,
-                agent_name=agent_name,
-                started_at=started_at,
-                finished_at=datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
-                status=status,
-                request_body=request_body,
-                response_body=response_body,
-                response_content_type=response_content_type,
-                http_status=http_status,
-                error_code=error_code,
-            )
-            await events.publish({"type": "history_changed"})
-        except Exception as exc:
-            diagnostics.observation_error(
-                exc,
-                request_id=getattr(request.state, "request_id", ""),
-                model=model,
-                agent_name=agent_name,
-                code="api_history_record_failed",
-            )
-            return False
-        return True
-
     async def primary_completion_stream(
         *,
         execution: AgentExecution,
-        request: Request,
         model: str,
-        agent_name: str,
-        started_at: str,
-        request_body: str,
-        request_started_clock: float,
-        record_agent_run: Callable[[AgentRunStatus, str | None, str], bool],
+        finalizer: CompletionFinalizer,
     ) -> AsyncIterator[str]:
         completion_id = f"chatcmpl_{uuid4().hex}"
         created = int(time.time())
@@ -321,13 +284,7 @@ def build_api_server_router(
             except AgentRuntimeError as exc:
                 terminal_status = "failed"
                 terminal_error_code = exc.code
-                diagnostics.runtime_error(
-                    exc,
-                    request_id=getattr(request.state, "request_id", ""),
-                    model=model,
-                    agent_name=agent_name,
-                    code=exc.code,
-                )
+                finalizer.runtime_error(exc, code=exc.code)
                 error_chunk = {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
@@ -350,13 +307,7 @@ def build_api_server_router(
             except Exception as exc:
                 terminal_status = "failed"
                 terminal_error_code = "internal_error"
-                diagnostics.runtime_error(
-                    exc,
-                    request_id=getattr(request.state, "request_id", ""),
-                    model=model,
-                    agent_name=agent_name,
-                    code="internal_error",
-                )
+                finalizer.runtime_error(exc, code="internal_error")
                 error_chunk = {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
@@ -403,13 +354,15 @@ def build_api_server_router(
             terminal_status = "completed"
             terminal_error_code = None
         finally:
-            if terminal_status in ("completed", "client_disconnected"):
-                diagnostics.request_finished(
-                    request_id=getattr(request.state, "request_id", ""),
-                    model=model,
-                    agent_name=agent_name,
+            response_text = "".join(response_parts)
+            await finalizer.finalize(
+                CompletionTerminal(
                     status=terminal_status,
-                    duration_ms=int((time.monotonic() - request_started_clock) * 1000),
+                    error_code=terminal_error_code,
+                    response_text=response_text,
+                    response_body="".join(wire),
+                    response_content_type="text/event-stream",
+                    http_status=200,
                     finish_reason=(
                         execution.finish_reason
                         if terminal_status == "completed"
@@ -417,19 +370,6 @@ def build_api_server_router(
                     ),
                     reasoning_tokens=execution.usage.get("reasoning_tokens"),
                 )
-            response_text = "".join(response_parts)
-            record_agent_run(terminal_status, terminal_error_code, response_text)
-            await record_message_history(
-                request=request,
-                model=model,
-                agent_name=agent_name,
-                started_at=started_at,
-                status=terminal_status,
-                request_body=request_body,
-                response_body="".join(wire),
-                response_content_type="text/event-stream",
-                http_status=200,
-                error_code=terminal_error_code,
             )
 
     async def run_until_disconnect(
@@ -591,8 +531,8 @@ def build_api_server_router(
                 status_code=422,
                 param="stream",
             )
-            await record_message_history(
-                request=request,
+            await history.record(
+                request_id=getattr(request.state, "request_id", ""),
                 model=model,
                 agent_name=agent_name,
                 started_at=started_at,
@@ -613,8 +553,8 @@ def build_api_server_router(
                 status_code=422,
                 param="messages",
             )
-            await record_message_history(
-                request=request,
+            await history.record(
+                request_id=getattr(request.state, "request_id", ""),
                 model=model,
                 agent_name=agent_name,
                 started_at=started_at,
@@ -637,8 +577,8 @@ def build_api_server_router(
                     status_code=422,
                     param=None,
                 )
-                await record_message_history(
-                    request=request,
+                await history.record(
+                    request_id=getattr(request.state, "request_id", ""),
                     model=model,
                     agent_name=agent_name,
                     started_at=started_at,
@@ -655,44 +595,23 @@ def build_api_server_router(
             request_id = getattr(request.state, "request_id", "")
             request_started_clock = time.monotonic()
             capture = AgentRunCapture()
-            session_run_record_attempted = False
-
-            def record_agent_run(
-                status: AgentRunStatus, error_code: str | None, response_text: str
-            ) -> bool:
-                nonlocal session_run_record_attempted
-                if session_run_record_attempted:
-                    return False
-                session_run_record_attempted = True
-                try:
-                    agent_sessions.record_run(
-                        session_id=session_id,
-                        request_id=request_id,
-                        model=model,
-                        agent_name=agent_name,
-                        started_at=started_at,
-                        finished_at=datetime.now(timezone.utc).isoformat(
-                            timespec="milliseconds"
-                        ),
-                        status=status,
-                        input_messages=payload.get("messages"),
-                        timeline=capture.snapshot(),
-                        response_text=response_text,
-                        error_code=error_code,
-                    )
-                    events.publish_nowait(
-                        {"type": "agent_session_changed", "session_id": session_id}
-                    )
-                except Exception as exc:
-                    diagnostics.observation_error(
-                        exc,
-                        request_id=request_id,
-                        model=model,
-                        agent_name=agent_name,
-                        code="agent_session_record_failed",
-                    )
-                    return False
-                return True
+            finalizer = CompletionFinalizer(
+                context=CompletionContext(
+                    request_id=request_id,
+                    session_id=session_id,
+                    model=model,
+                    agent_name=agent_name,
+                    started_at=started_at,
+                    request_body=raw_json,
+                    input_messages=payload.get("messages"),
+                    started_clock=request_started_clock,
+                ),
+                capture=capture,
+                diagnostics=diagnostics,
+                agent_sessions=agent_sessions,
+                events=events,
+                history=history,
+            )
 
             diagnostics.request_started(
                 request_id=request_id,
@@ -740,58 +659,44 @@ def build_api_server_router(
                 )
                 error_code = issue.code if issue is not None else exc.code
                 error_message = issue.message if issue is not None else exc.safe_message
-                diagnostics.runtime_error(
-                    exc,
-                    request_id=request_id,
-                    model=model,
-                    agent_name=agent_name,
-                    code=error_code,
-                )
-                record_agent_run("failed", error_code, "")
+                finalizer.runtime_error(exc, code=error_code)
                 error = _openai_error_payload(
                     error_code,
                     error_message,
                     status_code=exc.status_code,
                     param="model" if error_code.startswith("model_") else None,
                 )
-                await record_message_history(
-                    request=request,
-                    model=model,
-                    agent_name=agent_name,
-                    started_at=started_at,
-                    status="failed",
-                    request_body=raw_json,
-                    response_body=_json_wire(error),
-                    response_content_type="application/json",
-                    http_status=exc.status_code,
-                    error_code=error_code,
+                await finalizer.finalize(
+                    CompletionTerminal(
+                        status="failed",
+                        error_code=error_code,
+                        response_text="",
+                        response_body=_json_wire(error),
+                        response_content_type="application/json",
+                        http_status=exc.status_code,
+                        finish_reason=error_code,
+                        reasoning_tokens=None,
+                    )
                 )
                 return JSONResponse(
                     status_code=exc.status_code, content=error, headers=session_headers
                 )
             except Exception as exc:
-                diagnostics.runtime_error(
-                    exc,
-                    request_id=request_id,
-                    model=model,
-                    agent_name=agent_name,
-                    code="internal_error",
-                )
-                record_agent_run("failed", "internal_error", "")
+                finalizer.runtime_error(exc, code="internal_error")
                 error = _internal_error_payload(
                     getattr(request.state, "request_id", "")
                 )
-                await record_message_history(
-                    request=request,
-                    model=model,
-                    agent_name=agent_name,
-                    started_at=started_at,
-                    status="failed",
-                    request_body=raw_json,
-                    response_body=_json_wire(error),
-                    response_content_type="application/json",
-                    http_status=500,
-                    error_code="internal_error",
+                await finalizer.finalize(
+                    CompletionTerminal(
+                        status="failed",
+                        error_code="internal_error",
+                        response_text="",
+                        response_body=_json_wire(error),
+                        response_content_type="application/json",
+                        http_status=500,
+                        finish_reason="internal_error",
+                        reasoning_tokens=None,
+                    )
                 )
                 return JSONResponse(
                     status_code=500, content=error, headers=session_headers
@@ -800,13 +705,8 @@ def build_api_server_router(
                 return StreamingResponse(
                     primary_completion_stream(
                         execution=execution,
-                        request=request,
                         model=model,
-                        agent_name=agent_name,
-                        started_at=started_at,
-                        request_body=raw_json,
-                        request_started_clock=request_started_clock,
-                        record_agent_run=record_agent_run,
+                        finalizer=finalizer,
                     ),
                     media_type="text/event-stream",
                     headers={
@@ -818,83 +718,57 @@ def build_api_server_router(
             try:
                 content, usage = await run_until_disconnect(execution, request)
             except _ClientDisconnected:
-                diagnostics.request_finished(
-                    request_id=request_id,
-                    model=model,
-                    agent_name=agent_name,
-                    status="client_disconnected",
-                    duration_ms=int(
-                        (time.monotonic() - request_started_clock) * 1000
-                    ),
-                    finish_reason="client_disconnected",
-                    reasoning_tokens=execution.usage.get("reasoning_tokens"),
-                )
-                record_agent_run("client_disconnected", "client_disconnected", "")
-                await record_message_history(
-                    request=request,
-                    model=model,
-                    agent_name=agent_name,
-                    started_at=started_at,
-                    status="client_disconnected",
-                    request_body=raw_json,
-                    response_body="",
-                    response_content_type="application/json",
-                    http_status=499,
-                    error_code="client_disconnected",
+                await finalizer.finalize(
+                    CompletionTerminal(
+                        status="client_disconnected",
+                        error_code="client_disconnected",
+                        response_text="",
+                        response_body="",
+                        response_content_type="application/json",
+                        http_status=499,
+                        finish_reason="client_disconnected",
+                        reasoning_tokens=execution.usage.get("reasoning_tokens"),
+                    )
                 )
                 return Response(status_code=499, headers=session_headers)
             except AgentRuntimeError as exc:
-                diagnostics.runtime_error(
-                    exc,
-                    request_id=request_id,
-                    model=model,
-                    agent_name=agent_name,
-                    code=exc.code,
-                )
-                record_agent_run("failed", exc.code, "")
+                finalizer.runtime_error(exc, code=exc.code)
                 error = _openai_error_payload(
                     exc.code,
                     exc.safe_message,
                     status_code=exc.status_code,
                 )
-                await record_message_history(
-                    request=request,
-                    model=model,
-                    agent_name=agent_name,
-                    started_at=started_at,
-                    status="failed",
-                    request_body=raw_json,
-                    response_body=_json_wire(error),
-                    response_content_type="application/json",
-                    http_status=exc.status_code,
-                    error_code=exc.code,
+                await finalizer.finalize(
+                    CompletionTerminal(
+                        status="failed",
+                        error_code=exc.code,
+                        response_text="",
+                        response_body=_json_wire(error),
+                        response_content_type="application/json",
+                        http_status=exc.status_code,
+                        finish_reason=exc.code,
+                        reasoning_tokens=execution.usage.get("reasoning_tokens"),
+                    )
                 )
                 return JSONResponse(
                     status_code=exc.status_code, content=error, headers=session_headers
                 )
             except Exception as exc:
-                diagnostics.runtime_error(
-                    exc,
-                    request_id=request_id,
-                    model=model,
-                    agent_name=agent_name,
-                    code="internal_error",
-                )
-                record_agent_run("failed", "internal_error", "")
+                finalizer.runtime_error(exc, code="internal_error")
                 error = _internal_error_payload(
                     getattr(request.state, "request_id", "")
                 )
-                await record_message_history(
-                    request=request,
-                    model=model,
-                    agent_name=agent_name,
-                    started_at=started_at,
-                    status="failed",
-                    request_body=raw_json,
-                    response_body=_json_wire(error),
-                    response_content_type="application/json",
-                    http_status=500,
-                    error_code="internal_error",
+                await finalizer.finalize(
+                    CompletionTerminal(
+                        status="failed",
+                        error_code="internal_error",
+                        response_text="",
+                        response_body=_json_wire(error),
+                        response_content_type="application/json",
+                        http_status=500,
+                        finish_reason="internal_error",
+                        reasoning_tokens=execution.usage.get("reasoning_tokens"),
+                    )
                 )
                 return JSONResponse(
                     status_code=500, content=error, headers=session_headers
@@ -906,27 +780,17 @@ def build_api_server_router(
                 execution.finish_reason,
                 execution.finish_reason_source,
             )
-            diagnostics.request_finished(
-                request_id=request_id,
-                model=model,
-                agent_name=agent_name,
-                status="completed",
-                duration_ms=int((time.monotonic() - request_started_clock) * 1000),
-                finish_reason=execution.finish_reason,
-                reasoning_tokens=usage.get("reasoning_tokens"),
-            )
-            record_agent_run("completed", None, content)
-            await record_message_history(
-                request=request,
-                model=model,
-                agent_name=agent_name,
-                started_at=started_at,
-                status="completed",
-                request_body=raw_json,
-                response_body=_json_wire(response_payload),
-                response_content_type="application/json",
-                http_status=200,
-                error_code=None,
+            await finalizer.finalize(
+                CompletionTerminal(
+                    status="completed",
+                    error_code=None,
+                    response_text=content,
+                    response_body=_json_wire(response_payload),
+                    response_content_type="application/json",
+                    http_status=200,
+                    finish_reason=execution.finish_reason,
+                    reasoning_tokens=usage.get("reasoning_tokens"),
+                )
             )
             return JSONResponse(content=response_payload, headers=session_headers)
 

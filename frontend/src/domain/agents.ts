@@ -5,7 +5,6 @@ import type {
   BlockType,
   CapabilityManifest as ApiCapabilityManifest,
   CapabilityOverride as ApiCapabilityOverride,
-  CapabilityReference as ApiCapabilityReference,
   CatalogResponse,
   DraftValidationRequest as ApiDraftValidationRequest,
   PrimaryAgent,
@@ -14,18 +13,16 @@ import type {
   SubagentBinding as ApiSubagentBinding,
   SubagentOverride,
   SubagentOverridePayload as ApiSubagentOverridePayload,
-  ValidationIssue as ApiValidationIssue,
   ValidationReport as ApiValidationReport,
 } from '@/api'
 
 export type CapabilityType = BlockType
-export type OverrideMode = 'inherit' | 'replace' | 'disabled'
-export type StoredOverrideMode = Exclude<OverrideMode, 'inherit'>
+type OverrideMode = 'inherit' | 'replace' | 'disabled'
+type StoredOverrideMode = Exclude<OverrideMode, 'inherit'>
 
 export type CapabilityManifest = ApiCapabilityManifest
-export type AgentCatalog = CatalogResponse
+type AgentCatalog = CatalogResponse
 export type StoredBlock = SavedBlock
-export type CapabilityReference = ApiCapabilityReference
 export type SubagentBinding = ApiSubagentBinding
 
 export interface PrimaryAgentProfile extends Omit<PrimaryAgent, 'subagents'> {
@@ -33,18 +30,17 @@ export interface PrimaryAgentProfile extends Omit<PrimaryAgent, 'subagents'> {
   subagents: SubagentBinding[]
 }
 
-export type PrimaryAgentPayload = ApiPrimaryAgentPayload
-export type CapabilityOverride = ApiCapabilityOverride
+type PrimaryAgentPayload = ApiPrimaryAgentPayload
+type CapabilityOverride = ApiCapabilityOverride
 
-export interface OverrideSelection {
+interface OverrideSelection {
   type: CapabilityType
   mode: OverrideMode
   block_id: string
 }
 
 export type SubagentOverrideProfile = SubagentOverride
-export type SubagentOverridePayload = ApiSubagentOverridePayload
-export type ValidationIssue = ApiValidationIssue
+type SubagentOverridePayload = ApiSubagentOverridePayload
 export type ValidationReport = ApiValidationReport
 export type DraftValidationRequest = ApiDraftValidationRequest
 

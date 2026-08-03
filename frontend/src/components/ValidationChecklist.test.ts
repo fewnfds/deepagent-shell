@@ -163,8 +163,10 @@ describe('ValidationChecklist', () => {
       report: {
         valid: false,
         stage: 'draft_validation',
-        issues: cases.map(({ reason: _reason, resolution: _resolution, ...issue }) => ({
-          ...issue,
+        issues: cases.map(({ code, path, message_key }) => ({
+          code,
+          path,
+          message_key,
           scope: 'primary',
           owner_id: 'primary-id',
           owner_name: 'coordinator',

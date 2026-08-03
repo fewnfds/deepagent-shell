@@ -56,6 +56,7 @@ const repositoryValidation = ref<DraftValidationState>({
   report: null,
   error: '',
 })
+let repositoryValidationSequence = 0
 
 const activeCategoryId = computed(() => routeCategory(route.params.type))
 
@@ -105,15 +106,18 @@ async function loadCatalog(): Promise<void> {
 }
 
 async function refreshRepositoryValidation(): Promise<void> {
+  const requestSequence = ++repositoryValidationSequence
   repositoryValidation.value = { status: 'validating', report: null, error: '' }
   try {
     const report = await api.value.validateRepository()
+    if (requestSequence !== repositoryValidationSequence) return
     repositoryValidation.value = {
       status: report.valid ? 'valid' : 'invalid',
       report,
       error: '',
     }
   } catch (error) {
+    if (requestSequence !== repositoryValidationSequence) return
     repositoryValidation.value = {
       status: 'unavailable',
       report: null,

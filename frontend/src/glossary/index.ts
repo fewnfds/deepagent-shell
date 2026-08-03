@@ -1,3 +1,2 @@
 export { glossaryEntries } from './entries'
-export { glossaryEntry, searchGlossary } from './search'
-export type { GlossaryEntry, GlossaryScope, GlossarySource } from './types'
+export type { GlossaryEntry, GlossaryScope } from './types'

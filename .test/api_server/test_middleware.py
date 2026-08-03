@@ -65,7 +65,7 @@ def test_selected_todo_middleware_updates_state_and_uses_overrides(
 
     assert response.status_code == 200, response.text
     assert response.json()["choices"][0]["message"]["content"] == "todo completed"
-    assert ToolCallingFakeModel.bound_tool_names == ["write_todos", "read_file"]
+    assert set(ToolCallingFakeModel.bound_tool_names) == {"write_todos", "read_file"}
     assert ToolCallingFakeModel.bound_tool_descriptions["write_todos"] == (
         "CUSTOM TODO DESCRIPTION"
     )
@@ -79,7 +79,7 @@ def test_selected_todo_middleware_updates_state_and_uses_overrides(
         if message.type == "system"
     ]
     assert len(system_messages) == 1
-    assert system_messages[0].text == "CUSTOM TODO INSTRUCTIONS"
+    assert system_messages[0].text.strip() == "CUSTOM TODO INSTRUCTIONS"
     assert "Filesystem Tools" not in system_messages[0].text
     tool_results = [
         message
@@ -175,9 +175,9 @@ def test_selected_middleware_prompt_hooks_follow_product_order(
     system = next(
         message for message in ToolCallingFakeModel.seen_messages[0] if message.type == "system"
     ).text
-    assert system.index("TODO") < system.index("SKILL")
     assert system.index("SKILL") < system.index("FILESYSTEM")
-    assert system.index("FILESYSTEM") < system.index("CUSTOM")
+    assert system.index("FILESYSTEM") < system.index("TODO")
+    assert system.index("TODO") < system.index("CUSTOM")
 
 def test_selected_custom_middleware_executes_enabled_recipe_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

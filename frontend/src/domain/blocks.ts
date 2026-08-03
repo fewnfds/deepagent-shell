@@ -12,20 +12,18 @@ export const blockTypes = [
   'todo-list',
 ] as const
 
-export type BlockType = typeof blockTypes[number]
-
 export interface BlockDraftBase {
   id: string
   name: string
 }
 
-export interface BlockPayloadBase {
+interface BlockPayloadBase {
   name: string
 }
 
-export type ModelProvider = string
+type ModelProvider = string
 export type ModelProviderSettingInput = string | number | boolean | '' | null
-export type ModelProviderSettingsDraft = Record<string, ModelProviderSettingInput>
+type ModelProviderSettingsDraft = Record<string, ModelProviderSettingInput>
 
 export interface ModelDraft extends BlockDraftBase {
   provider: ModelProvider
@@ -50,7 +48,7 @@ export interface ModelApiRecord extends BlockDraftBase {
   model_settings?: unknown
 }
 
-export interface ModelPayload extends BlockPayloadBase {
+interface ModelPayload extends BlockPayloadBase {
   provider: ModelProvider
   base_url: string
   credential: string | null
@@ -65,8 +63,8 @@ export interface CustomToolDraft extends BlockDraftBase {
   tools: string[]
 }
 
-export type CustomToolApiRecord = CustomToolDraft
-export interface CustomToolPayload extends BlockPayloadBase { tools: string[] }
+type CustomToolApiRecord = CustomToolDraft
+interface CustomToolPayload extends BlockPayloadBase { tools: string[] }
 
 export interface CustomToolCatalogItem {
   name: string
@@ -76,14 +74,14 @@ export interface CustomToolCatalogItem {
   description?: string
 }
 
-export interface MiddlewareDraftEntry {
+interface MiddlewareDraftEntry {
   _key: string
   name: string
   enabled: boolean
   source: string
 }
 
-export interface MiddlewareApiEntry {
+interface MiddlewareApiEntry {
   name: string
   enabled: boolean
   source: string
@@ -93,11 +91,11 @@ export interface CustomMiddlewareDraft extends BlockDraftBase {
   middlewares: MiddlewareDraftEntry[]
 }
 
-export interface CustomMiddlewareApiRecord extends BlockDraftBase {
+interface CustomMiddlewareApiRecord extends BlockDraftBase {
   middlewares: MiddlewareApiEntry[]
 }
 
-export interface CustomMiddlewarePayload extends BlockPayloadBase {
+interface CustomMiddlewarePayload extends BlockPayloadBase {
   middlewares: MiddlewareApiEntry[]
 }
 
@@ -108,20 +106,20 @@ export interface CustomMiddlewareCatalogItem {
   source?: string
 }
 
-export type OutputFilterMode = 'allowlist' | 'blocklist'
-export type OutputVariableEncoding = 'html' | 'plain'
+type OutputFilterMode = 'allowlist' | 'blocklist'
+type OutputVariableEncoding = 'html' | 'plain'
 
-export interface OutputFilterMapping {
+interface OutputFilterMapping {
   field: string
   value: string
 }
 
-export interface OutputEventTemplate {
+interface OutputEventTemplate {
   enabled: boolean
   template: string
 }
 
-export interface OutputModeValue {
+interface OutputModeValue {
   filter_mode: OutputFilterMode
   filter_mappings: OutputFilterMapping[]
   variable_encoding: OutputVariableEncoding
@@ -129,10 +127,10 @@ export interface OutputModeValue {
 }
 
 export interface OutputModeDraft extends BlockDraftBase, OutputModeValue {}
-export type OutputModeApiRecord = OutputModeDraft
-export interface OutputModePayload extends BlockPayloadBase, OutputModeValue {}
+type OutputModeApiRecord = OutputModeDraft
+interface OutputModePayload extends BlockPayloadBase, OutputModeValue {}
 
-export interface OutputEventDefault {
+interface OutputEventDefault {
   key: string
   label?: string
   description?: string
@@ -145,7 +143,7 @@ export interface OutputModeDefaults {
   default_value: OutputModeValue
 }
 
-export type ExceptionRetryStrategy = 'provider_native' | 'model_retry_middleware'
+type ExceptionRetryStrategy = 'provider_native' | 'model_retry_middleware'
 export type ExceptionRetryCondition =
   | 'transport_error'
   | 'timeout'
@@ -153,7 +151,7 @@ export type ExceptionRetryCondition =
   | 'server_error'
   | 'authentication_error'
 
-export interface ExceptionRetryValue {
+interface ExceptionRetryValue {
   strategy: ExceptionRetryStrategy
   force_non_streaming: boolean
   max_retries: number | string
@@ -161,8 +159,8 @@ export interface ExceptionRetryValue {
 }
 
 export interface ExceptionRetryDraft extends BlockDraftBase, ExceptionRetryValue {}
-export type ExceptionRetryApiRecord = ExceptionRetryDraft
-export interface ExceptionRetryPayload extends BlockPayloadBase, ExceptionRetryValue {}
+type ExceptionRetryApiRecord = ExceptionRetryDraft
+interface ExceptionRetryPayload extends BlockPayloadBase, ExceptionRetryValue {}
 
 export interface ExceptionRetryDefaults {
   strategies: ExceptionRetryStrategy[]
@@ -170,27 +168,27 @@ export interface ExceptionRetryDefaults {
   default_value: ExceptionRetryValue
 }
 
-export interface PromptTagReplacementDraft {
+interface PromptTagReplacementDraft {
   _key: string
   tag: string
   replacement: string
 }
 
-export interface PromptTagReplacement {
+interface PromptTagReplacement {
   tag: string
   replacement: string
 }
 
-export type PromptStartupRole = 'user' | 'assistant'
+type PromptStartupRole = 'user' | 'assistant'
 
-export interface PromptStartupMessageDraft {
+interface PromptStartupMessageDraft {
   _key: string
   role: PromptStartupRole
   content_template: string
   name: string
 }
 
-export interface PromptStartupMessage {
+interface PromptStartupMessage {
   role: PromptStartupRole
   content_template: string
   name: string | null
@@ -201,12 +199,12 @@ export interface PromptPresetDraft extends BlockDraftBase {
   startup_messages: PromptStartupMessageDraft[]
 }
 
-export interface PromptPresetApiRecord extends BlockDraftBase {
+interface PromptPresetApiRecord extends BlockDraftBase {
   tag_replacements: PromptTagReplacement[]
   startup_messages: PromptStartupMessage[]
 }
 
-export interface PromptPresetPayload extends BlockPayloadBase {
+interface PromptPresetPayload extends BlockPayloadBase {
   tag_replacements: PromptTagReplacement[]
   startup_messages: PromptStartupMessage[]
 }
@@ -215,22 +213,22 @@ export interface PromptPresetDefaults {
   template_variables: string[]
 }
 
-export interface MappedDirectory {
+interface MappedDirectory {
   virtual_path: string
   local_path: string
 }
 
-export interface VirtualSource {
+interface VirtualSource {
   virtual_path: string
   source_path: string
 }
 
-export interface FilesystemToolDraft {
+interface FilesystemToolDraft {
   visible: boolean
   description_override: string
 }
 
-export interface FilesystemToolApiValue {
+interface FilesystemToolApiValue {
   visible: boolean
   description_override: string | null
 }
@@ -244,7 +242,7 @@ export interface FilesystemDraft extends BlockDraftBase {
   tool_configs: Record<string, FilesystemToolDraft>
 }
 
-export interface FilesystemApiRecord extends BlockDraftBase {
+interface FilesystemApiRecord extends BlockDraftBase {
   mapped_directories: MappedDirectory[]
   virtual_directories: VirtualSource[]
   virtual_files: VirtualSource[]
@@ -253,7 +251,7 @@ export interface FilesystemApiRecord extends BlockDraftBase {
   tool_configs: Record<string, FilesystemToolApiValue>
 }
 
-export interface FilesystemPayload extends BlockPayloadBase {
+interface FilesystemPayload extends BlockPayloadBase {
   mapped_directories: MappedDirectory[]
   virtual_directories: VirtualSource[]
   virtual_files: VirtualSource[]
@@ -262,7 +260,7 @@ export interface FilesystemPayload extends BlockPayloadBase {
   tool_configs: Record<string, FilesystemToolApiValue>
 }
 
-export interface FilesystemToolDefault {
+interface FilesystemToolDefault {
   name: string
   kind?: string
   configurable: boolean
@@ -282,13 +280,13 @@ export interface SkillDraft extends BlockDraftBase {
   instruction_override: string
 }
 
-export interface SkillApiRecord extends BlockDraftBase {
+interface SkillApiRecord extends BlockDraftBase {
   skills: string[]
   system_prompt_enabled?: boolean
   instruction_override: string | null
 }
 
-export interface SkillPayload extends BlockPayloadBase {
+interface SkillPayload extends BlockPayloadBase {
   skills: string[]
   system_prompt_enabled: boolean
   instruction_override: string | null
@@ -308,20 +306,20 @@ export interface SystemPromptDraft extends BlockDraftBase {
   system_prompt: string
 }
 
-export type SystemPromptApiRecord = SystemPromptDraft
-export interface SystemPromptPayload extends BlockPayloadBase { system_prompt: string }
+type SystemPromptApiRecord = SystemPromptDraft
+interface SystemPromptPayload extends BlockPayloadBase { system_prompt: string }
 
 export interface SubagentDraft extends BlockDraftBase {
   instruction_override: string
   task_description_override: string
 }
 
-export interface SubagentApiRecord extends BlockDraftBase {
+interface SubagentApiRecord extends BlockDraftBase {
   instruction_override: string | null
   task_description_override: string | null
 }
 
-export interface SubagentPayload extends BlockPayloadBase {
+interface SubagentPayload extends BlockPayloadBase {
   instruction_override: string | null
   task_description_override: string | null
 }
@@ -336,12 +334,12 @@ export interface TodoListDraft extends BlockDraftBase {
   tool_description_override: string
 }
 
-export interface TodoListApiRecord extends BlockDraftBase {
+interface TodoListApiRecord extends BlockDraftBase {
   system_prompt_override: string | null
   tool_description_override: string | null
 }
 
-export interface TodoListPayload extends BlockPayloadBase {
+interface TodoListPayload extends BlockPayloadBase {
   system_prompt_override: string | null
   tool_description_override: string | null
 }

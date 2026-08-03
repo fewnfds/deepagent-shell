@@ -28,10 +28,7 @@ def test_unselected_project_filesystem_exposes_only_read_file(
     assert response.json()["choices"][0]["message"]["content"] == (
         "completed without filesystem"
     )
-    assert ToolCallingFakeModel.bound_tool_names == [
-        "read_file",
-        "task",
-    ]
+    assert ToolCallingFakeModel.bound_tool_names == ["read_file"]
 
 def test_selected_filesystem_reads_request_initial_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

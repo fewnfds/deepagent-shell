@@ -2,7 +2,7 @@ name: agent-shell
 
 services:
   agent-shell:
-    image: "${AGENT_SHELL_IMAGE:-ghcr.io/fewnfds/deepagent-shell:latest}"
+    image: "${AGENT_SHELL_IMAGE:?Set AGENT_SHELL_IMAGE to an exact tag or digest}"
     env_file:
       - "${COMPOSE_DATA_DIR:-./data}/config/agent-shell.env"
     ports:

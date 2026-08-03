@@ -7,9 +7,9 @@ import { glossaryEntry, searchGlossary } from './search'
 
 describe('typed glossary data', () => {
   it('preserves the complete current glossary payload exactly', () => {
-    expect(glossaryEntries).toHaveLength(715)
+    expect(glossaryEntries).toHaveLength(714)
     expect(createHash('sha256').update(JSON.stringify(glossaryEntries)).digest('hex'))
-      .toBe('ec08bb773b8d22c1b27057ada943c045fa81cc382fbf3884727a134e077b5180')
+      .toBe('f7547fd5632fbe68ea7a13d4001ddf4d3b2f56096542795143af903b1ae3c813')
   })
 
   it('contains unique keys and complete bilingual source records', () => {

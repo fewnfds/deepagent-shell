@@ -17,7 +17,7 @@ import {
 import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
 import { setLocale } from '@/locales'
-import { navigationItems, sectionNavigationForPath } from '@/router'
+import { navigationItems, sectionNavigationForPath } from '@/navigation'
 
 interface AppShellApi extends ManagementEventSource {
   getCatalog(): Promise<CatalogResponse>

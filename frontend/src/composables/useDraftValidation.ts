@@ -10,9 +10,9 @@ import {
 
 import type { DraftValidationRequest, ValidationReport } from '@/domain/agents'
 
-export const DRAFT_VALIDATION_DEBOUNCE_MS = 1000
+const DRAFT_VALIDATION_DEBOUNCE_MS = 1000
 
-export type DraftValidationStatus = 'unavailable' | 'validating' | 'valid' | 'invalid'
+type DraftValidationStatus = 'unavailable' | 'validating' | 'valid' | 'invalid'
 
 export interface DraftValidationState {
   status: DraftValidationStatus
@@ -20,7 +20,7 @@ export interface DraftValidationState {
   error: string
 }
 
-export type DraftValidator = (request: DraftValidationRequest) => Promise<ValidationReport>
+type DraftValidator = (request: DraftValidationRequest) => Promise<ValidationReport>
 
 interface DraftValidationOptions {
   debounceMs?: number

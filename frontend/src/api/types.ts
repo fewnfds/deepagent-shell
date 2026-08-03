@@ -1,5 +1,4 @@
 export type JsonPrimitive = boolean | number | string | null
-export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue }
 
 export type BlockType =
   | 'model'
@@ -41,10 +40,6 @@ export type SavedBlock<TPayload extends BlockPayload = BlockPayload> = TPayload 
   id: string
 }
 
-export interface ModelCredentialState {
-  status: 'masked' | 'missing'
-}
-
 export interface ModelProviderCatalogItem {
   provider: string
   package: string
@@ -75,7 +70,7 @@ export interface CustomMiddlewareResource {
 }
 
 export type FileManagerScope = 'files' | 'skills' | 'custom_tools' | 'custom_middlewares'
-export type ManagedFileKind = 'directory' | 'file' | 'unsupported'
+type ManagedFileKind = 'directory' | 'file' | 'unsupported'
 
 export interface ManagedFileScopeCatalog {
   scopes: FileManagerScope[]
@@ -116,7 +111,7 @@ export interface ManagedArchivePreview {
   directory_count: number
 }
 
-export type SystemSecretUpdate =
+type SystemSecretUpdate =
   | { operation: 'preserve' }
   | { operation: 'replace'; value: string }
 
@@ -156,7 +151,7 @@ export interface ResourceCatalog<TItem> {
   errors: Record<string, LocalizedMessagePayload>
 }
 
-export interface CapabilityReference {
+interface CapabilityReference {
   type: BlockType
   block_id: string
 }
@@ -189,7 +184,7 @@ export interface SubagentOverridePayload {
 
 export type SubagentOverride = SubagentOverridePayload & { id: string }
 
-export type ValidationTarget =
+type ValidationTarget =
   | { kind: 'block'; type: BlockType; id?: string }
   | { kind: 'primary'; type?: ''; id?: string }
   | { kind: 'subagent-override'; type?: ''; id?: string }
@@ -240,7 +235,7 @@ export interface ApiServerSettings {
   runtime: string
 }
 
-export type ApiKeyCommand =
+type ApiKeyCommand =
   | { operation: 'keep' }
   | { operation: 'clear' }
   | { operation: 'replace'; value: string }
@@ -302,7 +297,7 @@ export interface SystemLogSettings {
   max_size_mib_limit: number
 }
 
-export interface RuntimeDiagnosticEntry {
+interface RuntimeDiagnosticEntry {
   sequence: number
   timestamp: string
   level: string
@@ -331,7 +326,7 @@ export interface AgentSessionSummary {
   model_call_count: number
 }
 
-export interface AgentSessionTimelineStep {
+interface AgentSessionTimelineStep {
   step_id: string
   sequence: string | number
   kind: string
@@ -354,7 +349,7 @@ export interface AgentSessionTimelineRun {
   response_summary: string
 }
 
-export interface AgentSessionTokenUsage {
+interface AgentSessionTokenUsage {
   input_tokens: number | null
   non_reasoning_output_tokens: number | null
   reasoning_output_tokens: number | null

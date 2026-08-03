@@ -5,7 +5,7 @@ import { routeLocationKey, routerKey } from 'vue-router'
 
 import SectionNav from '@/components/SectionNav.vue'
 import type { SectionNavItem } from '@/components/sectionNav'
-import { sectionNavigationForPath } from '@/router'
+import { sectionNavigationForPath } from '@/navigation'
 
 const { t } = useI18n()
 const route = inject(routeLocationKey, null)

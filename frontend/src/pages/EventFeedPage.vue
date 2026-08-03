@@ -278,7 +278,7 @@ const eventTableConfig: DataTableConfig<EventFeedItem> = {
     label: () => t('eventFeed.delete.filtered'),
     busyLabel: () => t('common.deleting'),
     enabled: () => true,
-    confirm: (context) => ({
+    confirm: () => ({
       title: t('eventFeed.delete.title'),
       description: t('eventFeed.delete.filteredDescription'),
       confirmLabel: t('common.delete'),
@@ -520,7 +520,7 @@ onMounted(() => { void loadControls() })
               step="1"
               type="number"
             >
-            <span class="input-group-text">MiB</span>
+            <span class="input-group-text">{{ 'MiB' }}</span>
             <LteButton :disabled="savingControl === 'system-log-settings'" theme="primary" type="submit">
               {{ t('common.save') }}
             </LteButton>

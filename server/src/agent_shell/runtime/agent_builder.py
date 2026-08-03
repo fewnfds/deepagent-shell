@@ -26,6 +26,14 @@ from agent_shell.runtime.capabilities.exception_retry import (
     materialize_exception_retry,
     model_block_with_retry_overrides,
 )
+from agent_shell.runtime.agent_compilation import (
+    MaterializedAgentProfile,
+    configuration_error,
+    construct_deep_agent,
+    reported_error,
+    validate_middleware_names,
+    validate_model_visible_tool_names,
+)
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.limits import (
     ProviderErrorBoundaryMiddleware,
@@ -37,7 +45,6 @@ from agent_shell.runtime.model_request_settings import (
 from agent_shell.runtime.model_response import ModelResponse
 from agent_shell.runtime.subagent_input import AgentRequestContext
 from agent_shell.validation.capability_assembly import FilesystemMode
-from agent_shell.validation.models import ValidationIssue, ValidationReport
 from agent_shell.validation.service import ConfigurationValidationService
 
 
@@ -155,69 +162,12 @@ class AgentBuilder:
         skills_dir: Path,
         validation: ConfigurationValidationService,
         provider_http_clients: ProviderHttpClients,
-        model_factory: Callable[[dict[str, Any], str | None], Any] | None = None,
     ) -> None:
         self._secrets = secrets
         self._custom_tools_dir = custom_tools_dir
         self._skills_dir = skills_dir
         self._validation = validation
         self._provider_http_clients = provider_http_clients
-        self._model_factory = model_factory
-
-    @staticmethod
-    def _configuration_error(
-        code: str,
-        message: str,
-        *,
-        status_code: int,
-        scope: str,
-        owner_id: str,
-        owner_name: str,
-        path: str,
-    ) -> AgentRuntimeError:
-        report = ValidationReport(
-            stage="request_prepare",
-            issues=(
-                ValidationIssue(
-                    code=code,
-                    scope=scope,
-                    owner_id=owner_id,
-                    owner_name=owner_name,
-                    path=path,
-                    message=message,
-                    message_key="validation.issue.runtime.configuration",
-                    message_args={},
-                ),
-            ),
-        )
-        return AgentRuntimeError(
-            code,
-            report.issues[0].message,
-            status_code=status_code,
-            validation_report=report,
-        )
-
-    @classmethod
-    def _reported_error(
-        cls,
-        error: AgentRuntimeError,
-        *,
-        scope: str,
-        owner_id: str,
-        owner_name: str,
-        path: str,
-    ) -> AgentRuntimeError:
-        if error.validation_report is not None:
-            return error
-        return cls._configuration_error(
-            error.code,
-            error.safe_message,
-            status_code=error.status_code,
-            scope=scope,
-            owner_id=owner_id,
-            owner_name=owner_name,
-            path=path,
-        )
 
     def _materialize_profile(
         self,
@@ -228,9 +178,8 @@ class AgentBuilder:
         scope: str,
         owner_id: str,
         owner_name: str,
-        model_factory_override: Callable[[dict[str, Any], str | None], Any] | None = None,
         workspace: DeepAgentsWorkspace | None = None,
-    ) -> dict[str, Any]:
+    ) -> MaterializedAgentProfile:
         model_id = references["model"]
         model_block = selected_blocks["model"]
         exception_retry = selected_blocks.get("exception-retry")
@@ -242,7 +191,7 @@ class AgentBuilder:
         try:
             credential = self._secrets.resolve_model(model_id)
         except ProviderCredentialError as exc:
-            raise self._configuration_error(
+            raise configuration_error(
                 exc.code,
                 exc.safe_message,
                 status_code=409,
@@ -252,20 +201,15 @@ class AgentBuilder:
                 path="capability_refs.model",
             ) from exc
         try:
-            model_factory = model_factory_override or self._model_factory
-            model = (
-                model_factory(effective_model_block, credential)
-                if model_factory is not None
-                else _build_chat_model(
-                    effective_model_block,
-                    credential,
-                    self._provider_http_clients,
-                )
+            model = _build_chat_model(
+                effective_model_block,
+                credential,
+                self._provider_http_clients,
             )
             if exception_retry is not None:
                 model = configure_model_for_retry(model, exception_retry)
         except AgentRuntimeError as exc:
-            raise self._reported_error(
+            raise reported_error(
                 exc,
                 scope=scope,
                 owner_id=owner_id,
@@ -273,7 +217,7 @@ class AgentBuilder:
                 path="capability_refs.model",
             ) from exc
         except Exception as exc:
-            raise self._configuration_error(
+            raise configuration_error(
                 "model_configuration_invalid",
                 "The selected model configuration could not be constructed.",
                 status_code=422,
@@ -294,7 +238,7 @@ class AgentBuilder:
                     )
                 )
             except AgentRuntimeError as exc:
-                raise self._reported_error(
+                raise reported_error(
                     exc,
                     scope=scope,
                     owner_id=owner_id,
@@ -315,7 +259,7 @@ class AgentBuilder:
                     todo_kwargs["tool_description"] = todo["tool_description_override"]
                 middleware.append(TodoListMiddleware(**todo_kwargs))
             except Exception as exc:
-                raise self._configuration_error(
+                raise configuration_error(
                     "middleware_materialization_failed",
                     "The selected Todo capability could not be constructed.",
                     status_code=422,
@@ -357,7 +301,7 @@ class AgentBuilder:
                 workspace=workspace,
             )
         except DeepAgentsCapabilityError as exc:
-            raise self._configuration_error(
+            raise configuration_error(
                 "middleware_materialization_failed",
                 "The selected filesystem or Skill capability could not be constructed.",
                 status_code=422,
@@ -371,7 +315,7 @@ class AgentBuilder:
                 ),
             ) from exc
         except Exception as exc:
-            raise self._configuration_error(
+            raise configuration_error(
                 "middleware_materialization_failed",
                 "The selected filesystem or Skill configuration is invalid.",
                 status_code=422,
@@ -397,7 +341,7 @@ class AgentBuilder:
                     materialize_custom_middlewares(custom["middlewares"])
                 )
             except AgentRuntimeError as exc:
-                raise self._reported_error(
+                raise reported_error(
                     exc,
                     scope=scope,
                     owner_id=owner_id,
@@ -411,118 +355,25 @@ class AgentBuilder:
             if exception_retry is not None
             else None
         )
-        return {
-            "model": model,
-            "model_provider": str(model_block["provider"]),
-            "model_name": str(model_block["model"]),
-            "tool_choice": model_block.get("tool_choice"),
-            "response_format": model_block.get("response_format"),
-            "model_settings": dict(model_block.get("model_settings") or {}),
-            "exception_retry": exception_retry_runtime,
-            "system_prompt": (
+        return MaterializedAgentProfile(
+            model=model,
+            model_provider=str(model_block["provider"]),
+            model_name=str(model_block["model"]),
+            tool_choice=model_block.get("tool_choice"),
+            response_format=model_block.get("response_format"),
+            model_settings=dict(model_block.get("model_settings") or {}),
+            exception_retry=exception_retry_runtime,
+            system_prompt=(
                 system_prompt["system_prompt"] if system_prompt is not None else None
             ),
-            "tools": tools,
-            "middleware": middleware,
-            "custom_middleware": custom_middleware,
-            "backend": backend,
-            "initial_files": initial_files,
-            "skill_sources": skill_sources,
-            "workspace": deepagents.workspace,
-        }
-
-    @staticmethod
-    def _validate_model_visible_tool_names(
-        *,
-        tools: list[Any] | tuple[Any, ...],
-        middleware: list[Any] | tuple[Any, ...],
-        owner: str,
-        default_tool_names: tuple[str, ...] = (),
-    ) -> None:
-        seen: dict[str, str] = {}
-
-        def register_name(name: object, source: str) -> None:
-            if not isinstance(name, str) or not name:
-                return
-            previous = seen.get(name)
-            if previous is not None:
-                raise AgentRuntimeError(
-                    "agent_tool_name_conflict",
-                    f"The selected {owner} exposes duplicate model-visible tool "
-                    f"name '{name}' from {previous} and {source}.",
-                    status_code=422,
-                )
-            seen[name] = source
-
-        for name in default_tool_names:
-            register_name(name, "Deep Agents default harness")
-        for tool in tools:
-            register_name(getattr(tool, "name", None), "direct tools")
-        for item in middleware:
-            for tool in getattr(item, "tools", ()) or ():
-                register_name(getattr(tool, "name", None), type(item).__name__)
-
-    @staticmethod
-    def _validate_middleware_names(
-        middleware: list[Any] | tuple[Any, ...],
-        *,
-        owner: str,
-    ) -> None:
-        seen: set[str] = set()
-        for item in middleware:
-            name = getattr(item, "name", None)
-            if not isinstance(name, str) or not name:
-                continue
-            if name in seen:
-                raise AgentRuntimeError(
-                    "agent_middleware_name_conflict",
-                    f"The selected {owner} contains duplicate runtime Middleware "
-                    f"name '{name}'. Rename or remove one of the conflicting items.",
-                    status_code=422,
-                )
-            seen.add(name)
-
-    def _construct_deep_agent(
-        self,
-        constructor: dict[str, object],
-        *,
-        model_provider: str,
-        model_name: str,
-        scope: str,
-        owner_id: str,
-        owner_name: str,
-        subject: str,
-        path: str,
-    ) -> Any:
-        try:
-            from agent_shell.runtime.deepagents_harness import (
-                ensure_agent_shell_harness_profiles,
-            )
-            from deepagents import create_deep_agent
-
-            ensure_agent_shell_harness_profiles(
-                provider=model_provider,
-                model=model_name,
-            )
-            return create_deep_agent(**constructor)
-        except AgentRuntimeError as exc:
-            raise self._reported_error(
-                exc,
-                scope=scope,
-                owner_id=owner_id,
-                owner_name=owner_name,
-                path=path,
-            ) from exc
-        except Exception as exc:
-            raise self._configuration_error(
-                "agent_construction_failed",
-                f"The selected {subject} could not be constructed.",
-                status_code=422,
-                scope=scope,
-                owner_id=owner_id,
-                owner_name=owner_name,
-                path=path,
-            ) from exc
+            tools=tuple(tools),
+            middleware=tuple(middleware),
+            custom_middleware=tuple(custom_middleware),
+            backend=backend,
+            initial_files=initial_files,
+            skill_sources=skill_sources,
+            workspace=deepagents.workspace,
+        )
 
     def build(
         self,
@@ -597,52 +448,46 @@ class AgentBuilder:
             owner_name=primary_name,
         )
         constructor: dict[str, object] = {
-            "model": materialized["model"],
+            "model": materialized.model,
             "name": str(primary["name"]),
             "context_schema": AgentRequestContext,
         }
-        if materialized["system_prompt"] is not None:
-            constructor["system_prompt"] = materialized["system_prompt"]
-        if materialized["tools"]:
-            constructor["tools"] = materialized["tools"]
-        if materialized["response_format"] is not None:
-            constructor["response_format"] = materialized["response_format"]
-        if materialized["backend"] is not None:
-            constructor["backend"] = materialized["backend"]
-        if materialized["skill_sources"]:
-            constructor["skills"] = list(materialized["skill_sources"])
+        if materialized.system_prompt is not None:
+            constructor["system_prompt"] = materialized.system_prompt
+        if materialized.tools:
+            constructor["tools"] = list(materialized.tools)
+        if materialized.response_format is not None:
+            constructor["response_format"] = materialized.response_format
+        if materialized.backend is not None:
+            constructor["backend"] = materialized.backend
+        if materialized.skill_sources:
+            constructor["skills"] = list(materialized.skill_sources)
 
-        middleware = [ToolErrorBoundaryMiddleware(), *materialized["middleware"]]
-        if materialized["tool_choice"] is not None or materialized["model_settings"]:
+        middleware = [ToolErrorBoundaryMiddleware(), *materialized.middleware]
+        if materialized.tool_choice is not None or materialized.model_settings:
             middleware.append(
                 make_model_request_settings_middleware(
-                    tool_choice=materialized["tool_choice"],
-                    model_settings=materialized["model_settings"],
+                    tool_choice=materialized.tool_choice,
+                    model_settings=materialized.model_settings,
                 )
             )
         input_state: dict[str, Any] = {"messages": prepared_input.messages}
         request_context: AgentRequestContext = {
             "client_messages": [dict(message) for message in messages]
         }
-        initial_files = dict(materialized["initial_files"])
+        initial_files = dict(materialized.initial_files)
 
         compiled_subagents: list[dict[str, Any]] = []
         task_description_override: str | None = None
         if resolved_subagents:
-            from agent_shell.runtime.subagent_graphs import build_subagent_graphs
+            from agent_shell.runtime.subagent_graphs import SubagentGraphCompiler
 
-            compiled_subagents = build_subagent_graphs(
-                roots=resolved_subagents,
-                nodes=assembly.subagent_nodes,
+            compiled_subagents = SubagentGraphCompiler(
                 primary_id=primary_id,
-                workspace=materialized["workspace"],
+                workspace=materialized.workspace,
                 materialize_profile=self._materialize_profile,
-                construct_deep_agent=self._construct_deep_agent,
-                validate_middleware_names=self._validate_middleware_names,
-                validate_tool_names=self._validate_model_visible_tool_names,
-                report_error=self._reported_error,
                 agent_input_observer=agent_input_observer,
-            )
+            ).compile(roots=resolved_subagents, nodes=assembly.subagent_nodes)
             delegation_instruction = selected_blocks["subagent"][
                 "instruction_override"
             ]
@@ -656,7 +501,7 @@ class AgentBuilder:
                 )
             constructor["subagents"] = compiled_subagents
 
-        middleware.extend(materialized["custom_middleware"])
+        middleware.extend(materialized.custom_middleware)
         if model_request_observer is not None:
             from agent_shell.runtime.interception import (
                 make_model_request_observer_middleware,
@@ -678,7 +523,7 @@ class AgentBuilder:
             middleware.append(
                 make_interception_middleware(model_request_interceptor)
             )
-        exception_retry_runtime = materialized["exception_retry"]
+        exception_retry_runtime = materialized.exception_retry
         middleware.append(ProviderErrorBoundaryMiddleware())
         if exception_retry_runtime is not None:
             middleware.extend(exception_retry_runtime.after_provider_boundary)
@@ -692,19 +537,19 @@ class AgentBuilder:
                 )
 
                 replacement = make_subagent_middleware_override(
-                    backend=materialized["backend"],
+                    backend=materialized.backend,
                     subagents=compiled_subagents,
                     task_description=task_description_override,
                     middleware=middleware,
                 )
                 if replacement is not None:
                     middleware.append(replacement)
-            self._validate_middleware_names(middleware, owner="Primary Agent")
+            validate_middleware_names(middleware, owner="Primary Agent")
             primary_middleware_names = {
                 getattr(item, "name", None) for item in middleware
             }
-            self._validate_model_visible_tool_names(
-                tools=materialized["tools"],
+            validate_model_visible_tool_names(
+                tools=materialized.tools,
                 middleware=middleware,
                 owner="Primary Agent",
                 default_tool_names=(
@@ -720,7 +565,7 @@ class AgentBuilder:
                 ),
             )
         except AgentRuntimeError as exc:
-            raise self._reported_error(
+            raise reported_error(
                 exc,
                 scope="primary",
                 owner_id=primary_id,
@@ -731,10 +576,10 @@ class AgentBuilder:
         if middleware:
             constructor["middleware"] = middleware
 
-        graph = self._construct_deep_agent(
+        graph = construct_deep_agent(
             constructor,
-            model_provider=materialized["model_provider"],
-            model_name=materialized["model_name"],
+            model_provider=materialized.model_provider,
+            model_name=materialized.model_name,
             scope="primary",
             owner_id=primary_id,
             owner_name=primary_name,

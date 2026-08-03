@@ -112,7 +112,7 @@ def test_running_crud_changes_only_later_agent_constructions(
     SnapshotEchoModel.release = release
     responses: dict[str, object] = {}
 
-    def model_factory(_block, credential):
+    def model_factory(_block, credential, _http_clients):
         return SnapshotEchoModel(responses=[credential or "missing"])
 
     def invoke_old(client: TestClient, model: str) -> None:
@@ -142,6 +142,7 @@ def test_running_crud_changes_only_later_agent_constructions(
                     "base_url": "https://provider.example/v1",
                     "credential": "provider-new-secret",
                     "model": "provider-model",
+                    "provider_settings": {},
                     "tool_choice": None,
                     "response_format": None,
                     "model_settings": {},
@@ -177,7 +178,7 @@ def test_stop_rejects_new_work_without_interrupting_an_existing_snapshot(
     SnapshotEchoModel.release = release
     responses: dict[str, object] = {}
 
-    def model_factory(_block, credential):
+    def model_factory(_block, credential, _http_clients):
         return SnapshotEchoModel(responses=[credential or "missing"])
 
     def invoke(client: TestClient, model: str) -> None:

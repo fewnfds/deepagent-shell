@@ -93,6 +93,9 @@ const editorRevision = ref('')
 const editorLoading = ref(false)
 const editorSaving = ref(false)
 const editorError = ref('')
+let directoryRequestSequence = 0
+let requestedDirectoryPath = ''
+let editorRequestSequence = 0
 
 const breadcrumbs = computed(() => {
   const result: Array<{ label: string, path: string | null }> = [
@@ -115,20 +118,49 @@ function joinPath(base: string, child: string): string {
   return base ? `${base}/${child}` : child
 }
 
+function isCurrentDirectoryRequest(
+  requestSequence: number,
+  requestedScope: FileManagerScope,
+  path: string,
+): boolean {
+  return requestSequence === directoryRequestSequence
+    && !atManagerRoot.value
+    && scope.value === requestedScope
+    && requestedDirectoryPath === path
+}
+
+function isCurrentEditorRequest(
+  requestSequence: number,
+  requestedScope: FileManagerScope,
+  path: string,
+): boolean {
+  return requestSequence === editorRequestSequence
+    && editorOpen.value
+    && scope.value === requestedScope
+    && editorPath.value === path
+}
+
 async function load(path = directory.value.path): Promise<void> {
+  const requestSequence = ++directoryRequestSequence
+  const requestedScope = scope.value
+  requestedDirectoryPath = path
   loading.value = true
   pageError.value = ''
   selectedItems.value = []
   try {
-    directory.value = await api.listManagedFiles(scope.value, path)
+    const response = await api.listManagedFiles(requestedScope, path)
+    if (!isCurrentDirectoryRequest(requestSequence, requestedScope, path)) return
+    directory.value = response
   } catch (error) {
+    if (!isCurrentDirectoryRequest(requestSequence, requestedScope, path)) return
     pageError.value = managementError.describe(error).display
   } finally {
-    loading.value = false
+    if (isCurrentDirectoryRequest(requestSequence, requestedScope, path)) loading.value = false
   }
 }
 
 async function loadScopes(): Promise<void> {
+  directoryRequestSequence += 1
   loading.value = true
   pageError.value = ''
   uploads.value = []
@@ -156,7 +188,9 @@ function openScope(value: FileManagerScope): void {
 
 function navigateBreadcrumb(path: string | null): void {
   if (path === null) {
+    directoryRequestSequence += 1
     atManagerRoot.value = true
+    loading.value = false
     uploads.value = []
     selectedItems.value = []
     return
@@ -259,6 +293,8 @@ async function runUploads(): Promise<void> {
 }
 
 async function editText(item: ManagedFileItem): Promise<void> {
+  const requestSequence = ++editorRequestSequence
+  const requestedScope = scope.value
   editorOpen.value = true
   editorPath.value = item.path
   editorContent.value = ''
@@ -266,14 +302,22 @@ async function editText(item: ManagedFileItem): Promise<void> {
   editorError.value = ''
   editorLoading.value = true
   try {
-    const response = await api.readManagedTextFile(scope.value, item.path)
+    const response = await api.readManagedTextFile(requestedScope, item.path)
+    if (!isCurrentEditorRequest(requestSequence, requestedScope, item.path)) return
     editorContent.value = response.content
     editorRevision.value = response.revision
   } catch (error) {
+    if (!isCurrentEditorRequest(requestSequence, requestedScope, item.path)) return
     editorError.value = managementError.describe(error).display
   } finally {
-    editorLoading.value = false
+    if (isCurrentEditorRequest(requestSequence, requestedScope, item.path)) editorLoading.value = false
   }
+}
+
+function closeEditor(): void {
+  editorRequestSequence += 1
+  editorOpen.value = false
+  editorLoading.value = false
 }
 
 async function saveText(): Promise<void> {
@@ -694,7 +738,7 @@ onMounted(() => { void loadScopes() })
       :open="editorOpen"
       size="wide"
       :title="editorPath"
-      @close="editorOpen = false"
+      @close="closeEditor"
     >
       <div v-if="editorLoading" class="d-flex align-items-center gap-2 p-3" aria-busy="true" role="status">
         <span class="spinner-border" aria-hidden="true" />

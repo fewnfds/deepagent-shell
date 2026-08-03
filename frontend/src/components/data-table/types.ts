@@ -1,6 +1,6 @@
 import type { ConfirmationRequest } from '@/composables/useConfirmation'
 
-export type DataTableText = string | (() => string)
+type DataTableText = string | (() => string)
 export type DataTableFilterValue = string | string[]
 
 export interface DataTableAppliedQuery {
@@ -13,39 +13,39 @@ export interface DataTableRequest extends DataTableAppliedQuery {
   pageSize: number
 }
 
-export interface DataTableNumberedResult<Row> {
+interface DataTableNumberedResult<Row> {
   rows: Row[]
   total: number
 }
 
-export interface DataTableLocalProvider<Row> {
+interface DataTableLocalProvider<Row> {
   mode: 'local'
   rows?: () => readonly Row[]
   load?: () => Promise<readonly Row[]>
 }
 
-export interface DataTableNumberedProvider<Row> {
+interface DataTableNumberedProvider<Row> {
   mode: 'numbered'
   load: (request: DataTableRequest) => Promise<DataTableNumberedResult<Row>>
 }
 
-export type DataTableProvider<Row> =
+type DataTableProvider<Row> =
   | DataTableLocalProvider<Row>
   | DataTableNumberedProvider<Row>
 
-export interface DataTableColumn<Row> {
+interface DataTableColumn<Row> {
   key: string
   label: DataTableText
   value: (row: Row) => unknown
 }
 
-export interface DataTableSearch<Row> {
+interface DataTableSearch<Row> {
   label: DataTableText
   placeholder: DataTableText
   values?: (row: Row) => readonly string[]
 }
 
-export interface DataTableFilterOption {
+interface DataTableFilterOption {
   value: string
   label: DataTableText
 }
@@ -56,24 +56,24 @@ interface DataTableFilterBase<Row> {
   values?: (row: Row) => string | readonly string[]
 }
 
-export interface DataTableTextFilter<Row> extends DataTableFilterBase<Row> {
+interface DataTableTextFilter<Row> extends DataTableFilterBase<Row> {
   kind: 'text'
   placeholder?: DataTableText
   initialValue?: string
 }
 
-export interface DataTableDateTimeFilter<Row> extends DataTableFilterBase<Row> {
+interface DataTableDateTimeFilter<Row> extends DataTableFilterBase<Row> {
   kind: 'datetime'
   initialValue?: string
 }
 
-export interface DataTableSingleFilter<Row> extends DataTableFilterBase<Row> {
+interface DataTableSingleFilter<Row> extends DataTableFilterBase<Row> {
   kind: 'single'
   options: readonly DataTableFilterOption[]
   initialValue?: string
 }
 
-export interface DataTableMultiFilter<Row> extends DataTableFilterBase<Row> {
+interface DataTableMultiFilter<Row> extends DataTableFilterBase<Row> {
   kind: 'multi'
   options: readonly DataTableFilterOption[]
   initialValue?: readonly string[]
@@ -85,7 +85,7 @@ export type DataTableFilter<Row> =
   | DataTableSingleFilter<Row>
   | DataTableMultiFilter<Row>
 
-export type DataTableActionTone = 'primary' | 'info' | 'success' | 'warning' | 'danger'
+type DataTableActionTone = 'primary' | 'info' | 'success' | 'warning' | 'danger'
 
 export interface DataTableRowAction<Row> {
   key: string
@@ -111,7 +111,7 @@ export interface DataTableBulkContext<Row> {
   hasAppliedFilters: boolean
 }
 
-export interface DataTableBulkAction<Row> {
+interface DataTableBulkAction<Row> {
   label: DataTableText
   busyLabel?: DataTableText
   enabled: (context: DataTableBulkContext<Row>) => boolean

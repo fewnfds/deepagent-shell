@@ -1,6 +1,6 @@
 import type { JsonPrimitive, ManagementEvent, ValidationReport } from './types'
 
-export type AuthChallengeReason = 'invalid' | 'required'
+type AuthChallengeReason = 'invalid' | 'required'
 
 export interface ManagementAuthSnapshot {
   open: boolean
@@ -24,7 +24,7 @@ export class ManagementAuthCancelledError extends Error {
   }
 }
 
-export class ManagementAuthController {
+class ManagementAuthController {
   private token: string | null = null
   private generation = 0
   private pending: PendingChallenge | null = null
@@ -99,7 +99,7 @@ export class ManagementAuthController {
 
 export const managementAuth = new ManagementAuthController()
 
-export interface ManagementApiErrorOptions {
+interface ManagementApiErrorOptions {
   status: number
   code: string
   message: string
@@ -132,8 +132,8 @@ export class ManagementApiError extends Error {
   }
 }
 
-export type QueryValue = boolean | number | string | null | undefined
-export type QueryParameters = Record<string, QueryValue | readonly QueryValue[]>
+type QueryValue = boolean | number | string | null | undefined
+type QueryParameters = Record<string, QueryValue | readonly QueryValue[]>
 
 export function buildQuery(parameters: QueryParameters = {}): string {
   const search = new URLSearchParams()
@@ -219,7 +219,7 @@ async function responsePayload(response: Response): Promise<unknown> {
   }
 }
 
-export async function parseManagementResponse<T>(response: Response): Promise<T> {
+async function parseManagementResponse<T>(response: Response): Promise<T> {
   const payload = await responsePayload(response)
   if (response.ok) return payload as T
 
@@ -430,7 +430,7 @@ export async function managementUpload<T>(
   }
 }
 
-export function parseSseJsonBlock(block: string): ManagementEvent | null {
+function parseSseJsonBlock(block: string): ManagementEvent | null {
   const data = block
     .split(/\r\n|\r|\n/)
     .filter((line) => line.startsWith('data:'))
@@ -477,7 +477,7 @@ export class SseJsonParser {
   }
 }
 
-export async function streamManagementEventsOnce(
+async function streamManagementEventsOnce(
   path: string,
   onEvent: (event: ManagementEvent) => void,
   signal: AbortSignal,
@@ -528,7 +528,7 @@ function reconnectDelay(signal: AbortSignal, delayMs: number): Promise<void> {
   })
 }
 
-export interface ManagementEventWatchOptions {
+interface ManagementEventWatchOptions {
   onError?: (error: unknown) => void
   reconnectDelayMs?: number
 }

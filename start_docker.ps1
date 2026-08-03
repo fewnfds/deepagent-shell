@@ -1,11 +1,15 @@
 [CmdletBinding()]
 param(
     [string]$DataDirectory = (Join-Path $PSScriptRoot "data"),
-    [string]$Image = "ghcr.io/fewnfds/deepagent-shell:latest"
+    [string]$Image
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($Image)) {
+    throw "Docker image is required. Pass -Image with an exact tag or digest."
+}
 
 $project = [System.IO.Path]::GetFullPath($PSScriptRoot)
 $data = [System.IO.Path]::GetFullPath($DataDirectory)

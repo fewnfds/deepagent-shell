@@ -230,7 +230,7 @@ function setBooleanNumber(key: string, event: Event): void {
               :value="provider.provider"
               :disabled="!provider.installed"
             >
-              {{ provider.provider }} · {{ provider.package }}
+              {{ provider.provider }} {{ '·' }} {{ provider.package }}
             </option>
           </select>
         </FormField>
@@ -372,7 +372,7 @@ function setBooleanNumber(key: string, event: Event): void {
                 v-else-if="field.kind === 'boolean-number'"
                 class="form-control"
                 :data-provider-setting="field.key"
-                placeholder="true | false | 0"
+                :placeholder="'true | false | 0'"
                 :value="draft.provider_settings[field.key] ?? ''"
                 @input="setBooleanNumber(field.key, $event)"
               >

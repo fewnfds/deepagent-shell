@@ -165,6 +165,14 @@ const manifests: CapabilityManifest[] = [
   },
 ]
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((accept) => {
+    resolve = accept
+  })
+  return { promise, resolve }
+}
+
 function createApi() {
   const block: SavedBlock = { id: 'block-uuid', name: 'Original model' }
   const copied: SavedBlock = { id: 'copy-uuid', name: 'Copied model' }
@@ -345,6 +353,38 @@ describe('ConfigLibraryPage', () => {
 
     expect(api.deleteUnsupportedBlock).toHaveBeenCalledWith('legacy-block-id')
     expect(api.validateRepository).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[data-testid="validation-issue"]').exists()).toBe(false)
+  })
+
+  it('keeps the latest repository validation when an earlier request finishes late', async () => {
+    const staleValidation = deferred<ValidationReport>()
+    const latestValidation = deferred<ValidationReport>()
+    const api = createApi()
+    api.validateRepository
+      .mockImplementationOnce(() => staleValidation.promise)
+      .mockImplementationOnce(() => latestValidation.promise)
+    const { wrapper } = await mountPage(api.service)
+
+    await buttonByText(wrapper, 'Refresh').trigger('click')
+    latestValidation.resolve({ valid: true, stage: 'repository_load', issues: [] })
+    await flushPromises()
+    staleValidation.resolve({
+      valid: false,
+      stage: 'repository_load',
+      issues: [{
+        code: 'stale.validation',
+        scope: 'repository',
+        owner_id: '',
+        owner_name: '',
+        path: 'repository',
+        message: 'stale result',
+        message_key: 'errors.requestFailed',
+        message_args: {},
+      }],
+    })
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="validation-checklist"]').attributes('data-status')).toBe('valid')
     expect(wrapper.find('[data-testid="validation-issue"]').exists()).toBe(false)
   })
 
