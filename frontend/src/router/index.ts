@@ -26,6 +26,7 @@ export const navigationItems: NavigationItem[] = [
   { path: '/components/model', labelKey: 'navigation.components', icon: 'bi-boxes', sectionPrefix: '/components' },
   { path: '/library/model', labelKey: 'navigation.library', icon: 'bi-archive', sectionPrefix: '/library' },
   { path: '/terminology', labelKey: 'navigation.terminology', icon: 'bi-book', sectionPrefix: '/terminology' },
+  { path: '/style-lab', labelKey: 'navigation.styleLab', icon: 'bi-sliders', sectionPrefix: '/style-lab' },
 ]
 
 export interface SectionNavigationItem {
@@ -46,7 +47,6 @@ const sectionNavigationGroups: SectionNavigationGroup[] = [
       { path: '/system/files', labelKey: 'navigation.sections.fileManager' },
       { path: '/system/events', labelKey: 'navigation.sections.eventFeed' },
       { path: '/system/agent-sessions', labelKey: 'navigation.sections.agentSessions' },
-      { path: '/system/style-lab', labelKey: 'navigation.sections.styleLab' },
     ],
   },
   {
@@ -82,7 +82,7 @@ export const router = createRouter({
     },
     { path: '/system/events', component: EventFeedPage, meta: { titleKey: 'navigation.system' } },
     { path: '/system/agent-sessions', component: AgentSessionsPage, meta: { titleKey: 'navigation.system' } },
-    { path: '/system/style-lab', component: StyleLabPage, meta: { titleKey: 'navigation.system' } },
+    { path: '/style-lab', component: StyleLabPage, meta: { titleKey: 'styleLab.title' } },
     {
       path: '/terminology',
       component: TerminologyPage,

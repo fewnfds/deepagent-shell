@@ -63,12 +63,11 @@ def build_subagent_graphs(
         )
         middleware = [ToolErrorBoundaryMiddleware(), *child["middleware"]]
         preset = node.blocks.get("prompt-preset")
-        if node.include_client_messages or preset:
+        if preset is not None:
             middleware.insert(
                 1,
                 SubagentInputMiddleware(
                     agent_name=node.name,
-                    include_client_messages=node.include_client_messages,
                     preset=preset,
                     observer=agent_input_observer,
                 ),

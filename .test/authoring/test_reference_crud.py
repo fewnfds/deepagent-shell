@@ -410,7 +410,6 @@ def test_subagent_override_self_reference_and_external_delete_protection(
         "name": "recursive_worker",
         "description": "Continues the same recursive role.",
         "subagent_override_id": target["id"],
-        "include_client_messages": True,
     }
     recursive = client.put(
         f"/api/subagent-overrides/{target['id']}",
@@ -480,7 +479,6 @@ def test_binding_uses_current_primary_and_optional_override_only(
         "name",
         "description",
         "subagent_override_id",
-        "include_client_messages",
     }
 
     override = client.post(
@@ -508,6 +506,7 @@ def test_binding_uses_current_primary_and_optional_override_only(
         "use_current_primary",
         "primary_agent_id",
         "inherit_all",
+        "include_client_messages",
     ):
         response = client.post(
             "/api/primary-agents",

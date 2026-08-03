@@ -864,7 +864,6 @@ class SubagentBinding(BaseModel):
     name: Annotated[str, Field(max_length=120)] = ""
     description: DescriptionDraft = ""
     subagent_override_id: BlockReference = ""
-    include_client_messages: bool = False
 
 
 class CapabilityReference(BaseModel):

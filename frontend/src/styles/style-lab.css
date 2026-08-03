@@ -38,16 +38,14 @@
   margin-bottom: 1.5rem;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--lab-accent) 45%, var(--bs-border-color));
-  border-radius: 1rem;
-  background:
-    radial-gradient(circle at 88% 15%, color-mix(in srgb, var(--lab-alt) 24%, transparent), transparent 28%),
-    linear-gradient(135deg, color-mix(in srgb, var(--lab-accent) 16%, transparent), var(--bs-body-bg) 58%);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--lab-accent) 8%, var(--bs-body-bg));
   box-shadow: 0 1rem 2.75rem color-mix(in srgb, var(--lab-accent) 10%, transparent);
 }
 
 .style-lab .lab-intro h2 {
   margin: 0.25rem 0 0.5rem;
-  font-size: clamp(1.4rem, 2vw, 2rem);
+  font-size: 2rem;
 }
 
 .style-lab .lab-intro p {
@@ -61,7 +59,7 @@
   color: var(--lab-accent);
   font-size: 0.72rem;
   font-weight: 800;
-  letter-spacing: 0.12em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
@@ -71,9 +69,98 @@
   gap: 0.5rem;
   min-width: 12rem;
   padding: 1rem;
-  border-radius: 0.75rem;
+  border-radius: 0.5rem;
   background: color-mix(in srgb, var(--bs-body-bg) 76%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bs-body-color) 10%, transparent);
+}
+
+.style-lab .lab-section {
+  margin-bottom: 2rem;
+}
+
+.style-lab .lab-section__header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.style-lab .lab-section__header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.style-lab .lab-section__index {
+  display: inline-grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--lab-accent) 45%, var(--bs-border-color));
+  border-radius: 0.35rem;
+  color: var(--lab-accent);
+  font-family: var(--bs-font-monospace);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.style-lab .lab-surface {
+  padding: 1rem;
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+  background: var(--bs-body-bg);
+}
+
+.style-lab .lab-cluster {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.style-lab .lab-cluster + .lab-cluster {
+  padding-top: 1rem;
+  margin-top: 1rem;
+  border-top: 1px solid var(--bs-border-color);
+}
+
+.style-lab .lab-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.style-lab .lab-form-span {
+  grid-column: 1 / -1;
+}
+
+.style-lab .lab-choice-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+.style-lab .lab-grid--compact {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+}
+
+.style-lab .lab-table-frame {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+  background: var(--bs-body-bg);
+}
+
+.style-lab .lab-feedback-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.style-lab .lab-feedback-grid > .lab-surface {
+  grid-column: 1 / -1;
 }
 
 .style-lab .lab-control-label {
@@ -113,7 +200,7 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--bs-border-color);
-  border-radius: 0.8rem;
+  border-radius: 0.5rem;
   color: var(--bs-body-color);
   background: var(--bs-body-bg);
   box-shadow: 0 0.4rem 1.5rem color-mix(in srgb, var(--bs-body-color) 8%, transparent);
@@ -154,7 +241,7 @@
   width: 2.6rem;
   height: 2.6rem;
   place-items: center;
-  border-radius: 0.7rem;
+  border-radius: 0.5rem;
   color: var(--bs-white);
   background: var(--lab-accent);
   box-shadow: 0 0.5rem 1rem color-mix(in srgb, var(--lab-accent) 22%, transparent);
@@ -282,17 +369,6 @@
   backdrop-filter: blur(1rem) saturate(135%);
 }
 
-.style-lab .lab-card--glass::before {
-  position: absolute;
-  inset: -35% auto auto 52%;
-  width: 9rem;
-  height: 9rem;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--lab-alt) 23%, transparent);
-  content: "";
-  filter: blur(1.4rem);
-}
-
 .style-lab .lab-card--glass .lab-card__header,
 .style-lab .lab-card--glass .lab-card__body {
   position: relative;
@@ -401,6 +477,15 @@
 
   .style-lab .lab-control-sample {
     min-width: 0;
+  }
+
+  .style-lab .lab-intro h2 {
+    font-size: 1.5rem;
+  }
+
+  .style-lab .lab-form-grid,
+  .style-lab .lab-feedback-grid {
+    grid-template-columns: 1fr;
   }
 }
 

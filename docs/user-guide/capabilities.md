@@ -150,8 +150,9 @@ retry owner，并可强制完整、非流式模型响应；不改变 tool choice
 标签，同一标签多次出现会在 Provider 前拒绝。替换结果与后续 Agent 消息不会再次扫描。
 
 Primary 在 graph 启动前准备自己的输入。Subagent 的最终 Preset 可继承、替换或关闭；binding 的
-`include_client_messages` 决定 child 是否先带入本次请求冻结的原始客户端消息。child 使用 LangChain
-原生 `before_agent` Middleware 应用 Preset，并把委派 task 保留在末尾，不包裹官方 runnable。完整字段见
+最终 Preset 是冻结客户端消息与 Startup conversation 的唯一门禁。选择到 Preset 时，child 使用 LangChain
+原生 `before_agent` Middleware 处理冻结客户端消息、追加 Startup conversation，并把 delegated task 保留
+在末尾；最终没有 Preset 时只接收 delegated task。该节点不包裹官方 runnable。完整字段见
 [提示词预设](../wizard-pages/prompt-preset-config.md)。
 
 ## 11. 同步子代理（Synchronous Subagents）
@@ -161,13 +162,14 @@ Primary 在 graph 启动前准备自己的输入。Subagent 的最终 Preset 可
 覆盖模型可见说明，并必须保留 `{available_agents}`。Primary 引用该 block 即启用同步委派；具体 Subagent
 绑定在 Primary 页面维护。引用后，真实请求中必须至少有一条完整且已启用的 binding，否则构建失败。
 
-每个 binding 的 child graph 由 `create_deep_agent()` 构造并作为 `CompiledSubAgent` 传入。binding 还可用
-`include_client_messages=true` 让 child 接收冻结客户端消息；child Prompt Preset 在原生
-`before_agent` 节点中运行。当前只支持 synchronous Subagent，不包含异步或 dynamic Subagent。
+每个 binding 的 child graph 由 `create_deep_agent()` 构造并作为 `CompiledSubAgent` 传入。child Prompt
+Preset 在原生 `before_agent` 节点中运行，并决定是否注入冻结客户端消息和 Startup conversation。当前只
+支持 synchronous Subagent，不包含异步或 dynamic Subagent。
 
 每个 Subagent 覆写还保存自己的命名 bindings，可以引用自身。隐式 `general-purpose` 已全局关闭，空
-catalog 没有 `task`；非空 catalog 仍由官方 `SubAgentMiddleware` 生成工具。普通自由覆写不保证跨 Agent
-Prompt Caching；只有客户端消息、model、system prompt、Prompt Preset、按序 tool schema、response schema
-等最终前缀都一致时，才具备共享较长前缀的条件。同一 Subagent block 的 task description 会进入 Primary
+catalog 没有 `task`；非空 catalog 仍由官方 `SubAgentMiddleware` 生成工具。不同 catalog 可以复用相同的
+模型可见 binding 名称，名称只在各自 catalog 内唯一。普通自由覆写是基线，不保证跨 Agent Prompt
+Caching；只有冻结客户端消息处理结果、model、system prompt、按序 tool schema、response schema 等
+Startup conversation 之前的最终表面都一致时，才具备共享较长前缀的条件。同一 Subagent block 的 task description 会进入 Primary
 和拥有 `task` 的 child，但 `{available_agents}` 只有在两侧 catalog 也相同时才展开为相同文本；实际缓存
 命中仍由 Provider/model 决定。

@@ -31,8 +31,7 @@ Shell 仍保留 Deep Agents 必需的 StateBackend，并把 FilesystemMiddleware
 
 - `name`：父 Agent 调用 task 时使用的唯一标识；
 - `description`：告诉父 Agent 何时委派；
-- `subagent_override_id`：可选的覆写策略 UUID；空字符串表示完整继承当前 Primary；
-- `include_client_messages`：是否把本次请求冻结的原始客户端消息带入 child，默认 `false`。
+- `subagent_override_id`：可选的覆写策略 UUID；空字符串表示完整继承当前 Primary。
 
 binding 的名称必须匹配 `[A-Za-z_][A-Za-z0-9_-]*`，同一 Primary 内唯一，说明必填；
 添加 binding 即启用，未完成的 binding 应直接移除。非空覆写 UUID 会参与删除保护。
@@ -55,21 +54,23 @@ Deep Agents 默认 StateBackend，但只暴露 `read_file`。同步 child 是 `c
 bindings。全局关闭隐式 `general-purpose`，因此空列表没有 `task`；用户可通过普通自引用或循环引用明确
 提供递归委派。当前不支持异步或 dynamic Subagent。
 
-`include_client_messages=true` 时，child 的原生 `before_agent` Middleware 从请求 context 读取冻结客户端
-消息，对其应用 child 最终 Prompt Preset，再把 Deep Agents 的委派 task 放在末尾。`false` 时 child 只从
-自己的 Preset 启动消息和委派 task 开始。该处理不携带 Primary 已产生的 AI/Tool 过程，不包裹
-`CompiledSubAgent`，并且每次委派只执行一次。
+child 的最终 Prompt Preset 是冻结客户端消息与 Startup conversation 的唯一门禁。最终选择到 Preset 时，
+child 的原生 `before_agent` Middleware 从请求 context 读取冻结客户端消息，应用该 Preset，追加 Startup
+conversation，再把 Deep Agents 的 delegated task 放在末尾；最终没有 Preset 时不装配该 Middleware，
+child 只接收 delegated task。该处理不携带 Primary 已产生的 AI/Tool 过程，不包裹 `CompiledSubAgent`，
+并且每次委派只执行一次。
 
 ## Prompt Caching 边界
 
-Subagent 的自由覆写优先于缓存对齐，普通 binding 不保证与 Primary 共享 Provider 缓存。需要尽量共享
-长前缀时，使用 `include_client_messages=true`，不选择 Subagent 覆写，并确保 Primary 与 child 的最终
-model、system prompt、Prompt Preset、按序 tool schema、response schema 和相关 model settings 实际一致。
-委派 task 会排在这段冻结消息之后，因此可保持前面的消息字节稳定；但工具、结构化输出和 Provider
-内部序列化也可能参与缓存键，不能假定工具只是较后的提示词。
+自由装配是产品基线，普通 binding 不保证与 Primary 共享 Provider 缓存。缓存对齐只是用户手工配置的
+理论特殊情况：用户可以让 Primary 与 child 的最终 model、system prompt、冻结客户端消息处理结果、
+按序 tool schema、response schema 和相关 model settings 实际一致，只让各自 Prompt Preset 末尾的
+Startup conversation 区分身份。delegated task 会排在 child Startup conversation 之后；工具、结构化
+输出和 Provider 内部序列化也可能参与缓存键，不能假定工具只是较后的提示词。
 
 需要相同 `task` schema 时，应在 Primary 与 Subagent 覆写中保存名称、说明和顺序相同的显式 catalog；
-两侧继续由官方 `SubAgentMiddleware` 生成工具。最终请求任何一处不同都可能缩短可复用前缀。缓存是否
+不同 catalog 可以复用同一个模型可见 binding 名称，例如都叫 `worker`，名称只要求在各自 catalog 内
+唯一。两侧继续由官方 `SubAgentMiddleware` 生成工具。最终请求任何一处不同都可能缩短可复用前缀。缓存是否
 命中及其 token 门槛仍由具体 Provider/model 决定；需要核对时使用拦截测试比较最终 `ModelRequest`，
 不要把配置相似等同于命中保证。
 

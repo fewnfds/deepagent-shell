@@ -10,6 +10,7 @@ def test_subagent_runs_without_project_filesystem(
         bound_tool_names: ClassVar[list[str]] = []
 
     class ChildModel(ToolCallingFakeModel):
+        seen_messages: ClassVar[list[list[object]]] = []
         bound_tool_names: ClassVar[list[str]] = []
 
     parent_model = ParentModel(
@@ -104,6 +105,11 @@ def test_subagent_runs_without_project_filesystem(
     )
     assert ParentModel.bound_tool_names == ["read_file", "task"]
     assert ChildModel.bound_tool_names == ["read_file"]
+    assert [
+        (message.type, message.text)
+        for message in ChildModel.seen_messages[0]
+        if message.type != "system"
+    ] == [("human", "Complete the isolated task.")]
 
 
 def test_unconfigured_filesystem_keeps_skill_reads_agent_scoped(
@@ -932,7 +938,6 @@ def test_named_subagent_can_reference_itself_with_matching_task_schema(
     binding = {
         "name": "recursive_worker",
         "description": "Continues the recursive task.",
-        "include_client_messages": False,
     }
 
     with make_client(tmp_path, monkeypatch) as client:
@@ -1140,7 +1145,6 @@ def test_subagent_prompt_override_builds_from_frozen_client_messages(
                         "name": "override_worker",
                         "description": "Uses a child-only Prompt Preset.",
                         "subagent_override_id": prompt_override["id"],
-                        "include_client_messages": True,
                     },
                 ],
             },

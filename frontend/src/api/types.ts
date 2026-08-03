@@ -165,7 +165,6 @@ export interface SubagentBinding {
   name: string
   description: string
   subagent_override_id: string
-  include_client_messages: boolean
 }
 
 export interface PrimaryAgentPayload {

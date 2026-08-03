@@ -45,29 +45,25 @@ describe('agent profile adapters', () => {
       name: ' self_worker ',
       description: 'Continue the same role.',
       subagent_override_id: '00000000-0000-0000-0000-000000000020',
-      include_client_messages: true,
     })
 
     expect(subagentOverridePayload(draft).subagents).toEqual([{
       name: 'self_worker',
       description: 'Continue the same role.',
       subagent_override_id: '00000000-0000-0000-0000-000000000020',
-      include_client_messages: true,
     }])
   })
 
-  it('projects Subagent bindings without the removed enabled field', () => {
+  it('projects Subagent bindings without removed fields', () => {
     expect(normalizeSubagentBinding({
       enabled: false,
       name: 'researcher',
       description: 'Research delegated topics',
       subagent_override_id: '',
-      include_client_messages: true,
     })).toEqual({
       name: 'researcher',
       description: 'Research delegated topics',
       subagent_override_id: '',
-      include_client_messages: true,
     })
   })
 })

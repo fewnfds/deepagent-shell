@@ -178,7 +178,6 @@ describe('agent authoring pages', () => {
       'col-md-6',
       'col-md-6',
       'col-12',
-      'col-12',
     ])
     await card.get('[data-testid="binding-body"] input[autocomplete="off"]').setValue('researcher')
     await card.get('textarea').setValue('Research delegated topics')
@@ -194,7 +193,6 @@ describe('agent authoring pages', () => {
         name: 'researcher',
         description: 'Research delegated topics',
         subagent_override_id: '00000000-0000-0000-0000-000000000020',
-        include_client_messages: false,
       }],
     }))
     wrapper.unmount()
@@ -282,7 +280,6 @@ describe('agent authoring pages', () => {
     await binding.get('input[autocomplete="off"]').setValue('self_worker')
     await binding.get('textarea').setValue('Continue the same role.')
     await binding.get('[data-testid="binding-override"]').setValue(id)
-    await binding.get('input[type="checkbox"]').setValue(true)
     await buttonByText(wrapper, 'common.save').trigger('click')
     await flushPromises()
 
@@ -293,7 +290,6 @@ describe('agent authoring pages', () => {
           name: 'self_worker',
           description: 'Continue the same role.',
           subagent_override_id: id,
-          include_client_messages: true,
         }],
       }),
     )

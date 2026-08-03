@@ -80,19 +80,6 @@ function removeBinding(index: number): void {
               <textarea v-model="binding.description" class="form-control" rows="4" />
             </FormField>
           </div>
-          <div class="col-12">
-            <div class="form-check">
-              <input
-                :id="`subagent-include-client-${index}`"
-                v-model="binding.include_client_messages"
-                class="form-check-input"
-                type="checkbox"
-              >
-              <label class="form-check-label" :for="`subagent-include-client-${index}`">
-                {{ t('fields.include_client_messages') }}
-              </label>
-            </div>
-          </div>
         </div>
       </div>
     </article>

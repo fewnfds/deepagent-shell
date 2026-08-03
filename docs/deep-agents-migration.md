@@ -56,21 +56,24 @@ Deep Agents 管理，空值使用上游默认说明。
 
 ## Subagent 输入与 Prompt Caching
 
-binding 的 `include_client_messages` 决定 child 是否接收本次请求冻结的原始客户端消息。child 通过
-LangChain 原生 node-style `before_agent` Middleware 在自己的 graph 启动时重建消息：先对可选客户端消息
-执行该 child 最终 Prompt Preset，再追加 Preset 启动消息，最后保留 Deep Agents 传入的委派 task。该逻辑不
+child 的最终 Prompt Preset 是冻结客户端消息与 Startup conversation 的唯一输入门禁。选择或继承到
+Preset 时，child 通过 LangChain 原生 node-style `before_agent` Middleware 在自己的 graph 启动时重建
+消息：先处理本次请求冻结的客户端消息，再追加 Preset Startup conversation，最后保留 Deep Agents
+传入的 delegated task。最终没有 Preset 时不装配该 Middleware，child 只接收 delegated task。该逻辑不
 包裹 `CompiledSubAgent` runnable，也不修改 Deep Agents 源码；每次委派都得到 fresh child state。
 
 普通 Subagent 可以自由替换或关闭允许覆写的 model、system prompt、tools、Skill、Middleware、Prompt
-Preset、response format 和 retry；这种自由装配不承诺 Primary 与 child 之间的 Prompt Caching。需要尽量
-共享长前缀时，应使用 `include_client_messages=true`，并让 child 完整继承同一 model、system prompt、
-Prompt Preset、按相同顺序生成的 tool schema、response schema 与相关 model settings。即使如此，缓存是否
-命中、最小 token 门槛、缓存范围和计费仍由具体 Provider/model 决定；项目不把命中作为运行保证。
+Preset、response format 和 retry；自由装配是产品基线，不承诺 Primary 与 child 之间的 Prompt Caching。
+用户需要尽量共享长前缀时，可以手工让 Primary/child 的 model、最终 system prompt、冻结客户端消息处理
+结果、按相同顺序生成的 tool schema、response schema 与相关 model settings 保持一致，只用不同 Preset
+末尾的 Startup conversation 区分身份。即使如此，缓存是否命中、最小 token 门槛、缓存范围和计费仍由
+具体 Provider/model 决定；项目不把命中作为运行保证，也不增加缓存模式或自动对齐校验。
 
 工具不能被假定为“位于消息之后”的无关尾部。Provider 的缓存 wire 和序列化顺序不是本项目 contract；
 如果最终 `task` schema、其他工具的名称/description/参数结构或顺序不同，完整请求前缀可能在工具处就分叉。
 需要让 Primary 与 Subagent 的 `task` schema 相同时，为两者显式配置相同的命名 catalog（名称、说明及顺序
-一致），并让同一 `task_description_override` 在两侧展开为相同文本。Agent Shell 继续把这些 catalog 交给
+一致），并让同一 `task_description_override` 在两侧展开为相同文本。不同 Agent 的 catalog 可以使用同一个
+模型可见 binding 名称，例如都叫 `worker`；名称只要求在各自 catalog 内唯一。Agent Shell 继续把这些 catalog 交给
 官方 `SubAgentMiddleware`，不自定义工具参数 schema；实际对齐面仍应以最终 `ModelRequest` 为准，不能只
 比较工具名。
 

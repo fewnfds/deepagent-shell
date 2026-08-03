@@ -244,9 +244,11 @@
           "lab-card--rail", "lab-card--split", "lab-card--terminal", "lab-card__body",
           "lab-card__eyebrow", "lab-card__footer", "lab-card__header", "lab-card__icon",
           "lab-card__index", "lab-control-label", "lab-control-sample", "lab-corner-mark",
-          "lab-definition-list", "lab-dot", "lab-grid", "lab-intro", "lab-kicker",
+          "lab-definition-list", "lab-dot", "lab-grid", "lab-grid--compact", "lab-intro", "lab-kicker",
           "lab-kpi-row", "lab-mini-field", "lab-sample", "lab-status-value", "lab-swatch",
-          "lab-swatch-row", "lab-terminal-dots", "lab-terminal-line", "style-lab"
+          "lab-swatch-row", "lab-terminal-dots", "lab-terminal-line", "lab-choice-group",
+          "lab-cluster", "lab-feedback-grid", "lab-form-grid", "lab-form-span", "lab-section",
+          "lab-section__header", "lab-section__index", "lab-surface", "lab-table-frame", "style-lab"
         ]
       }
     ]

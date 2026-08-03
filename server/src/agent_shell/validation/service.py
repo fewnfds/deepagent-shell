@@ -34,7 +34,7 @@ from agent_shell.validation.models import ValidationIssue, ValidationReport
 from agent_shell.validation.subagent_bindings import subagent_binding_issues
 
 
-SubagentNodeKey = tuple[str, str, bool]
+SubagentNodeKey = tuple[str, str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,7 +47,6 @@ class ResolvedSubagentEdge:
 class ResolvedSubagent:
     key: SubagentNodeKey
     name: str
-    include_client_messages: bool
     references: dict[str, str]
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
@@ -876,7 +875,6 @@ class ConfigurationValidationService:
             node_key: SubagentNodeKey = (
                 override_id,
                 subagent_name,
-                bool(binding.get("include_client_messages")),
             )
             edge = ResolvedSubagentEdge(binding=binding, target_key=node_key)
             if node_key in subagent_nodes or node_key in resolving_nodes:
@@ -967,9 +965,6 @@ class ConfigurationValidationService:
                 subagent_nodes[node_key] = ResolvedSubagent(
                     key=node_key,
                     name=subagent_name,
-                    include_client_messages=bool(
-                        binding.get("include_client_messages")
-                    ),
                     references=child_references,
                     blocks=child_blocks,
                     filesystem_mode=child_filesystem_mode,

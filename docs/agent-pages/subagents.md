@@ -26,7 +26,8 @@ Deep Agents Subagent 覆写，按 manifest 策略移除。
 
 `subagents[]` 是该 Subagent 自己的命名 child catalog，字段与 Primary binding 相同。列表为空表示没有
 `task`；可以引用任意已保存覆写，也可以引用当前覆写自身。平台不增加 inherit/custom/none 模式：每条
-binding 的目标、名称、说明和客户端消息选项就是完整配置。
+binding 的目标、名称和说明就是完整配置。名称只要求在当前 catalog 内唯一；不同 Primary/Subagent 的
+catalog 可以使用相同的模型可见名称，例如都叫 `worker`。
 
 覆写策略只在与 binding 所在的当前 Primary 组合后才有最终含义。model 丢失、引用失效或资源无法
 物化仍会由集中装配校验拒绝保存、启动或真实 Agent 构建。
@@ -36,15 +37,16 @@ Primary 和所有同步 Subagent 双向共享请求级虚拟文件、初始文�
 overlay 只暴露最终选中的目录；未选路径返回 not found。替换或关闭 Skill 不创建第二套普通 workspace，
 也不影响 Primary 与 sibling 的 Skill 视图或宣告。
 
-Prompt Preset 在 child graph 启动时由 LangChain 原生 `before_agent` Middleware 执行。binding 的
-`include_client_messages=true` 时，它处理本次请求冻结的原始客户端消息；为 `false` 时只生成自己的启动
-消息。两种情况都会在末尾保留 Deep Agents 传入的委派 task。Preset 可继承、替换或关闭，不需要包装
-`CompiledSubAgent` runnable。
+Prompt Preset 是 child 注入冻结客户端消息与 Startup conversation 的唯一门禁。child 最终选择到 Preset
+时，LangChain 原生 `before_agent` Middleware 处理本次请求冻结的客户端消息，追加自己的 Startup
+conversation，并在末尾保留 Deep Agents 传入的 delegated task；最终没有 Preset 时不装配该 Middleware，
+child 只接收 delegated task。Preset 可继承、替换或关闭，不需要包装 `CompiledSubAgent` runnable。
 
-不选择覆写策略只表示能力完整继承，不自动承诺 Prompt Caching。跨 Primary/child 尽量共享长前缀还要求
-`include_client_messages=true`，并且最终 model、system prompt、消息、按序 tool schema、response schema
-与相关 model settings 均保持一致；任何自由覆写或上游 `task` schema 差异都可能让前缀提前分叉。是否
-实际命中缓存由 Provider/model 决定。
+不选择覆写策略只表示能力完整继承，不自动承诺 Prompt Caching。自由装配是基线；缓存对齐只是用户可以
+手工构造的理论特殊情况。该特殊情况要求最终 model、system prompt、冻结客户端消息处理结果、按序 tool
+schema、response schema 与相关 model settings 均保持一致，并可只用不同 Preset 的 Startup conversation
+区分身份；任何自由覆写或上游 `task` schema 差异都可能让前缀提前分叉。是否实际命中缓存由
+Provider/model 决定。
 
 若某条 binding 不需要任何显式 replace/disabled，不选择覆写策略即可；binding 的
 `subagent_override_id` 保存为空字符串，不需要创建一份空策略。

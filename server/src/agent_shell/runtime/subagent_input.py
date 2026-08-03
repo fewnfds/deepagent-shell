@@ -23,13 +23,11 @@ class SubagentInputMiddleware(AgentMiddleware):
         self,
         *,
         agent_name: str,
-        include_client_messages: bool,
-        preset: dict[str, Any] | None,
+        preset: dict[str, Any],
         observer: Callable[[dict[str, object]], Any] | None = None,
     ) -> None:
         super().__init__()
         self._agent_name = agent_name
-        self._include_client_messages = include_client_messages
         self._preset = preset
         self._observer = observer
 
@@ -48,13 +46,8 @@ class SubagentInputMiddleware(AgentMiddleware):
             "",
         )
         context = runtime.context or {"client_messages": []}
-        source_messages = (
-            context.get("client_messages", [])
-            if self._include_client_messages
-            else []
-        )
         prepared = prepare_agent_input(
-            source_messages,
+            context.get("client_messages", []),
             self._preset,
             variables={
                 "task": task,

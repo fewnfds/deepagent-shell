@@ -31,5 +31,5 @@ StateBackend，但只暴露 `read_file`。项目 Skills、模型、工具和其�
 策略解析；Skill 选择不得
 创建第二套普通 workspace，而是在共享普通 workspace 上为 child 叠加只暴露其最终选中 Skill 的只读
 `/skills/` overlay；未选路径返回 not found。Prompt Preset 也可继承、替换或关闭，并通过 child 原生
-`before_agent` Middleware 处理 binding 选择的冻结客户端消息，随后保留委派 task。当前不支持异步或
-dynamic Subagent。
+`before_agent` Middleware 处理冻结客户端消息，追加 Startup conversation，随后保留 delegated task；
+最终没有 Prompt Preset 的 child 只接收 delegated task。当前不支持异步或 dynamic Subagent。

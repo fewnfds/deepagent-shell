@@ -93,6 +93,7 @@ function titleKeyForPath(path: string): string {
   if (path.startsWith('/components/')) return 'components.title'
   if (path.startsWith('/library/')) return 'library.title'
   if (path === '/terminology') return 'terminology.title'
+  if (path === '/style-lab') return 'styleLab.title'
   return 'apiServer.homeTitle'
 }
 
@@ -105,7 +106,7 @@ async function mountShell(path = '/', api = createShellApi()) {
       '/system/files',
       '/system/events',
       '/system/agent-sessions',
-      '/system/style-lab',
+      '/style-lab',
       '/agents/primary',
       '/agents/subagents',
       '/components/model',
@@ -163,6 +164,10 @@ describe('AppShell', () => {
     expect(shell.get('a[href="/system/files"] .nav-icon').classes()).toContain('bi-circle')
     expect(shell.get('a[href="/system/agent-sessions"]').text()).toContain('历史会话')
     expect(shell.get('a[href="/system/agent-sessions"]').element.closest('ul')?.textContent).toContain('系统配置')
+    expect(shell.get('a[href="/style-lab"] .nav-icon').classes()).toContain('bi-sliders')
+    const topLevelLinks = shell.findAll('.nav-sidebar > .nav-item > .nav-link')
+      .map((link) => link.attributes('href'))
+    expect(topLevelLinks.indexOf('/style-lab')).toBeGreaterThan(topLevelLinks.indexOf('/terminology'))
     expect(shell.findAll('a[href^="/components/"]').map((link) => link.attributes('href')))
       .toEqual(['/components/model', '/components/skill'])
   })

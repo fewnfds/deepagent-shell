@@ -30,24 +30,26 @@ Primary 的每条 binding 添加后立即启用，并需要：
 
 - 在该 Primary 内唯一、符合标识符规则的名称；
 - 面向父 Agent 的用途说明；
-- 可选的 Subagent 覆写策略；不选择表示完整继承当前 Primary；
-- 是否接收本次请求冻结的原始客户端消息，默认关闭。
+- 可选的 Subagent 覆写策略；不选择表示完整继承当前 Primary。
 
 真实请求按“当前 Primary + 可选覆写”构造同步 Subagent。父 Agent 的命名 bindings 不会隐式复制到
 child；child 只使用目标覆写显式保存的 catalog。隐式 `general-purpose` 已全局关闭，空 catalog 没有
 `task`；显式自引用或循环引用可提供递归委派。binding 不保存其他 Primary ID；完整继承能力时只把
-`subagent_override_id` 留空，也不要求创建空覆写配置。
+`subagent_override_id` 留空，也不要求创建空覆写配置。binding 名称只要求在所属 catalog 内唯一；不同
+Primary/Subagent 的 catalog 可以都使用同一个模型可见名称，例如 `worker`。
 
 ## Subagent 输入与缓存友好装配
 
-`include_client_messages=true` 时，child 的 LangChain 原生 node-style `before_agent` Middleware 读取请求
-context 中的冻结客户端消息，应用 child 最终 Prompt Preset，追加 Preset 启动消息，再保留 Deep Agents
-传入的委派 task。为 `false` 时只准备 child 的启动消息与 task。每次委派使用 fresh state，不继承
-Primary 已产生的 AI/Tool 过程，也不包裹 `CompiledSubAgent` runnable。
+child 的最终 Prompt Preset 是冻结客户端消息与 Startup conversation 的唯一门禁。选择到 Preset 时，
+LangChain 原生 node-style `before_agent` Middleware 读取请求 context 中的冻结客户端消息，应用该 Preset，
+追加 Startup conversation，再保留 Deep Agents 传入的 delegated task；最终没有 Preset 时不装配该节点，
+child 只接收 delegated task。每次委派使用 fresh state，不继承 Primary 已产生的 AI/Tool 过程，也不包裹
+`CompiledSubAgent` runnable。
 
-Subagent 继续允许按策略自由装配；普通组合不承诺跨 Agent Prompt Caching。需要尽量共享较长前缀时，
-启用客户端消息并完整继承，确保最终 model、system prompt、Prompt Preset、客户端消息、按序 tool
-schema、response schema 与相关 model settings 实际一致。工具不能假定为缓存键中的较后部分，默认
+Subagent 继续允许按策略自由装配，这是产品基线；普通组合不承诺跨 Agent Prompt Caching。缓存对齐只是
+用户手工配置的理论特殊情况：让最终 model、system prompt、冻结客户端消息处理结果、按序 tool schema、
+response schema 与相关 model settings 实际一致，只用不同 Preset 末尾的 Startup conversation 区分身份。
+平台不比较或修正不同 Preset 的 Client tag replacements。工具不能假定为缓存键中的较后部分，默认
 `task` 的 schema 会随命名 Subagent 列表变化。需要对齐时为两侧显式保存内容和顺序相同的 catalog；
 实际缓存门槛、范围、TTL、计费和命中由具体 Provider/model 决定。
 

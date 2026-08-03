@@ -91,7 +91,6 @@ export function blankSubagentBinding(): SubagentBinding {
     name: '',
     description: '',
     subagent_override_id: '',
-    include_client_messages: false,
   }
 }
 
@@ -101,7 +100,6 @@ export function normalizeSubagentBinding(value: unknown): SubagentBinding {
     name: text(source.name),
     description: text(source.description),
     subagent_override_id: text(source.subagent_override_id),
-    include_client_messages: source.include_client_messages === true,
   }
 }
 
@@ -140,7 +138,6 @@ export function primaryAgentPayload(
       name: binding.name.trim(),
       description: binding.description,
       subagent_override_id: binding.subagent_override_id,
-      include_client_messages: binding.include_client_messages,
     })),
   }
 }
@@ -214,7 +211,6 @@ export function subagentOverridePayload(
       name: binding.name.trim(),
       description: binding.description,
       subagent_override_id: binding.subagent_override_id,
-      include_client_messages: binding.include_client_messages,
     })),
   }
 }
