@@ -433,7 +433,13 @@ try {
         uv_sha256 = ([string]$lock.uv.sha256).ToLowerInvariant()
         build_fingerprint = $buildFingerprint
     }
-    $runtimeManifest | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $buildRoot "runtime-manifest.json") -Encoding utf8
+    $runtimeManifestPath = Join-Path $buildRoot "runtime-manifest.json"
+    $runtimeManifestJson = ($runtimeManifest | ConvertTo-Json) + "`n"
+    [System.IO.File]::WriteAllText(
+        $runtimeManifestPath,
+        $runtimeManifestJson,
+        [System.Text.UTF8Encoding]::new($false)
+    )
     Remove-Item -LiteralPath $buildMetadata -Recurse -Force
 
     $previousApplicationRoot = Assert-ChildPath (Join-Path $temporaryRoot "app-previous-$PID") $runtimeRoot

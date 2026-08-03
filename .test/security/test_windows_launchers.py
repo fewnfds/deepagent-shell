@@ -76,6 +76,18 @@ def test_windows_runtime_unwraps_powershell_file_system_exceptions_for_retry() -
     assert "remained in use for 30 seconds" in bootstrap
 
 
+def test_windows_runtime_manifests_are_written_as_utf8_without_bom() -> None:
+    scripts = [
+        REPOSITORY_ROOT / "packaging" / "windows" / "bootstrap_runtime.ps1",
+        REPOSITORY_ROOT / "packaging" / "windows" / "build_portable.ps1",
+    ]
+
+    for script in scripts:
+        source = script.read_text(encoding="utf-8")
+        assert "[System.Text.UTF8Encoding]::new($false)" in source
+        assert "runtime-manifest.json\") -Encoding utf8" not in source
+
+
 def test_listen_probe_reports_an_occupied_port_without_starting_the_app(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

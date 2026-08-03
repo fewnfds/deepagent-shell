@@ -97,7 +97,12 @@ function Install-CurrentApplication {
         $manifest | Add-Member -NotePropertyName application_sha256 `
             -NotePropertyValue ((Get-FileHash -LiteralPath $wheels[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()) `
             -Force
-        $manifest | ConvertTo-Json | Set-Content -LiteralPath $manifestPath -Encoding utf8
+        $manifestJson = ($manifest | ConvertTo-Json) + "`n"
+        [System.IO.File]::WriteAllText(
+            $manifestPath,
+            $manifestJson,
+            [System.Text.UTF8Encoding]::new($false)
+        )
     }
     finally {
         if (Test-Path -LiteralPath $buildRoot) {
