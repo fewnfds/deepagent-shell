@@ -18,6 +18,7 @@ import type {
   BlockPayload,
   BlockType,
   CatalogResponse,
+  ConfigurationValidationSettings,
   CustomMiddlewareResource,
   CustomToolResource,
   DraftValidationRequest,
@@ -145,13 +146,6 @@ export const managementApi = {
       method: id ? 'PUT' : 'POST',
       body: JSON.stringify(withoutId(data)),
     })
-  },
-
-  validateAutomationWorkflow(
-    type: AutomationWorkflowType,
-    data: AutomationWorkflowPayload | SavedAutomationWorkflow,
-  ): Promise<ValidationReport> {
-    return managementRequest(`/api/automation/${type}/validate`, jsonBody(data))
   },
 
   deleteAutomationWorkflow(
@@ -308,6 +302,17 @@ export const managementApi = {
 
   validateDraft(request: DraftValidationRequest): Promise<ValidationReport> {
     return managementRequest('/api/validation/draft', jsonBody(request))
+  },
+
+  getValidationSettings(): Promise<ConfigurationValidationSettings> {
+    return managementRequest('/api/validation/settings')
+  },
+
+  updateValidationSettings(debounceMs: number): Promise<ConfigurationValidationSettings> {
+    return managementRequest('/api/validation/settings', {
+      method: 'PUT',
+      body: JSON.stringify({ debounce_ms: debounceMs }),
+    })
   },
 
   listPrimaryAgents(): Promise<PrimaryAgent[]> {

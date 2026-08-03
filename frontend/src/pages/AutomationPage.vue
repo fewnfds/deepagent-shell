@@ -19,7 +19,7 @@ import SectionNav from '@/components/SectionNav.vue'
 import type { SectionNavItem } from '@/components/sectionNav'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
 import { useConfirmation } from '@/composables/useConfirmation'
-import { useDraftValidation } from '@/composables/useDraftValidation'
+import { useConfigurationValidation } from '@/composables/useConfigurationValidation'
 import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
 import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
@@ -79,9 +79,9 @@ const { markClean, runAfterDiscard } = useUnsavedChanges(
   }),
 )
 
-const { validation, validateNow } = useDraftValidation(
-  draft,
-  () => ({
+const { validation, validateNow } = useConfigurationValidation({
+  source: draft,
+  buildRequest: () => ({
     target: {
       kind: 'automation' as const,
       type: workflowType.value,
@@ -89,21 +89,12 @@ const { validation, validateNow } = useDraftValidation(
     },
     payload: currentPayload(),
   }),
-  (request) => managementApi.validateAutomationWorkflow(
-    workflowType.value,
-    request.payload as unknown as AutomationWorkflowPayload,
-  ),
-)
-
-const displayedValidation = computed(() => validation.value.status === 'unavailable'
-  ? {
-    ...validation.value,
-    error: managementError.describe(
-      validation.value.error,
-      'errors.validationUnavailable',
-    ).display,
-  }
-  : validation.value)
+  validate: (request) => managementApi.validateDraft(request),
+  errorMessage: (error) => managementError.describe(
+    error,
+    'errors.validationUnavailable',
+  ).display,
+})
 
 function queryId(): string {
   return typeof route.query.id === 'string' ? route.query.id : ''
@@ -314,7 +305,7 @@ watch(
       <aside class="col-lg-4 validation-sidebar">
         <ValidationChecklist
           :title="t('automation.validationTitle')"
-          :validation="displayedValidation"
+          :validation="validation"
         />
       </aside>
     </div>

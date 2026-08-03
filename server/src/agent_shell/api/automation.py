@@ -86,20 +86,6 @@ def build_automation_router(
         check_type(workflow_type)
         return store.list_items(workflow_type)
 
-    @router.post("/api/automation/{workflow_type}/validate")
-    async def validate_workflow(
-        workflow_type: str, payload: dict[str, Any]
-    ) -> dict[str, Any]:
-        check_type(workflow_type)
-        report, _validated = validation.validate_workflow(
-            workflow_type,
-            payload,
-            stage="workflow_draft",
-            owner_id=str(payload.get("id", "")),
-            stored=bool(payload.get("id")),
-        )
-        return report.as_dict()
-
     @router.get("/api/automation/{workflow_type}/{item_id}")
     async def get_workflow(workflow_type: str, item_id: str) -> dict:
         check_type(workflow_type)

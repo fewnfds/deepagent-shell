@@ -15,8 +15,11 @@ def test_automation_crud_validation_and_reference_cleanup(
         )
         scripts = client.get("/api/automation/scripts")
         invalid = client.post(
-            "/api/automation/hook-workflow/validate",
-            json={"name": "Empty", "hooks": {}},
+            "/api/validation/draft",
+            json={
+                "target": {"kind": "automation", "type": "hook-workflow"},
+                "payload": {"name": "Empty", "hooks": {}},
+            },
         )
         hook = create_hook_workflow(
             client,

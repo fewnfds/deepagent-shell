@@ -71,6 +71,11 @@ function createShellApi(overrides: Record<string, unknown> = {}) {
       editor_defaults: {},
     })),
     getApiServer: vi.fn(async () => stoppedSettings),
+    getValidationSettings: vi.fn(async () => ({
+      debounce_ms: 1000,
+      min_debounce_ms: 100,
+      max_debounce_ms: 10_000,
+    })),
     startApiServer: vi.fn(async () => ({ ...stoppedSettings, enabled: true, status: 'running' as const })),
     stopApiServer: vi.fn(async () => stoppedSettings),
     watchApiServerEvents: vi.fn(() => vi.fn()),

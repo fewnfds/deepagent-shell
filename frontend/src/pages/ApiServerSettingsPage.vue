@@ -10,7 +10,7 @@ import {
 } from '@/api'
 import PageShell from '@/components/PageShell.vue'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
-import type { DraftValidationState } from '@/composables/useDraftValidation'
+import { useConfigurationValidation } from '@/composables/useConfigurationValidation'
 import { useManagementError } from '@/composables/useManagementError'
 
 interface ApiServerSettingsApi {
@@ -28,28 +28,15 @@ const api: ApiServerSettingsApi = props.api ?? managementApi
 const settings = ref<ApiServerSettings | null>(null)
 const loading = ref(true)
 const loadError = ref('')
-const repositoryValidation = ref<DraftValidationState>({
-  status: 'validating',
-  report: null,
-  error: '',
-})
 let loadSequence = 0
-async function loadRepositoryValidation(): Promise<void> {
-  try {
-    const report = await api.validateRepository()
-    repositoryValidation.value = {
-      status: report.valid ? 'valid' : 'invalid',
-      report,
-      error: '',
-    }
-  } catch (error) {
-    repositoryValidation.value = {
-      status: 'unavailable',
-      report: null,
-      error: managementError.describe(error, 'errors.validationUnavailable').display,
-    }
-  }
-}
+const { validation: repositoryValidation } = useConfigurationValidation({
+  buildRequest: () => ({}),
+  validate: () => api.validateRepository(),
+  errorMessage: (error) => managementError.describe(
+    error,
+    'errors.validationUnavailable',
+  ).display,
+})
 
 async function loadSettings(): Promise<void> {
   const sequence = ++loadSequence
@@ -70,7 +57,7 @@ async function loadSettings(): Promise<void> {
 }
 
 onMounted(() => {
-  void Promise.all([loadSettings(), loadRepositoryValidation()])
+  void loadSettings()
 })
 </script>
 

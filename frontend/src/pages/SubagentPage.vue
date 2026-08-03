@@ -10,7 +10,7 @@ import RecordPicker from '@/components/RecordPicker.vue'
 import FormField from '@/components/FormField.vue'
 import SubagentReferencesEditor from '@/components/SubagentReferencesEditor.vue'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
-import { useDraftValidation } from '@/composables/useDraftValidation'
+import { useConfigurationValidation } from '@/composables/useConfigurationValidation'
 import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
 import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
@@ -78,30 +78,24 @@ const { markClean, runAfterDiscard } = useUnsavedChanges(
   }),
 )
 
-const { validation, validateNow } = useDraftValidation(
-  form,
-  () => ({
+const { validation, validateNow } = useConfigurationValidation({
+  source: form,
+  buildRequest: () => ({
     target: {
       kind: 'subagent',
       id: form.value.id,
     },
     payload: subagentPayload(form.value),
   }),
-  async (request) => {
+  validate: async (request) => {
     if (!service.value) throw new Error(t('agents.serviceUnavailable'))
     return service.value.validateDraft(request)
   },
-)
-
-const displayedValidation = computed(() => validation.value.status === 'unavailable'
-  ? {
-    ...validation.value,
-    error: managementError.describe(
-      validation.value.error,
-      'errors.validationUnavailable',
-    ).display,
-  }
-  : validation.value)
+  errorMessage: (error) => managementError.describe(
+    error,
+    'errors.validationUnavailable',
+  ).display,
+})
 
 function capabilityBlocks(type: CapabilityType): StoredBlock[] {
   return blocks.value[type] ?? []
@@ -494,7 +488,7 @@ watch(
       <aside class="col-lg-4 validation-sidebar">
         <ValidationChecklist
           :title="t('agents.override.validationTitle')"
-          :validation="displayedValidation"
+          :validation="validation"
         />
       </aside>
     </div>

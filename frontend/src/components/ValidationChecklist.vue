@@ -3,12 +3,12 @@ import { LteAccordion, LteAccordionItem, LteAlert } from '@adminlte/vue'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type { DraftValidationState } from '@/composables/useDraftValidation'
+import type { ConfigurationValidationState } from '@/composables/useConfigurationValidation'
 import { useValidationIssuePresentation } from '@/composables/useValidationIssuePresentation'
 
 const props = defineProps<{
   title: string
-  validation: Readonly<DraftValidationState>
+  validation: Readonly<ConfigurationValidationState>
 }>()
 
 const { t } = useI18n()

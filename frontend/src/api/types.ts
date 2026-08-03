@@ -134,6 +134,12 @@ export interface SystemSettingsUpdate {
   trusted_proxy_cidrs: string[]
 }
 
+export interface ConfigurationValidationSettings {
+  debounce_ms: number
+  min_debounce_ms: number
+  max_debounce_ms: number
+}
+
 export interface SkillResource {
   name: string
   folder: string

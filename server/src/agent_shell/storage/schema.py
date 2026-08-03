@@ -98,6 +98,16 @@ INSERT OR IGNORE INTO runtime_control_settings (
     singleton, interception_enabled, verbose_diagnostics
 ) VALUES (1, 0, 0);
 
+CREATE TABLE IF NOT EXISTS configuration_validation_settings (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    debounce_ms INTEGER NOT NULL CHECK (
+        debounce_ms >= 100 AND debounce_ms <= 10000
+    )
+);
+
+INSERT OR IGNORE INTO configuration_validation_settings (singleton, debounce_ms)
+VALUES (1, 1000);
+
 CREATE TABLE IF NOT EXISTS system_log_settings (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     max_size_mib INTEGER NOT NULL CHECK (

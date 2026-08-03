@@ -15,7 +15,7 @@ import SectionNav from '@/components/SectionNav.vue'
 import type { SectionNavItem } from '@/components/sectionNav'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
 import { useConfirmation } from '@/composables/useConfirmation'
-import type { DraftValidationState } from '@/composables/useDraftValidation'
+import { useConfigurationValidation } from '@/composables/useConfigurationValidation'
 import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
 import {
@@ -51,12 +51,18 @@ const copyName = ref('')
 const copyError = ref('')
 const copying = ref(false)
 const deletingUnsupportedBlockId = ref('')
-const repositoryValidation = ref<DraftValidationState>({
-  status: 'validating',
-  report: null,
-  error: '',
+const {
+  validation: repositoryValidation,
+  validateNow: refreshRepositoryValidation,
+} = useConfigurationValidation({
+  buildRequest: () => ({}),
+  validate: () => api.value.validateRepository(),
+  immediate: false,
+  errorMessage: (error) => managementError.describe(
+    error,
+    'errors.validationUnavailable',
+  ).display,
 })
-let repositoryValidationSequence = 0
 
 const activeCategoryId = computed(() => routeCategory(route.params.type))
 
@@ -102,27 +108,6 @@ async function loadCatalog(): Promise<void> {
     catalogError.value = managementError.describe(error).display
   } finally {
     catalogReady.value = true
-  }
-}
-
-async function refreshRepositoryValidation(): Promise<void> {
-  const requestSequence = ++repositoryValidationSequence
-  repositoryValidation.value = { status: 'validating', report: null, error: '' }
-  try {
-    const report = await api.value.validateRepository()
-    if (requestSequence !== repositoryValidationSequence) return
-    repositoryValidation.value = {
-      status: report.valid ? 'valid' : 'invalid',
-      report,
-      error: '',
-    }
-  } catch (error) {
-    if (requestSequence !== repositoryValidationSequence) return
-    repositoryValidation.value = {
-      status: 'unavailable',
-      report: null,
-      error: managementError.describe(error, 'errors.validationUnavailable').display,
-    }
   }
 }
 

@@ -12,10 +12,12 @@ import {
   managementApi,
   type ApiServerSettings,
   type ApiServerSettingsUpdate,
+  type ConfigurationValidationSettings,
   type SystemSettings,
   type SystemSettingsUpdate,
 } from '@/api'
 import PageShell from '@/components/PageShell.vue'
+import { useConfigurationValidationSettings } from '@/composables/useConfigurationValidationSettings'
 import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
 
@@ -24,6 +26,8 @@ interface SystemSettingsApi {
   updateSystemSettings(payload: SystemSettingsUpdate): Promise<SystemSettings>
   getApiServer(): Promise<ApiServerSettings>
   saveApiServer(payload: ApiServerSettingsUpdate): Promise<ApiServerSettings>
+  getValidationSettings(): Promise<ConfigurationValidationSettings>
+  updateValidationSettings(debounceMs: number): Promise<ConfigurationValidationSettings>
   getInterceptionTest(): Promise<{ enabled: boolean }>
   updateInterceptionTest(enabled: boolean): Promise<{ enabled: boolean }>
 }
@@ -33,6 +37,7 @@ const api = props.api ?? managementApi
 const { t } = useI18n()
 const managementError = useManagementError()
 const { notify } = useToasts()
+const validationSettingsController = useConfigurationValidationSettings()
 
 const settings = ref<SystemSettings | null>(null)
 const apiServerSettings = ref<ApiServerSettings | null>(null)
@@ -48,6 +53,9 @@ const apiKey = ref('')
 const apiKeyDirty = ref(false)
 const showApiKey = ref(false)
 const maxInitialMessages = ref(1000)
+const validationDebounceMs = ref(1000)
+const validationDebounceMin = ref(100)
+const validationDebounceMax = ref(10_000)
 const interceptionEnabled = ref(false)
 const corsOrigins = ref('')
 const trustedProxies = ref('')
@@ -59,12 +67,16 @@ const apiKeyPlaceholder = computed(() => apiServerSettings.value?.api_key.config
 const settingsValid = computed(() => {
   const normalizedPort = Number(port.value)
   const normalizedMessageLimit = Number(maxInitialMessages.value)
+  const normalizedValidationDebounce = Number(validationDebounceMs.value)
   return Number.isInteger(normalizedPort)
     && normalizedPort >= 1
     && normalizedPort <= 65_535
     && Number.isInteger(normalizedMessageLimit)
     && normalizedMessageLimit >= 1
     && normalizedMessageLimit <= 10_000
+    && Number.isInteger(normalizedValidationDebounce)
+    && normalizedValidationDebounce >= validationDebounceMin.value
+    && normalizedValidationDebounce <= validationDebounceMax.value
 })
 
 function lines(value: string): string[] {
@@ -94,6 +106,13 @@ function applyInterceptionSetting(interception: { enabled: boolean }): void {
   interceptionEnabled.value = interception.enabled
 }
 
+function applyValidationSettings(value: ConfigurationValidationSettings): void {
+  validationDebounceMs.value = value.debounce_ms
+  validationDebounceMin.value = value.min_debounce_ms
+  validationDebounceMax.value = value.max_debounce_ms
+  validationSettingsController.apply(value)
+}
+
 async function load(): Promise<void> {
   loading.value = true
   pageError.value = ''
@@ -102,14 +121,17 @@ async function load(): Promise<void> {
       loadedSystemSettings,
       loadedApiServerSettings,
       loadedInterception,
+      loadedValidationSettings,
     ] = await Promise.all([
       api.getSystemSettings(),
       api.getApiServer(),
       api.getInterceptionTest(),
+      api.getValidationSettings(),
     ])
     applySystemSettings(loadedSystemSettings)
     applyApiServerSettings(loadedApiServerSettings)
     applyInterceptionSetting(loadedInterception)
+    applyValidationSettings(loadedValidationSettings)
   } catch (error) {
     pageError.value = managementError.describe(error).display
   } finally {
@@ -134,6 +156,7 @@ async function save(): Promise<void> {
       savedSystemSettings,
       savedApiServerSettings,
       savedInterception,
+      savedValidationSettings,
     ] = await Promise.all([
       api.updateSystemSettings({
         host: host.value.trim(),
@@ -150,10 +173,12 @@ async function save(): Promise<void> {
         max_initial_messages: Number(maxInitialMessages.value),
       }),
       api.updateInterceptionTest(interceptionEnabled.value),
+      api.updateValidationSettings(Number(validationDebounceMs.value)),
     ])
     applySystemSettings(savedSystemSettings)
     applyApiServerSettings(savedApiServerSettings)
     applyInterceptionSetting(savedInterception)
+    applyValidationSettings(savedValidationSettings)
     notify({ tone: 'success', title: t('systemSettings.saved') })
   } catch (error) {
     pageError.value = managementError.describe(error).display
@@ -327,19 +352,37 @@ onMounted(() => { void load() })
               </h2>
             </header>
             <div class="card-body">
-            <label class="form-label" for="max-initial-messages">
-              {{ t('apiServer.request.maxInitialMessages') }}
-            </label>
-            <input
-              id="max-initial-messages"
-              v-model.number="maxInitialMessages"
-              class="form-control"
-              max="10000"
-              min="1"
-              required
-              step="1"
-              type="number"
-            >
+            <div class="mb-3">
+              <label class="form-label" for="max-initial-messages">
+                {{ t('apiServer.request.maxInitialMessages') }}
+              </label>
+              <input
+                id="max-initial-messages"
+                v-model.number="maxInitialMessages"
+                class="form-control"
+                max="10000"
+                min="1"
+                required
+                step="1"
+                type="number"
+              >
+            </div>
+
+            <div>
+              <label class="form-label" for="configuration-validation-debounce">
+                {{ t('systemSettings.validationDebounceMs') }}
+              </label>
+              <input
+                id="configuration-validation-debounce"
+                v-model.number="validationDebounceMs"
+                class="form-control"
+                :max="validationDebounceMax"
+                :min="validationDebounceMin"
+                required
+                step="100"
+                type="number"
+              >
+            </div>
 
             <div class="row g-3 mt-2">
               <div class="col-md-6">

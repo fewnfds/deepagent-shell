@@ -38,7 +38,7 @@ describe('AutomationPage', () => {
       }],
       errors: {},
     })
-    vi.spyOn(managementApi, 'validateAutomationWorkflow').mockResolvedValue({
+    const validateDraft = vi.spyOn(managementApi, 'validateDraft').mockResolvedValue({
       valid: true,
       stage: 'workflow_draft',
       issues: [],
@@ -74,6 +74,23 @@ describe('AutomationPage', () => {
     await saveButton.trigger('click')
     await flushPromises()
 
+    expect(validateDraft).toHaveBeenLastCalledWith({
+      target: {
+        kind: 'automation',
+        type: 'hook-workflow',
+        id: '',
+      },
+      payload: {
+        name: 'Prepare request',
+        hooks: {
+          request_prepare: [
+            { script_id: 'message-script', config: { slot: 'user' } },
+          ],
+          subagent_before_invoke: [],
+          request_end: [],
+        },
+      },
+    })
     expect(save).toHaveBeenCalledWith('hook-workflow', {
       name: 'Prepare request',
       hooks: {

@@ -21,7 +21,10 @@ import SectionNav from '@/components/SectionNav.vue'
 import type { SectionNavItem } from '@/components/sectionNav'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
 import { useConfirmation } from '@/composables/useConfirmation'
-import { useDraftValidation, type DraftValidationState } from '@/composables/useDraftValidation'
+import {
+  useConfigurationValidation,
+  type ConfigurationValidationState,
+} from '@/composables/useConfigurationValidation'
 import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
 import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
@@ -205,9 +208,9 @@ async function isStoredRecordInvalid(id: string): Promise<boolean> {
   }
 }
 
-const { validation } = useDraftValidation(
-  draft,
-  () => {
+const { validation } = useConfigurationValidation({
+  source: draft,
+  buildRequest: () => {
     if (!activeType.value || !draft.value) return null
     return {
       target: {
@@ -218,20 +221,15 @@ const { validation } = useDraftValidation(
       payload: payloadFromDraft(activeType.value, draft.value),
     }
   },
-  (request) => managementApi.validateDraft(request),
-)
+  validate: (request) => managementApi.validateDraft(request),
+  errorMessage: (error) => managementError.describe(
+    error,
+    'errors.validationUnavailable',
+  ).display,
+})
 
-const displayedValidation = computed<DraftValidationState>(() => {
+const displayedValidation = computed<ConfigurationValidationState>(() => {
   if (saveValidation.value) return { status: 'invalid', report: saveValidation.value, error: '' }
-  if (validation.value.status === 'unavailable') {
-    return {
-      ...validation.value,
-      error: managementError.describe(
-        validation.value.error,
-        'errors.validationUnavailable',
-      ).display,
-    }
-  }
   return validation.value
 })
 

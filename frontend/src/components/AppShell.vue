@@ -8,8 +8,10 @@ import {
   managementApi,
   type ApiServerSettings,
   type CatalogResponse,
+  type ConfigurationValidationSettings,
   type ManagementEvent,
 } from '@/api'
+import { provideConfigurationValidationSettings } from '@/composables/useConfigurationValidationSettings'
 import {
   useManagementEvents,
   type ManagementEventSource,
@@ -22,6 +24,7 @@ import { navigationItems, sectionNavigationForPath } from '@/navigation'
 interface AppShellApi extends ManagementEventSource {
   getCatalog(): Promise<CatalogResponse>
   getApiServer(): Promise<ApiServerSettings>
+  getValidationSettings(): Promise<ConfigurationValidationSettings>
   startApiServer(): Promise<ApiServerSettings>
   stopApiServer(): Promise<ApiServerSettings>
 }
@@ -31,6 +34,7 @@ const { locale, t } = useI18n()
 const route = useRoute()
 const { colorMode, setColorMode } = provideColorMode({ initialMode: 'auto' })
 const api = props.api ?? managementApi
+const validationSettings = provideConfigurationValidationSettings(api)
 const managementError = useManagementError()
 const { notify } = useToasts()
 const mainContent = ref<HTMLElement | null>(null)
@@ -143,7 +147,10 @@ async function changeLifecycle(action: 'start' | 'stop'): Promise<void> {
 }
 
 function onManagementEvent(event: ManagementEvent): void {
-  if (event.type === 'settings_changed') void loadApiServer()
+  if (event.type === 'settings_changed') {
+    void loadApiServer()
+    void validationSettings.load()
+  }
 }
 
 function isNarrow(): boolean {
@@ -168,12 +175,16 @@ watch(() => route.fullPath, async () => {
   mainContent.value?.focus({ preventScroll: true })
 })
 
-useManagementEvents(onManagementEvent, api, () => { void loadApiServer() })
+useManagementEvents(onManagementEvent, api, () => {
+  void loadApiServer()
+  void validationSettings.load()
+})
 
 onMounted(() => {
   document.body.classList.add('layout-fixed', 'sidebar-expand-lg', 'sidebar-mini', 'bg-body-tertiary')
   void loadApiServer()
   void loadComponentNavigation()
+  void validationSettings.load()
 })
 
 onBeforeUnmount(() => {

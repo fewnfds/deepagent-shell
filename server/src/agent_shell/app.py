@@ -48,6 +48,7 @@ from agent_shell.storage.history_retention import HistoryRetentionStore
 from agent_shell.storage.runtime_controls import RuntimeControlSettingsStore
 from agent_shell.storage.runtime_diagnostics import RuntimeDiagnosticStore
 from agent_shell.storage.system_log_settings import MIB_BYTES, SystemLogSettingsStore
+from agent_shell.storage.validation_settings import ConfigurationValidationSettingsStore
 from agent_shell.storage.event_feed import EventFeedStore
 from agent_shell.validation.service import ConfigurationValidationService
 from agent_shell.automation.validation import AutomationValidationService
@@ -102,6 +103,7 @@ def create_app(
     )
     history_retention = HistoryRetentionStore(database)
     runtime_control_settings = RuntimeControlSettingsStore(database)
+    configuration_validation_settings = ConfigurationValidationSettingsStore(database)
     runtime_diagnostic_store = RuntimeDiagnosticStore(database, history_retention)
     block_store = BlockStore(database, event_logger)
     config_store = AgentConfigStore(database, event_logger)
@@ -426,7 +428,13 @@ def create_app(
             configuration_validation,
         )
     )
-    app.include_router(build_validation_router(configuration_validation))
+    app.include_router(
+        build_validation_router(
+            configuration_validation,
+            automation_validation,
+            configuration_validation_settings,
+        )
+    )
     app.include_router(
         build_automation_router(
             automation_store,
