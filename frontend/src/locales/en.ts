@@ -375,6 +375,7 @@ export const en: MessageSchema = {
     tool_token_limit_before_evict: 'Tool result eviction threshold',
     tool_configs: 'Tool configuration',
     permissions: 'Path permissions',
+    path: 'Path',
     permission: 'Permission',
     tool_overrides: 'Tool overrides',
     visible: 'Visible to model',

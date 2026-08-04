@@ -373,6 +373,7 @@ export const zhCN = {
     tool_token_limit_before_evict: '工具结果卸载阈值',
     tool_configs: '工具配置',
     permissions: '路径权限',
+    path: '路径',
     permission: '权限',
     tool_overrides: '工具覆写',
     visible: '模型可见',

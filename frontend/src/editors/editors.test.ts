@@ -230,6 +230,51 @@ describe('dedicated block editors', () => {
     expect(editor.findAll('[data-testid="filesystem-permission-row"]')).toHaveLength(3)
   })
 
+  it('uses compact mapping rows with add actions at both ends', async () => {
+    const permissionsDraft = filesystemPermissionsAdapter.blank(filesystemPermissionsDefaults)
+    permissionsDraft.permissions.push({ path: '/workspace/**', permission: 'read-write' })
+    const permissions = mount(FilesystemPermissionsEditor, {
+      props: {
+        modelValue: permissionsDraft,
+        defaults: filesystemPermissionsDefaults,
+        filesystems: [],
+      },
+      global: { plugins: [localizedI18n] },
+    })
+    const permissionRow = permissions.get('[data-testid="filesystem-permission-row"]')
+    expect(permissionRow.classes()).toContain('simple-mapping-row')
+    expect(permissionRow.classes()).not.toContain('list-group-item')
+    expect(permissionRow.text()).not.toContain('permissions.0.path')
+    expect(permissionRow.get('label[for="filesystem-permission-path-0"]').text()).toBe('路径')
+    expect(permissionRow.get('.simple-mapping-actions').findAll('button')).toHaveLength(3)
+    expect(permissions.findAll('[data-action="add-filesystem-permission"]')).toHaveLength(2)
+    await permissions.findAll('[data-action="add-filesystem-permission"]')[1]?.trigger('click')
+    expect(permissions.findAll('[data-testid="filesystem-permission-row"]')).toHaveLength(2)
+
+    const filesystemDraft = filesystemAdapter.blank(filesystemDefaults)
+    filesystemDraft.mapped_directories.push({
+      virtual_path: '/workspace',
+      local_path: 'C:/workspace',
+    })
+    const filesystem = mount(FilesystemEditor, {
+      props: { modelValue: filesystemDraft, defaults: filesystemDefaults },
+      global: { plugins: [localizedI18n] },
+    })
+    expect(filesystem.get('[data-testid="mapped-directory-row"]').classes())
+      .toContain('simple-mapping-row')
+    expect(filesystem.findAll('[data-action="add-mapped-directory"]')).toHaveLength(2)
+
+    const outputDraft = outputModeAdapter.blank(outputDefaults)
+    outputDraft.filter_mappings.push({ field: 'message', value: 'secret' })
+    const output = mount(OutputModeEditor, {
+      props: { modelValue: outputDraft, defaults: outputDefaults },
+      global: { plugins: [localizedI18n] },
+    })
+    expect(output.get('[data-testid="output-filter-row"]').classes())
+      .toContain('simple-mapping-row')
+    expect(output.findAll('[data-action="add-filter-mapping"]')).toHaveLength(2)
+  })
+
   it('emits model queries and resource refresh requests instead of calling APIs', async () => {
     const model = mountEditor(ModelEditor, { modelValue: modelAdapter.blank() })
     await model.get('[data-testid="model-fetch-group"]').trigger('submit')

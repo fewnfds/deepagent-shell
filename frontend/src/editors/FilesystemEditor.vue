@@ -34,26 +34,31 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
           <h3 class="h5 fw-semibold mb-1">{{ t('editors.filesystem.mappedDirectoriesTitle') }}</h3>
           <p class="small text-body-secondary mb-0">{{ t('editors.filesystem.mappedDirectoriesHint') }}</p>
         </div>
-        <LteButton class="ms-auto" theme="success" @click="draft.mapped_directories.push({ virtual_path: '', local_path: '' })">
-          {{ t('editors.common.add') }}
+        <LteButton :aria-label="t('editors.common.add')" :title="t('editors.common.add')" class="ms-auto" data-action="add-mapped-directory" size="sm" theme="success" type="button" @click="draft.mapped_directories.push({ virtual_path: '', local_path: '' })">
+          <i class="bi bi-plus-lg" aria-hidden="true" />
         </LteButton>
       </header>
-      <div v-if="draft.mapped_directories.length" class="list-group list-group-flush">
-        <div v-for="(item, index) in draft.mapped_directories" :key="index" class="list-group-item">
-          <div class="row g-3">
-            <div class="col-md-6">
-              <FormField :field-path="`mapped_directories.${index}.virtual_path`"><LteInput v-model="item.virtual_path" /></FormField>
+      <div class="card-body">
+        <div v-if="draft.mapped_directories.length" class="simple-mapping-list">
+          <div v-for="(item, index) in draft.mapped_directories" :key="index" class="simple-mapping-row" data-testid="mapped-directory-row">
+            <div class="simple-mapping-primary">
+              <label class="visually-hidden" :for="`mapped-directory-virtual-path-${index}`">{{ t('fields.virtual_path') }}</label>
+              <LteInput :id="`mapped-directory-virtual-path-${index}`" v-model="item.virtual_path" />
             </div>
-            <div class="col-md-6">
-              <FormField :field-path="`mapped_directories.${index}.local_path`"><LteInput v-model="item.local_path" /></FormField>
+            <div class="simple-mapping-secondary">
+              <label class="visually-hidden" :for="`mapped-directory-local-path-${index}`">{{ t('fields.local_path') }}</label>
+              <LteInput :id="`mapped-directory-local-path-${index}`" v-model="item.local_path" />
             </div>
-          </div>
-          <div class="d-flex justify-content-end">
-            <LteButton theme="danger" @click="draft.mapped_directories.splice(index, 1)">{{ t('editors.common.remove') }}</LteButton>
+            <div class="simple-mapping-actions">
+              <LteButton :aria-label="t('editors.common.remove')" :title="t('editors.common.remove')" size="sm" theme="danger" type="button" @click="draft.mapped_directories.splice(index, 1)"><i class="bi bi-trash" aria-hidden="true" /></LteButton>
+            </div>
           </div>
         </div>
+        <p v-else class="text-body-secondary mb-0">{{ t('editors.filesystem.emptyMappedDirectories') }}</p>
+        <div class="simple-mapping-footer">
+          <LteButton :aria-label="t('editors.common.add')" :title="t('editors.common.add')" data-action="add-mapped-directory" size="sm" theme="success" type="button" @click="draft.mapped_directories.push({ virtual_path: '', local_path: '' })"><i class="bi bi-plus-lg" aria-hidden="true" /></LteButton>
+        </div>
       </div>
-      <p v-else class="card-body text-body-secondary mb-0">{{ t('editors.filesystem.emptyMappedDirectories') }}</p>
     </section>
 
     <section class="card mb-3">
@@ -62,22 +67,31 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
           <h3 class="h5 fw-semibold mb-1">{{ t('editors.filesystem.virtualDirectoriesTitle') }}</h3>
           <p class="small text-body-secondary mb-0">{{ t('editors.filesystem.virtualDirectoriesHint') }}</p>
         </div>
-        <LteButton class="ms-auto" theme="success" @click="draft.virtual_directories.push({ virtual_path: '', source_path: '' })">
-          {{ t('editors.common.add') }}
+        <LteButton :aria-label="t('editors.common.add')" :title="t('editors.common.add')" class="ms-auto" data-action="add-virtual-directory" size="sm" theme="success" type="button" @click="draft.virtual_directories.push({ virtual_path: '', source_path: '' })">
+          <i class="bi bi-plus-lg" aria-hidden="true" />
         </LteButton>
       </header>
-      <div v-if="draft.virtual_directories.length" class="list-group list-group-flush">
-        <div v-for="(item, index) in draft.virtual_directories" :key="index" class="list-group-item">
-          <div class="row g-3">
-            <div class="col-md-6"><FormField :field-path="`virtual_directories.${index}.virtual_path`"><LteInput v-model="item.virtual_path" /></FormField></div>
-            <div class="col-md-6"><FormField :field-path="`virtual_directories.${index}.source_path`"><LteInput v-model="item.source_path" /></FormField></div>
-          </div>
-          <div class="d-flex justify-content-end">
-            <LteButton theme="danger" @click="draft.virtual_directories.splice(index, 1)">{{ t('editors.common.remove') }}</LteButton>
+      <div class="card-body">
+        <div v-if="draft.virtual_directories.length" class="simple-mapping-list">
+          <div v-for="(item, index) in draft.virtual_directories" :key="index" class="simple-mapping-row" data-testid="virtual-directory-row">
+            <div class="simple-mapping-primary">
+              <label class="visually-hidden" :for="`virtual-directory-virtual-path-${index}`">{{ t('fields.virtual_path') }}</label>
+              <LteInput :id="`virtual-directory-virtual-path-${index}`" v-model="item.virtual_path" />
+            </div>
+            <div class="simple-mapping-secondary">
+              <label class="visually-hidden" :for="`virtual-directory-source-path-${index}`">{{ t('fields.source_path') }}</label>
+              <LteInput :id="`virtual-directory-source-path-${index}`" v-model="item.source_path" />
+            </div>
+            <div class="simple-mapping-actions">
+              <LteButton :aria-label="t('editors.common.remove')" :title="t('editors.common.remove')" size="sm" theme="danger" type="button" @click="draft.virtual_directories.splice(index, 1)"><i class="bi bi-trash" aria-hidden="true" /></LteButton>
+            </div>
           </div>
         </div>
+        <p v-else class="text-body-secondary mb-0">{{ t('editors.filesystem.emptyVirtualDirectories') }}</p>
+        <div class="simple-mapping-footer">
+          <LteButton :aria-label="t('editors.common.add')" :title="t('editors.common.add')" data-action="add-virtual-directory" size="sm" theme="success" type="button" @click="draft.virtual_directories.push({ virtual_path: '', source_path: '' })"><i class="bi bi-plus-lg" aria-hidden="true" /></LteButton>
+        </div>
       </div>
-      <p v-else class="card-body text-body-secondary mb-0">{{ t('editors.filesystem.emptyVirtualDirectories') }}</p>
     </section>
 
     <section class="card mb-3">
@@ -86,22 +100,31 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
           <h3 class="h5 fw-semibold mb-1">{{ t('editors.filesystem.virtualFilesTitle') }}</h3>
           <p class="small text-body-secondary mb-0">{{ t('editors.filesystem.virtualFilesHint') }}</p>
         </div>
-        <LteButton class="ms-auto" theme="success" @click="draft.virtual_files.push({ virtual_path: '', source_path: '' })">
-          {{ t('editors.common.add') }}
+        <LteButton :aria-label="t('editors.common.add')" :title="t('editors.common.add')" class="ms-auto" data-action="add-virtual-file" size="sm" theme="success" type="button" @click="draft.virtual_files.push({ virtual_path: '', source_path: '' })">
+          <i class="bi bi-plus-lg" aria-hidden="true" />
         </LteButton>
       </header>
-      <div v-if="draft.virtual_files.length" class="list-group list-group-flush">
-        <div v-for="(item, index) in draft.virtual_files" :key="index" class="list-group-item">
-          <div class="row g-3">
-            <div class="col-md-6"><FormField :field-path="`virtual_files.${index}.virtual_path`"><LteInput v-model="item.virtual_path" /></FormField></div>
-            <div class="col-md-6"><FormField :field-path="`virtual_files.${index}.source_path`"><LteInput v-model="item.source_path" /></FormField></div>
-          </div>
-          <div class="d-flex justify-content-end">
-            <LteButton theme="danger" @click="draft.virtual_files.splice(index, 1)">{{ t('editors.common.remove') }}</LteButton>
+      <div class="card-body">
+        <div v-if="draft.virtual_files.length" class="simple-mapping-list">
+          <div v-for="(item, index) in draft.virtual_files" :key="index" class="simple-mapping-row" data-testid="virtual-file-row">
+            <div class="simple-mapping-primary">
+              <label class="visually-hidden" :for="`virtual-file-virtual-path-${index}`">{{ t('fields.virtual_path') }}</label>
+              <LteInput :id="`virtual-file-virtual-path-${index}`" v-model="item.virtual_path" />
+            </div>
+            <div class="simple-mapping-secondary">
+              <label class="visually-hidden" :for="`virtual-file-source-path-${index}`">{{ t('fields.source_path') }}</label>
+              <LteInput :id="`virtual-file-source-path-${index}`" v-model="item.source_path" />
+            </div>
+            <div class="simple-mapping-actions">
+              <LteButton :aria-label="t('editors.common.remove')" :title="t('editors.common.remove')" size="sm" theme="danger" type="button" @click="draft.virtual_files.splice(index, 1)"><i class="bi bi-trash" aria-hidden="true" /></LteButton>
+            </div>
           </div>
         </div>
+        <p v-else class="text-body-secondary mb-0">{{ t('editors.filesystem.emptyVirtualFiles') }}</p>
+        <div class="simple-mapping-footer">
+          <LteButton :aria-label="t('editors.common.add')" :title="t('editors.common.add')" data-action="add-virtual-file" size="sm" theme="success" type="button" @click="draft.virtual_files.push({ virtual_path: '', source_path: '' })"><i class="bi bi-plus-lg" aria-hidden="true" /></LteButton>
+        </div>
       </div>
-      <p v-else class="card-body text-body-secondary mb-0">{{ t('editors.filesystem.emptyVirtualFiles') }}</p>
     </section>
 
     <section class="card mb-3">

@@ -151,6 +151,45 @@ pre code {
   resize: vertical;
 }
 
+.simple-mapping-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.simple-mapping-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 2fr) minmax(10rem, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.simple-mapping-primary,
+.simple-mapping-secondary {
+  min-width: 0;
+}
+
+.simple-mapping-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.25rem;
+}
+
+.simple-mapping-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.75rem;
+}
+
+@media (max-width: 767.98px) {
+  .simple-mapping-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .simple-mapping-primary {
+    grid-column: 1 / -1;
+  }
+}
+
 .session-timeline-json {
   height: 200px;
   min-height: 200px;

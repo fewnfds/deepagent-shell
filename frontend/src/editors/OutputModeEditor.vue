@@ -57,33 +57,34 @@ function variableToken(variable: string): string {
         </div>
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
           <span class="text-body-secondary">{{ t('editors.outputMode.mappingHint') }}</span>
-          <LteButton class="ms-auto" theme="success" @click="draft.filter_mappings.push({ field: '', value: '' })">
-            {{ t('editors.outputMode.addMapping') }}
+          <LteButton :aria-label="t('editors.outputMode.addMapping')" :title="t('editors.outputMode.addMapping')" class="ms-auto" data-action="add-filter-mapping" size="sm" theme="success" type="button" @click="draft.filter_mappings.push({ field: '', value: '' })">
+            <i class="bi bi-plus-lg" aria-hidden="true" />
           </LteButton>
         </div>
-        <div v-if="draft.filter_mappings.length">
-          <div v-for="(mapping, index) in draft.filter_mappings" :key="index" class="mb-3">
-              <div class="row g-3">
-                <div class="col-md-6">
-                  <FormField :field-path="`filter_mappings.${index}.field`">
-                    <input v-model="mapping.field" class="form-control" :list="`filter-fields-${index}`">
-                    <datalist :id="`filter-fields-${index}`">
-                      <option v-for="field in defaults.filter_fields" :key="field" :value="field" />
-                    </datalist>
-                  </FormField>
-                </div>
-                <div class="col-md-6">
-                  <FormField :field-path="`filter_mappings.${index}.value`">
-                    <LteInput v-model="mapping.value" />
-                  </FormField>
-                </div>
-              </div>
-              <div class="d-flex justify-content-end">
-                <LteButton theme="danger" @click="draft.filter_mappings.splice(index, 1)">{{ t('editors.common.remove') }}</LteButton>
-              </div>
+        <div v-if="draft.filter_mappings.length" class="simple-mapping-list">
+          <div v-for="(mapping, index) in draft.filter_mappings" :key="index" class="simple-mapping-row" data-testid="output-filter-row">
+            <div class="simple-mapping-primary">
+              <label class="visually-hidden" :for="`output-filter-field-${index}`">{{ t('fields.field') }}</label>
+              <input :id="`output-filter-field-${index}`" v-model="mapping.field" class="form-control" :list="`filter-fields-${index}`">
+              <datalist :id="`filter-fields-${index}`">
+                <option v-for="field in defaults.filter_fields" :key="field" :value="field" />
+              </datalist>
+            </div>
+            <div class="simple-mapping-secondary">
+              <label class="visually-hidden" :for="`output-filter-value-${index}`">{{ t('fields.value') }}</label>
+              <LteInput :id="`output-filter-value-${index}`" v-model="mapping.value" />
+            </div>
+            <div class="simple-mapping-actions">
+              <LteButton :aria-label="t('editors.common.remove')" :title="t('editors.common.remove')" size="sm" theme="danger" type="button" @click="draft.filter_mappings.splice(index, 1)"><i class="bi bi-trash" aria-hidden="true" /></LteButton>
+            </div>
           </div>
         </div>
-        <p v-else class="text-body-secondary">{{ t('editors.outputMode.emptyMappings') }}</p>
+        <p v-else class="text-body-secondary mb-0">{{ t('editors.outputMode.emptyMappings') }}</p>
+        <div class="simple-mapping-footer">
+          <LteButton :aria-label="t('editors.outputMode.addMapping')" :title="t('editors.outputMode.addMapping')" data-action="add-filter-mapping" size="sm" theme="success" type="button" @click="draft.filter_mappings.push({ field: '', value: '' })">
+            <i class="bi bi-plus-lg" aria-hidden="true" />
+          </LteButton>
+        </div>
       </div>
     </section>
 

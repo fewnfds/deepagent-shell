@@ -96,27 +96,32 @@ function importFilesystemPaths(): void {
             </LteButton>
           </div>
         </div>
-      </div>
-      <div v-if="draft.permissions.length" class="list-group list-group-flush">
-        <div v-for="(entry, index) in draft.permissions" :key="index" class="list-group-item" data-testid="filesystem-permission-row">
-          <div class="row g-3 align-items-end">
-            <div class="col-lg-6"><FormField :field-path="`permissions.${index}.path`"><LteInput v-model="entry.path" /></FormField></div>
-            <div class="col-lg-3">
-              <FormField :field-path="`permissions.${index}.permission`">
-                <select v-model="entry.permission" class="form-select">
-                  <option v-for="permission in permissionOptions" :key="permission" :value="permission">{{ t(`editors.filesystemPermissions.permission.${permission}`) }}</option>
-                </select>
-              </FormField>
+        <div v-if="draft.permissions.length" class="simple-mapping-list mt-3">
+          <div v-for="(entry, index) in draft.permissions" :key="index" class="simple-mapping-row" data-testid="filesystem-permission-row">
+            <div class="simple-mapping-primary">
+              <label class="visually-hidden" :for="`filesystem-permission-path-${index}`">{{ t('fields.path') }}</label>
+              <LteInput :id="`filesystem-permission-path-${index}`" v-model="entry.path" />
             </div>
-            <div class="col-lg-3 d-flex justify-content-end gap-1">
+            <div class="simple-mapping-secondary">
+              <label class="visually-hidden" :for="`filesystem-permission-value-${index}`">{{ t('fields.permission') }}</label>
+              <select :id="`filesystem-permission-value-${index}`" v-model="entry.permission" class="form-select">
+                <option v-for="permission in permissionOptions" :key="permission" :value="permission">{{ t(`editors.filesystemPermissions.permission.${permission}`) }}</option>
+              </select>
+            </div>
+            <div class="simple-mapping-actions">
               <LteButton :aria-label="t('editors.common.moveUp')" :disabled="index === 0" :title="t('editors.common.moveUp')" size="sm" theme="secondary" type="button" @click="movePermission(index, -1)"><i class="bi bi-arrow-up" aria-hidden="true" /></LteButton>
               <LteButton :aria-label="t('editors.common.moveDown')" :disabled="index === draft.permissions.length - 1" :title="t('editors.common.moveDown')" size="sm" theme="secondary" type="button" @click="movePermission(index, 1)"><i class="bi bi-arrow-down" aria-hidden="true" /></LteButton>
               <LteButton :aria-label="t('editors.common.remove')" :title="t('editors.common.remove')" data-action="remove-filesystem-permission" size="sm" theme="danger" type="button" @click="draft.permissions.splice(index, 1)"><i class="bi bi-trash" aria-hidden="true" /></LteButton>
             </div>
           </div>
         </div>
+        <p v-else class="text-body-secondary mt-3 mb-0">{{ t('editors.filesystemPermissions.emptyPermissions') }}</p>
+        <div class="simple-mapping-footer">
+          <LteButton :aria-label="t('editors.common.add')" :title="t('editors.common.add')" data-action="add-filesystem-permission" size="sm" theme="success" type="button" @click="addPermission">
+            <i class="bi bi-plus-lg" aria-hidden="true" />
+          </LteButton>
+        </div>
       </div>
-      <p v-else class="card-body text-body-secondary mb-0">{{ t('editors.filesystemPermissions.emptyPermissions') }}</p>
     </section>
 
     <section class="card mb-3">
