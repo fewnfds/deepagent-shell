@@ -28,14 +28,11 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
 <template>
   <div data-editor="filesystem">
     <section class="card mb-3">
-      <header class="card-header d-flex align-items-start justify-content-between gap-2">
+      <header class="card-header">
         <div>
           <h3 class="h5 fw-semibold mb-1">{{ t('editors.filesystem.mappedDirectoriesTitle') }}</h3>
           <p class="small text-body-secondary mb-0">{{ t('editors.filesystem.mappedDirectoriesHint') }}</p>
         </div>
-        <LteButton :aria-label="t('editors.common.add')" :title="t('editors.common.add')" class="ms-auto" data-action="add-mapped-directory" size="sm" theme="success" type="button" @click="draft.mapped_directories.push({ virtual_path: '', local_path: '' })">
-          <i class="bi bi-plus-lg" aria-hidden="true" />
-        </LteButton>
       </header>
       <div class="card-body">
         <div v-if="draft.mapped_directories.length" class="simple-mapping-list">
@@ -61,14 +58,11 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
     </section>
 
     <section class="card mb-3">
-      <header class="card-header d-flex align-items-start justify-content-between gap-2">
+      <header class="card-header">
         <div>
           <h3 class="h5 fw-semibold mb-1">{{ t('editors.filesystem.virtualDirectoriesTitle') }}</h3>
           <p class="small text-body-secondary mb-0">{{ t('editors.filesystem.virtualDirectoriesHint') }}</p>
         </div>
-        <LteButton :aria-label="t('editors.common.add')" :title="t('editors.common.add')" class="ms-auto" data-action="add-virtual-directory" size="sm" theme="success" type="button" @click="draft.virtual_directories.push({ virtual_path: '', source_path: '' })">
-          <i class="bi bi-plus-lg" aria-hidden="true" />
-        </LteButton>
       </header>
       <div class="card-body">
         <div v-if="draft.virtual_directories.length" class="simple-mapping-list">
@@ -94,14 +88,11 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
     </section>
 
     <section class="card mb-3">
-      <header class="card-header d-flex align-items-start justify-content-between gap-2">
+      <header class="card-header">
         <div>
           <h3 class="h5 fw-semibold mb-1">{{ t('editors.filesystem.virtualFilesTitle') }}</h3>
           <p class="small text-body-secondary mb-0">{{ t('editors.filesystem.virtualFilesHint') }}</p>
         </div>
-        <LteButton :aria-label="t('editors.common.add')" :title="t('editors.common.add')" class="ms-auto" data-action="add-virtual-file" size="sm" theme="success" type="button" @click="draft.virtual_files.push({ virtual_path: '', source_path: '' })">
-          <i class="bi bi-plus-lg" aria-hidden="true" />
-        </LteButton>
       </header>
       <div class="card-body">
         <div v-if="draft.virtual_files.length" class="simple-mapping-list">

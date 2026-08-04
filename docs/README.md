@@ -19,6 +19,5 @@
 ## 安装与维护
 
 - [Docker 部署](docker.md)
-- [Windows 发行包构建](building-windows-release.md)
 - [源码运行、Debug 与发布](development-and-release.md)
 - [Deep Agents runtime 基线](deep-agents-migration.md)

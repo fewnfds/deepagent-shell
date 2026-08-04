@@ -15,7 +15,7 @@ Primary Agent 与同步 Subagent。
 - 使用 SQLite 保存配置、凭据状态、API 调用记录、拦截记录、运行日志和历史会话；
 - 在日志中心统一查询事件，在历史会话中按请求查看模型、工具与 Subagent 时间线；
 - 提供文件管理、系统设置、管理认证、推理 API Key、CORS、可信代理与远程部署闸门；
-- 提供 Windows 源码运行、Windows 自包含 ZIP 和 Linux amd64 Docker 部署方式。
+- 提供可移动的 Windows 源码 Clone 和 Linux amd64 Docker 部署方式。
 
 Deep Agents 的 filesystem、subagent、summarization、tool-call repair 等 harness 能力由上游负责。
 Agent Shell 负责读取当前配置、准备 backend/skills/subagents/tools/middleware，并把运行事件投影为公开输出。
@@ -41,7 +41,7 @@ git pull --ff-only
 ```
 
 `data/` 保存实例配置和用户数据，`runtime/` 保存可重建运行态，两者都不由 Git 更新。更新或迁移前
-先停止服务；迁移实例时复制完整 `data/`。
+先停止服务；Windows 实例可以整体移动到新的可写目录，若只迁移数据则复制完整 `data/`。
 
 ## 配置第一份 Agent
 
@@ -72,16 +72,12 @@ Content-Type: application/json
 
 ## 发行与部署
 
-稳定源码位于 `main`，滚动源码位于 `dev`。带版本号的 Windows ZIP 与 Docker image 以
-[GitHub Releases](https://github.com/fewnfds/deepagent-shell/releases) 中实际发布的资产为准。
+稳定源码位于 `main`，滚动源码位于 `dev`。
 
-- Windows ZIP：解压到可写目录后运行 `.\start_server.bat`，无需安装 Python、Node.js 或 uv。
+- Windows：Clone 需要的分支，运行 `.\start_server.bat`；首次启动自动准备固定 Python runtime。
 - Docker：使用 `ghcr.io/fewnfds/deepagent-shell:<version>`，把宿主 `data/` 映射到 `/app/data`。
-- 源码构建 ZIP：在 Windows x64 和 Node.js 22 环境运行
-  `pwsh.exe -NoProfile -File .\packaging\windows\build_portable.ps1`。
 
-详情见 [Docker 部署](docs/docker.md)、[Windows 发行包构建](docs/building-windows-release.md)和
-[开发与发布](docs/development-and-release.md)。
+详情见 [Docker 部署](docs/docker.md)和[开发与发布](docs/development-and-release.md)。
 
 ## 数据目录
 

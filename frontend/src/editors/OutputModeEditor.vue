@@ -55,12 +55,7 @@ function variableToken(variable: string): string {
             </FormField>
           </div>
         </div>
-        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-          <span class="text-body-secondary">{{ t('editors.outputMode.mappingHint') }}</span>
-          <LteButton :aria-label="t('editors.outputMode.addMapping')" :title="t('editors.outputMode.addMapping')" class="ms-auto" data-action="add-filter-mapping" size="sm" theme="success" type="button" @click="draft.filter_mappings.push({ field: '', value: '' })">
-            <i class="bi bi-plus-lg" aria-hidden="true" />
-          </LteButton>
-        </div>
+        <p class="text-body-secondary mb-3">{{ t('editors.outputMode.mappingHint') }}</p>
         <div v-if="draft.filter_mappings.length" class="simple-mapping-list">
           <div v-for="(mapping, index) in draft.filter_mappings" :key="index" class="simple-mapping-row" data-testid="output-filter-row">
             <div class="simple-mapping-primary">

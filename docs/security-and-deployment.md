@@ -71,5 +71,5 @@ AGENT_SHELL_TRUSTED_PROXY_CIDRS=[]
 AGENT_SHELL_MANAGEMENT_TOKEN=<management password>
 ```
 
-未知 `AGENT_SHELL_*` 键会使启动失败。Windows ZIP 启动器只读取自身 data 配置；源码和容器的具体入口
-见根 README 与 [Docker 部署](docker.md)。
+未知 `AGENT_SHELL_*` 键会使启动失败。Windows 源码启动器读取当前 Clone 的 data 配置；源码和容器的
+具体入口见根 README 与 [Docker 部署](docker.md)。

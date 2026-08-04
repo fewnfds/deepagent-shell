@@ -191,7 +191,9 @@ describe('dedicated block editors', () => {
       props: { modelValue: filesystemDraft, defaults: filesystemDefaults },
       global: { plugins: [localizedI18n] },
     })
-    expect(filesystem.findAll('[data-action="add-mapped-directory"]')).toHaveLength(2)
+    expect(filesystem.findAll('[data-action="add-mapped-directory"]')).toHaveLength(1)
+    expect(filesystem.findAll('[data-action="add-virtual-directory"]')).toHaveLength(1)
+    expect(filesystem.findAll('[data-action="add-virtual-file"]')).toHaveLength(1)
 
     const outputDraft = outputModeAdapter.blank(outputDefaults)
     outputDraft.filter_mappings.push({ field: 'message', value: 'secret' })
@@ -199,7 +201,7 @@ describe('dedicated block editors', () => {
       props: { modelValue: outputDraft, defaults: outputDefaults },
       global: { plugins: [localizedI18n] },
     })
-    expect(output.findAll('[data-action="add-filter-mapping"]')).toHaveLength(2)
+    expect(output.findAll('[data-action="add-filter-mapping"]')).toHaveLength(1)
   })
 
   it('emits model queries and resource refresh requests instead of calling APIs', async () => {

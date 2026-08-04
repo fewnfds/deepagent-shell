@@ -46,7 +46,7 @@ from .image_helpers import read_size
 
 ## 2. Python 依赖（Windows）
 
-Windows 源码 Clone 和 Windows ZIP 支持可选 `requirements.txt`。每行声明一个普通 PyPI requirement：
+Windows 源码 Clone 支持可选 `requirements.txt`。每行声明一个普通 PyPI requirement：
 
 ```text
 Pillow>=11,<13

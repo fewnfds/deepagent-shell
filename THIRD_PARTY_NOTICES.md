@@ -1,9 +1,9 @@
 # Third-party notices
 
-Agent Shell is licensed under the MIT License. The release also contains the
-components below. The declared-license column is generated from installed wheel
-metadata and `frontend/package-lock.json`; original license and notice files are
-included in release archives under `THIRD_PARTY_LICENSES/` when supplied upstream.
+Agent Shell is licensed under the MIT License. Its runtime and compiled frontend use
+the components below. The declared-license column is generated from installed wheel
+metadata and `frontend/package-lock.json`; follow each source link for authoritative
+license and notice terms.
 
 | Ecosystem | Component | Version | Declared license | Source |
 | --- | --- | --- | --- | --- |
@@ -151,5 +151,5 @@ included in release archives under `THIRD_PARTY_LICENSES/` when supplied upstrea
 | runtime | CPython | 3.12.9 | PSF-2.0 | https://www.python.org/ |
 
 `NOASSERTION` means the upstream package metadata did not declare a short
-machine-readable license identifier; inspect its bundled license files and source
-link for the authoritative terms.
+machine-readable license identifier; inspect its source link for the authoritative
+terms.

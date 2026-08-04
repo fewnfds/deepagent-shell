@@ -6,7 +6,7 @@
 ghcr.io/fewnfds/deepagent-shell:<version>
 ```
 
-版本以 [GitHub Releases](https://github.com/fewnfds/deepagent-shell/releases) 实际发布内容为准。
+版本使用仓库的 `v<project.version>` tag，并发布到 GitHub Container Registry。
 
 ## 启动
 

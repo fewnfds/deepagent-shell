@@ -2,7 +2,7 @@
 
 ## 启动
 
-源码 Clone 或 Windows ZIP 都从项目根运行：
+Windows 源码 Clone 从项目根运行：
 
 ```powershell
 .\start_server.bat
