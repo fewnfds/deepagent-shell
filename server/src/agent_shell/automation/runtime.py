@@ -159,11 +159,17 @@ class AutomationContext:
         self._runtime = runtime
         self._owner_id = owner.id
         self._hook = hook
+        self._graph_stop_requested = False
 
     def prepare_skill(self, name: str, mode: str = "overlay") -> Path:
         if self._hook != "request_prepare":
             raise ValueError("Skills may only be prepared during request_prepare")
         return self._runtime.prepare_skill(self._owner_id, name, mode=mode)
+
+    def request_graph_stop(self) -> None:
+        if self._hook == "request_end":
+            raise ValueError("The Agent graph has already stopped during request_end")
+        self._graph_stop_requested = True
 
     def log(self, message: object) -> None:
         _LOGGER.info(
@@ -212,6 +218,8 @@ class AutomationRuntime:
         self._module_names: set[str] = set()
         self._overlay_owners: set[str] = set()
         self._tasks: list[asyncio.Task[None]] = []
+        self._stop_event = asyncio.Event()
+        self._graph_stop_event = asyncio.Event()
         self._started = False
         self._closed = False
 
@@ -331,6 +339,8 @@ class AutomationRuntime:
                 messages=self._messages[owner.id],
                 initial_files=self._initial_files[owner.id],
             )
+            if self.graph_stop_requested:
+                raise self.graph_stop_error()
 
     async def before_subagent_invoke(
         self,
@@ -355,6 +365,8 @@ class AutomationRuntime:
         if self._started:
             return
         self._started = True
+        if self._stop_event.is_set():
+            return
         for owner in self._owners:
             if owner.lifecycle_workflow is not None:
                 self._tasks.append(
@@ -370,8 +382,7 @@ class AutomationRuntime:
         if self._closed:
             return
         self._closed = True
-        for task in self._tasks:
-            task.cancel()
+        self._stop_event.set()
         if self._tasks:
             await asyncio.gather(*self._tasks, return_exceptions=True)
         for owner in self._owners:
@@ -399,12 +410,31 @@ class AutomationRuntime:
         if self._request_runtime_dir.exists():
             shutil.rmtree(self._request_runtime_dir, ignore_errors=True)
 
+    @property
+    def graph_stop_requested(self) -> bool:
+        return self._graph_stop_event.is_set()
+
+    async def wait_for_graph_stop(self) -> None:
+        await self._graph_stop_event.wait()
+
+    @staticmethod
+    def graph_stop_error() -> AgentRuntimeError:
+        return AgentRuntimeError(
+            "automation_requested_graph_stop",
+            "An automation script requested that the Agent graph stop.",
+            status_code=409,
+        )
+
+    def _request_graph_stop(self) -> None:
+        self._graph_stop_event.set()
+        self._stop_event.set()
+
     async def _lifecycle_loop(
         self, owner: AutomationOwner, workflow: dict[str, Any]
     ) -> None:
         tick = 0
         interval = float(workflow["interval_seconds"])
-        while True:
+        while not self._stop_event.is_set():
             try:
                 await self._run_nodes(
                     owner,
@@ -425,7 +455,12 @@ class AutomationRuntime:
                 )
                 return
             tick += 1
-            await asyncio.sleep(interval)
+            if self._stop_event.is_set():
+                return
+            try:
+                await asyncio.wait_for(self._stop_event.wait(), timeout=interval)
+            except TimeoutError:
+                pass
 
     async def _run_hook(
         self,
@@ -488,6 +523,9 @@ class AutomationRuntime:
             )
             try:
                 await run(context)
+                if context._graph_stop_requested:
+                    self._request_graph_stop()
+                    return
             except asyncio.CancelledError:
                 raise
             except Exception as exc:

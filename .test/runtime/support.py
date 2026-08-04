@@ -131,6 +131,17 @@ class EventGraph:
 
 
 class NoopAutomation:
+    @property
+    def graph_stop_requested(self) -> bool:
+        return False
+
+    async def wait_for_graph_stop(self) -> None:
+        await asyncio.Event().wait()
+
+    @staticmethod
+    def graph_stop_error() -> AgentRuntimeError:
+        raise AssertionError("Noop automation cannot request a graph stop")
+
     async def start(self) -> None:
         pass
 
