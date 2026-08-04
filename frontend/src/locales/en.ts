@@ -1060,6 +1060,7 @@ export const en: MessageSchema = {
     },
     subagent: {
       identityTitle: 'Routing identity',
+      roleName: 'Agent role name',
     },
     override: {
       title: 'Subagent',

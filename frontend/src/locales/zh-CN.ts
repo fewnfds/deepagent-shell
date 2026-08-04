@@ -1058,6 +1058,7 @@ export const zhCN = {
     },
     subagent: {
       identityTitle: '路由身份',
+      roleName: '代理角色名',
     },
     override: {
       title: 'Subagent',

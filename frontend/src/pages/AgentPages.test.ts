@@ -308,6 +308,7 @@ describe('agent authoring pages', () => {
     expect(primaryPage.wrapper.get('aside.col-lg-4').classes()).toContain('validation-sidebar')
     expect(wrapper.get('section.col-lg-8')).toBeTruthy()
     expect(wrapper.get('aside.col-lg-4').classes()).toContain('validation-sidebar')
+    expect(wrapper.text()).toContain('agents.subagent.roleName')
     expect(wrapper.findAll('[data-capability] input[type="radio"]')).toHaveLength(0)
     expect(wrapper.findAll('[data-capability] select')).toHaveLength(2)
     expect(primaryPage.wrapper.findAll('[data-capability] > .card')).toHaveLength(2)

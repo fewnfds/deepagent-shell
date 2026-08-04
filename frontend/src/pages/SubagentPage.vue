@@ -320,7 +320,7 @@ watch(
 
         <section class="row g-3 mb-3" :aria-label="t('agents.subagent.identityTitle')">
           <div class="col-md-6">
-            <FormField field-path="name">
+            <FormField field-path="name" label-key="agents.subagent.roleName">
               <input
                 v-model="form.name"
                 autocomplete="off"
