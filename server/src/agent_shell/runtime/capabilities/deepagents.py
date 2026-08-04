@@ -8,7 +8,12 @@ from pathlib import Path, PurePosixPath
 import stat
 from typing import Any
 
-from agent_shell.contracts import FilesystemBlock, SkillBlock
+from agent_shell.contracts import (
+    FilesystemBlock,
+    FilesystemPermissionsBlock,
+    FilesystemToolConfigs,
+    SkillBlock,
+)
 from agent_shell.registries.skills import scan_skill_folder
 from agent_shell.validation.capability_assembly import FilesystemMode
 
@@ -33,6 +38,7 @@ class DeepAgentsCapabilities:
     initial_files: dict[str, Any]
     selected_skills: tuple[str, ...]
     skill_sources: tuple[str, ...]
+    permissions: tuple[Any, ...]
     filesystem_mode: FilesystemMode
     workspace: DeepAgentsWorkspace
 
@@ -395,6 +401,7 @@ def build_deepagents_capabilities(
     filesystem: FilesystemBlock | None,
     skill: SkillBlock | None,
     *,
+    filesystem_permissions: FilesystemPermissionsBlock | None = None,
     filesystem_mode: FilesystemMode,
     skills_dir: Path,
     workspace: DeepAgentsWorkspace | None = None,
@@ -417,8 +424,14 @@ def build_deepagents_capabilities(
         )
 
     tool_configs = (
-        filesystem.tool_configs.model_dump() if filesystem is not None else {}
+        filesystem.tool_configs.model_dump()
+        if filesystem is not None
+        else FilesystemToolConfigs().model_dump()
     )
+    if filesystem_permissions is not None:
+        for name, override in filesystem_permissions.tool_overrides:
+            if override is not None:
+                tool_configs[name] = override.model_dump()
     custom_tool_descriptions = {
         name: config["description_override"]
         for name, config in tool_configs.items()
@@ -511,14 +524,70 @@ def build_deepagents_capabilities(
             else None
         ),
     }
-    if filesystem is not None:
-        filesystem_kwargs["tools"] = [
-            name for name, config in tool_configs.items() if config["visible"]
-        ]
-    else:
-        filesystem_kwargs["tools"] = ["read_file"]
-    if filesystem is not None and filesystem.system_prompt_override is not None:
+    filesystem_kwargs["tools"] = [
+        name for name, config in tool_configs.items() if config["visible"]
+    ]
+    if (
+        filesystem_permissions is not None
+        and filesystem_permissions.system_prompt_override is not None
+    ):
+        filesystem_kwargs["system_prompt"] = (
+            filesystem_permissions.system_prompt_override.value
+        )
+    elif filesystem is not None and filesystem.system_prompt_override is not None:
         filesystem_kwargs["system_prompt"] = filesystem.system_prompt_override
+    materialized_permissions: list[Any] = []
+    if filesystem_permissions is not None:
+        from deepagents.middleware.filesystem import FilesystemPermission
+
+        # Skill visibility is owned by the per-Agent skill route, not user rules.
+        materialized_permissions.extend(
+            (
+                FilesystemPermission(
+                    operations=["read"],
+                    paths=["/skills/**"],
+                    mode="allow",
+                ),
+                FilesystemPermission(
+                    operations=["write"],
+                    paths=["/skills/**"],
+                    mode="deny",
+                ),
+            )
+        )
+        for entry in filesystem_permissions.permissions:
+            if entry.permission == "read-write":
+                materialized_permissions.append(
+                    FilesystemPermission(
+                        operations=["read", "write"],
+                        paths=[entry.path],
+                        mode="allow",
+                    )
+                )
+            elif entry.permission == "read-only":
+                materialized_permissions.extend(
+                    (
+                        FilesystemPermission(
+                            operations=["read"],
+                            paths=[entry.path],
+                            mode="allow",
+                        ),
+                        FilesystemPermission(
+                            operations=["write"],
+                            paths=[entry.path],
+                            mode="deny",
+                        ),
+                    )
+                )
+            else:
+                materialized_permissions.append(
+                    FilesystemPermission(
+                        operations=["read", "write"],
+                        paths=[entry.path],
+                        mode="deny",
+                    )
+                )
+        filesystem_kwargs["_permissions"] = materialized_permissions
     filesystem_middleware = FilesystemMiddleware(**filesystem_kwargs)
     middleware: list[Any] = []
     if skill_sources:
@@ -539,6 +608,7 @@ def build_deepagents_capabilities(
         initial_files=dict(workspace.initial_files),
         selected_skills=selected_skills,
         skill_sources=tuple(skill_sources),
+        permissions=tuple(materialized_permissions),
         filesystem_mode=filesystem_mode,
         workspace=workspace,
     )

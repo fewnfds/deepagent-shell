@@ -60,6 +60,13 @@ const obsoleteReferences = computed(() => {
     .map((reference, index) => ({ index, reference }))
     .filter(({ reference }) => !supported.has(reference.type))
 })
+const workspaceCapabilityTypes = new Set<CapabilityType>([
+  'filesystem',
+  'filesystem-permissions',
+])
+const generalManifests = computed(() => manifests.value.filter(
+  (manifest) => !workspaceCapabilityTypes.has(manifest.type),
+))
 
 const { markClean, runAfterDiscard } = useUnsavedChanges(
   () => primaryAgentPayload(form.value),
@@ -309,10 +316,33 @@ watch(
           </ul>
         </section>
 
+        <section class="card mb-3" :aria-label="t('agents.workspace.title')" data-testid="primary-workspace-card">
+          <header class="card-header">
+            <h2 class="card-title h5 mb-0 fw-semibold">{{ t('agents.workspace.title') }}</h2>
+          </header>
+          <div class="card-body">
+            <div class="row g-3">
+              <div v-for="type in ['filesystem', 'filesystem-permissions'] as CapabilityType[]" :key="type" class="col-md-6">
+                <label class="form-label" :for="`primary-capability-${type}`">{{ t(`capabilities.${type}.label`) }}</label>
+                <select
+                  :id="`primary-capability-${type}`"
+                  class="form-select"
+                  :data-testid="`primary-capability-${type}`"
+                  :value="referenceId(form, type)"
+                  @change="updateReference(type, ($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="">{{ t('agents.capability.notAttached') }}</option>
+                  <option v-for="block in capabilityBlocks(type)" :key="block.id" :value="block.id">{{ block.name }}</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section class="mb-3" :aria-label="t('agents.primary.capabilitiesTitle')">
           <div class="row g-3">
             <div
-              v-for="capability in manifests"
+              v-for="capability in generalManifests"
               :key="capability.type"
               class="col-md-6 col-xxl-4"
               :data-capability="capability.type"

@@ -15,6 +15,7 @@ PUBLIC_TYPES = (
     "model",
     "system-prompt",
     "filesystem",
+    "filesystem-permissions",
     "todo-list",
     "custom-tool",
     "skill",
@@ -158,6 +159,22 @@ def block_cases(tmp_path: Path) -> list[tuple[str, dict]]:
                 "tool_configs": {
                     "read_file": {"visible": True},
                     "write_file": {"visible": True},
+                },
+            },
+        ),
+        (
+            "filesystem-permissions",
+            {
+                "name": "Workspace permissions",
+                "permissions": [
+                    {"path": "/workspace/**", "permission": "read-only"}
+                ],
+                "system_prompt_override": {"value": "Review files without changing them."},
+                "tool_overrides": {
+                    "write_file": {
+                        "visible": False,
+                        "description_override": None,
+                    }
                 },
             },
         ),

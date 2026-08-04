@@ -8,6 +8,7 @@ import {
   customToolAdapter,
   exceptionRetryAdapter,
   filesystemAdapter,
+  filesystemPermissionsAdapter,
   modelAdapter,
   outputModeAdapter,
   skillAdapter,
@@ -15,6 +16,7 @@ import {
   systemPromptAdapter,
   todoListAdapter,
   type FilesystemDefaults,
+  type FilesystemPermissionsDefaults,
   type ExceptionRetryDefaults,
   type OutputModeDefaults,
   type SkillDefaults,
@@ -28,6 +30,7 @@ import {
   CustomToolEditor,
   ExceptionRetryEditor,
   FilesystemEditor,
+  FilesystemPermissionsEditor,
   ModelEditor,
   OutputModeEditor,
   SkillEditor,
@@ -49,6 +52,10 @@ const filesystemDefaults: FilesystemDefaults = {
     { name: 'grep', configurable: true, visible: true, default_description: 'grep default' },
     { name: 'execute', configurable: false, visible: false, default_description: 'execute default' },
   ],
+}
+const filesystemPermissionsDefaults: FilesystemPermissionsDefaults = {
+  system_prompt: filesystemDefaults.system_prompt,
+  tools: filesystemDefaults.tools,
 }
 const outputDefaults: OutputModeDefaults = {
   events: [{ key: 'assistant_text', variables: ['message'] }],
@@ -121,6 +128,11 @@ describe('dedicated block editors', () => {
       mountEditor(FilesystemEditor, {
         modelValue: filesystemAdapter.blank(filesystemDefaults), defaults: filesystemDefaults,
       }),
+      mountEditor(FilesystemPermissionsEditor, {
+        modelValue: filesystemPermissionsAdapter.blank(filesystemPermissionsDefaults),
+        defaults: filesystemPermissionsDefaults,
+        filesystems: [],
+      }),
       mountEditor(SkillEditor, {
         modelValue: skillAdapter.blank(skillDefaults), defaults: skillDefaults,
       }),
@@ -135,8 +147,87 @@ describe('dedicated block editors', () => {
 
     expect(wrappers.map((wrapper) => wrapper.attributes('data-editor'))).toEqual([
       'model', 'custom-tool', 'custom-middleware', 'output-mode', 'exception-retry',
-      'filesystem', 'skill', 'system-prompt', 'subagent', 'todo-list',
+      'filesystem', 'filesystem-permissions', 'skill', 'system-prompt', 'subagent', 'todo-list',
     ])
+  })
+
+  it('round-trips filesystem permission rules and atomic overrides', () => {
+    const apiValue = {
+      id: 'permissions-id',
+      name: 'Review policy',
+      permissions: [
+        { path: '/source/**', permission: 'read-only' as const },
+        { path: '/private/**', permission: 'no-access' as const },
+      ],
+      system_prompt_override: { value: '' },
+      tool_overrides: {
+        write_file: { visible: false, description_override: 'Policy write tool' },
+      },
+    }
+
+    const draft = filesystemPermissionsAdapter.fromApi(
+      apiValue,
+      filesystemPermissionsDefaults,
+    )
+
+    expect(draft.system_prompt_override_enabled).toBe(true)
+    expect(draft.system_prompt_use_default).toBe(false)
+    expect(draft.system_prompt_value).toBe('')
+    expect(draft.tool_overrides.write_file?.override).toBe(true)
+    expect(filesystemPermissionsAdapter.toPayload(
+      draft,
+      filesystemPermissionsDefaults,
+    )).toEqual({
+      name: 'Review policy',
+      permissions: apiValue.permissions,
+      system_prompt_override: { value: '' },
+      tool_overrides: {
+        write_file: { visible: false, description_override: 'Policy write tool' },
+      },
+    })
+  })
+
+  it('quick-loads paths from multiple filesystems without adding duplicates', async () => {
+    const editor = mountEditor(FilesystemPermissionsEditor, {
+      modelValue: filesystemPermissionsAdapter.blank(filesystemPermissionsDefaults),
+      defaults: filesystemPermissionsDefaults,
+      filesystems: [
+        {
+          id: 'filesystem-a',
+          name: 'Filesystem A',
+          mapped_directories: [{ virtual_path: '/workspace/', local_path: 'C:/workspace' }],
+          virtual_directories: [{ virtual_path: '/drafts/', source_path: 'C:/drafts' }],
+          virtual_files: [{ virtual_path: '/README.md', source_path: 'C:/README.md' }],
+        },
+        {
+          id: 'filesystem-b',
+          name: 'Filesystem B',
+          mapped_directories: [{ virtual_path: '/other/', local_path: 'C:/other' }],
+        },
+      ],
+    })
+    const selects = editor.findAll('select')
+    await selects[0]?.setValue('filesystem-a')
+    await selects[1]?.setValue('no-access')
+    await editor.get('[data-action="import-filesystem-paths"]').trigger('click')
+    await editor.get('[data-action="import-filesystem-paths"]').trigger('click')
+
+    expect(editor.findAll('[data-testid="filesystem-permission-row"]')).toHaveLength(3)
+    expect(editor.findAll('[data-testid="filesystem-permission-row"] input').map(
+      (input) => (input.element as HTMLInputElement).value,
+    )).toEqual(['/workspace/**', '/drafts/**', '/README.md'])
+    expect(editor.findAll('[data-testid="filesystem-permission-row"] select').map(
+      (select) => (select.element as HTMLSelectElement).value,
+    )).toEqual(['no-access', 'no-access', 'no-access'])
+
+    await selects[0]?.setValue('filesystem-b')
+    await editor.get('[data-action="import-filesystem-paths"]').trigger('click')
+    expect(editor.findAll('[data-testid="filesystem-permission-row"]')).toHaveLength(4)
+    expect(editor.findAll('[data-testid="filesystem-permission-row"] input').at(-1)?.element)
+      .toHaveProperty('value', '/other/**')
+
+    await editor.findAll('[data-action="remove-filesystem-permission"]')[0]?.trigger('click')
+    expect(editor.findAll('[data-testid="filesystem-permission-row"]')).toHaveLength(3)
   })
 
   it('emits model queries and resource refresh requests instead of calling APIs', async () => {

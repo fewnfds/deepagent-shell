@@ -277,6 +277,10 @@ export const en: MessageSchema = {
       label: 'Filesystem',
       description: 'Disk mappings and request-scoped file space',
     },
+    'filesystem-permissions': {
+      label: 'Filesystem permissions',
+      description: 'Per-Agent path permissions, file tools, and filesystem prompt overrides',
+    },
     'todo-list': {
       label: 'Todo list',
       description: 'The write_todos planning tool and its prompt text',
@@ -370,6 +374,9 @@ export const en: MessageSchema = {
     system_prompt_override: 'System prompt override',
     tool_token_limit_before_evict: 'Tool result eviction threshold',
     tool_configs: 'Tool configuration',
+    permissions: 'Path permissions',
+    permission: 'Permission',
+    tool_overrides: 'Tool overrides',
     visible: 'Visible to model',
     description_override: 'Description override',
     tool_description_override: 'Tool description override',
@@ -545,6 +552,22 @@ export const en: MessageSchema = {
       systemPromptTitle: 'Filesystem prompt',
       toolsTitle: 'Built-in file tools',
       toolDescriptionLabel: '{tool} tool description',
+    },
+    filesystemPermissions: {
+      permissionsTitle: 'Path permissions',
+      emptyPermissions: 'No path permission has been added. Unmatched paths are read-write by default.',
+      importFilesystem: 'Load filesystem paths',
+      importPermission: 'Imported permission',
+      importAction: 'Append filesystem paths',
+      permission: {
+        'read-write': 'Read and write',
+        'read-only': 'Read only',
+        'no-access': 'No access',
+      },
+      systemPromptTitle: 'Filesystem prompt override',
+      useDefaultPrompt: 'Override with the Deep Agents default prompt',
+      toolsTitle: 'Atomic file tool overrides',
+      override: 'Override',
     },
     skill: {
       namePlaceholder: 'For example: Research Skills',
@@ -1058,6 +1081,9 @@ export const en: MessageSchema = {
       inheritPrimary: 'Same as Primary Agent',
       validationTitle: 'Primary Agent draft validation',
     },
+    workspace: {
+      title: 'File workspace',
+    },
     subagent: {
       identityTitle: 'Routing identity',
       roleName: 'Agent role name',
@@ -1077,6 +1103,7 @@ export const en: MessageSchema = {
     validatingDetail: 'Checking the current content.',
     unavailableDetail: 'The current content cannot be checked right now. You can still try to save; saving checks it again.',
     issueSummary: 'Configuration problems: {count}. Expand to view the full details',
+    warningSummary: '{count} non-blocking warnings. The configuration can still be saved',
     scope: {
       block: 'component configuration',
       primary: 'Primary Agent configuration',
@@ -1110,6 +1137,7 @@ export const en: MessageSchema = {
       referenceNotFound: 'Select a new {capability_type_label} configuration in the owning configuration.',
       requiredCapabilityMissing: 'Select a {capability_type_label} configuration in the owning configuration.',
       toolNameConflict: 'Disable one tool source or rename the custom tool so every model-visible tool name is unique.',
+      filesystemPermissionPathUnmatched: 'Check this Agent\'s current filesystem paths. If the rule is reserved for another filesystem, keep it and continue saving.',
       subagentNotFound: 'Select a Subagent entity that still exists.',
       subagentInvalid: 'Open the Subagent entity named {component_name} and correct its configuration, or select another entity.',
       subagentReferenceRequired: 'Reference at least one Subagent entity. If delegation is not needed, remove the synchronous Subagent capability.',
@@ -1159,6 +1187,7 @@ export const en: MessageSchema = {
         referenceNotFound: 'The previously selected {capability_type_label} configuration no longer exists.',
         requiredCapabilityMissing: 'No {capability_type_label} configuration is selected.',
         toolNameConflict: 'The {tool_name} tool comes from both {first_capability_type_label} and {second_capability_type_label}, so the model cannot distinguish them.',
+        filesystemPermissionPathUnmatched: 'Path permission {path} does not currently match a declared path in this Agent\'s filesystem.',
         subagentNotFound: 'The referenced Subagent entity no longer exists.',
         subagentInvalid: 'The Subagent entity named {component_name} contains invalid content.',
         subagentReferenceRequired: 'The synchronous Subagent capability is selected, but no usable Subagent entity is referenced.',

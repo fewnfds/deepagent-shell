@@ -9,6 +9,7 @@ const resolutionKeys: Record<string, string> = {
   'assembly.reference_not_found': 'referenceNotFound',
   'assembly.required_capability_missing': 'requiredCapabilityMissing',
   'assembly.tool_name_conflict': 'toolNameConflict',
+  'assembly.filesystem_permission_path_unmatched': 'filesystemPermissionPathUnmatched',
   'assembly.subagent_not_found': 'subagentNotFound',
   'assembly.subagent_invalid': 'subagentInvalid',
   'assembly.subagent_reference_required': 'subagentReferenceRequired',

@@ -1,6 +1,7 @@
 export { default as CustomMiddlewareEditor } from './CustomMiddlewareEditor.vue'
 export { default as CustomToolEditor } from './CustomToolEditor.vue'
 export { default as FilesystemEditor } from './FilesystemEditor.vue'
+export { default as FilesystemPermissionsEditor } from './FilesystemPermissionsEditor.vue'
 export { default as ModelEditor } from './ModelEditor.vue'
 export { default as OutputModeEditor } from './OutputModeEditor.vue'
 export { default as ExceptionRetryEditor } from './ExceptionRetryEditor.vue'

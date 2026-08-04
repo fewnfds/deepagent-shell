@@ -18,6 +18,7 @@ def test_health_catalog_and_readiness_are_small_and_current(
     assert set(catalog) == {"block_types", "editor_defaults"}
     assert set(catalog["editor_defaults"]) == {
         "filesystem",
+        "filesystem_permissions",
         "skill",
         "subagent",
         "todo_list",
@@ -25,7 +26,7 @@ def test_health_catalog_and_readiness_are_small_and_current(
         "exception_retry",
     }
     assert [item["type"] for item in catalog["block_types"]] == list(PUBLIC_TYPES)
-    assert [item["order"] for item in catalog["block_types"]] == list(range(1, 11))
+    assert [item["order"] for item in catalog["block_types"]] == list(range(1, 12))
     by_type = {item["type"]: item for item in catalog["block_types"]}
     assert set(by_type["model"]) == {
         "type",
@@ -85,6 +86,12 @@ def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) 
                 config["description_override"] is None
                 for config in created["tool_configs"].values()
             )
+        if block_type == "filesystem-permissions":
+            assert created["permissions"] == payload["permissions"]
+            assert created["system_prompt_override"] == payload[
+                "system_prompt_override"
+            ]
+            assert created["tool_overrides"]["write_file"]["visible"] is False
         if block_type == "skill":
             assert created["instruction_override"] is None
         if block_type == "subagent":
@@ -201,6 +208,26 @@ def test_basic_payload_shape_errors_are_rejected(tmp_path: Path, monkeypatch) ->
     assert empty_skill.status_code == 422, empty_skill.text
     assert removed_skill_switch.status_code == 422, removed_skill_switch.text
     assert removed_subagent_switch.status_code == 422, removed_subagent_switch.text
+
+
+def test_filesystem_permissions_reject_invalid_or_duplicate_paths(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = make_client(tmp_path, monkeypatch)
+
+    for permissions in (
+        [{"path": "relative/**", "permission": "read-only"}],
+        [{"path": "/workspace/~/secret", "permission": "no-access"}],
+        [
+            {"path": "/workspace/**", "permission": "read-only"},
+            {"path": "\\workspace\\**", "permission": "no-access"},
+        ],
+    ):
+        response = client.post(
+            "/api/blocks/filesystem-permissions",
+            json={"name": "Invalid permissions", "permissions": permissions},
+        )
+        assert response.status_code == 422, response.text
 
 
 def test_output_mode_rejects_invalid_filter_and_template_contracts(

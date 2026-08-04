@@ -9,11 +9,12 @@ from pydantic import ValidationError
 from agent_shell.capability_manifest import (
     CAPABILITY_BY_TYPE,
     CAPABILITY_MANIFESTS,
-    UNCONFIGURED_FILESYSTEM_TOOL_NAMES,
+    FILESYSTEM_TOOL_NAMES,
 )
 from agent_shell.contracts import (
     BLOCK_MODELS,
     CapabilityReference,
+    FilesystemToolConfigs,
     PrimaryAgentProfile,
     SubagentProfile,
 )
@@ -31,6 +32,9 @@ from agent_shell.validation.capability_assembly import (
     capability_assembly_issues,
 )
 from agent_shell.validation.contracts import report_from_validation_error
+from agent_shell.validation.filesystem_permissions import (
+    filesystem_permission_warnings,
+)
 from agent_shell.validation.models import ValidationIssue, ValidationReport
 from agent_shell.validation.subagent_references import subagent_reference_issues
 
@@ -643,16 +647,13 @@ class ConfigurationValidationService:
         owner_id: str,
         owner_name: str,
     ) -> ValidationIssue | None:
-        seen: dict[str, str] = (
-            {"task": "Deep Agents default harness"} if has_subagents else {}
-        )
-        if filesystem_mode == "default-shared":
-            seen.update(
-                {
-                    name: "Deep Agents default harness"
-                    for name in UNCONFIGURED_FILESYSTEM_TOOL_NAMES
-                }
-            )
+        del filesystem_mode
+        seen: dict[str, str] = {
+            name: "Deep Agents filesystem harness"
+            for name in self._visible_filesystem_tools(blocks)
+        }
+        if has_subagents:
+            seen["task"] = "Deep Agents default harness"
         for capability_type in references:
             manifest = CAPABILITY_BY_TYPE.get(capability_type)
             block = blocks.get(capability_type)
@@ -683,24 +684,7 @@ class ConfigurationValidationService:
                     if isinstance(tool_name, str) and tool_name:
                         names.append(tool_name)
             elif capability_type == "filesystem":
-                configs = block.get("tool_configs", {})
-                visible_names: list[str] = []
-                for name in names:
-                    if name == "read_file":
-                        visible_names.append(name)
-                        continue
-                    if name == "execute":
-                        continue
-                    config = configs.get(name) if isinstance(configs, dict) else None
-                    if name == "delete":
-                        if isinstance(config, dict) and config.get("visible") is True:
-                            visible_names.append(name)
-                    elif (
-                        not isinstance(config, dict)
-                        or config.get("visible") is not False
-                    ):
-                        visible_names.append(name)
-                names = visible_names
+                continue
             for name in names:
                 previous = seen.get(name)
                 if previous is not None:
@@ -723,6 +707,27 @@ class ConfigurationValidationService:
                     )
                 seen[name] = capability_type
         return None
+
+    @staticmethod
+    def _visible_filesystem_tools(
+        blocks: dict[str, dict[str, Any]],
+    ) -> tuple[str, ...]:
+        configs = FilesystemToolConfigs().model_dump(mode="json")
+        filesystem = blocks.get("filesystem")
+        if filesystem is not None and isinstance(filesystem.get("tool_configs"), dict):
+            configs.update(filesystem["tool_configs"])
+        permissions = blocks.get("filesystem-permissions")
+        overrides = permissions.get("tool_overrides", {}) if permissions else {}
+        if isinstance(overrides, dict):
+            for name, override in overrides.items():
+                if name in configs and isinstance(override, dict):
+                    configs[name] = override
+        return tuple(
+            name
+            for name in FILESYSTEM_TOOL_NAMES
+            if isinstance(configs.get(name), dict)
+            and configs[name].get("visible") is True
+        )
 
     def _subagent_profile(
         self,
@@ -1079,6 +1084,24 @@ class ConfigurationValidationService:
             )
         )
 
+        issues.extend(
+            filesystem_permission_warnings(
+                selected,
+                scope="primary",
+                owner_id=owner_id,
+                owner_name=owner_name,
+            )
+        )
+        for node in subagent_nodes.values():
+            issues.extend(
+                filesystem_permission_warnings(
+                    node.blocks,
+                    scope="subagent",
+                    owner_id=node.key,
+                    owner_name=node.name,
+                )
+            )
+
         report = ValidationReport(stage=stage, issues=tuple(issues))
         if not report.valid:
             return report, None
@@ -1094,9 +1117,10 @@ class ConfigurationValidationService:
         )
 
     @staticmethod
-    def _issue_key(issue: ValidationIssue) -> tuple[str, str, str, str, str]:
+    def _issue_key(issue: ValidationIssue) -> tuple[str, str, str, str, str, str]:
         return (
             issue.code,
+            issue.severity,
             issue.scope,
             issue.owner_id,
             issue.owner_name,

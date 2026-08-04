@@ -72,6 +72,16 @@ const filesystemManifest: CapabilityManifest = {
   subagent_policy: 'inherit',
 }
 
+const filesystemPermissionsManifest: CapabilityManifest = {
+  ...modelManifest,
+  type: 'filesystem-permissions',
+  terminology_key: 'filesystem-permissions',
+  order: 4,
+  subagent_overrideable: true,
+  required: false,
+  subagent_policy: 'inherit',
+}
+
 const outputModeManifest: CapabilityManifest = {
   ...modelManifest,
   type: 'output-mode',
@@ -311,6 +321,10 @@ describe('agent authoring pages', () => {
     expect(wrapper.text()).toContain('agents.subagent.roleName')
     expect(wrapper.findAll('[data-capability] input[type="radio"]')).toHaveLength(0)
     expect(wrapper.findAll('[data-capability] select')).toHaveLength(2)
+    expect(primaryPage.wrapper.get('[data-testid="primary-workspace-card"]')).toBeTruthy()
+    expect(wrapper.get('[data-testid="subagent-workspace-card"]')).toBeTruthy()
+    expect(primaryPage.wrapper.findAll('[data-testid^="primary-capability-filesystem"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-testid^="subagent-capability-filesystem"]')).toHaveLength(2)
     expect(primaryPage.wrapper.findAll('[data-capability] > .card')).toHaveLength(2)
     expect(wrapper.findAll('[data-capability] > .card')).toHaveLength(2)
     expect(primaryPage.wrapper.findAll('[data-capability] .badge').every((badge) => (
@@ -333,6 +347,7 @@ describe('agent authoring pages', () => {
           modelManifest,
           promptManifest,
           filesystemManifest,
+          filesystemPermissionsManifest,
           outputModeManifest,
           subagentManifest,
         ],
@@ -341,12 +356,19 @@ describe('agent authoring pages', () => {
     })
     const { wrapper } = await mountSubagentPage(api)
 
-    expect(wrapper.findAll('[data-capability]')).toHaveLength(5)
+    expect(wrapper.findAll('[data-capability]')).toHaveLength(4)
+    expect(wrapper.get('[data-testid="subagent-workspace-card"]')).toBeTruthy()
 
     const filesystem = wrapper.get('[data-testid="subagent-capability-filesystem"]')
     expect(filesystem.attributes('disabled')).toBeDefined()
     expect((filesystem.element as HTMLSelectElement).value).toBe('__inherit__')
     expect(filesystem.text()).toContain('agents.override.mode.inherit')
+
+    const permissions = wrapper.get('[data-testid="subagent-capability-filesystem-permissions"]')
+    expect(permissions.attributes('disabled')).toBeUndefined()
+    expect((permissions.element as HTMLSelectElement).value).toBe('__inherit__')
+    expect(permissions.find('option[value="__disabled__"]').exists()).toBe(true)
+    await permissions.setValue('00000000-0000-0000-0000-000000000002')
 
     const outputMode = wrapper.get('[data-testid="subagent-capability-output-mode"]')
     expect(outputMode.attributes('disabled')).toBeDefined()
@@ -365,11 +387,18 @@ describe('agent authoring pages', () => {
     await flushPromises()
     expect(api.createSubagent).toHaveBeenCalledWith(expect.objectContaining({
       settings: expect.objectContaining({
-        capability_overrides: [{
-          type: 'subagent',
-          mode: 'replace',
-          block_id: '00000000-0000-0000-0000-000000000002',
-        }],
+        capability_overrides: expect.arrayContaining([
+          {
+            type: 'filesystem-permissions',
+            mode: 'replace',
+            block_id: '00000000-0000-0000-0000-000000000002',
+          },
+          {
+            type: 'subagent',
+            mode: 'replace',
+            block_id: '00000000-0000-0000-0000-000000000002',
+          },
+        ]),
       }),
     }))
     await subagent.setValue('__disabled__')

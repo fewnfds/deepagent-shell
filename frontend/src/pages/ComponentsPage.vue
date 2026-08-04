@@ -33,6 +33,7 @@ import {
   type BlockDraftBase,
   type CustomMiddlewareCatalogItem,
   type CustomToolCatalogItem,
+  type FilesystemImportSource,
   type SkillCatalogItem,
   type ModelDraft,
 } from '@/domain/blocks'
@@ -41,6 +42,7 @@ import {
   CustomToolEditor,
   ExceptionRetryEditor,
   FilesystemEditor,
+  FilesystemPermissionsEditor,
   ModelEditor,
   OutputModeEditor,
   SkillEditor,
@@ -59,6 +61,7 @@ const editorComponents: Record<BlockType, Component> = {
   model: ModelEditor,
   'system-prompt': SystemPromptEditor,
   filesystem: FilesystemEditor,
+  'filesystem-permissions': FilesystemPermissionsEditor,
   'todo-list': TodoListEditor,
   'custom-tool': CustomToolEditor,
   skill: SkillEditor,
@@ -108,6 +111,7 @@ const customToolErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const customMiddlewares = ref<CustomMiddlewareCatalogItem[]>([])
 const customMiddlewareErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const skills = ref<SkillCatalogItem[]>([])
+const filesystems = ref<FilesystemImportSource[]>([])
 const skillErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const loadingResource = ref(false)
 
@@ -161,11 +165,17 @@ const editorProps = computed<Record<string, unknown>>(() => {
         loading: loadingResource.value,
       }
     case 'filesystem':
+    case 'filesystem-permissions':
     case 'todo-list':
     case 'output-mode':
     case 'exception-retry':
     case 'subagent':
-      return { defaults: activeDefaults.value }
+      return {
+        defaults: activeDefaults.value,
+        ...(activeType.value === 'filesystem-permissions'
+          ? { filesystems: filesystems.value }
+          : {}),
+      }
     default:
       return {}
   }
@@ -272,7 +282,12 @@ async function loadRoute(): Promise<void> {
   pageError.value = ''
   saveValidation.value = null
   try {
-    const listed = await managementApi.listBlocks(manifest.type)
+    const [listed, filesystemItems] = await Promise.all([
+      managementApi.listBlocks(manifest.type),
+      manifest.type === 'filesystem-permissions'
+        ? managementApi.listBlocks('filesystem')
+        : Promise.resolve([]),
+    ])
     if (sequence !== routeSequence) return
     const id = routeId()
     let loadedDraft: BlockDraftBase
@@ -290,6 +305,7 @@ async function loadRoute(): Promise<void> {
     }
     activeType.value = manifest.type
     records.value = listed
+    filesystems.value = filesystemItems as FilesystemImportSource[]
     draft.value = loadedDraft
     selectedId.value = loadedDraft.id
     markClean()

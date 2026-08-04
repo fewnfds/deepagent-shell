@@ -7,7 +7,11 @@ import stat
 import pytest
 from pydantic import ValidationError
 
-from agent_shell.contracts import FilesystemBlock, SkillBlock
+from agent_shell.contracts import (
+    FilesystemBlock,
+    FilesystemPermissionsBlock,
+    SkillBlock,
+)
 from agent_shell.runtime.capabilities import (
     DeepAgentsCapabilityError,
     build_deepagents_capabilities,
@@ -110,6 +114,88 @@ def test_filesystem_runtime_options_and_tool_switches_are_compiled(tmp_path: Pat
         "delete": "Delete a configured workspace path.",
     }
     assert middleware._tool_token_limit_before_evict == 4096
+
+
+def test_filesystem_permissions_atomically_override_tools_prompt_and_paths(
+    tmp_path: Path,
+) -> None:
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+    filesystem = FilesystemBlock.model_validate(
+        {
+            "name": "Workspace",
+            "system_prompt_override": "Base filesystem prompt",
+            "tool_configs": {
+                "ls": {
+                    "visible": True,
+                    "description_override": "Base list description",
+                },
+                "write_file": {"visible": True},
+            },
+        }
+    )
+    permissions = FilesystemPermissionsBlock.model_validate(
+        {
+            "name": "Reviewer",
+            "permissions": [
+                {"path": "/source/**", "permission": "read-only"},
+                {"path": "/output/**", "permission": "read-write"},
+                {"path": "/private/**", "permission": "no-access"},
+                {"path": "/skills/**", "permission": "no-access"},
+            ],
+            "system_prompt_override": {"value": "Policy prompt"},
+            "tool_overrides": {
+                "ls": {"visible": False, "description_override": None},
+                "write_file": {
+                    "visible": True,
+                    "description_override": "Policy write description",
+                },
+            },
+        }
+    )
+
+    capabilities = build_deepagents_capabilities(
+        filesystem,
+        None,
+        filesystem_permissions=permissions,
+        filesystem_mode="configured-shared",
+        skills_dir=skills_dir,
+    )
+    middleware = capabilities.middleware[0]
+
+    assert "ls" not in {tool.name for tool in middleware.tools}
+    assert middleware._custom_system_prompt == "Policy prompt"
+    assert middleware._custom_tool_descriptions == {
+        "write_file": "Policy write description"
+    }
+    rules = [
+        (tuple(rule.operations), tuple(rule.paths), rule.mode)
+        for rule in capabilities.permissions
+    ]
+    assert rules == [
+        (("read",), ("/skills/**",), "allow"),
+        (("write",), ("/skills/**",), "deny"),
+        (("read",), ("/source/**",), "allow"),
+        (("write",), ("/source/**",), "deny"),
+        (("read", "write"), ("/output/**",), "allow"),
+        (("read", "write"), ("/private/**",), "deny"),
+        (("read", "write"), ("/skills/**",), "deny"),
+    ]
+    assert middleware._permissions == list(capabilities.permissions)
+    from deepagents.middleware.filesystem import _check_fs_permission
+
+    assert (
+        _check_fs_permission(
+            list(capabilities.permissions), "read", "/skills/demo/SKILL.md"
+        )
+        == "allow"
+    )
+    assert (
+        _check_fs_permission(
+            list(capabilities.permissions), "write", "/skills/demo/SKILL.md"
+        )
+        == "deny"
+    )
 
 
 def test_request_seed_file_data_uses_string_content_for_text_and_binary(
@@ -332,7 +418,14 @@ def test_default_workspace_keeps_consumer_skill_overlays_read_only_and_isolated(
     )
 
     alpha_filesystem = alpha_capabilities.middleware[-1]
-    assert [tool.name for tool in alpha_filesystem.tools] == ["read_file"]
+    assert [tool.name for tool in alpha_filesystem.tools] == [
+        "ls",
+        "read_file",
+        "write_file",
+        "edit_file",
+        "glob",
+        "grep",
+    ]
     assert alpha_filesystem._tool_token_limit_before_evict is None
     assert isinstance(alpha_capabilities.backend.default, StateBackend)
     assert alpha_capabilities.backend is not beta_capabilities.backend

@@ -42,6 +42,7 @@ def test_manifest_matches_current_blocks_and_form_order() -> None:
         "model",
         "system-prompt",
         "filesystem",
+        "filesystem-permissions",
         "todo-list",
         "custom-tool",
         "skill",
@@ -57,6 +58,9 @@ def test_manifest_matches_current_blocks_and_form_order() -> None:
     assert manifests["filesystem"].subagent_overrideable is False
     assert manifests["filesystem"].subagent_policy == "inherit"
     assert manifests["filesystem"].required is False
+    assert manifests["filesystem-permissions"].subagent_overrideable is True
+    assert manifests["filesystem-permissions"].subagent_policy == "inherit"
+    assert manifests["filesystem-permissions"].required is False
     assert manifests["output-mode"].subagent_overrideable is False
     assert manifests["output-mode"].required is True
     assert manifests["output-mode"].subagent_policy == "top-level-only"
@@ -82,6 +86,7 @@ def test_manifest_rejects_invalid_catalog_structure() -> None:
 def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
     defaults = editor_defaults()
     filesystem = defaults["filesystem"]
+    filesystem_permissions = defaults["filesystem_permissions"]
     output = defaults["output_mode"]
 
     assert [tool["name"] for tool in filesystem["tools"]] == list(
@@ -95,6 +100,8 @@ def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
     assert tools["execute"]["configurable"] is False
     assert tools["execute"]["visible"] is False
     assert filesystem["system_prompt"] == ""
+    assert filesystem_permissions["system_prompt"] == ""
+    assert filesystem_permissions["tools"] == filesystem["tools"]
     assert defaults["subagent"]["system_prompt"] == ""
     assert set(defaults["subagent"]) == {"system_prompt", "tool_description"}
     assert set(defaults["todo_list"]) == {"system_prompt", "tool_description"}

@@ -31,14 +31,15 @@
 
 ## 两档运行模式
 
-- 未选择项目 Filesystem：使用请求级默认 StateBackend，模型只获得 `read_file`。是否选择 Skill 只改变
-  当前 Agent 可读的 `/skills/` 内容；普通 workspace 初始为空。
+- 未选择项目 Filesystem：使用请求级默认 StateBackend，普通 workspace 初始为空；模型默认获得 `ls`、
+  `read_file`、`write_file`、`edit_file`、`glob`、`grep`。
 - 选择项目 Filesystem：使用配置的共享 workspace，并按 `tool_configs` 开放 `ls`、`read_file`、
   `write_file`、`edit_file`、`delete`、`glob`、`grep`。`read_file` 固定可见；`execute` 固定不可见；
   `delete` 默认关闭。
 
 同一次请求中的 Primary 与同步 Subagent 共享普通 StateBackend、初始文件和 mapped routes；Subagent settings
-不能单独替换文件系统。每个 Agent 的 `/skills/` 仍按最终 Skill 选择建立只读视图。
+不能单独替换文件系统。每个 Agent 的 `/skills/` 仍按最终 Skill 选择建立只读视图。需要让不同 Agent 对共享
+workspace 使用不同路径权限、文件工具或文件系统提示词时，另行选择[文件系统权限](filesystem-permissions-config.md)。
 
 ## 来源类型
 
@@ -52,6 +53,7 @@
 
 `system_prompt_override=null` 使用当前 Deep Agents 默认行为；工具 `description_override=null` 保留默认说明。
 `tool_token_limit_before_evict` 为正整数或 `null`，`null` 关闭大工具结果卸载。
+没有装配文件系统权限时，路径默认可读写，文件系统组件中的提示词和工具配置直接生效。
 
 虚拟来源会在每个新请求中重新完整读取，当前没有单文件、展开文件数或总字节配额。不要选择依赖缓存、
 构建产物、媒体目录或其他大型路径。并行 Subagent 不应同时修改同一临时文件。

@@ -579,6 +579,67 @@ class FilesystemToolConfigs(BaseModel):
     )
 
 
+class FilesystemToolOverrides(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    ls: FilesystemToolConfig | None = None
+    read_file: RequiredFilesystemToolConfig | None = None
+    write_file: FilesystemToolConfig | None = None
+    edit_file: FilesystemToolConfig | None = None
+    delete: OptionalFilesystemToolConfig | None = None
+    glob: FilesystemToolConfig | None = None
+    grep: FilesystemToolConfig | None = None
+    execute: ExecuteFilesystemToolConfig | None = None
+
+
+FilesystemPermissionValue = Literal["read-write", "read-only", "no-access"]
+
+
+class FilesystemPermissionEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    path: VirtualPath
+    permission: FilesystemPermissionValue
+
+    @field_validator("path")
+    @classmethod
+    def validate_path(cls, value: str) -> str:
+        value = value.replace("\\", "/")
+        if not value.startswith("/"):
+            raise ValueError("permission path must start with /")
+        if any(part == ".." for part in value.split("/")):
+            raise ValueError("permission path must not contain ..")
+        if any(part == "~" for part in value.split("/")):
+            raise ValueError("permission path must not contain ~")
+        if "\x00" in value:
+            raise ValueError("permission path must not contain NUL")
+        return value
+
+
+class FilesystemSystemPromptOverride(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
+
+    value: PromptOverrideText | None = None
+
+
+class FilesystemPermissionsBlock(StrictBlock):
+    permissions: list[FilesystemPermissionEntry] = Field(
+        default_factory=list,
+        max_length=500,
+    )
+    system_prompt_override: FilesystemSystemPromptOverride | None = None
+    tool_overrides: FilesystemToolOverrides = Field(
+        default_factory=FilesystemToolOverrides
+    )
+
+    @model_validator(mode="after")
+    def validate_permissions(self) -> "FilesystemPermissionsBlock":
+        paths = [item.path for item in self.permissions]
+        if len(paths) != len(set(paths)):
+            raise ValueError("permission paths must be unique")
+        return self
+
+
 class FilesystemBlock(StrictBlock):
     mapped_directories: list[MappedDirectory] = Field(default_factory=list, max_length=100)
     virtual_directories: list[VirtualDirectorySource] = Field(default_factory=list, max_length=100)
@@ -873,6 +934,7 @@ BLOCK_MODELS: dict[str, type[StrictBlock]] = {
     "model": ModelBlock,
     "system-prompt": SystemPromptBlock,
     "filesystem": FilesystemBlock,
+    "filesystem-permissions": FilesystemPermissionsBlock,
     "todo-list": TodoListBlock,
     "custom-tool": CustomToolBlock,
     "skill": SkillBlock,

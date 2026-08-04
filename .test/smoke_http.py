@@ -25,6 +25,7 @@ CAPABILITY_TYPES = (
     "model",
     "system-prompt",
     "filesystem",
+    "filesystem-permissions",
     "todo-list",
     "custom-tool",
     "skill",
@@ -118,6 +119,12 @@ def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> d
             },
         },
         "filesystem": {"name": name},
+        "filesystem-permissions": {
+            "name": name,
+            "permissions": [
+                {"path": "/workspace/**", "permission": "read-only"}
+            ],
+        },
         "skill": {"name": name, "skills": ["fixture-skill"]},
         "system-prompt": {"name": name, "system_prompt": "Smoke prompt."},
         "subagent": {"name": name},

@@ -5,18 +5,19 @@ from dataclasses import dataclass
 from typing import Literal
 
 
-UNCONFIGURED_FILESYSTEM_TOOL_NAMES = (
+DEFAULT_FILESYSTEM_TOOL_NAMES = (
+    "ls",
     "read_file",
+    "write_file",
+    "edit_file",
+    "glob",
+    "grep",
 )
 
 FILESYSTEM_TOOL_NAMES = (
-    "ls",
-    *UNCONFIGURED_FILESYSTEM_TOOL_NAMES,
-    "write_file",
-    "edit_file",
+    *DEFAULT_FILESYSTEM_TOOL_NAMES[:4],
     "delete",
-    "glob",
-    "grep",
+    *DEFAULT_FILESYSTEM_TOOL_NAMES[4:],
     "execute",
 )
 
@@ -68,38 +69,43 @@ CAPABILITY_MANIFESTS = (
         tool_names=FILESYSTEM_TOOL_NAMES,
     ),
     CapabilityManifest(
-        "todo-list", "todo-list", "待办计划", 4,
+        "filesystem-permissions", "filesystem-permissions", "文件系统权限", 4,
+        "shield-lock", "filesystem_permissions",
+        subagent_overrideable=True, required=False, subagent_policy="inherit",
+    ),
+    CapabilityManifest(
+        "todo-list", "todo-list", "待办计划", 5,
         "check", "todo_list",
         subagent_overrideable=True, required=False, subagent_policy="inherit",
         tool_names=("write_todos",),
     ),
     CapabilityManifest(
-        "custom-tool", "custom-tool", "自定义工具", 5,
+        "custom-tool", "custom-tool", "自定义工具", 6,
         "wrench", "custom_tool",
         subagent_overrideable=True, required=False, subagent_policy="inherit",
     ),
     CapabilityManifest(
-        "skill", "skill", "技能", 6, "sparkles",
+        "skill", "skill", "技能", 7, "sparkles",
         "skill", subagent_overrideable=True, required=False,
         subagent_policy="inherit",
     ),
     CapabilityManifest(
-        "custom-middleware", "middleware", "自定义中间件", 7,
+        "custom-middleware", "middleware", "自定义中间件", 8,
         "layers", "custom_middleware",
         subagent_overrideable=True, required=False, subagent_policy="inherit",
     ),
     CapabilityManifest(
-        "output-mode", "output-policy", "输出模式", 8,
+        "output-mode", "output-policy", "输出模式", 9,
         "braces", "output_mode",
         subagent_overrideable=False, required=True, subagent_policy="top-level-only",
     ),
     CapabilityManifest(
-        "exception-retry", "exception-retry", "异常重试", 9,
+        "exception-retry", "exception-retry", "异常重试", 10,
         "arrow-repeat", "exception_retry",
         subagent_overrideable=True, required=False, subagent_policy="inherit",
     ),
     CapabilityManifest(
-        "subagent", "delegation", "委派能力", 10,
+        "subagent", "delegation", "委派能力", 11,
         "users", "subagent",
         subagent_overrideable=True, required=False, subagent_policy="inherit",
     ),

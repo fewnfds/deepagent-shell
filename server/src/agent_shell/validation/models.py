@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Literal
 
 from agent_shell.localization import (
     MessageArg,
@@ -27,6 +28,7 @@ class ValidationIssue:
     owner_id: str = ""
     owner_name: str = ""
     owner_type: str = ""
+    severity: Literal["error", "warning"] = "error"
 
     def __post_init__(self) -> None:
         # owner/path values can originate from a draft or historical payload.
@@ -61,6 +63,7 @@ class ValidationIssue:
             "message": self.message,
             "message_key": self.message_key,
             "message_args": dict(self.message_args),
+            "severity": self.severity,
         }
         if self.owner_type:
             payload["owner_type"] = self.owner_type
@@ -74,7 +77,7 @@ class ValidationReport:
 
     @property
     def valid(self) -> bool:
-        return not self.issues
+        return not any(issue.severity == "error" for issue in self.issues)
 
     def as_dict(self) -> dict[str, object]:
         return {

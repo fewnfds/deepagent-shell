@@ -10,7 +10,12 @@ from pydantic import SecretStr
 from agent_shell import __version__
 from agent_shell.automation.runtime import AutomationRuntime
 from agent_shell.capability_manifest import FILESYSTEM_TOOL_NAMES
-from agent_shell.contracts import FilesystemBlock, OutputModeBlock, SkillBlock
+from agent_shell.contracts import (
+    FilesystemBlock,
+    FilesystemPermissionsBlock,
+    OutputModeBlock,
+    SkillBlock,
+)
 from agent_shell.provider_http import PROVIDER_HTTP_TIMEOUT, ProviderHttpClients
 from agent_shell.provider_secrets import ProviderCredentialError, ProviderSecretResolver
 from agent_shell.runtime.capabilities import (
@@ -287,6 +292,7 @@ class AgentBuilder:
         initial_files: dict[str, Any] = {}
         skill_sources: tuple[str, ...] = ()
         filesystem = selected_blocks.get("filesystem")
+        filesystem_permissions = selected_blocks.get("filesystem-permissions")
         skill = selected_blocks.get("skill")
         try:
             filesystem_block = (
@@ -307,6 +313,17 @@ class AgentBuilder:
                 if skill is not None
                 else None
             )
+            filesystem_permissions_block = (
+                FilesystemPermissionsBlock.model_validate(
+                    {
+                        key: value
+                        for key, value in filesystem_permissions.items()
+                        if key != "id"
+                    }
+                )
+                if filesystem_permissions is not None
+                else None
+            )
             selected_skill_names = (
                 list(skill_block.skills) if skill_block is not None else []
             )
@@ -320,6 +337,7 @@ class AgentBuilder:
             deepagents = build_deepagents_capabilities(
                 filesystem_block,
                 skill_block,
+                filesystem_permissions=filesystem_permissions_block,
                 filesystem_mode=filesystem_mode,
                 skills_dir=effective_skills_dir,
                 workspace=workspace,
@@ -425,6 +443,7 @@ class AgentBuilder:
             backend=backend,
             initial_files=initial_files,
             skill_sources=skill_sources,
+            permissions=deepagents.permissions,
             workspace=deepagents.workspace,
         )
 
@@ -519,6 +538,8 @@ class AgentBuilder:
             constructor["response_format"] = materialized.response_format
         if materialized.backend is not None:
             constructor["backend"] = materialized.backend
+        if materialized.permissions:
+            constructor["permissions"] = list(materialized.permissions)
         if materialized.skill_sources:
             constructor["skills"] = list(materialized.skill_sources)
 

@@ -384,6 +384,10 @@ _EDITOR_DEFAULTS = {
         ].default,
         "tools": _filesystem_tools(),
     },
+    "filesystem_permissions": {
+        "system_prompt": FILESYSTEM_EDITOR_SYSTEM_PROMPT,
+        "tools": _filesystem_tools(),
+    },
     "skill": {
         "system_prompt": SKILLS_SYSTEM_PROMPT,
         "required_placeholders": [f"{{{field}}}" for field in SKILL_PROMPT_FIELDS],

@@ -89,6 +89,12 @@ def block_payload(capability_type: str, name: str) -> dict:
             },
         },
         "filesystem": {"name": name},
+        "filesystem-permissions": {
+            "name": name,
+            "permissions": [
+                {"path": "/workspace/**", "permission": "read-only"}
+            ],
+        },
         "skill": {"name": name, "skills": ["fixture-skill"]},
         "system-prompt": {"name": name, "system_prompt": "Fixture prompt."},
         "subagent": {"name": name},

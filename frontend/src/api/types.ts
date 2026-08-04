@@ -4,6 +4,7 @@ export type BlockType =
   | 'model'
   | 'system-prompt'
   | 'filesystem'
+  | 'filesystem-permissions'
   | 'todo-list'
   | 'custom-tool'
   | 'skill'
@@ -269,6 +270,7 @@ export interface ValidationIssue {
   message: string
   message_key: string
   message_args: Record<string, JsonPrimitive>
+  severity: 'error' | 'warning'
 }
 
 export interface ValidationReport {

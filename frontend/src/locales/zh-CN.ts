@@ -275,6 +275,10 @@ export const zhCN = {
       label: '文件系统',
       description: '磁盘映射与请求级临时文件空间',
     },
+    'filesystem-permissions': {
+      label: '文件系统权限',
+      description: '按 Agent 覆写路径权限、文件工具和文件系统提示词',
+    },
     'todo-list': {
       label: '待办计划',
       description: 'write_todos 计划工具及其提示文本',
@@ -368,6 +372,9 @@ export const zhCN = {
     system_prompt_override: '系统提示词覆写',
     tool_token_limit_before_evict: '工具结果卸载阈值',
     tool_configs: '工具配置',
+    permissions: '路径权限',
+    permission: '权限',
+    tool_overrides: '工具覆写',
     visible: '模型可见',
     description_override: '说明覆写',
     tool_description_override: '工具说明覆写',
@@ -543,6 +550,22 @@ export const zhCN = {
       systemPromptTitle: '文件系统提示词',
       toolsTitle: '内置文件工具',
       toolDescriptionLabel: '{tool} 工具说明',
+    },
+    filesystemPermissions: {
+      permissionsTitle: '路径权限',
+      emptyPermissions: '尚未添加路径权限；未匹配的路径默认可读写。',
+      importFilesystem: '加载文件系统路径',
+      importPermission: '载入后的权限',
+      importAction: '追加文件系统路径',
+      permission: {
+        'read-write': '可读写',
+        'read-only': '只读',
+        'no-access': '不可访问',
+      },
+      systemPromptTitle: '文件系统提示词覆写',
+      useDefaultPrompt: '覆写为 Deep Agents 默认提示词',
+      toolsTitle: '文件工具原子覆写',
+      override: '覆写',
     },
     skill: {
       namePlaceholder: '例如：研究 Skill 集',
@@ -1056,6 +1079,9 @@ export const zhCN = {
       inheritPrimary: '与主代理相同',
       validationTitle: 'Primary Agent 草稿校验',
     },
+    workspace: {
+      title: '文件工作区',
+    },
     subagent: {
       identityTitle: '路由身份',
       roleName: '代理角色名',
@@ -1075,6 +1101,7 @@ export const zhCN = {
     validatingDetail: '正在检查当前内容。',
     unavailableDetail: '暂时无法检查当前内容。你仍可尝试保存，保存时会再次检查。',
     issueSummary: '{count} 个问题，展开查看完整内容',
+    warningSummary: '{count} 个非阻塞警告，配置仍可保存',
     scope: {
       block: '组件配置',
       primary: 'Primary Agent 配置',
@@ -1108,6 +1135,7 @@ export const zhCN = {
       referenceNotFound: '在所属配置中重新选择一份{capability_type_label}配置。',
       requiredCapabilityMissing: '在所属配置中选择一份{capability_type_label}配置。',
       toolNameConflict: '关闭其中一个工具来源，或修改自定义工具名称，确保模型看到的工具名不重复。',
+      filesystemPermissionPathUnmatched: '检查当前 Agent 的文件系统路径；如果该规则是为其他文件系统预留的，可以保留并继续保存。',
       subagentNotFound: '重新选择一个仍然存在的 Subagent 实体。',
       subagentInvalid: '打开 {component_name} 对应的 Subagent 实体并修正配置，或改选其他实体。',
       subagentReferenceRequired: '至少引用一个 Subagent 实体；如果不需要委派，请移除同步 Subagent 能力。',
@@ -1157,6 +1185,7 @@ export const zhCN = {
         referenceNotFound: '此前选择的{capability_type_label}配置已不存在。',
         requiredCapabilityMissing: '尚未选择{capability_type_label}配置。',
         toolNameConflict: '{tool_name}工具同时来自{first_capability_type_label}和{second_capability_type_label}，模型无法区分。',
+        filesystemPermissionPathUnmatched: '路径权限 {path} 当前没有命中此 Agent 文件系统中声明的路径。',
         subagentNotFound: '引用的 Subagent 实体已不存在。',
         subagentInvalid: '{component_name} 对应的 Subagent 实体包含无效内容。',
         subagentReferenceRequired: '已选择同步 Subagent 能力，但还没有引用可用的 Subagent 实体。',

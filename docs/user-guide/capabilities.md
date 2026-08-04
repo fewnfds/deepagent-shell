@@ -1,12 +1,13 @@
 # 创建组件
 
-【组件】提供十类可复用配置。保存组件后，还要在 Primary 或 Subagent 实体 settings 中引用才会参与运行。
+【组件】提供十一类可复用配置。保存组件后，还要在 Primary 或 Subagent 实体 settings 中引用才会参与运行。
 
 | 组件 | 用途 | Primary 要求 | Subagent 策略 |
 | --- | --- | --- | --- |
 | 模型 | Provider、模型名、凭据和请求设置 | 必选 | 继承或替换 |
 | 系统提示词 | 基础 system prompt | 可选 | 继承、替换或关闭 |
 | 文件系统 | workspace、映射、临时文件和文件工具 | 可选 | 全请求共享，不单独覆写 |
+| 文件系统权限 | 路径权限与文件工具、提示词覆写 | 可选 | 继承、替换或关闭 |
 | 待办计划 | `write_todos` 与规划提示 | 可选 | 继承、替换或关闭 |
 | 自定义工具 | 选择 `data/resources/custom_tools/` 中的工具 | 可选 | 继承、替换或关闭 |
 | Skill | 选择 `data/resources/skills/` 中的 Skill | 可选 | 继承、替换或关闭 |

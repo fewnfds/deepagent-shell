@@ -351,6 +351,7 @@
           "src/editors/CustomMiddlewareEditor.vue",
           "src/editors/ExceptionRetryEditor.vue",
           "src/editors/FilesystemEditor.vue",
+          "src/editors/FilesystemPermissionsEditor.vue",
           "src/editors/ModelEditor.vue",
           "src/editors/OutputModeEditor.vue",
           "src/pages/AutomationPage.vue",

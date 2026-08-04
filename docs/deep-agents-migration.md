@@ -24,8 +24,8 @@ child 输入；它不在 model/tool 循环中改写消息、判断下一步、�
 - Primary 必须有模型与输出模式；
 - 同步 child 以持久 Subagent 实体定义；父级只保存实体 UUID 引用，Shell 把实体的 `name`、`description` 和
   唯一编译 runnable 投影为 `CompiledSubAgent`；diamond 和显式 cycle 复用同一 profile ID 对应的 runnable；
-- 文件 workspace 的可见工具由最终 Filesystem/Skill 组合决定；配置的 workspace 在同一请求的代理树中
-  共享，Skill namespace 按 Agent 只读隔离；
+- 文件 workspace 在同一请求的代理树中共享；最终 Filesystem 与按 Agent 解析的 filesystem-permissions
+  决定提示词、内置文件工具和 `permissions=`，Skill namespace 仍按 Agent 只读隔离；
 - Subagent 的能力按 inherit/replace/disabled 解析，模型必须保留，输出模式只属于 Primary；
 - 事件/定时工作流不是 Deep Agents Middleware。`request_prepare` 在构造前运行，
   `subagent_before_invoke` 在每次同步 child 调用前运行；生命周期任务只更新 Shell 变量或外部/mapped 文件。

@@ -67,6 +67,19 @@ const obsoleteOverrides = computed(() => {
     .map((override, index) => ({ index, override }))
     .filter(({ override }) => !supported.has(override.type))
 })
+const workspaceCapabilityTypes = new Set<CapabilityType>([
+  'filesystem',
+  'filesystem-permissions',
+])
+const generalManifests = computed(() => manifests.value.filter(
+  (manifest) => !workspaceCapabilityTypes.has(manifest.type),
+))
+const filesystemManifest = computed(() => manifests.value.find(
+  (manifest) => manifest.type === 'filesystem',
+))
+const filesystemPermissionsManifest = computed(() => manifests.value.find(
+  (manifest) => manifest.type === 'filesystem-permissions',
+))
 
 const { markClean, runAfterDiscard } = useUnsavedChanges(
   () => subagentPayload(form.value),
@@ -373,10 +386,40 @@ watch(
           </ul>
         </section>
 
+        <section class="card mb-3" :aria-label="t('agents.workspace.title')" data-testid="subagent-workspace-card">
+          <header class="card-header">
+            <h2 class="card-title h5 mb-0 fw-semibold">{{ t('agents.workspace.title') }}</h2>
+          </header>
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label" for="subagent-capability-filesystem">{{ t('capabilities.filesystem.label') }}</label>
+                <select id="subagent-capability-filesystem" class="form-select" data-testid="subagent-capability-filesystem" disabled>
+                  <option :value="filesystemManifest?.subagent_policy === 'inherit' ? INHERIT_VALUE : INVALID_VALUE">{{ filesystemManifest?.subagent_policy === 'inherit' ? t('agents.override.mode.inherit') : t('agents.override.mode.invalid') }}</option>
+                </select>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="subagent-capability-filesystem-permissions">{{ t('capabilities.filesystem-permissions.label') }}</label>
+                <select
+                  id="subagent-capability-filesystem-permissions"
+                  class="form-select"
+                  data-testid="subagent-capability-filesystem-permissions"
+                  :value="selectionValue('filesystem-permissions')"
+                  @change="filesystemPermissionsManifest && updateSelection(filesystemPermissionsManifest, ($event.target as HTMLSelectElement).value)"
+                >
+                  <option :value="INHERIT_VALUE">{{ t('agents.override.mode.inherit') }}</option>
+                  <option :value="DISABLED_VALUE">{{ t('agents.override.mode.disabled') }}</option>
+                  <option v-for="block in capabilityBlocks('filesystem-permissions')" :key="block.id" :value="block.id">{{ block.name }}</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section class="mb-3" :aria-label="t('agents.override.capabilitiesTitle')">
           <div class="row g-3">
             <div
-              v-for="capability in manifests"
+              v-for="capability in generalManifests"
               :key="capability.type"
               class="col-md-6 col-xxl-4"
               :data-capability="capability.type"

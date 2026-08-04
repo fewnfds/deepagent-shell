@@ -26,6 +26,7 @@ Subagent 页面保存可复用的完整 Subagent 实体。实体只有被 Primar
 - `disabled` 不带 `block_id`；
 - 模型可继承或替换，不能关闭；
 - 文件系统由整棵请求代理树共享，不参与覆写；
+- 文件系统权限可以继承、替换或关闭；关闭表示使用无路径限制、无额外覆写的默认策略；
 - 输出模式只属于顶层 Primary；
 - 其余可覆写组件支持继承、替换或关闭。
 
@@ -39,5 +40,5 @@ Subagent 页面保存可复用的完整 Subagent 实体。实体只有被 Primar
 分别执行一次该实体的 `subagent_before_invoke`，并使用新的独立消息副本。
 
 同一次请求中的 Primary 与同步 Subagent 共享普通 workspace 和 mapped routes。每个 Agent 根据自己的
-最终 Skill 配置获得只读 `/skills/` 视图。请求结束后，内存 workspace 不保留；mapped directory 的
-磁盘写入按本地文件系统持久化。
+最终文件系统权限获得路径访问和文件工具，再根据最终 Skill 配置获得只读 `/skills/` 视图。请求结束后，
+内存 workspace 不保留；mapped directory 的磁盘写入按本地文件系统持久化。

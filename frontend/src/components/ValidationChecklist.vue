@@ -16,22 +16,30 @@ const issuePresentation = useValidationIssuePresentation()
 
 const validationStatus = computed(() => props.validation.status)
 const issueCount = computed(() => props.validation.report?.issues.length ?? 0)
+const warningCount = computed(() => props.validation.report?.issues.filter(
+  (issue) => issue.severity === 'warning',
+).length ?? 0)
+const hasWarnings = computed(() => warningCount.value > 0)
 </script>
 
 <template>
   <section
-    v-if="validationStatus === 'invalid' || validationStatus === 'unavailable'"
-    class="card card-outline card-danger mb-3"
+    v-if="validationStatus === 'invalid' || validationStatus === 'unavailable' || hasWarnings"
+    class="card card-outline mb-3"
     aria-live="polite"
     :data-status="validationStatus"
     data-testid="validation-checklist"
   >
     <header class="card-header d-flex align-items-center gap-2">
-      <i class="bi bi-exclamation-triangle text-danger" aria-hidden="true" />
+      <i v-if="validationStatus === 'invalid' || validationStatus === 'unavailable'" class="bi bi-exclamation-triangle text-danger" aria-hidden="true" />
+      <i v-else class="bi bi-info-circle" aria-hidden="true" />
       <div class="lh-sm">
         <h2 class="h5 mb-1 fw-semibold">{{ title }}</h2>
         <p v-if="validationStatus === 'invalid'" class="small text-body-secondary mb-0">
           {{ t('validation.issueSummary', { count: issueCount }) }}
+        </p>
+        <p v-else-if="hasWarnings" class="small text-body-secondary mb-0">
+          {{ t('validation.warningSummary', { count: warningCount }) }}
         </p>
       </div>
     </header>

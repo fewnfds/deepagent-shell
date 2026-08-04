@@ -20,6 +20,37 @@ function mountChecklist(validation: Record<string, unknown>) {
 }
 
 describe('ValidationChecklist', () => {
+  it('renders non-blocking warnings while the report remains valid', () => {
+    const wrapper = mountChecklist({
+      status: 'valid',
+      error: '',
+      report: {
+        valid: true,
+        stage: 'draft_validation',
+        issues: [{
+          code: 'assembly.filesystem_permission_path_unmatched',
+          scope: 'primary',
+          owner_id: 'primary-id',
+          owner_name: 'Writer',
+          path: 'capability_refs.filesystem-permissions.permissions[0].path',
+          message: 'raw warning',
+          message_key: 'validation.issue.assembly.filesystemPermissionPathUnmatched',
+          message_args: { path: '/archive/**' },
+          severity: 'warning',
+        }],
+      },
+    })
+
+    expect(wrapper.get('[data-testid="validation-checklist"]').attributes('data-status'))
+      .toBe('valid')
+    expect(wrapper.get('header').text()).toContain('1 个非阻塞警告，配置仍可保存')
+    expect(wrapper.get('[data-testid="validation-reason"]').text())
+      .toContain('路径权限 /archive/** 当前没有命中')
+    expect(wrapper.get('[data-testid="validation-resolution"]').text())
+      .toContain('可以保留并继续保存')
+    expect(wrapper.text()).not.toContain('raw warning')
+  })
+
   it('shows a compact success title and icon without a redundant status badge', () => {
     const wrapper = mountChecklist({
       status: 'valid',

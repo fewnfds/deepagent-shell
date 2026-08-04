@@ -183,6 +183,8 @@ class SubagentGraphCompiler:
             constructor["response_format"] = child.response_format
         if child.backend is not None:
             constructor["backend"] = child.backend
+        if child.permissions:
+            constructor["permissions"] = list(child.permissions)
         if child.skill_sources:
             constructor["skills"] = list(child.skill_sources)
         if compiled_children:
