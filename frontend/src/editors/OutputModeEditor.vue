@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { LteButton, LteInput, LteTextarea } from '@adminlte/vue'
+import { LteButton, LteTextarea } from '@adminlte/vue'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -72,7 +72,7 @@ function variableToken(variable: string): string {
             </div>
             <div class="simple-mapping-secondary">
               <label class="visually-hidden" :for="`output-filter-value-${index}`">{{ t('fields.value') }}</label>
-              <LteInput :id="`output-filter-value-${index}`" v-model="mapping.value" />
+              <input :id="`output-filter-value-${index}`" v-model="mapping.value" class="form-control">
             </div>
             <div class="simple-mapping-actions">
               <LteButton :aria-label="t('editors.common.remove')" :title="t('editors.common.remove')" size="sm" theme="danger" type="button" @click="draft.filter_mappings.splice(index, 1)"><i class="bi bi-trash" aria-hidden="true" /></LteButton>

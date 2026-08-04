@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { LteButton, LteInput, LteTextarea } from '@adminlte/vue'
+import { LteButton, LteTextarea } from '@adminlte/vue'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -100,7 +100,7 @@ function importFilesystemPaths(): void {
           <div v-for="(entry, index) in draft.permissions" :key="index" class="simple-mapping-row" data-testid="filesystem-permission-row">
             <div class="simple-mapping-primary">
               <label class="visually-hidden" :for="`filesystem-permission-path-${index}`">{{ t('fields.path') }}</label>
-              <LteInput :id="`filesystem-permission-path-${index}`" v-model="entry.path" />
+              <input :id="`filesystem-permission-path-${index}`" v-model="entry.path" class="form-control">
             </div>
             <div class="simple-mapping-secondary">
               <label class="visually-hidden" :for="`filesystem-permission-value-${index}`">{{ t('fields.permission') }}</label>

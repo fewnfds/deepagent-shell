@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {
   LteButton,
-  LteInput,
   LteTextarea,
 } from '@adminlte/vue'
 import { computed } from 'vue'
@@ -43,11 +42,11 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
           <div v-for="(item, index) in draft.mapped_directories" :key="index" class="simple-mapping-row" data-testid="mapped-directory-row">
             <div class="simple-mapping-primary">
               <label class="visually-hidden" :for="`mapped-directory-virtual-path-${index}`">{{ t('fields.virtual_path') }}</label>
-              <LteInput :id="`mapped-directory-virtual-path-${index}`" v-model="item.virtual_path" />
+              <input :id="`mapped-directory-virtual-path-${index}`" v-model="item.virtual_path" class="form-control">
             </div>
             <div class="simple-mapping-secondary">
               <label class="visually-hidden" :for="`mapped-directory-local-path-${index}`">{{ t('fields.local_path') }}</label>
-              <LteInput :id="`mapped-directory-local-path-${index}`" v-model="item.local_path" />
+              <input :id="`mapped-directory-local-path-${index}`" v-model="item.local_path" class="form-control">
             </div>
             <div class="simple-mapping-actions">
               <LteButton :aria-label="t('editors.common.remove')" :title="t('editors.common.remove')" size="sm" theme="danger" type="button" @click="draft.mapped_directories.splice(index, 1)"><i class="bi bi-trash" aria-hidden="true" /></LteButton>
@@ -76,11 +75,11 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
           <div v-for="(item, index) in draft.virtual_directories" :key="index" class="simple-mapping-row" data-testid="virtual-directory-row">
             <div class="simple-mapping-primary">
               <label class="visually-hidden" :for="`virtual-directory-virtual-path-${index}`">{{ t('fields.virtual_path') }}</label>
-              <LteInput :id="`virtual-directory-virtual-path-${index}`" v-model="item.virtual_path" />
+              <input :id="`virtual-directory-virtual-path-${index}`" v-model="item.virtual_path" class="form-control">
             </div>
             <div class="simple-mapping-secondary">
               <label class="visually-hidden" :for="`virtual-directory-source-path-${index}`">{{ t('fields.source_path') }}</label>
-              <LteInput :id="`virtual-directory-source-path-${index}`" v-model="item.source_path" />
+              <input :id="`virtual-directory-source-path-${index}`" v-model="item.source_path" class="form-control">
             </div>
             <div class="simple-mapping-actions">
               <LteButton :aria-label="t('editors.common.remove')" :title="t('editors.common.remove')" size="sm" theme="danger" type="button" @click="draft.virtual_directories.splice(index, 1)"><i class="bi bi-trash" aria-hidden="true" /></LteButton>
@@ -109,11 +108,11 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
           <div v-for="(item, index) in draft.virtual_files" :key="index" class="simple-mapping-row" data-testid="virtual-file-row">
             <div class="simple-mapping-primary">
               <label class="visually-hidden" :for="`virtual-file-virtual-path-${index}`">{{ t('fields.virtual_path') }}</label>
-              <LteInput :id="`virtual-file-virtual-path-${index}`" v-model="item.virtual_path" />
+              <input :id="`virtual-file-virtual-path-${index}`" v-model="item.virtual_path" class="form-control">
             </div>
             <div class="simple-mapping-secondary">
               <label class="visually-hidden" :for="`virtual-file-source-path-${index}`">{{ t('fields.source_path') }}</label>
-              <LteInput :id="`virtual-file-source-path-${index}`" v-model="item.source_path" />
+              <input :id="`virtual-file-source-path-${index}`" v-model="item.source_path" class="form-control">
             </div>
             <div class="simple-mapping-actions">
               <LteButton :aria-label="t('editors.common.remove')" :title="t('editors.common.remove')" size="sm" theme="danger" type="button" @click="draft.virtual_files.splice(index, 1)"><i class="bi bi-trash" aria-hidden="true" /></LteButton>
