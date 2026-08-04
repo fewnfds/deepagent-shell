@@ -3,162 +3,130 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pydantic import ValidationError
-
-from agent_shell.automation.contracts import WORKFLOW_MODELS
 from agent_shell.automation.scripts import resolve_automation_script
 from agent_shell.registries.errors import ResourceScanError
-from agent_shell.validation.contracts import report_from_validation_error
-from agent_shell.validation.models import ValidationIssue, ValidationReport
+from agent_shell.validation.models import ValidationIssue
 
 
 class AutomationValidationService:
-    def __init__(self, *, scripts_dir: Path, runtime_root: Path | None = None) -> None:
+    def __init__(self, *, scripts_dir: Path, runtime_root: Path) -> None:
         self._scripts_dir = scripts_dir
         self._runtime_root = runtime_root
 
-    def validate_workflow(
+    def configuration_issues(
         self,
-        workflow_type: str,
-        payload: dict[str, Any],
+        automation: dict[str, Any],
         *,
-        stage: str,
-        owner_id: str = "",
-        stored: bool = False,
-    ) -> tuple[ValidationReport, dict[str, Any] | None]:
-        model = WORKFLOW_MODELS[workflow_type]
-        candidate = (
-            {key: value for key, value in payload.items() if key != "id"}
-            if stored
-            else payload
-        )
-        try:
-            validated_model = model.model_validate(candidate)
-        except ValidationError as exc:
-            return (
-                report_from_validation_error(
-                    exc,
-                    stage=stage,
-                    scope="automation",
-                    owner_id=owner_id,
-                    owner_name=str(payload.get("name", "")),
-                    owner_type=workflow_type,
-                ),
-                None,
-            )
-        validated = validated_model.model_dump(mode="json")
-        trigger = "hook" if workflow_type == "hook-workflow" else "lifecycle"
-        nodes = (
-            [
-                (node, f"hooks.{hook}[{index}].script_id")
-                for hook in (
-                    "request_prepare",
-                    "subagent_before_invoke",
-                    "request_end",
-                )
-                for index, node in enumerate(validated["hooks"][hook])
-            ]
-            if workflow_type == "hook-workflow"
-            else [
-                (node, f"nodes[{index}].script_id")
-                for index, node in enumerate(validated["nodes"])
-            ]
-        )
+        scope: str,
+        owner_id: str,
+        owner_name: str,
+        path_prefix: str,
+    ) -> list[ValidationIssue]:
+        if automation.get("mode") in {"inherit", "disabled"}:
+            return []
         issues: list[ValidationIssue] = []
-        for node, path in nodes:
-            script_id = str(node["script_id"])
+        has_lifecycle = False
+        for index, binding in enumerate(automation.get("plugins", [])):
+            plugin_id = str(binding.get("plugin_id", ""))
+            path = f"{path_prefix}.plugins[{index}].plugin_id"
             try:
                 resolved = resolve_automation_script(
-                    script_id,
+                    plugin_id,
                     self._scripts_dir,
                     runtime_root=self._runtime_root,
                 )
-            except ResourceScanError as exc:
+            except ResourceScanError:
                 issues.append(
-                    self._script_issue(
-                        "automation.script_invalid",
+                    self._issue(
+                        "automation.plugin_invalid",
+                        scope,
                         owner_id,
-                        str(validated["name"]),
+                        owner_name,
                         path,
-                        script_id,
-                        str(exc),
+                        plugin_id,
+                        "The referenced automation plugin is invalid.",
+                        "pluginInvalid",
                     )
                 )
                 continue
             if resolved is None:
                 issues.append(
-                    self._script_issue(
-                        "automation.script_not_found",
+                    self._issue(
+                        "automation.plugin_not_found",
+                        scope,
                         owner_id,
-                        str(validated["name"]),
+                        owner_name,
                         path,
-                        script_id,
-                        "The referenced automation script does not exist.",
+                        plugin_id,
+                        "The referenced automation plugin does not exist.",
+                        "pluginNotFound",
                     )
                 )
                 continue
-            metadata, _ = resolved
-            if trigger not in metadata["triggers"]:
-                issues.append(
-                    self._script_issue(
-                        "automation.script_trigger_unsupported",
-                        owner_id,
-                        str(validated["name"]),
-                        path,
-                        script_id,
-                        "The automation script does not support this workflow type.",
-                    )
-                )
+            metadata, _folder = resolved
+            enabled = bool(binding.get("enabled", True))
+            if enabled and "lifecycle" in metadata["entrypoints"]:
+                has_lifecycle = True
+            if not enabled:
                 continue
             dependency_status = str(metadata["dependency_status"])
-            if dependency_status != "ready":
-                code = (
-                    "automation.script_dependencies_failed"
-                    if dependency_status == "failed"
-                    else "automation.script_dependencies_restart_required"
+            if dependency_status == "ready":
+                continue
+            if dependency_status == "failed":
+                code = "automation.plugin_dependencies_failed"
+                key = "pluginDependenciesFailed"
+                message = "The automation plugin dependencies could not be prepared."
+            else:
+                code = "automation.plugin_dependencies_restart_required"
+                key = "pluginDependenciesRestartRequired"
+                message = "Restart Agent Shell to prepare the automation plugin dependencies."
+            issues.append(
+                self._issue(
+                    code,
+                    scope,
+                    owner_id,
+                    owner_name,
+                    path,
+                    plugin_id,
+                    message,
+                    key,
                 )
-                message = (
-                    "The automation plugin dependencies could not be prepared."
-                    if dependency_status == "failed"
-                    else "Restart Agent Shell to prepare the automation plugin dependencies."
+            )
+        if automation.get("lifecycle_interval_seconds") is not None and not has_lifecycle:
+            issues.append(
+                ValidationIssue(
+                    code="automation.lifecycle_plugin_required",
+                    scope=scope,
+                    owner_id=owner_id,
+                    owner_name=owner_name,
+                    path=f"{path_prefix}.lifecycle_interval_seconds",
+                    message=(
+                        "Lifecycle requires an enabled plugin that declares the lifecycle entrypoint."
+                    ),
+                    message_key="validation.issue.automation.lifecyclePluginRequired",
+                    message_args={},
                 )
-                issues.append(
-                    self._script_issue(
-                        code,
-                        owner_id,
-                        str(validated["name"]),
-                        path,
-                        script_id,
-                        message,
-                    )
-                )
-        return ValidationReport(stage=stage, issues=tuple(issues)), validated
+            )
+        return issues
 
     @staticmethod
-    def _script_issue(
+    def _issue(
         code: str,
+        scope: str,
         owner_id: str,
         owner_name: str,
         path: str,
-        script_id: str,
+        plugin_id: str,
         message: str,
+        message_key: str,
     ) -> ValidationIssue:
-        message_keys = {
-            "automation.script_invalid": "scriptInvalid",
-            "automation.script_not_found": "scriptNotFound",
-            "automation.script_trigger_unsupported": "scriptTriggerUnsupported",
-            "automation.script_dependencies_failed": "scriptDependenciesFailed",
-            "automation.script_dependencies_restart_required": (
-                "scriptDependenciesRestartRequired"
-            ),
-        }
         return ValidationIssue(
             code=code,
-            scope="automation",
+            scope=scope,
             owner_id=owner_id,
             owner_name=owner_name,
             path=path,
             message=message,
-            message_key=f"validation.issue.automation.{message_keys[code]}",
-            message_args={"script_id": script_id},
+            message_key=f"validation.issue.automation.{message_key}",
+            message_args={"plugin_id": plugin_id},
         )

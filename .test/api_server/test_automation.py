@@ -5,87 +5,95 @@ from agent_shell.automation.dependencies import dependency_state_path
 from .support import *
 
 
-def test_automation_crud_validation_and_reference_cleanup(
+def automation_config(
+    plugin_id: str,
+    *,
+    interval: float | None = None,
+) -> dict[str, object]:
+    return {
+        "plugins": [
+            {"plugin_id": plugin_id, "enabled": True, "config": {}}
+        ],
+        "lifecycle_interval_seconds": interval,
+    }
+
+
+def primary_update(primary: dict, automation: dict[str, object]) -> dict[str, object]:
+    return {
+        "name": primary["name"],
+        "capability_refs": primary["capability_refs"],
+        "subagents": primary["subagents"],
+        "automation": automation,
+    }
+
+
+def test_plugin_catalog_direct_binding_and_old_workflow_routes_are_removed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
         write_automation_script(
             tmp_path,
-            "open-script",
-            "async def run(ctx):\n    ctx.vars.set('request.seen', True)\n",
-            triggers=("hook", "lifecycle"),
+            "open-plugin",
+            "async def prepare(ctx):\n    ctx.vars.set('request.seen', True)\n"
+            "async def lifecycle(ctx):\n    return None\n",
+            entrypoints=("prepare", "lifecycle"),
         )
-        scripts = client.get("/api/automation/scripts")
-        invalid = client.post(
+        catalog = client.get("/api/automation/plugins")
+        primary = create_primary(client)
+        attached = client.put(
+            f"/api/primary-agents/{primary['id']}",
+            json=primary_update(
+                primary,
+                automation_config("open-plugin", interval=2),
+            ),
+        )
+        stored = client.get(f"/api/primary-agents/{primary['id']}")
+        old_catalog = client.get("/api/automation/scripts")
+        old_hook = client.post(
+            "/api/automation/hook-workflow",
+            json={"name": "Removed", "hooks": {}},
+        )
+        old_lifecycle = client.post(
+            "/api/automation/lifecycle-workflow",
+            json={"name": "Removed", "interval_seconds": 2, "nodes": []},
+        )
+        old_draft = client.post(
             "/api/validation/draft",
             json={
                 "target": {"kind": "automation", "type": "hook-workflow"},
-                "payload": {"name": "Empty", "hooks": {}},
+                "payload": {},
             },
         )
-        hook = create_hook_workflow(
-            client,
-            "Request preparation",
-            request_prepare=[{"script_id": "open-script", "config": {}}],
-        )
-        lifecycle = client.post(
-            "/api/automation/lifecycle-workflow",
-            json={
-                "name": "Refresh files",
-                "interval_seconds": 2,
-                "nodes": [{"script_id": "open-script", "config": {}}],
-            },
-        )
-        copied = client.post(
-            f"/api/automation/hook-workflow/{hook['id']}/copy",
-            json={"name": "Request preparation copy"},
+
+    assert catalog.status_code == 200
+    assert [item["id"] for item in catalog.json()["catalog"]] == ["open-plugin"]
+    assert catalog.json()["catalog"][0]["entrypoints"] == [
+        "prepare",
+        "lifecycle",
+    ]
+    assert attached.status_code == 200, attached.text
+    assert stored.json()["automation"] == automation_config(
+        "open-plugin", interval=2
+    )
+    assert old_catalog.status_code == 404
+    assert old_hook.status_code == 404
+    assert old_lifecycle.status_code == 404
+    assert old_draft.status_code == 422
+
+
+def test_repository_validation_rechecks_changed_plugin_resources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        write_automation_script(
+            tmp_path,
+            "mutable-plugin",
+            "async def prepare(ctx):\n    return None\n",
         )
         primary = create_primary(client)
         attached = client.put(
             f"/api/primary-agents/{primary['id']}",
-            json={
-                "name": primary["name"],
-                "capability_refs": primary["capability_refs"],
-                "subagents": [],
-                "automation": {
-                    "hook_workflow_id": hook["id"],
-                    "lifecycle_workflow_id": lifecycle.json()["id"],
-                },
-            },
-        )
-        removed = client.delete(
-            f"/api/automation/hook-workflow/{hook['id']}"
-        )
-        stored_primary = client.get(f"/api/primary-agents/{primary['id']}")
-
-    assert scripts.status_code == 200
-    assert [item["id"] for item in scripts.json()["catalog"]] == ["open-script"]
-    assert invalid.status_code == 200
-    assert invalid.json()["valid"] is False
-    assert lifecycle.status_code == 200, lifecycle.text
-    assert copied.status_code == 200, copied.text
-    assert copied.json()["name"] == "Request preparation copy"
-    assert attached.status_code == 200, attached.text
-    assert removed.status_code == 200
-    assert stored_primary.json()["automation"] == {
-        "hook_workflow_id": "",
-        "lifecycle_workflow_id": lifecycle.json()["id"],
-    }
-
-
-def test_repository_validation_rechecks_changed_script_resources(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    with make_client(tmp_path, monkeypatch) as client:
-        write_automation_script(
-            tmp_path,
-            "mutable-script",
-            "async def run(ctx):\n    return None\n",
-        )
-        workflow = create_hook_workflow(
-            client,
-            "Stored workflow",
-            request_prepare=[{"script_id": "mutable-script", "config": {}}],
+            json=primary_update(primary, automation_config("mutable-plugin")),
         )
         stopped = client.post("/api/api-server/stop")
         script_path = (
@@ -93,31 +101,31 @@ def test_repository_validation_rechecks_changed_script_resources(
             / "data"
             / "resources"
             / "automation_scripts"
-            / "mutable-script"
+            / "mutable-plugin"
             / "main.py"
         )
         script_path.unlink()
         started = client.post("/api/api-server/start")
 
-    assert workflow["id"]
+    assert attached.status_code == 200, attached.text
     assert stopped.status_code == 200
     assert started.status_code == 422
     issues = started.json()["detail"]["validation"]["issues"]
     assert any(
-        issue["owner_id"] == workflow["id"]
-        and issue["code"] == "automation.script_invalid"
+        issue["owner_id"] == primary["id"]
+        and issue["code"] == "automation.plugin_invalid"
         for issue in issues
     )
 
 
-def test_workflow_requires_current_plugin_dependency_state(
+def test_binding_requires_current_plugin_dependency_state(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
         write_automation_script(
             tmp_path,
             "image-reader",
-            "async def run(ctx):\n    return None\n",
+            "async def prepare(ctx):\n    return None\n",
         )
         plugin = (
             tmp_path
@@ -126,18 +134,14 @@ def test_workflow_requires_current_plugin_dependency_state(
             / "automation_scripts"
             / "image-reader"
         )
-        (plugin / "requirements.txt").write_text("Pillow>=11,<13\n", encoding="utf-8")
-        catalog = client.get("/api/automation/scripts").json()["catalog"]
-        pending = client.post(
-            "/api/automation/hook-workflow",
-            json={
-                "name": "Image preparation",
-                "hooks": {
-                    "request_prepare": [
-                        {"script_id": "image-reader", "config": {}}
-                    ]
-                },
-            },
+        (plugin / "requirements.txt").write_text(
+            "Pillow>=11,<13\n", encoding="utf-8"
+        )
+        catalog = client.get("/api/automation/plugins").json()["catalog"]
+        primary = create_primary(client)
+        payload = primary_update(primary, automation_config("image-reader"))
+        pending = client.put(
+            f"/api/primary-agents/{primary['id']}", json=payload
         )
         state_path = dependency_state_path(tmp_path / "runtime")
         state_path.parent.mkdir(parents=True)
@@ -160,21 +164,64 @@ def test_workflow_requires_current_plugin_dependency_state(
             ),
             encoding="utf-8",
         )
-        ready = client.post(
-            "/api/automation/hook-workflow",
-            json={
-                "name": "Image preparation",
-                "hooks": {
-                    "request_prepare": [
-                        {"script_id": "image-reader", "config": {}}
-                    ]
-                },
-            },
+        ready = client.put(
+            f"/api/primary-agents/{primary['id']}", json=payload
         )
 
     assert catalog[0]["dependency_status"] == "restart_required"
     assert pending.status_code == 422
     assert pending.json()["detail"]["validation"]["issues"][0]["code"] == (
-        "automation.script_dependencies_restart_required"
+        "automation.plugin_dependencies_restart_required"
     )
     assert ready.status_code == 200, ready.text
+
+
+def test_native_middleware_hook_shares_prepare_context_and_original_messages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marker = tmp_path / "native-hook.txt"
+    with make_client(tmp_path, monkeypatch) as client:
+        write_automation_script(
+            tmp_path,
+            "native-hook",
+            "from pathlib import Path\n"
+            "from langchain.agents.middleware import AgentMiddleware\n"
+            "class NativeHook(AgentMiddleware):\n"
+            "    def __init__(self, ctx):\n        self.ctx = ctx\n"
+            "    async def awrap_model_call(self, request, handler):\n"
+            "        original = self.ctx.request.messages[0]['content']\n"
+            "        shared = self.ctx.vars.get('plugin.prepared')\n"
+            "        Path(self.ctx.config['marker']).write_text(f'{original}|{shared}')\n"
+            "        return await handler(request)\n"
+            "def create_middleware(ctx):\n    return NativeHook(ctx)\n"
+            "async def prepare(ctx):\n"
+            "    ctx.vars.set('plugin.prepared', True)\n",
+            entrypoints=("middleware", "prepare"),
+        )
+        primary = create_primary(client)
+        attached = client.put(
+            f"/api/primary-agents/{primary['id']}",
+            json=primary_update(
+                primary,
+                {
+                    "plugins": [{
+                        "plugin_id": "native-hook",
+                        "enabled": True,
+                        "config": {"marker": str(marker)},
+                    }],
+                    "lifecycle_interval_seconds": None,
+                },
+            ),
+        )
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": primary["name"],
+                "messages": [{"role": "user", "content": "original"}],
+            },
+        )
+
+    assert attached.status_code == 200, attached.text
+    assert response.status_code == 200, response.text
+    assert response.json()["choices"][0]["message"]["content"] == "runtime reply"
+    assert marker.read_text(encoding="utf-8") == "original|True"

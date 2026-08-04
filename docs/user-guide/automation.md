@@ -1,178 +1,235 @@
-# 使用自动化工作流
+# 使用自动化插件
 
-【自动化】让实例维护者把自定义 Python 脚本按顺序挂到 Primary 或 Subagent。它运行在 Agent 构造前和请求
-生命周期外围，不是 LangChain Middleware，也不会包裹 model call 或 tool call。
+【自动化】是按 Agent 身份挂载的 Python 插件系统。每个 Primary 配置或 Subagent 配置都可以拥有一组有序
+插件 binding；binding 保存插件 ID、启用状态和一份 JSON config。
 
-## 1. 创建插件
+插件有两类执行边界：
 
-每个自动化脚本目录就是一个插件包。在【系统 / 文件管理 / 自动化脚本】下创建目录，目录名必须与脚本 ID
-相同：
+- Agent 内部使用 LangChain 原生 `AgentMiddleware`，可以实现完整 model/tool Hook；
+- Agent Shell 额外提供 `prepare`、请求生命期 `lifecycle` 和终态 `complete`。
+
+Shell 不复制 LangChain 的 Hook 调度器。插件返回 Middleware 后，Shell 把它放入
+`deepagents.create_deep_agent(middleware=[...])`；LangChain 运行到相应节点时直接调用插件的方法。
+
+## 插件包
+
+在【系统 / 文件管理 / 自动化脚本】下创建一目录一个插件包。目录名必须与 manifest ID 相同：
 
 ```text
-automation_scripts/add-context/
+automation_scripts/market-context/
   script.json
   main.py
   requirements.txt  # 可选
 ```
 
-`script.json`：
+当前唯一 manifest 版本是 v2：
 
 ```json
 {
-  "api_version": 1,
-  "id": "add-context",
-  "name": "Add context",
-  "description": "Append current instance context before Agent startup.",
-  "triggers": ["hook"]
+  "api_version": 2,
+  "id": "market-context",
+  "name": "Market context",
+  "description": "Prepare current market context for this Agent.",
+  "entrypoints": ["middleware", "prepare", "lifecycle", "complete"]
 }
 ```
 
-`triggers` 可包含 `hook`、`lifecycle` 或两者。`main.py` 必须使用 UTF-8，并在模块顶层准确提供一个异步入口：
+`entrypoints` 至少声明一项，只能包含：
+
+| 声明 | `main.py` 入口 | 所属边界 |
+| --- | --- | --- |
+| `middleware` | `def create_middleware(ctx)` | LangChain Agent Hook |
+| `prepare` | `async def prepare(ctx)` | 所有 Agent 图构造前 |
+| `lifecycle` | `async def lifecycle(ctx)` | 请求生命期 fixed-delay 循环 |
+| `complete` | `async def complete(ctx)` | 请求所有终态之后 |
+
+未声明的入口不会执行。扫描目录时只做 manifest、UTF-8、Python AST 和函数签名检查，不 import `main.py`。
+插件实际被启用的 Agent 使用时才会 request-local import，并在请求清理时移除模块。插件可包含辅助文件和资产；
+相对 import 正常可用：
 
 ```python
-async def run(ctx) -> None:
-    ctx.messages.append({
-        "role": "user",
-        "content": str(ctx.config.get("text", "")),
-    })
+from .market_client import load_current_market
 ```
 
-扫描资源时只静态检查文件，不执行 `main.py`。插件被有效 Agent 装配使用时才会 import。插件可包含辅助
-Python 文件和资产；`main.py` 使用相对导入读取同目录模块：
+## LangChain Hook
+
+`create_middleware(ctx)` 返回一个 `AgentMiddleware`，也可以返回有序的 Middleware `list` 或 `tuple`：
 
 ```python
-from .image_helpers import read_size
+from langchain.agents.middleware import AgentMiddleware
+
+
+class MarketMiddleware(AgentMiddleware):
+    def __init__(self, ctx):
+        self.ctx = ctx
+
+    async def abefore_model(self, state, runtime):
+        market = self.ctx.vars.get("plugin.market")
+        self.ctx.log(f"market context ready: {market is not None}")
+        return None
+
+    async def awrap_tool_call(self, request, handler):
+        result = await handler(request)
+        return result
+
+
+def create_middleware(ctx):
+    return MarketMiddleware(ctx)
 ```
 
-## 2. Python 依赖（Windows）
+插件类可以使用 LangChain 当前提供的完整同步或异步方法：
 
-Windows 源码 Clone 支持可选 `requirements.txt`。每行声明一个普通 PyPI requirement：
+- `before_agent` / `abefore_agent`
+- `before_model` / `abefore_model`
+- `wrap_model_call` / `awrap_model_call`
+- `after_model` / `aafter_model`
+- `wrap_tool_call` / `awrap_tool_call`
+- `after_agent` / `aafter_agent`
+
+Hook 方法的 `state`、`runtime`、`request`、`handler`、response 和返回值都是 LangChain 原生对象。短路、重试、
+handler 调用次数、state update、`Command` 和错误传播都按 LangChain 规则执行。插件 Middleware 的
+`state_schema`、`tools` 和 `transformers` 也直接交给 Agent factory，不经过 JSON 转换或 Shell adapter。
+
+binding 顺序就是最终 Middleware 顺序。before、after 和 wrap 的正序、逆序与嵌套由 LangChain 根据该列表
+处理。插件不要假设并行工具或递归 Subagent 是串行的；需要图内并发一致性的值应放入 LangGraph state，
+请求级便利数据可放入下述 `ctx.vars`。
+
+## Shell 生命周期
+
+### prepare
+
+`prepare` 在配置快照解析完成后、任何 Primary/Subagent `create_deep_agent()` 之前按 Agent 和 binding 顺序执行：
+
+```python
+async def prepare(ctx):
+    current = await load_current_market()
+    ctx.vars.set("plugin.market", current)
+    ctx.messages.extend([
+        {"role": "user", "content": "Current market data follows."},
+        {"role": "assistant", "content": str(current)},
+    ])
+```
+
+此阶段可以修改当前 Agent 身份自己的 `ctx.messages`、写入 `ctx.initial_files`，或准备 Skill overlay。所有
+Agent 身份的 prepare 结束后，Shell 统一校验派生消息；无效 role/content 会在构造 Agent 图前失败。
+
+Subagent 每次调用仍使用新的 LangGraph state。它的输入顺序是：该 Subagent 身份 prepare 后的基础多轮消息，
+再追加 Primary 本次 `task` 委派消息。静态 system prompt 单独由 `create_deep_agent(system_prompt=...)` 装配。
+
+### lifecycle
+
+Agent 配置填写 `lifecycle_interval_seconds` 后，该身份在一次 API 请求内最多启动一个 fixed-delay 循环。首轮在
+所有 Agent 构造成功后立即开始；每轮按 binding 顺序调用所有声明 `lifecycle` 的启用插件，一轮结束后再等待
+间隔，不重叠、不补跑。
+
+一次 lifecycle 调用失败只停止该 Agent 身份的循环，不接管 Agent graph，也不自动 retry。lifecycle 不热修改
+已经启动的模型上下文；可以更新 `ctx.vars`、外部服务或 mapped 文件，供后续 Hook/工具读取。
+
+### complete
+
+请求正常完成、失败、超时、取消或客户端断开后，Shell 先停止产生新的 lifecycle tick，等待正在运行的一轮
+自然返回，再按 binding 顺序调用 `complete`：
+
+```python
+async def complete(ctx):
+    ctx.log(ctx.terminal["status"])
+```
+
+`complete` 是 Shell graph 外的终态边界，不等同于 LangChain `after_agent`。complete 失败只记录安全日志，
+不会替换已经确定的公开响应。
+
+## Agent 配置
+
+Primary 的 `automation` 直接保存：
+
+```json
+{
+  "plugins": [
+    {
+      "plugin_id": "market-context",
+      "enabled": true,
+      "config": {"market": "example"}
+    }
+  ],
+  "lifecycle_interval_seconds": 5
+}
+```
+
+同一个插件可以用不同 config 挂载多次；每个 binding 有独立 plugin-scope 变量。`enabled=false` 的 binding 不
+import、不执行，也不因第三方依赖未准备而阻止请求。
+
+Subagent 的整组 `settings.automation` 使用一种模式：
+
+- `inherit`：使用当前 Primary 的整组 bindings 和 interval；
+- `replace`：使用这个 Subagent 自己保存的 bindings 和 interval；
+- `disabled`：不使用自动化插件。
+
+同一个 Subagent profile 无论从 diamond 还是显式递归到达，在一次请求中只有一个 Agent 身份上下文和一个可选
+lifecycle loop；每次 `task` invocation 的 LangGraph state 仍然独立。
+
+## ctx 与不可变原始消息
+
+`ctx.request.messages` 是本次 OpenAI 请求通过权威校验后的原始 `messages[]`。它是只读 tuple，其中每条消息
+也是只读 mapping：
+
+- 同一请求的 prepare、Middleware、lifecycle、complete 和全部 Agent 身份看到相同内容；
+- prepare 对 `ctx.messages` 的修改不会改变它；
+- LangChain state 更新不会改变它；
+- 下一次 API 请求根据客户端新提交的完整 messages 重新建立。
+
+插件要稳定切分 Primary 用户信息时，应始终从 `ctx.request.messages` 开始计算，把结果写入当前 Agent 的
+`ctx.messages` 或 `ctx.vars`，不要把前序插件已经修改的工作列表当作原始事实。
+
+所有插件边界可用：
+
+- `ctx.request.id`、`ctx.request.messages`
+- `ctx.agent`：只读 `id/type/name`
+- `ctx.plugin`：只读 `id/binding_index`
+- `ctx.config`：当前 binding 的只读 JSON 配置
+- `ctx.vars.get/set/delete(path)`
+- `ctx.paths.plugin_dir`、`runtime_dir`、`mapped`
+- `ctx.stage`、`ctx.tick`、`ctx.terminal`
+- `ctx.log(value)`
+
+只有 prepare 额外提供可写 `ctx.messages`、`ctx.initial_files` 和：
+
+```python
+overlay = ctx.prepare_skill("my-skill", mode="overlay")
+persistent = ctx.prepare_skill("my-skill", mode="persistent")
+```
+
+变量路径必须使用 `request.key`、`agent.key` 或 `plugin.key`：request scope 在本次请求全部 Agent 间共享；
+agent scope 属于唯一 Primary/Subagent profile；plugin scope 属于该身份的具体 binding。值会做 JSON copy，
+单值最大 256 KiB，不跨 API 请求保留。需要跨请求持久化时由插件自行使用数据库、文件或外部服务。
+
+## Python 依赖（Windows）
+
+可选 `requirements.txt` 每行声明一个普通 PyPI requirement：
 
 ```text
 Pillow>=11,<13
 openpyxl==3.1.5
 ```
 
-插件依赖安装到 `runtime/automation_plugins/site-packages/`，Agent Shell 启动时把该目录追加到同一个 Python
-解释器。因此 `main.py` 可以直接 import 第三方包并继续使用完整 `ctx`，不创建独立虚拟环境。核心依赖路径
-始终优先，插件不能升级或降级 Agent Shell 已锁定的包。
+Windows 启动器把全部有效自动化插件的兼容依赖并集原子生成到
+`runtime/automation_plugins/site-packages/`。核心 site-packages 始终优先，并以当前 runtime 的完整版本作为
+约束；插件不能升级、降级或替换 Agent Shell、LangChain、LangGraph 或 Deep Agents 依赖。
 
-双击 `start_server.bat` 时，启动器根据所有有效插件的 requirements 指纹决定是否重建共享依赖层。首次安装
-或 requirements 变化需要访问 PyPI；只接受当前 Windows/Python 可用的二进制 wheel。解析或安装失败不会
-修改核心 runtime，管理台会把相关插件标记为依赖失败。修改 `requirements.txt` 后必须停止并重新启动 Agent
-Shell，运行中的服务不会热安装。
+requirements 变化后停止并重新启动 Agent Shell。安装只发生在受控启动阶段，请求处理期间不会调用 pip/uv。
+当前只接受公开 PyPI 的普通 PEP 508 requirement、当前 Windows/Python 可用的二进制 wheel；不接受 URL、VCS、
+本地路径、editable、额外索引或源码构建。该层是实例共享环境，不是每插件独立 venv，互斥依赖无法同时使用。
 
-首版 requirements 规则：
+Docker 当前不准备动态插件依赖；带非空 requirements 的插件会保持依赖未就绪。
 
-- 允许普通 PEP 508 包名、版本、extras、environment marker、UTF-8 注释和空行；
-- 最多 100 个包，文件最大 64 KiB，同一个包只能声明一次；
-- 不接受 `-r`、`--index-url`、editable、URL、VCS、本地路径或续行；
-- 固定使用公开 PyPI，不从 requirements 读取索引地址或凭据；
-- 不支持源码构建、系统软件和系统库。FFmpeg、Tesseract、LibreOffice 等不属于 Python wheel 依赖。
+## 权限、失败与一致性
 
-不要在 `main.py` 中调用 pip 或 uv。插件目录和 requirements 都在 `data/` 中持久化；实际安装结果属于
-可重建 `runtime/`，不会修改 Git 文件，源码 Clone 仍使用 `git pull --ff-only` 更新。
+自动化插件是实例维护者信任并安装的任意 Python 代码，以 Agent Shell 服务进程完整权限运行，没有 sandbox。
+它可以访问网络、文件、进程、数据库和第三方服务。平台不限制业务副作用，也不提供事务、回滚、冲突协调或
+强制超时。
 
-Docker 当前不准备动态插件依赖。带非空 `requirements.txt` 的插件在 Docker 中会显示为依赖未就绪，不能
-被工作流装配；无第三方依赖的插件行为不变。
+prepare 或 Middleware 构造失败会阻止请求；LangChain Hook 的错误按 Agent graph 原生规则传播；lifecycle 错误
+只停止对应循环；complete 错误只记录日志。平台不提供 `request_graph_stop()`，插件不能通过 Shell 私有信号接管
+graph 终止条件。
 
-## 3. 创建工作流
-
-在【自动化 / 事件工作流】或【定时工作流】新建配置。节点按页面顺序串行执行，每个节点选择脚本并填写一个
-JSON object 作为 `ctx.config`。
-
-事件工作流有三个固定 Hook：
-
-| Hook | 次数 | 可用的阶段数据 |
-| --- | --- | --- |
-| `request_prepare` | 每个唯一 Primary/Subagent owner 一次 | `ctx.messages`、`ctx.initial_files`、Skill 准备 |
-| `subagent_before_invoke` | 对应 Subagent 每次真实调用前一次 | 本次调用的 `ctx.messages` 副本 |
-| `request_end` | 请求到达终态后每个 owner 一次 | `ctx.terminal`；定时任务已停止 |
-
-定时工作流设置 `interval_seconds`。首轮在所有 Agent 构造成功后立即开始；一轮全部节点结束后才等待间隔，
-不会重叠或补跑。请求结束时，平台停止启动新一轮，但不会取消正在执行的脚本；当前节点和本轮剩余节点自然
-返回后才执行 `request_end` 和请求级清理。某条定时流报错只停止该流，不会接管 Agent graph。
-
-事件工作流至少要有一个节点，定时工作流至少要有一个节点。v1 没有 DAG、条件表达式、cron、自动重试或回滚；
-复杂分支直接写在脚本中。
-
-## 4. 装配 Agent
-
-Primary 页面可分别选择一个事件工作流和一个定时工作流。Subagent 页面分别使用继承、替换或关闭：
-
-- 继承：使用 Primary 最终选择的同类工作流；
-- 替换：选择另一条工作流；
-- 关闭：该 Subagent 不运行该类工作流。
-
-同一个 Subagent 实体无论从多少分支或递归层级到达，在一次请求中都只有一套变量、Skill overlay 和定时任务。
-每次实际调用它仍会执行一次 `subagent_before_invoke`。
-
-## 消息修改接口
-
-固定 Prompt Preset 已移除，但启动前插入或改写消息的通用接口保留：
-
-- Primary 的 `request_prepare` 直接修改该 Primary 的 `ctx.messages`；
-- 每个 Subagent 的 `request_prepare` 先准备自己的基础副本；
-- 每次 `subagent_before_invoke` 再修改该次调用的新副本；
-- 平台最后追加本次 delegated messages，脚本不能把委派任务挪到前面；
-- Primary 和各 Subagent 的消息副本彼此独立。
-
-脚本结束后的列表必须仍是有效的 OpenAI messages。生命周期运行中不会热注入新消息；需要动态信息时，把它
-写到 mapped file，让 Agent 下一次 `read_file`、`grep` 或 `glob` 读取当时的磁盘内容。
-
-## Context API
-
-所有阶段都有：
-
-- `ctx.config`：当前节点只读配置；
-- `ctx.vars.get(path, default)`、`set(path, value)`、`delete(path)`；
-- `ctx.request`、`ctx.agent`、`ctx.workflow`、`ctx.node`：只读标识；
-- `ctx.paths.plugin_dir`：脚本目录；
-- `ctx.paths.runtime_dir`：本次 request/owner 临时目录；
-- `ctx.paths.mapped`：filesystem 虚拟映射路径到本地 `Path` 的只读映射；
-- `ctx.tick`：定时轮次，其他阶段为 `None`；
-- `ctx.terminal`：只在 `request_end` 提供；
-- `ctx.log(value)`：写入截断后的自动化日志。
-- `ctx.request_graph_stop()`：请求在当前节点自然返回后停止 Agent graph；`request_end` 阶段不可调用。
-
-变量路径必须写全：`request.key`、`agent.key` 或 `workflow.key`。request 变量在本次请求全部 owner 间共享；
-agent 变量只属于当前 Primary/Subagent 实体；workflow 变量属于当前 owner 的当前工作流。变量不会跨请求保留，
-值必须可 JSON 序列化，单值上限 256 KiB。平台不做 merge、锁、事务或冲突处理。
-
-`request_prepare` 还提供：
-
-- `ctx.initial_files["/absolute/virtual/path"] = "text"`，值也可为 `bytes`；
-- `ctx.prepare_skill(name, mode="overlay")`：返回本次 owner 的 Skill 副本目录；
-- `ctx.prepare_skill(name, mode="persistent")`：返回原始 Skill 目录。
-
-`overlay` 只影响本次请求并在终态清理；`persistent` 的修改会影响当前和未来请求。Skill 准备在其他 Hook 或
-定时工作流中会被拒绝。
-
-## 脚本生命周期与数据完整性
-
-平台只负责调用和调度插件，不为插件设置执行超时。每次 `run(ctx)` 必须表示一次有限、短小的工作，通常应在
-3–5 秒内完成。不要在 `run(ctx)` 或模块顶层编写永久循环、长期阻塞调用，也不要启动没有退出条件的后台 Task、
-线程或 detached 进程。脚本不返回时，请求收尾和服务的优雅停止也可能一直等待。
-
-停止定时工作流发生在单轮执行边界，而不是任意 `await` 边界。平台不会为了结束请求而中断正在运行的节点；
-如果脚本正在写入 100 条记录，它仍可自然完成剩余写入。但自然排空不能代替数据一致性设计：数据库批量修改
-应放在同一事务中，文件更新应先完整写入临时文件再原子替换，资源释放应放在 `finally` 中。脚本自身异常、
-服务被强制结束、系统崩溃或断电时，平台不保证插件代码有机会完成或清理。
-
-普通返回表示继续。生命周期脚本抛出未处理异常时只停止当前定时流；`request_prepare` 或
-`subagent_before_invoke` 抛出异常时当前请求失败；`request_end` 异常只记录日志。脚本可以捕获确实能够恢复的
-异常；需要停止整个 Agent 请求时，先完成或回滚当前数据操作，再调用 `ctx.request_graph_stop()` 并自然返回。
-该请求在节点返回后生效，不会从函数中间抛出取消异常。
-
-插件直接创建的子进程、线程和后台 Task 不属于平台管理范围。平台不会发现、登记、等待或终止这些资源；插件
-必须自行保存句柄、设计退出条件，并在 `finally` 或 `request_end` 中关闭。需要子进程跟随主服务消亡时，优先
-使用父进程传入 pipe 的 EOF、IPC 心跳或操作系统父进程 handle，不要只依赖可能复用的 PID。
-
-## 安全与冲突
-
-自动化插件及其第三方依赖以 Agent Shell 服务进程的完整权限执行，没有 sandbox。它们可以访问网络、文件、
-环境和进程，也可能删除或泄露实例与操作系统数据。只有实例维护者能管理这些资源，并应在运行前审查代码、
-requirements、包名和版本来源。
-
-平台不协调脚本冲突：多个 owner 或工作流同时修改同一个文件或变量时，结果由真实执行时序决定。持久 Skill
-修改也不备份、不回滚、不加锁。
+插件必须有限返回，并自行保证外部操作一致性：数据库批量更新使用事务，文件先完整写临时文件再原子替换，
+网络协议按服务端幂等规则设计。插件自己创建的线程、子进程或后台 Task 不归平台发现、等待或终止。

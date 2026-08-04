@@ -7,16 +7,24 @@ import type {
   CapabilityOverride as ApiCapabilityOverride,
   CatalogResponse,
   DraftValidationRequest as ApiDraftValidationRequest,
+  AutomationScriptResource,
   PrimaryAgent,
   PrimaryAgentPayload as ApiPrimaryAgentPayload,
+  ResourceCatalog,
   SavedBlock,
-  SavedAutomationWorkflow,
   Subagent,
   SubagentPayload as ApiSubagentPayload,
   SubagentReference as ApiSubagentReference,
-  WorkflowOverride,
   ValidationReport as ApiValidationReport,
 } from '@/api'
+import {
+  automationPayload,
+  normalizeAutomation,
+  normalizeSubagentAutomation,
+  subagentAutomationPayload,
+  type AutomationConfigurationDraft,
+  type SubagentAutomationDraft,
+} from '@/domain/automation'
 
 export type CapabilityType = BlockType
 type OverrideMode = 'inherit' | 'replace' | 'disabled'
@@ -27,9 +35,10 @@ type AgentCatalog = CatalogResponse
 export type StoredBlock = SavedBlock
 export type SubagentReference = ApiSubagentReference
 
-export interface PrimaryAgentProfile extends Omit<PrimaryAgent, 'subagents'> {
+export interface PrimaryAgentProfile extends Omit<PrimaryAgent, 'subagents' | 'automation'> {
   id: string
   subagents: SubagentReference[]
+  automation: AutomationConfigurationDraft
 }
 
 type PrimaryAgentPayload = ApiPrimaryAgentPayload
@@ -41,7 +50,11 @@ interface OverrideSelection {
   block_id: string
 }
 
-export type SubagentProfile = Subagent
+export interface SubagentProfile extends Omit<Subagent, 'settings'> {
+  settings: Omit<Subagent['settings'], 'automation'> & {
+    automation: SubagentAutomationDraft
+  }
+}
 type SubagentPayload = ApiSubagentPayload
 export type ValidationReport = ApiValidationReport
 export type DraftValidationRequest = ApiDraftValidationRequest
@@ -49,7 +62,7 @@ export type DraftValidationRequest = ApiDraftValidationRequest
 export interface AgentAuthoringService {
   getCatalog(): Promise<AgentCatalog>
   listBlocks(type: CapabilityType): Promise<StoredBlock[]>
-  listAutomationWorkflows(type: 'hook-workflow' | 'lifecycle-workflow'): Promise<SavedAutomationWorkflow[]>
+  listAutomationPlugins?(): Promise<ResourceCatalog<AutomationScriptResource>>
   listPrimaryAgents(): Promise<PrimaryAgent[]>
   getPrimaryAgent(id: string): Promise<PrimaryAgent>
   createPrimaryAgent(payload: PrimaryAgentPayload): Promise<PrimaryAgent>
@@ -66,7 +79,7 @@ export const agentAuthoringServiceKey: InjectionKey<AgentAuthoringService> = Sym
 export const managementAgentAuthoringService: AgentAuthoringService = {
   getCatalog: () => managementApi.getCatalog(),
   listBlocks: (type) => managementApi.listBlocks(type),
-  listAutomationWorkflows: (type) => managementApi.listAutomationWorkflows(type),
+  listAutomationPlugins: () => managementApi.listAutomationPlugins(),
   listPrimaryAgents: () => managementApi.listPrimaryAgents(),
   getPrimaryAgent: (id) => managementApi.getPrimaryAgent(id),
   createPrimaryAgent: (payload) => managementApi.savePrimaryAgent(payload),
@@ -101,7 +114,7 @@ export function blankPrimaryAgent(): PrimaryAgentProfile {
     name: '',
     capability_refs: [],
     subagents: [],
-    automation: { hook_workflow_id: '', lifecycle_workflow_id: '' },
+    automation: { plugins: [], lifecycle_interval_seconds: null },
   }
 }
 
@@ -109,7 +122,6 @@ export function normalizePrimaryAgent(value: unknown): PrimaryAgentProfile {
   const source = record(value)
   const references = Array.isArray(source.capability_refs) ? source.capability_refs : []
   const subagents = Array.isArray(source.subagents) ? source.subagents : []
-  const automation = record(source.automation)
   return {
     id: text(source.id),
     name: text(source.name),
@@ -118,10 +130,7 @@ export function normalizePrimaryAgent(value: unknown): PrimaryAgentProfile {
       return { type: text(reference.type), block_id: text(reference.block_id) }
     }),
     subagents: subagents.map(normalizeSubagentReference),
-    automation: {
-      hook_workflow_id: text(automation.hook_workflow_id),
-      lifecycle_workflow_id: text(automation.lifecycle_workflow_id),
-    },
+    automation: normalizeAutomation(source.automation),
   }
 }
 
@@ -133,7 +142,7 @@ export function primaryAgentPayload(value: PrimaryAgentProfile): PrimaryAgentPay
     subagents: value.subagents.map((reference) => ({
       subagent_id: reference.subagent_id,
     })),
-    automation: { ...value.automation },
+    automation: automationPayload(value.automation),
   }
 }
 
@@ -156,8 +165,9 @@ export function blankSubagent(): SubagentProfile {
       capability_overrides: [],
       subagents: [],
       automation: {
-        hook_workflow: { mode: 'inherit', workflow_id: '' },
-        lifecycle_workflow: { mode: 'inherit', workflow_id: '' },
+        mode: 'inherit',
+        plugins: [],
+        lifecycle_interval_seconds: null,
       },
     },
   }
@@ -170,16 +180,6 @@ export function normalizeSubagent(value: unknown): SubagentProfile {
     ? settings.capability_overrides
     : []
   const subagents = Array.isArray(settings.subagents) ? settings.subagents : []
-  const automation = record(settings.automation)
-
-  const workflowOverride = (value: unknown): WorkflowOverride => {
-    const selection = record(value)
-    const mode = text(selection.mode)
-    return {
-      mode: mode === 'replace' || mode === 'disabled' ? mode : 'inherit',
-      workflow_id: text(selection.workflow_id),
-    }
-  }
   return {
     id: text(source.id),
     component_name: text(source.component_name),
@@ -195,10 +195,7 @@ export function normalizeSubagent(value: unknown): SubagentProfile {
         }
       }),
       subagents: subagents.map(normalizeSubagentReference),
-      automation: {
-        hook_workflow: workflowOverride(automation.hook_workflow),
-        lifecycle_workflow: workflowOverride(automation.lifecycle_workflow),
-      },
+      automation: normalizeSubagentAutomation(settings.automation),
     },
   }
 }
@@ -236,10 +233,7 @@ export function subagentPayload(value: SubagentProfile): SubagentPayload {
       subagents: value.settings.subagents.map((reference) => ({
         subagent_id: reference.subagent_id,
       })),
-      automation: {
-        hook_workflow: { ...value.settings.automation.hook_workflow },
-        lifecycle_workflow: { ...value.settings.automation.lifecycle_workflow },
-      },
+      automation: subagentAutomationPayload(value.settings.automation),
     },
   }
 }

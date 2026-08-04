@@ -7,7 +7,7 @@
 1. [启动并认识管理台](user-guide/getting-started.md)
 2. [创建组件](user-guide/capabilities.md)
 3. [装配 Primary 与 Subagent](user-guide/configuration-workflow.md)
-4. [使用自动化工作流](user-guide/automation.md)
+4. [使用自动化插件](user-guide/automation.md)
 5. [管理配置仓库](user-guide/configuration-library.md)
 6. [调用 API Server](user-guide/api-server.md)
 7. [查看日志与历史会话](user-guide/runtime-observability.md)

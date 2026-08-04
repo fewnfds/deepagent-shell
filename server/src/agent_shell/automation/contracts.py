@@ -5,92 +5,60 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-WorkflowName = Annotated[str, Field(min_length=1, max_length=120)]
-WorkflowReference = Annotated[str, Field(max_length=120)]
-RequiredScriptId = Annotated[
+PluginId = Annotated[
     str,
     Field(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9-]*$"),
 ]
 
 
-class AutomationNode(BaseModel):
+class AutomationPluginBinding(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    script_id: RequiredScriptId
+    plugin_id: PluginId
+    enabled: bool = True
     config: dict[str, Any] = Field(default_factory=dict)
 
 
-class HookNodes(BaseModel):
+class PrimaryAutomation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    request_prepare: list[AutomationNode] = Field(default_factory=list, max_length=100)
-    subagent_before_invoke: list[AutomationNode] = Field(
-        default_factory=list, max_length=100
+    plugins: list[AutomationPluginBinding] = Field(default_factory=list, max_length=100)
+    lifecycle_interval_seconds: float | None = Field(
+        default=None,
+        ge=0.1,
+        le=86_400,
     )
-    request_end: list[AutomationNode] = Field(default_factory=list, max_length=100)
-
-
-class HookWorkflow(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    name: WorkflowName
-    hooks: HookNodes = Field(default_factory=HookNodes)
 
     @model_validator(mode="after")
-    def require_node(self) -> "HookWorkflow":
-        if not (
-            self.hooks.request_prepare
-            or self.hooks.subagent_before_invoke
-            or self.hooks.request_end
+    def validate_lifecycle(self) -> "PrimaryAutomation":
+        if self.lifecycle_interval_seconds is not None and not any(
+            binding.enabled for binding in self.plugins
         ):
-            raise ValueError("an event workflow requires at least one script node")
-        return self
-
-
-class LifecycleWorkflow(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    name: WorkflowName
-    interval_seconds: float = Field(ge=0.1, le=86_400)
-    nodes: list[AutomationNode] = Field(min_length=1, max_length=100)
-
-
-class PrimaryAutomation(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    hook_workflow_id: WorkflowReference = ""
-    lifecycle_workflow_id: WorkflowReference = ""
-
-
-class WorkflowOverride(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    mode: Literal["inherit", "replace", "disabled"] = "inherit"
-    workflow_id: WorkflowReference = ""
-
-    @model_validator(mode="after")
-    def validate_selection(self) -> "WorkflowOverride":
-        if self.mode == "replace" and not self.workflow_id:
-            raise ValueError("replace mode requires a workflow_id")
-        if self.mode != "replace" and self.workflow_id:
-            raise ValueError("only replace mode may contain a workflow_id")
+            raise ValueError("lifecycle requires at least one enabled plugin")
         return self
 
 
 class SubagentAutomation(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid")
 
-    hook_workflow: WorkflowOverride = Field(default_factory=WorkflowOverride)
-    lifecycle_workflow: WorkflowOverride = Field(default_factory=WorkflowOverride)
+    mode: Literal["inherit", "replace", "disabled"] = "inherit"
+    plugins: list[AutomationPluginBinding] = Field(default_factory=list, max_length=100)
+    lifecycle_interval_seconds: float | None = Field(
+        default=None,
+        ge=0.1,
+        le=86_400,
+    )
 
-
-WORKFLOW_MODELS = {
-    "hook-workflow": HookWorkflow,
-    "lifecycle-workflow": LifecycleWorkflow,
-}
-
-
-def validate_workflow_payload(workflow_type: str, payload: dict[str, Any]) -> dict:
-    model = WORKFLOW_MODELS[workflow_type]
-    return model.model_validate(payload).model_dump(mode="json")
-
+    @model_validator(mode="after")
+    def validate_selection(self) -> "SubagentAutomation":
+        if self.mode == "replace":
+            if not self.plugins:
+                raise ValueError("replace mode requires at least one plugin")
+            if self.lifecycle_interval_seconds is not None and not any(
+                binding.enabled for binding in self.plugins
+            ):
+                raise ValueError("lifecycle requires at least one enabled plugin")
+            return self
+        if self.plugins or self.lifecycle_interval_seconds is not None:
+            raise ValueError("only replace mode may contain automation configuration")
+        return self

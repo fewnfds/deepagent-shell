@@ -26,13 +26,13 @@
 
 ## 自动化装配
 
-事件工作流和定时工作流不是组件。Primary 可分别选择零或一个工作流；Subagent 对两类工作流分别选择继承、
-替换或关闭。同一个 Subagent 实体在一次请求中只有一套自动化运行态，即使被多条路径或递归调用；每次真实
-委派仍会单独触发该 Subagent 的启动前 Hook。
+自动化不是组件。Primary 直接保存有序插件 bindings 和可选 lifecycle interval；Subagent 对整组自动化选择
+继承 Primary、使用自己的插件或关闭。同一个 Subagent 实体在一次请求中只有一套 request-local ctx 和至多一个
+lifecycle loop，即使被多条路径或递归调用；每次真实委派仍使用新的 LangGraph state。
 
-Primary 和每个 Subagent 都有自己的客户端消息副本。事件脚本可以在构造 Primary 前或每次启动 Subagent 前
-修改对应 `ctx.messages`，不会修改其他 Agent 的副本。详细脚本格式与边界见
-[使用自动化工作流](automation.md)。
+Primary 和每个 Subagent 都有自己的派生消息副本。插件 `prepare` 可以在任何 Agent 图构造前修改对应
+`ctx.messages`；原始客户端消息始终通过不可变 `ctx.request.messages` 提供。需要每次 invocation 运行的逻辑
+使用插件返回的 LangChain 原生 Middleware Hook。详细格式见[使用自动化插件](automation.md)。
 
 ## 校验与生效
 

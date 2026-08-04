@@ -14,7 +14,14 @@ Subagent 页面保存可复用的完整 Subagent 实体。实体只有被 Primar
     ],
     "subagents": [
       {"subagent_id": "UUID"}
-    ]
+    ],
+    "automation": {
+      "mode": "replace",
+      "plugins": [
+        {"plugin_id": "market-context", "enabled": true, "config": {}}
+      ],
+      "lifecycle_interval_seconds": null
+    }
   }
 }
 ```
@@ -30,14 +37,16 @@ Subagent 页面保存可复用的完整 Subagent 实体。实体只有被 Primar
 - 输出模式只属于顶层 Primary；
 - 其余可覆写组件支持继承、替换或关闭。
 
-`settings.automation` 对事件工作流和定时工作流分别使用继承、替换或关闭。工作流不是组件，不放入
-`capability_overrides`。
+`settings.automation` 对整组自动化使用 `inherit/replace/disabled`。replace 保存该身份自己的有序 plugin
+bindings 和可选 lifecycle interval；其他模式不保存插件配置。自动化不是组件，不放入
+`capability_overrides`，自定义 Tool 与自定义 Middleware 也继续使用各自 capability。
 
 `settings.subagents[]` 是该 Subagent 自己可以调用的有序实体引用。父级引用不会自动复制给 child。同一个
 实体在请求内无论从多少分支或显式循环到达，都只构造一个 Subagent graph；各次 `task` 调用仍分别执行。
 
-同样地，一个实体在一次请求中只有一套自动化 owner、变量、Skill overlay 和定时任务；每次 `task` 调用前仍
-分别执行一次该实体的 `subagent_before_invoke`，并使用新的独立消息副本。
+同样地，一个实体在一次请求中只有一套 automation owner、三层变量、Skill overlay 和至多一个 lifecycle
+loop。插件 prepare 为该 profile 建立基础多轮消息；每次 `task` 调用使用新的 graph state，并在基础消息末尾
+追加本次 delegated messages。需要每次 invocation 执行的逻辑使用插件原生 `before_agent` 等 Middleware Hook。
 
 同一次请求中的 Primary 与同步 Subagent 共享普通 workspace 和 mapped routes。每个 Agent 根据自己的
 最终文件系统权限获得路径访问和文件工具，再根据最终 Skill 配置获得只读 `/skills/` 视图。请求结束后，

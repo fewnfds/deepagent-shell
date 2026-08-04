@@ -22,6 +22,7 @@ class MaterializedAgentProfile:
     system_prompt: str | None
     tools: tuple[Any, ...]
     middleware: tuple[Any, ...]
+    automation_middleware: tuple[Any, ...]
     custom_middleware: tuple[Any, ...]
     backend: Any | None
     initial_files: dict[str, Any]
@@ -55,7 +56,7 @@ def configuration_error(
     path: str,
 ) -> AgentRuntimeError:
     report = ValidationReport(
-        stage="request_prepare",
+        stage="request_assembly",
         issues=(
             ValidationIssue(
                 code=code,

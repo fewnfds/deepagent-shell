@@ -105,8 +105,6 @@ class AgentExecution:
                 yield rendered
 
         try:
-            if self.automation.graph_stop_requested:
-                raise self.automation.graph_stop_error()
             async with asyncio.timeout(EXECUTION_TIMEOUT_SECONDS):
                 with warnings.catch_warnings():
                     warnings.filterwarnings(
@@ -131,14 +129,11 @@ class AgentExecution:
                     next_envelope: asyncio.Future[object] | None = (
                         asyncio.ensure_future(anext(envelopes))
                     )
-                    graph_stop = asyncio.create_task(
-                        self.automation.wait_for_graph_stop()
-                    )
                     try:
                         while next_envelope is not None:
                             timeout = self.rectifier.deadline_delay()
                             done, _pending = await asyncio.wait(
-                                {next_envelope, graph_stop},
+                                {next_envelope},
                                 timeout=timeout,
                                 return_when=asyncio.FIRST_COMPLETED,
                             )
@@ -147,8 +142,6 @@ class AgentExecution:
                                     if rendered:
                                         yield rendered
                                 continue
-                            if graph_stop in done:
-                                raise self.automation.graph_stop_error()
                             try:
                                 envelope = next_envelope.result()
                             except StopAsyncIteration:
@@ -165,10 +158,6 @@ class AgentExecution:
                                     if rendered:
                                         yield rendered
                     finally:
-                        if not graph_stop.done():
-                            graph_stop.cancel()
-                            with suppress(asyncio.CancelledError):
-                                await graph_stop
                         if next_envelope is not None and not next_envelope.done():
                             next_envelope.cancel()
                             with suppress(asyncio.CancelledError):

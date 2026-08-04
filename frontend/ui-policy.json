@@ -242,7 +242,6 @@
         "name": "validation-sidebar",
         "paths": [
           "src/pages/ApiServerSettingsPage.vue",
-          "src/pages/AutomationPage.vue",
           "src/pages/ComponentsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/PrimaryAgentPage.vue",
@@ -353,7 +352,6 @@
         "kind": "domain-composition",
         "reason": "Owns localized backend field labels, technical field names and contextual hints without wrapping controls",
         "callers": [
-          "src/components/AutomationNodeList.vue",
           "src/components/RecordPicker.vue",
           "src/components/SubagentReferencesEditor.vue",
           "src/editors/CustomMiddlewareEditor.vue",
@@ -362,16 +360,18 @@
           "src/editors/FilesystemPermissionsEditor.vue",
           "src/editors/ModelEditor.vue",
           "src/editors/OutputModeEditor.vue",
-          "src/pages/AutomationPage.vue",
           "src/pages/ConfigLibraryPage.vue"
         ]
       },
       {
-        "name": "AutomationNodeList",
-        "path": "src/components/AutomationNodeList.vue",
+        "name": "AutomationPluginBindings",
+        "path": "src/components/AutomationPluginBindings.vue",
         "kind": "domain-composition",
-        "reason": "Owns ordered custom-script node editing shared by event and timed workflows",
-        "callers": ["src/pages/AutomationPage.vue"]
+        "reason": "Owns ordered Agent automation plugin bindings and the single request lifecycle interval",
+        "callers": [
+          "src/pages/PrimaryAgentPage.vue",
+          "src/pages/SubagentPage.vue"
+        ]
       },
       {
         "name": "SubagentReferencesEditor",
@@ -389,7 +389,6 @@
         "kind": "domain-composition",
         "reason": "Owns record selection, identity and create/copy/delete interaction",
         "callers": [
-          "src/pages/AutomationPage.vue",
           "src/pages/ComponentsPage.vue",
           "src/pages/PrimaryAgentPage.vue",
           "src/pages/SubagentPage.vue"
@@ -402,7 +401,6 @@
         "reason": "Owns the stable inline or stacked child-page and category button navigation semantics",
         "callers": [
           "src/components/PageShell.vue",
-          "src/pages/AutomationPage.vue",
           "src/pages/ComponentsPage.vue",
           "src/pages/ConfigLibraryPage.vue"
         ]
@@ -414,7 +412,6 @@
         "reason": "Owns presentation of the backend-authoritative validation states and issues",
         "callers": [
           "src/pages/ApiServerSettingsPage.vue",
-          "src/pages/AutomationPage.vue",
           "src/pages/ComponentsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/PrimaryAgentPage.vue",

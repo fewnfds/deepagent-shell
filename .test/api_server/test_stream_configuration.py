@@ -214,26 +214,26 @@ def test_global_interception_captures_final_moved_prompt_tools_and_raw_request(
         write_automation_script(
             tmp_path,
             "capture-message-rewrite",
-            "async def run(ctx):\n"
+            "async def prepare(ctx):\n"
             "    tag = str(ctx.config.get('tag', ''))\n"
             "    replacement = str(ctx.config.get('replacement', ''))\n"
             "    for message in ctx.messages:\n"
             "        if message.get('role') == 'user':\n"
             "            message['content'] = message['content'].replace(tag, replacement)\n",
         )
-        workflow = create_hook_workflow(
-            client,
-            "Captured message preparation",
-            request_prepare=[
+        automation = {
+            "plugins": [
                 {
-                    "script_id": "capture-message-rewrite",
+                    "plugin_id": "capture-message-rewrite",
+                    "enabled": True,
                     "config": {
                         "tag": "|||agent_prompt|||",
                         "replacement": "PRESET",
                     },
                 }
             ],
-        )
+            "lifecycle_interval_seconds": None,
+        }
         prompt = client.post(
             "/api/blocks/system-prompt",
             json={"name": "Captured prompt", "system_prompt": "PRIMARY"},
@@ -271,10 +271,7 @@ def test_global_interception_captures_final_moved_prompt_tools_and_raw_request(
                     {"type": "output-mode", "block_id": output_mode["id"]},
                 ],
                 "subagents": [],
-                "automation": {
-                    "hook_workflow_id": workflow["id"],
-                    "lifecycle_workflow_id": "",
-                },
+                "automation": automation,
             },
         )
         assert updated.status_code == 200, updated.text

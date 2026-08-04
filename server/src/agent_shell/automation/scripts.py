@@ -8,27 +8,36 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from agent_shell.registries.errors import ResourceScanError
 from agent_shell.automation.dependencies import (
     dependency_metadata,
     read_plugin_requirements,
 )
+from agent_shell.registries.errors import ResourceScanError
+
+
+PluginEntrypoint = Literal["middleware", "prepare", "lifecycle", "complete"]
+_ENTRYPOINT_FUNCTIONS: dict[str, tuple[str, bool]] = {
+    "middleware": ("create_middleware", False),
+    "prepare": ("prepare", True),
+    "lifecycle": ("lifecycle", True),
+    "complete": ("complete", True),
+}
 
 
 class AutomationScriptManifest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    api_version: Literal[1]
+    api_version: Literal[2]
     id: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9-]*$")
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=1024)
-    triggers: list[Literal["hook", "lifecycle"]] = Field(min_length=1, max_length=2)
+    entrypoints: list[PluginEntrypoint] = Field(min_length=1, max_length=4)
 
-    @field_validator("triggers")
+    @field_validator("entrypoints")
     @classmethod
-    def unique_triggers(cls, value: list[str]) -> list[str]:
+    def unique_entrypoints(cls, value: list[str]) -> list[str]:
         if len(value) != len(set(value)):
-            raise ValueError("script triggers must be unique")
+            raise ValueError("plugin entrypoints must be unique")
         return value
 
 
@@ -57,6 +66,36 @@ def _read_text(path: Path, *, label: str) -> str:
         ) from exc
 
 
+def _validate_entrypoint(tree: ast.Module, entrypoint: str) -> None:
+    function_name, must_be_async = _ENTRYPOINT_FUNCTIONS[entrypoint]
+    functions = [
+        node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == function_name
+    ]
+    if len(functions) != 1 or isinstance(functions[0], ast.AsyncFunctionDef) != must_be_async:
+        declaration = "async def" if must_be_async else "def"
+        raise ResourceScanError(
+            "resource.error.automationScript.entrypointRequired",
+            f"main.py must define exactly one module-level {declaration} {function_name}(ctx).",
+            {"entrypoint": entrypoint},
+        )
+    function = functions[0]
+    positional = [*function.args.posonlyargs, *function.args.args]
+    if (
+        len(positional) != 1
+        or function.args.vararg is not None
+        or function.args.kwarg is not None
+        or function.args.kwonlyargs
+    ):
+        raise ResourceScanError(
+            "resource.error.automationScript.entrypointSignatureInvalid",
+            f"The {function_name} entrypoint must accept exactly one positional ctx argument.",
+            {"entrypoint": entrypoint},
+        )
+
+
 def scan_automation_script_folder(
     folder: Path,
     *,
@@ -65,7 +104,7 @@ def scan_automation_script_folder(
     if _is_link(folder):
         raise ResourceScanError(
             "resource.error.automationScript.linkUnsupported",
-            "Automation script folders may not be links or reparse points.",
+            "Automation plugin folders may not be links or reparse points.",
         )
     manifest_path = folder / "script.json"
     main_path = folder / "main.py"
@@ -77,7 +116,7 @@ def scan_automation_script_folder(
     if _is_link(manifest_path) or _is_link(main_path):
         raise ResourceScanError(
             "resource.error.automationScript.linkUnsupported",
-            "Automation script files may not be links or reparse points.",
+            "Automation plugin files may not be links or reparse points.",
         )
     try:
         raw_manifest = json.loads(_read_text(manifest_path, label="script.json"))
@@ -108,29 +147,8 @@ def scan_automation_script_folder(
             f"main.py contains a syntax error on line {exc.lineno or 1}.",
             {"line": exc.lineno or 1},
         ) from exc
-    entrypoints = [
-        node
-        for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name == "run"
-    ]
-    if len(entrypoints) != 1 or not isinstance(entrypoints[0], ast.AsyncFunctionDef):
-        raise ResourceScanError(
-            "resource.error.automationScript.asyncRunRequired",
-            "main.py must define exactly one module-level async def run(ctx).",
-        )
-    entrypoint = entrypoints[0]
-    positional = [*entrypoint.args.posonlyargs, *entrypoint.args.args]
-    if (
-        len(positional) != 1
-        or entrypoint.args.vararg is not None
-        or entrypoint.args.kwarg is not None
-        or entrypoint.args.kwonlyargs
-    ):
-        raise ResourceScanError(
-            "resource.error.automationScript.runSignatureInvalid",
-            "The run entrypoint must accept exactly one positional ctx argument.",
-        )
+    for entrypoint in manifest.entrypoints:
+        _validate_entrypoint(tree, entrypoint)
     requirements = read_plugin_requirements(folder)
     return {
         **manifest.model_dump(mode="json"),
@@ -172,7 +190,7 @@ def scan_automation_scripts(
             if script_id in seen_ids:
                 raise ResourceScanError(
                     "resource.error.automationScript.idDuplicate",
-                    "Automation script ids must be unique.",
+                    "Automation plugin ids must be unique.",
                 )
             seen_ids.add(script_id)
             catalog.append(item)

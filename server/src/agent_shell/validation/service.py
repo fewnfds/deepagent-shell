@@ -24,7 +24,6 @@ from agent_shell.registries.custom_tools import (
     scan_custom_tool_file,
 )
 from agent_shell.storage.agent_configs import AgentConfigStore
-from agent_shell.storage.automation import AutomationStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.automation.validation import AutomationValidationService
 from agent_shell.validation.capability_assembly import (
@@ -57,8 +56,7 @@ class ResolvedSubagent:
     references: dict[str, str]
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
-    hook_workflow: dict[str, Any] | None
-    lifecycle_workflow: dict[str, Any] | None
+    automation: dict[str, Any]
     subagents: tuple[ResolvedSubagentEdge, ...]
 
 
@@ -68,8 +66,7 @@ class StaticAssembly:
     references: dict[str, str]
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
-    hook_workflow: dict[str, Any] | None
-    lifecycle_workflow: dict[str, Any] | None
+    automation: dict[str, Any]
     subagents: tuple[ResolvedSubagentEdge, ...]
     subagent_nodes: dict[SubagentNodeKey, ResolvedSubagent]
 
@@ -87,14 +84,12 @@ class ConfigurationValidationService:
         self,
         blocks: BlockStore,
         agent_configs: AgentConfigStore,
-        automation: AutomationStore,
         automation_validation: AutomationValidationService,
         *,
         custom_tools_dir: Path,
     ) -> None:
         self._blocks = blocks
         self._agent_configs = agent_configs
-        self._automation = automation
         self._automation_validation = automation_validation
         self._custom_tools_dir = custom_tools_dir
 
@@ -277,24 +272,15 @@ class ConfigurationValidationService:
             owner_name=validated["component_name"],
             path_prefix="settings.capability_overrides",
         )
-        automation = settings.get("automation", {})
-        for workflow_type, selection_name in (
-            ("hook-workflow", "hook_workflow"),
-            ("lifecycle-workflow", "lifecycle_workflow"),
-        ):
-            selection = automation.get(selection_name, {})
-            if selection.get("mode") != "replace":
-                continue
-            _workflow, workflow_issue = self._workflow_reference(
-                workflow_type,
-                str(selection.get("workflow_id", "")),
+        issues.extend(
+            self._automation_validation.configuration_issues(
+                settings.get("automation", {}),
                 scope="subagent",
                 owner_id=owner_id,
                 owner_name=validated["component_name"],
-                path=f"settings.automation.{selection_name}.workflow_id",
+                path_prefix="settings.automation",
             )
-            if workflow_issue is not None:
-                issues.append(workflow_issue)
+        )
         child_references = list(settings.get("subagents", []))
         child_profiles: dict[str, dict[str, Any]] = {}
         for index, reference in enumerate(child_references):
@@ -335,7 +321,7 @@ class ConfigurationValidationService:
         return ValidationReport(stage=stage, issues=tuple(issues)), validated
 
     def resolve_primary(
-        self, primary_id: str, *, stage: str = "request_prepare"
+        self, primary_id: str, *, stage: str = "request_assembly"
     ) -> tuple[ValidationReport, StaticAssembly | None]:
         primary = self._agent_configs.get_item("primary_agents", primary_id)
         if primary is None:
@@ -388,16 +374,6 @@ class ConfigurationValidationService:
                         stage=stage,
                     ).issues
                 )
-        for workflow_type in ("hook-workflow", "lifecycle-workflow"):
-            for workflow in self._automation.list_items(workflow_type):
-                report, _ = self._automation_validation.validate_workflow(
-                    workflow_type,
-                    workflow,
-                    stage=stage,
-                    owner_id=str(workflow.get("id", "")),
-                    stored=True,
-                )
-                issues.extend(report.issues)
         for profile in self._agent_configs.list_items("subagents"):
             report, _ = self.validate_subagent(
                 profile,
@@ -801,42 +777,6 @@ class ConfigurationValidationService:
             )
         return model.model_dump(mode="json"), None
 
-    def _workflow_reference(
-        self,
-        workflow_type: str,
-        workflow_id: str,
-        *,
-        scope: str,
-        owner_id: str,
-        owner_name: str,
-        path: str,
-    ) -> tuple[dict[str, Any] | None, ValidationIssue | None]:
-        if not workflow_id:
-            return None, None
-        workflow = self._automation.get_item(workflow_type, workflow_id)
-        if workflow is not None:
-            report, validated = self._automation_validation.validate_workflow(
-                workflow_type,
-                workflow,
-                stage="request_prepare",
-                owner_id=workflow_id,
-                stored=True,
-            )
-            if report.valid:
-                assert validated is not None
-                return {"id": workflow_id, **validated}, None
-            return None, report.issues[0]
-        return None, ValidationIssue(
-            code="assembly.workflow_not_found",
-            scope=scope,
-            owner_id=owner_id,
-            owner_name=owner_name,
-            path=path,
-            message="The referenced automation workflow does not exist.",
-            message_key="validation.issue.assembly.workflowNotFound",
-            message_args={"workflow_type": workflow_type},
-        )
-
     def _assemble_primary(
         self,
         primary: dict[str, Any],
@@ -857,23 +797,15 @@ class ConfigurationValidationService:
             block_overrides=block_overrides,
         )
         primary_automation = primary.get("automation", {})
-        primary_hook, hook_issue = self._workflow_reference(
-            "hook-workflow",
-            str(primary_automation.get("hook_workflow_id", "")),
-            scope="primary",
-            owner_id=owner_id,
-            owner_name=owner_name,
-            path="automation.hook_workflow_id",
+        issues.extend(
+            self._automation_validation.configuration_issues(
+                primary_automation,
+                scope="primary",
+                owner_id=owner_id,
+                owner_name=owner_name,
+                path_prefix="automation",
+            )
         )
-        primary_lifecycle, lifecycle_issue = self._workflow_reference(
-            "lifecycle-workflow",
-            str(primary_automation.get("lifecycle_workflow_id", "")),
-            scope="primary",
-            owner_id=owner_id,
-            owner_name=owner_name,
-            path="automation.lifecycle_workflow_id",
-        )
-        issues.extend(issue for issue in (hook_issue, lifecycle_issue) if issue)
 
         delegation_selected = selected.get("subagent") is not None
         root_references = list(primary.get("subagents", []))
@@ -962,34 +894,22 @@ class ConfigurationValidationService:
             )
             subagent_name = str(profile["name"])
 
-            child_automation = settings.get("automation", {})
-
-            def resolve_child_workflow(
-                workflow_type: str,
-                selection_name: str,
-                inherited: dict[str, Any] | None,
-            ) -> tuple[dict[str, Any] | None, ValidationIssue | None]:
-                selection = child_automation.get(selection_name, {})
-                mode = selection.get("mode", "inherit")
-                if mode == "inherit":
-                    return inherited, None
-                if mode == "disabled":
-                    return None, None
-                return self._workflow_reference(
-                    workflow_type,
-                    str(selection.get("workflow_id", "")),
-                    scope="subagent",
-                    owner_id=profile_id,
-                    owner_name=subagent_name,
-                    path=f"settings.automation.{selection_name}.workflow_id",
-                )
-
-            child_hook, child_hook_issue = resolve_child_workflow(
-                "hook-workflow", "hook_workflow", primary_hook
-            )
-            child_lifecycle, child_lifecycle_issue = resolve_child_workflow(
-                "lifecycle-workflow", "lifecycle_workflow", primary_lifecycle
-            )
+            automation_selection = settings.get("automation", {})
+            automation_mode = automation_selection.get("mode", "inherit")
+            if automation_mode == "inherit":
+                child_automation = primary_automation
+            elif automation_mode == "disabled":
+                child_automation = {
+                    "plugins": [],
+                    "lifecycle_interval_seconds": None,
+                }
+            else:
+                child_automation = {
+                    "plugins": list(automation_selection.get("plugins", [])),
+                    "lifecycle_interval_seconds": automation_selection.get(
+                        "lifecycle_interval_seconds"
+                    ),
+                }
 
             (
                 child_blocks,
@@ -1014,11 +934,16 @@ class ConfigurationValidationService:
             )
             if child_tool_issue is not None:
                 child_issues.append(child_tool_issue)
-            child_issues.extend(
-                issue
-                for issue in (child_hook_issue, child_lifecycle_issue)
-                if issue is not None
-            )
+            if automation_mode == "replace":
+                child_issues.extend(
+                    self._automation_validation.configuration_issues(
+                        child_automation,
+                        scope="subagent",
+                        owner_id=profile_id,
+                        owner_name=subagent_name,
+                        path_prefix="settings.automation",
+                    )
+                )
             issues.extend(child_issues)
             child_edges: list[ResolvedSubagentEdge] = []
             if len(issues) == issue_count:
@@ -1051,8 +976,7 @@ class ConfigurationValidationService:
                     references=child_references,
                     blocks=child_blocks,
                     filesystem_mode=child_filesystem_mode,
-                    hook_workflow=child_hook,
-                    lifecycle_workflow=child_lifecycle,
+                    automation=child_automation,
                     subagents=tuple(child_edges),
                 )
             resolving_nodes.remove(profile_id)
@@ -1121,8 +1045,7 @@ class ConfigurationValidationService:
             references=references,
             blocks=selected,
             filesystem_mode=filesystem_mode,
-            hook_workflow=primary_hook,
-            lifecycle_workflow=primary_lifecycle,
+            automation=primary_automation,
             subagents=resolved_subagents,
             subagent_nodes=subagent_nodes,
         )

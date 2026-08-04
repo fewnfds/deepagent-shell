@@ -1,2 +1,1 @@
-"""Open automation workflow contracts and runtime support."""
-
+"""Request-local automation plugin contracts and runtime support."""

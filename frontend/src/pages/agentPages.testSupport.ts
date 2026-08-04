@@ -106,13 +106,18 @@ export function service(overrides: Partial<AgentAuthoringService> = {}): AgentAu
     name: 'Shared name',
     capability_refs: [],
     subagents: [],
+    automation: { plugins: [], lifecycle_interval_seconds: null },
   }
   const subagent: SubagentProfile = {
     id: '00000000-0000-0000-0000-000000000020',
     component_name: 'Worker component',
     name: 'worker',
     description: 'Handles delegated work.',
-    settings: { capability_overrides: [], subagents: [] },
+    settings: {
+      capability_overrides: [],
+      subagents: [],
+      automation: { mode: 'inherit', plugins: [], lifecycle_interval_seconds: null },
+    },
   }
   return {
     getCatalog: vi.fn(async () => ({
@@ -123,7 +128,7 @@ export function service(overrides: Partial<AgentAuthoringService> = {}): AgentAu
       id: `00000000-0000-0000-0000-${type === 'model' ? '000000000001' : '000000000002'}`,
       name: `${type} block`,
     }]),
-    listAutomationWorkflows: vi.fn(async () => []),
+    listAutomationPlugins: vi.fn(async () => ({ catalog: [], errors: {} })),
     listPrimaryAgents: vi.fn(async () => [primary]),
     getPrimaryAgent: vi.fn(async () => primary),
     createPrimaryAgent: vi.fn(async (payload) => ({ ...primary, ...payload, id: 'created-primary' })),

@@ -36,20 +36,20 @@ Provider 原始错误正文。以下 management-only 功能会按产品用途保
 
 ## 用户代码与文件系统
 
-自定义工具、自定义 Middleware 和自动化脚本是受信任的本地代码，真实请求会 import 或执行。只有实例维护者可以
+自定义工具、自定义 Middleware 和自动化插件是受信任的本地代码，真实请求会 import 或执行。只有实例维护者可以
 管理这些资源，并应预先审查依赖、网络、文件和进程权限。
 
 Windows 自动化插件可以声明公开 PyPI 的二进制 wheel 依赖。第三方 wheel 与插件代码具有相同的服务进程权限；
 包名仿冒、恶意更新和依赖接管都属于供应链风险。平台固定公开 PyPI、拒绝 requirements 中的 URL/索引配置，
 并约束核心版本，但这不代替维护者对包名、发布者、版本和许可证的审查。
 
-自动化脚本没有 sandbox，以 Agent Shell 服务进程权限运行。它可以修改消息、实例文件、持久 Skill、mapped
+自动化插件没有 sandbox，以 Agent Shell 服务进程权限运行。它可以修改消息、实例文件、持久 Skill、mapped
 目录和服务账号可访问的其他宿主资源，也可以发起网络或进程操作。平台不备份、不回滚、不加锁，也不协调
-多个脚本的文件或变量冲突。
+多个插件的文件或变量冲突。
 
 项目 filesystem 的 mapped directories 可读写宿主真实目录。只映射 Agent 确实需要的路径；写入、编辑
-和递归删除工具按最小权限启用。Agent 看到的 Skill namespace 始终只读，但 request_prepare 自动化可按用户
-选择修改 Skill 源或本次 overlay。文件管理页面只访问五个 data scope，不代表
+和递归删除工具按最小权限启用。Agent 看到的 Skill namespace 始终只读，但 automation prepare 可按用户选择
+修改 Skill 源或本次 overlay。文件管理页面只访问五个 data scope，不代表
 自定义代码或 mapped directory 具有相同限制。
 
 ## 容量与保留

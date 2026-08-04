@@ -3,8 +3,9 @@ import { LteAlert, LteButton } from '@adminlte/vue'
 import { computed, inject, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import type { SavedAutomationWorkflow, WorkflowOverride } from '@/api'
+import type { AutomationScriptResource } from '@/api'
 
+import AutomationPluginBindings from '@/components/AutomationPluginBindings.vue'
 import PageShell from '@/components/PageShell.vue'
 import RecordPicker from '@/components/RecordPicker.vue'
 import SubagentReferencesEditor from '@/components/SubagentReferencesEditor.vue'
@@ -50,8 +51,7 @@ const feedbackDetail = ref('')
 const manifests = ref<CapabilityManifest[]>([])
 const blocks = ref<Record<string, StoredBlock[]>>({})
 const profiles = ref<SubagentProfile[]>([])
-const hookWorkflows = ref<SavedAutomationWorkflow[]>([])
-const lifecycleWorkflows = ref<SavedAutomationWorkflow[]>([])
+const automationPlugins = ref<AutomationScriptResource[]>([])
 const selectedProfileId = ref('')
 const form = ref(blankSubagent())
 const recordOptions = computed(() => profiles.value.map((profile) => ({
@@ -81,7 +81,7 @@ const filesystemPermissionsManifest = computed(() => manifests.value.find(
 ))
 
 const { markClean, runAfterDiscard } = useUnsavedChanges(
-  () => subagentPayload(form.value),
+  () => form.value,
   () => ({
     title: t('unsavedChanges.title'),
     description: t('unsavedChanges.description'),
@@ -141,22 +141,12 @@ function removeObsoleteOverride(index: number): void {
   form.value.settings.capability_overrides.splice(index, 1)
 }
 
-function workflowSelection(type: 'hook_workflow' | 'lifecycle_workflow'): string {
-  const selection = form.value.settings.automation[type]
-  if (selection.mode === 'inherit') return INHERIT_VALUE
-  if (selection.mode === 'disabled') return DISABLED_VALUE
-  return selection.workflow_id
-}
-
-function updateWorkflow(
-  type: 'hook_workflow' | 'lifecycle_workflow',
-  value: string,
-): void {
-  let selection: WorkflowOverride
-  if (value === INHERIT_VALUE) selection = { mode: 'inherit', workflow_id: '' }
-  else if (value === DISABLED_VALUE) selection = { mode: 'disabled', workflow_id: '' }
-  else selection = { mode: 'replace', workflow_id: value }
-  form.value.settings.automation[type] = selection
+function updateAutomationMode(value: string): void {
+  const mode = value === 'replace' || value === 'disabled' ? value : 'inherit'
+  const current = form.value.settings.automation
+  form.value.settings.automation = mode === 'replace'
+    ? { ...current, mode }
+    : { mode, plugins: [], lifecycle_interval_seconds: null }
 }
 
 async function startNew(): Promise<void> {
@@ -225,7 +215,8 @@ async function save(): Promise<void> {
   feedbackKey.value = ''
   feedbackDetail.value = ''
   try {
-    await validateNow()
+    const state = await validateNow()
+    if (state.status !== 'valid') return
     const payload = subagentPayload(form.value)
     const saved = form.value.id
       ? await service.value.updateSubagent(form.value.id, payload)
@@ -252,16 +243,14 @@ async function loadWorkspace(): Promise<void> {
   }
   loading.value = true
   try {
-    const [catalog, profileItems, hooks, lifecycles] = await Promise.all([
+    const [catalog, profileItems, pluginCatalog] = await Promise.all([
       service.value.getCatalog(),
       service.value.listSubagents(),
-      service.value.listAutomationWorkflows('hook-workflow'),
-      service.value.listAutomationWorkflows('lifecycle-workflow'),
+      service.value.listAutomationPlugins?.() ?? Promise.resolve({ catalog: [], errors: {} }),
     ])
     manifests.value = [...catalog.block_types].sort((left, right) => left.order - right.order)
     profiles.value = profileItems.map(normalizeSubagent)
-    hookWorkflows.value = hooks
-    lifecycleWorkflows.value = lifecycles
+    automationPlugins.value = pluginCatalog.catalog
     const entries = await Promise.all(manifests.value
       .filter((manifest) => manifest.subagent_overrideable)
       .map(async (manifest) => [
@@ -494,58 +483,31 @@ watch(
             </div>
           </div>
         </section>
-        <section class="mb-3" :aria-label="t('agents.automation.title')">
-          <div class="row g-3">
-            <div class="col-md-6">
-              <section class="card h-100">
-                <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-                  <label class="card-title mb-0" for="subagent-hook-workflow">
-                    {{ t('automation.hook.title') }}
-                  </label>
-                  <span class="badge text-bg-info ms-auto">{{ t('agents.capability.optional') }}</span>
-                </header>
-                <div class="card-body">
-                  <select
-                    id="subagent-hook-workflow"
-                    class="form-select"
-                    :value="workflowSelection('hook_workflow')"
-                    @change="updateWorkflow('hook_workflow', ($event.target as HTMLSelectElement).value)"
-                  >
-                    <option :value="INHERIT_VALUE">{{ t('agents.override.mode.inherit') }}</option>
-                    <option :value="DISABLED_VALUE">{{ t('agents.override.mode.disabled') }}</option>
-                    <option v-for="workflow in hookWorkflows" :key="workflow.id" :value="workflow.id">
-                      {{ workflow.name }}
-                    </option>
-                  </select>
-                </div>
-              </section>
-            </div>
-            <div class="col-md-6">
-              <section class="card h-100">
-                <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-                  <label class="card-title mb-0" for="subagent-lifecycle-workflow">
-                    {{ t('automation.lifecycle.title') }}
-                  </label>
-                  <span class="badge text-bg-info ms-auto">{{ t('agents.capability.optional') }}</span>
-                </header>
-                <div class="card-body">
-                  <select
-                    id="subagent-lifecycle-workflow"
-                    class="form-select"
-                    :value="workflowSelection('lifecycle_workflow')"
-                    @change="updateWorkflow('lifecycle_workflow', ($event.target as HTMLSelectElement).value)"
-                  >
-                    <option :value="INHERIT_VALUE">{{ t('agents.override.mode.inherit') }}</option>
-                    <option :value="DISABLED_VALUE">{{ t('agents.override.mode.disabled') }}</option>
-                    <option v-for="workflow in lifecycleWorkflows" :key="workflow.id" :value="workflow.id">
-                      {{ workflow.name }}
-                    </option>
-                  </select>
-                </div>
-              </section>
-            </div>
+        <section class="card mb-3" :aria-label="t('agents.automation.title')">
+          <header class="card-header">
+            <label class="card-title mb-0" for="subagent-automation-mode">
+              {{ t('agents.automation.title') }}
+            </label>
+          </header>
+          <div class="card-body">
+            <select
+              id="subagent-automation-mode"
+              class="form-select"
+              :value="form.settings.automation.mode"
+              @change="updateAutomationMode(($event.target as HTMLSelectElement).value)"
+            >
+              <option value="inherit">{{ t('agents.override.mode.inherit') }}</option>
+              <option value="replace">{{ t('agents.override.mode.replace') }}</option>
+              <option value="disabled">{{ t('agents.override.mode.disabled') }}</option>
+            </select>
           </div>
         </section>
+        <AutomationPluginBindings
+          v-if="form.settings.automation.mode === 'replace'"
+          v-model="form.settings.automation"
+          path-prefix="settings-automation"
+          :plugins="automationPlugins"
+        />
         <SubagentReferencesEditor
           v-model:references="form.settings.subagents"
           :profiles="profiles"

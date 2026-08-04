@@ -94,6 +94,7 @@ class SubagentGraphCompiler:
                 observer=self._agent_input_observer,
             ),
         )
+        middleware.extend(child.automation_middleware)
         if child.tool_choice is not None or child.model_settings:
             middleware.append(
                 make_model_request_settings_middleware(

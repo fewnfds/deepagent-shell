@@ -13,8 +13,6 @@ import type {
   ApiServerSettings,
   ApiServerSettingsUpdate,
   AutomationScriptResource,
-  AutomationWorkflowPayload,
-  AutomationWorkflowType,
   BlockPayload,
   BlockType,
   CatalogResponse,
@@ -40,7 +38,6 @@ import type {
   PrimaryAgentPayload,
   ReadinessResponse,
   ResourceCatalog,
-  SavedAutomationWorkflow,
   RetentionSettings,
   RuntimeDiagnostics,
   SavedBlock,
@@ -117,44 +114,8 @@ export const managementApi = {
     return managementRequest('/api/skills')
   },
 
-  listAutomationScripts(): Promise<ResourceCatalog<AutomationScriptResource>> {
-    return managementRequest('/api/automation/scripts')
-  },
-
-  listAutomationWorkflows(
-    type: AutomationWorkflowType,
-  ): Promise<SavedAutomationWorkflow[]> {
-    return managementRequest(`/api/automation/${type}`)
-  },
-
-  getAutomationWorkflow(
-    type: AutomationWorkflowType,
-    id: string,
-  ): Promise<SavedAutomationWorkflow> {
-    return managementRequest(recordPath(`/api/automation/${type}`, id))
-  },
-
-  saveAutomationWorkflow(
-    type: AutomationWorkflowType,
-    data: AutomationWorkflowPayload | SavedAutomationWorkflow,
-  ): Promise<SavedAutomationWorkflow> {
-    const id = 'id' in data && typeof data.id === 'string' ? data.id : ''
-    const path = id
-      ? recordPath(`/api/automation/${type}`, id)
-      : `/api/automation/${type}`
-    return managementRequest(path, {
-      method: id ? 'PUT' : 'POST',
-      body: JSON.stringify(withoutId(data)),
-    })
-  },
-
-  deleteAutomationWorkflow(
-    type: AutomationWorkflowType,
-    id: string,
-  ): Promise<{ ok: boolean }> {
-    return managementRequest(recordPath(`/api/automation/${type}`, id), {
-      method: 'DELETE',
-    })
+  listAutomationPlugins(): Promise<ResourceCatalog<AutomationScriptResource>> {
+    return managementRequest('/api/automation/plugins')
   },
 
   getSystemSettings(): Promise<SystemSettings> {

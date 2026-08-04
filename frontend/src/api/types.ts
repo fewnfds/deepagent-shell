@@ -162,37 +162,18 @@ export interface CapabilityReference {
   block_id: string
 }
 
-export type AutomationWorkflowType = 'hook-workflow' | 'lifecycle-workflow'
-
-export interface AutomationNode {
-  script_id: string
+export interface AutomationPluginBinding {
+  plugin_id: string
+  enabled: boolean
   config: Record<string, unknown>
 }
 
-export interface HookWorkflowPayload {
-  name: string
-  hooks: {
-    request_prepare: AutomationNode[]
-    subagent_before_invoke: AutomationNode[]
-    request_end: AutomationNode[]
-  }
-}
-
-export interface LifecycleWorkflowPayload {
-  name: string
-  interval_seconds: number
-  nodes: AutomationNode[]
-}
-
-export type AutomationWorkflowPayload = HookWorkflowPayload | LifecycleWorkflowPayload
-export type SavedAutomationWorkflow = AutomationWorkflowPayload & { id: string }
-
 export interface AutomationScriptResource {
-  api_version: 1
+  api_version: 2
   id: string
   name: string
   description: string
-  triggers: ('hook' | 'lifecycle')[]
+  entrypoints: ('middleware' | 'prepare' | 'lifecycle' | 'complete')[]
   folder: string
   python_requirements: string[]
   requirements_fingerprint: string
@@ -201,18 +182,14 @@ export interface AutomationScriptResource {
 }
 
 export interface PrimaryAutomation {
-  hook_workflow_id: string
-  lifecycle_workflow_id: string
-}
-
-export interface WorkflowOverride {
-  mode: 'inherit' | 'replace' | 'disabled'
-  workflow_id: string
+  plugins: AutomationPluginBinding[]
+  lifecycle_interval_seconds: number | null
 }
 
 export interface SubagentAutomation {
-  hook_workflow: WorkflowOverride
-  lifecycle_workflow: WorkflowOverride
+  mode: 'inherit' | 'replace' | 'disabled'
+  plugins: AutomationPluginBinding[]
+  lifecycle_interval_seconds: number | null
 }
 
 export interface SubagentReference {
@@ -253,7 +230,6 @@ type ValidationTarget =
   | { kind: 'block'; type: BlockType; id?: string }
   | { kind: 'primary'; type?: ''; id?: string }
   | { kind: 'subagent'; type?: ''; id?: string }
-  | { kind: 'automation'; type: AutomationWorkflowType; id?: string }
 
 export interface DraftValidationRequest {
   target: ValidationTarget

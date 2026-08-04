@@ -19,7 +19,7 @@ export const router = createRouter({
     { path: '/', component: ApiServerSettingsPage, meta: { titleKey: 'apiServer.homeTitle' } },
     { path: '/agents/primary', component: PrimaryAgentPage, meta: { titleKey: 'navigation.agents' } },
     { path: '/agents/subagents', component: SubagentPage, meta: { titleKey: 'navigation.agents' } },
-    { path: '/automation/:type', component: AutomationPage, meta: { titleKey: 'navigation.automation' } },
+    { path: '/automation', component: AutomationPage, meta: { titleKey: 'navigation.automation' } },
     { path: '/components/:type', component: ComponentsPage, meta: { titleKey: 'components.title' } },
     { path: '/library/:type', component: ConfigLibraryPage, meta: { titleKey: 'library.title' } },
     {

@@ -39,7 +39,6 @@ from agent_shell.security import (
     validate_api_key_policy,
 )
 from agent_shell.storage.agent_configs import AgentConfigStore
-from agent_shell.storage.automation import AutomationStore
 from agent_shell.storage.agent_sessions import AgentSessionStore
 from agent_shell.storage.api_server import ApiServerStore
 from agent_shell.storage.blocks import BlockStore
@@ -107,7 +106,6 @@ def create_app(
     runtime_diagnostic_store = RuntimeDiagnosticStore(database, history_retention)
     block_store = BlockStore(database, event_logger)
     config_store = AgentConfigStore(database, event_logger)
-    automation_store = AutomationStore(database, event_logger)
     automation_validation = AutomationValidationService(
         scripts_dir=automation_scripts_dir,
         runtime_root=runtime_dir,
@@ -115,7 +113,6 @@ def create_app(
     configuration_validation = ConfigurationValidationService(
         block_store,
         config_store,
-        automation_store,
         automation_validation,
         custom_tools_dir=custom_tools_dir,
     )
@@ -432,14 +429,11 @@ def create_app(
     app.include_router(
         build_validation_router(
             configuration_validation,
-            automation_validation,
             configuration_validation_settings,
         )
     )
     app.include_router(
         build_automation_router(
-            automation_store,
-            automation_validation,
             automation_scripts_dir,
             runtime_dir,
         )

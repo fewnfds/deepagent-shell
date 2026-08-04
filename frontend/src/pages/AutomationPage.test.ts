@@ -5,149 +5,83 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import { managementApi } from '@/api'
 import AutomationPage from './AutomationPage.vue'
 
-const toastNotify = vi.hoisted(() => vi.fn())
-
-vi.mock('@/composables/useToasts', () => ({
-  useToasts: () => ({ notify: toastNotify }),
-}))
-
-vi.mock('@/composables/useConfirmation', () => ({
-  useConfirmation: () => ({ confirm: vi.fn(async () => true) }),
-}))
-
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key, te: () => true }),
 }))
 
 afterEach(() => {
   vi.restoreAllMocks()
-  toastNotify.mockReset()
 })
 
+async function mountPage() {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/automation', component: AutomationPage }],
+  })
+  await router.push('/automation')
+  await router.isReady()
+  const wrapper = mount(AutomationPage, { global: { plugins: [router] } })
+  await flushPromises()
+  return wrapper
+}
+
 describe('AutomationPage', () => {
-  it('saves an ordered custom-script event workflow', async () => {
-    vi.spyOn(managementApi, 'listAutomationWorkflows').mockResolvedValue([])
-    vi.spyOn(managementApi, 'listAutomationScripts').mockResolvedValue({
+  it('shows installed plugin entrypoints and requirements', async () => {
+    vi.spyOn(managementApi, 'listAutomationPlugins').mockResolvedValue({
       catalog: [{
-        api_version: 1,
-        id: 'message-script',
-        name: 'Message script',
-        description: 'Updates prepared messages.',
-        triggers: ['hook'],
-        folder: 'message-script',
-        python_requirements: [],
-        requirements_fingerprint: 'empty-fingerprint',
+        api_version: 2,
+        id: 'market-context',
+        name: 'Market context',
+        description: 'Prepares current market messages.',
+        entrypoints: ['middleware', 'prepare', 'complete'],
+        folder: 'market-context',
+        python_requirements: ['example-market-sdk>=2'],
+        requirements_fingerprint: 'market-fingerprint',
         dependency_status: 'ready',
         dependency_error_code: '',
       }],
       errors: {},
     })
-    const validateDraft = vi.spyOn(managementApi, 'validateDraft').mockResolvedValue({
-      valid: true,
-      stage: 'workflow_draft',
-      issues: [],
-    })
-    const save = vi.spyOn(managementApi, 'saveAutomationWorkflow').mockResolvedValue({
-      id: 'workflow-id',
-      name: 'Prepare request',
-      hooks: {
-        request_prepare: [{ script_id: 'message-script', config: { slot: 'user' } }],
-        subagent_before_invoke: [],
-        request_end: [],
-      },
-    })
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [{ path: '/automation/:type', component: AutomationPage }],
-    })
-    await router.push('/automation/hook-workflow')
-    await router.isReady()
-    const wrapper = mount(AutomationPage, { global: { plugins: [router] } })
-    await flushPromises()
 
-    await wrapper.get('[data-field="record-name"]').setValue('Prepare request')
-    await wrapper.findAll('button[aria-label="automation.nodes.add"]')[0]?.trigger('click')
-    const firstNode = wrapper.findAll('.list-group-item')[0]
-    if (!firstNode) throw new Error('request preparation node was not added')
-    await firstNode.get('select').setValue('message-script')
-    await firstNode.get('textarea').setValue('{"slot":"user"}')
-    const saveButton = wrapper.findAll('button').find((button) => (
-      button.text().includes('common.save')
-    ))
-    if (!saveButton) throw new Error('save button not found')
-    await saveButton.trigger('click')
-    await flushPromises()
+    const wrapper = await mountPage()
 
-    expect(validateDraft).toHaveBeenLastCalledWith({
-      target: {
-        kind: 'automation',
-        type: 'hook-workflow',
-        id: '',
-      },
-      payload: {
-        name: 'Prepare request',
-        hooks: {
-          request_prepare: [
-            { script_id: 'message-script', config: { slot: 'user' } },
-          ],
-          subagent_before_invoke: [],
-          request_end: [],
-        },
-      },
-    })
-    expect(save).toHaveBeenCalledWith('hook-workflow', {
-      name: 'Prepare request',
-      hooks: {
-        request_prepare: [
-          { script_id: 'message-script', config: { slot: 'user' } },
-        ],
-        subagent_before_invoke: [],
-        request_end: [],
-      },
-    })
-    expect(toastNotify).toHaveBeenCalledWith({
-      tone: 'success',
-      title: 'automation.feedback.saved',
-    })
+    expect(wrapper.text()).toContain('Market context')
+    expect(wrapper.text()).toContain('market-context')
+    expect(wrapper.text()).toContain('automation.entrypoints.middleware')
+    expect(wrapper.text()).toContain('automation.entrypoints.prepare')
+    expect(wrapper.text()).toContain('automation.entrypoints.complete')
+    expect(wrapper.text()).toContain('example-market-sdk>=2')
+    expect(wrapper.text()).toContain('automation.scripts.status.ready')
     wrapper.unmount()
   })
 
-  it('marks plugins that need a dependency restart as unavailable', async () => {
-    vi.spyOn(managementApi, 'listAutomationWorkflows').mockResolvedValue([])
-    vi.spyOn(managementApi, 'listAutomationScripts').mockResolvedValue({
+  it('reports dependency restart state and invalid plugin folders', async () => {
+    vi.spyOn(managementApi, 'listAutomationPlugins').mockResolvedValue({
       catalog: [{
-        api_version: 1,
+        api_version: 2,
         id: 'image-reader',
         name: 'Image reader',
         description: 'Reads image metadata.',
-        triggers: ['hook'],
+        entrypoints: ['prepare'],
         folder: 'image-reader',
         python_requirements: ['Pillow>=11'],
         requirements_fingerprint: 'pillow-fingerprint',
         dependency_status: 'restart_required',
         dependency_error_code: '',
       }],
-      errors: {},
+      errors: {
+        broken: {
+          message_key: 'resource.error.automationScript.manifestInvalid',
+          message: 'Invalid manifest.',
+          message_args: {},
+        },
+      },
     })
-    vi.spyOn(managementApi, 'validateDraft').mockResolvedValue({
-      valid: false,
-      stage: 'workflow_draft',
-      issues: [],
-    })
-    const router = createRouter({
-      history: createMemoryHistory(),
-      routes: [{ path: '/automation/:type', component: AutomationPage }],
-    })
-    await router.push('/automation/hook-workflow')
-    await router.isReady()
-    const wrapper = mount(AutomationPage, { global: { plugins: [router] } })
-    await flushPromises()
 
-    expect(wrapper.text()).toContain('automation.scripts.dependenciesRestartRequired')
-    await wrapper.findAll('button[aria-label="automation.nodes.add"]')[0]?.trigger('click')
-    const pluginOption = wrapper.find('option[value="image-reader"]')
-    expect(pluginOption.attributes('disabled')).toBeDefined()
-    expect(pluginOption.text()).toContain('automation.scripts.status.restartRequired')
+    const wrapper = await mountPage()
+
+    expect(wrapper.text()).toContain('automation.scripts.invalid')
+    expect(wrapper.text()).toContain('automation.scripts.status.restartRequired')
     wrapper.unmount()
   })
 })

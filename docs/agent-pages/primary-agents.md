@@ -11,7 +11,13 @@ Primary Agent 是 `/v1/models` 中公开的 model。每条记录包含名称、�
   ],
   "subagents": [
     {"subagent_id": "UUID"}
-  ]
+  ],
+  "automation": {
+    "plugins": [
+      {"plugin_id": "market-context", "enabled": true, "config": {}}
+    ],
+    "lifecycle_interval_seconds": null
+  }
 }
 ```
 
@@ -32,6 +38,7 @@ Deep Agents/LangGraph 管理。
 保存时服务端检查必选项、UUID、组件结构、实体引用、同父路由名冲突、可静态确定的工具名冲突和完整
 Subagent 组合。
 
-`automation` 可分别引用零或一个事件工作流、零或一个定时工作流。两者不属于 `capability_refs`；事件工作流
-可在构造前修改 Primary 自己的消息副本，定时工作流只在本次请求生命周期运行。
+`automation` 不属于 `capability_refs`，直接保存有序 plugin bindings 和可选 lifecycle interval。插件可在所有
+Agent 构造前 prepare Primary 自己的派生消息，可返回 LangChain 原生 Middleware，也可在本次请求生命周期运行
+循环与 complete。原始客户端消息通过插件只读的 `ctx.request.messages` 保持不变。
 磁盘资源、Python import 和 Provider 连接在真实请求中再次检查。配置变更只影响之后开始的请求。

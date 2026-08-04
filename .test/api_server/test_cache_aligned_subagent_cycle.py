@@ -118,7 +118,7 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
         write_automation_script(
             tmp_path,
             "prepare-shared-prefix",
-            "async def run(ctx):\n"
+            "async def prepare(ctx):\n"
             "    tag = str(ctx.config['tag'])\n"
             "    replacement = str(ctx.config['replacement'])\n"
             "    for message in ctx.messages:\n"
@@ -130,12 +130,11 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
             "    ])\n",
         )
 
-        def create_startup_workflow(name: str, role: str, ready: str) -> dict:
-            return create_hook_workflow(
-                client,
-                name,
-                request_prepare=[{
-                    "script_id": "prepare-shared-prefix",
+        def automation(role: str, ready: str) -> dict[str, object]:
+            return {
+                "plugins": [{
+                    "plugin_id": "prepare-shared-prefix",
+                    "enabled": True,
                     "config": {
                         "tag": "[[SHARED_CONTEXT]]",
                         "replacement": shared_replacement,
@@ -143,15 +142,14 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
                         "ready": ready,
                     },
                 }],
-            )
+                "lifecycle_interval_seconds": None,
+            }
 
-        primary_workflow = create_startup_workflow(
-            "Primary Xiao Ai startup",
+        primary_automation = automation(
             "PRIMARY ROLE: read files, plan the work, and delegate units.",
             "PRIMARY READY",
         )
-        worker_workflow = create_startup_workflow(
-            "Worker Xiao Ai startup",
+        worker_automation = automation(
             "WORKER ROLE: execute the delegated unit using the shared context.",
             "WORKER READY",
         )
@@ -170,14 +168,8 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
                 subagents=children,
             )
             payload["settings"]["automation"] = {
-                "hook_workflow": {
-                    "mode": "replace",
-                    "workflow_id": worker_workflow["id"],
-                },
-                "lifecycle_workflow": {
-                    "mode": "inherit",
-                    "workflow_id": "",
-                },
+                "mode": "replace",
+                **worker_automation,
             }
             return payload
 
@@ -217,10 +209,7 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
                 "subagents": [{"subagent_id": b["id"]}],
-                "automation": {
-                    "hook_workflow_id": primary_workflow["id"],
-                    "lifecycle_workflow_id": "",
-                },
+                "automation": primary_automation,
             },
         )
         assert a_response.status_code == 200, a_response.text

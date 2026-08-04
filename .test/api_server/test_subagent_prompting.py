@@ -208,15 +208,15 @@ def test_subagent_prompt_override_builds_from_frozen_client_messages(
         write_automation_script(
             tmp_path,
             "append-subagent-startup",
-            "async def run(ctx):\n"
+            "async def prepare(ctx):\n"
             "    ctx.messages.extend(dict(message) for message in ctx.config['messages'])\n",
         )
-        startup_workflow = create_hook_workflow(
-            client,
-            "Delegated task startup",
-            subagent_before_invoke=[
+        startup_automation = {
+            "mode": "replace",
+            "plugins": [
                 {
-                    "script_id": "append-subagent-startup",
+                    "plugin_id": "append-subagent-startup",
+                    "enabled": True,
                     "config": {
                         "messages": [
                             {"role": "user", "content": "Delegated work."},
@@ -228,14 +228,15 @@ def test_subagent_prompt_override_builds_from_frozen_client_messages(
                     },
                 }
             ],
-        )
+            "lifecycle_interval_seconds": None,
+        }
 
         def create_subagent(
             component_name: str,
             routing_name: str,
             description: str,
             model: dict,
-            hook_workflow: dict | None = None,
+            automation: dict[str, object] | None = None,
         ) -> dict:
             capability_overrides = [{
                 "type": "model",
@@ -248,17 +249,8 @@ def test_subagent_prompt_override_builds_from_frozen_client_messages(
                 description=description,
                 capability_overrides=capability_overrides,
             )
-            if hook_workflow is not None:
-                payload["settings"]["automation"] = {
-                    "hook_workflow": {
-                        "mode": "replace",
-                        "workflow_id": hook_workflow["id"],
-                    },
-                    "lifecycle_workflow": {
-                        "mode": "inherit",
-                        "workflow_id": "",
-                    },
-                }
+            if automation is not None:
+                payload["settings"]["automation"] = automation
             response = client.post(
                 "/api/subagents",
                 json=payload,
@@ -271,7 +263,7 @@ def test_subagent_prompt_override_builds_from_frozen_client_messages(
             "override_worker",
             "Uses child-only startup automation.",
             override_model,
-            startup_workflow,
+            startup_automation,
         )
         delegation_response = client.post(
             "/api/blocks/subagent",

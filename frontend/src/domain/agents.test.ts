@@ -25,7 +25,7 @@ describe('agent profile adapters', () => {
         block_id: '00000000-0000-0000-0000-000000000001',
       }],
       subagents: [{ subagent_id: '00000000-0000-0000-0000-000000000020' }],
-      automation: { hook_workflow_id: '', lifecycle_workflow_id: '' },
+      automation: { plugins: [], lifecycle_interval_seconds: null },
     })
   })
 
@@ -40,8 +40,9 @@ describe('agent profile adapters', () => {
       capability_overrides: [],
       subagents: [],
       automation: {
-        hook_workflow: { mode: 'inherit', workflow_id: '' },
-        lifecycle_workflow: { mode: 'inherit', workflow_id: '' },
+        mode: 'inherit',
+        plugins: [],
+        lifecycle_interval_seconds: null,
       },
     })
   })
@@ -63,8 +64,9 @@ describe('agent profile adapters', () => {
         capability_overrides: [],
         subagents: [{ subagent_id: '00000000-0000-0000-0000-000000000020' }],
         automation: {
-          hook_workflow: { mode: 'inherit', workflow_id: '' },
-          lifecycle_workflow: { mode: 'inherit', workflow_id: '' },
+          mode: 'inherit',
+          plugins: [],
+          lifecycle_interval_seconds: null,
         },
       },
     })

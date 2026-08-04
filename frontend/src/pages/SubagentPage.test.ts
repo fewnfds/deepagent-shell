@@ -157,8 +157,9 @@ describe('Subagent authoring page', () => {
         ],
         subagents: [],
         automation: {
-          hook_workflow: { mode: 'inherit', workflow_id: '' },
-          lifecycle_workflow: { mode: 'inherit', workflow_id: '' },
+          mode: 'inherit',
+          plugins: [],
+          lifecycle_interval_seconds: null,
         },
       },
     })

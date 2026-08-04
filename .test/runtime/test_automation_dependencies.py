@@ -17,11 +17,11 @@ def write_script(root: Path, script_id: str, source: str) -> Path:
     (folder / "script.json").write_text(
         json.dumps(
             {
-                "api_version": 1,
+                "api_version": 2,
                 "id": script_id,
                 "name": script_id,
                 "description": "Dependency test plugin.",
-                "triggers": ["hook"],
+                "entrypoints": ["prepare"],
             }
         ),
         encoding="utf-8",
@@ -56,7 +56,7 @@ def test_requirements_are_restricted_normalized_and_need_runtime_state(
     folder = write_script(
         scripts,
         "image-reader",
-        "async def run(ctx):\n    return None\n",
+        "async def prepare(ctx):\n    return None\n",
     )
     (folder / "requirements.txt").write_text(
         "# plugin dependencies\nPillow>=11,<13\nhttpx; python_version >= '3.12'\n",
@@ -93,7 +93,7 @@ def test_dependency_preparation_replaces_only_successful_plugin_layer(
     folder = write_script(
         scripts,
         "image-reader",
-        "async def run(ctx):\n    return None\n",
+        "async def prepare(ctx):\n    return None\n",
     )
     (folder / "requirements.txt").write_text("Pillow==12.0.0\n", encoding="utf-8")
     write_runtime_manifest(runtime_root)

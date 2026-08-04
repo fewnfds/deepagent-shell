@@ -47,7 +47,7 @@ class SubagentInputMiddleware(AgentMiddleware):
         context = runtime.context
         if context is None:
             raise RuntimeError("The Subagent automation context is unavailable")
-        rebuilt_messages = await context["automation_runtime"].before_subagent_invoke(
+        rebuilt_messages = context["automation_runtime"].input_for(
             self._owner_id,
             delegated_messages,
         )

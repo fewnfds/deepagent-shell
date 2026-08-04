@@ -8,7 +8,7 @@ Primary Agent 与同步 Subagent。
 
 - 管理模型、系统提示词、文件系统、待办计划、自定义工具、Skill、自定义 Middleware、输出模式、
   异常重试和委派能力；
-- 用自定义 Python 脚本配置启动前事件工作流和请求生命周期定时工作流；
+- 为每个 Agent 身份挂载可声明第三方依赖的 Python 自动化插件，接入 LangChain 原生 Hook 与 Shell 生命周期；
 - 通过 Primary Agent 组合组件，通过可复用 Subagent 实体定义路由身份、能力策略和下级引用；
 - 提供 `GET /v1/models` 与流式/非流式 `POST /v1/chat/completions`；
 - 支持 OpenAI、Anthropic、Google GenAI、Google Vertex AI、DeepSeek 和 xAI；
@@ -101,7 +101,7 @@ docs/           当前版本公开说明
 - [用户指南](docs/user-guide/README.md)
 - [组件说明](docs/wizard-pages/README.md)
 - [Agent 说明](docs/agent-pages/README.md)
-- [自动化工作流](docs/user-guide/automation.md)
+- [自动化插件](docs/user-guide/automation.md)
 - [安全与部署](docs/security-and-deployment.md)
 - [开发与发布](docs/development-and-release.md)
 - [全部文档](docs/README.md)

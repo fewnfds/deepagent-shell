@@ -6,33 +6,31 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from langchain.agents.middleware import AgentMiddleware
 
-from agent_shell.automation.runtime import (
-    AutomationContext,
-    AutomationOwner,
-    AutomationRuntime,
-    AutomationVariables,
-)
+from agent_shell.automation.context import AutomationVariables
+from agent_shell.automation.runtime import AutomationOwner, AutomationRuntime
 from agent_shell.automation.scripts import scan_automation_scripts
+from agent_shell.runtime.errors import AgentRuntimeError
 
 
-def write_script(
+def write_plugin(
     root: Path,
-    script_id: str,
+    plugin_id: str,
     source: str,
     *,
-    triggers: tuple[str, ...] = ("hook",),
+    entrypoints: tuple[str, ...],
 ) -> Path:
-    folder = root / script_id
+    folder = root / plugin_id
     folder.mkdir(parents=True)
     (folder / "script.json").write_text(
         json.dumps(
             {
-                "api_version": 1,
-                "id": script_id,
-                "name": script_id,
-                "description": "Runtime test script.",
-                "triggers": list(triggers),
+                "api_version": 2,
+                "id": plugin_id,
+                "name": plugin_id,
+                "description": "Test plugin",
+                "entrypoints": list(entrypoints),
             }
         ),
         encoding="utf-8",
@@ -41,279 +39,269 @@ def write_script(
     return folder
 
 
-def test_script_scan_is_static_and_reports_invalid_entrypoints(tmp_path: Path) -> None:
-    scripts = tmp_path / "scripts"
-    marker = tmp_path / "imported.txt"
-    write_script(
-        scripts,
-        "static-script",
-        f"from pathlib import Path\nPath({str(marker)!r}).write_text('imported')\n"
-        "async def run(ctx):\n    return None\n",
-    )
-    write_script(
-        scripts,
-        "sync-script",
-        "def run(ctx):\n    return None\n",
-    )
-
-    result = scan_automation_scripts(scripts)
-
-    assert [item["id"] for item in result["catalog"]] == ["static-script"]
-    assert result["errors"]["sync-script"]["message_key"] == (
-        "resource.error.automationScript.asyncRunRequired"
-    )
-    assert not marker.exists()
-
-
-def test_plugin_main_supports_relative_helper_imports(tmp_path: Path) -> None:
-    scripts = tmp_path / "scripts"
-    folder = write_script(
-        scripts,
-        "package-script",
-        "from .helper import VALUE\n"
-        "async def run(ctx):\n"
-        "    ctx.messages.append({'role': 'user', 'content': VALUE})\n",
-    )
-    (folder / "helper.py").write_text("VALUE = 'from-helper'\n", encoding="utf-8")
-    workflow = {
-        "id": "workflow",
-        "name": "Package workflow",
-        "hooks": {
-            "request_prepare": [{"script_id": "package-script", "config": {}}],
-            "subagent_before_invoke": [],
-            "request_end": [],
+def owner(
+    plugin_id: str,
+    *,
+    interval: float | None = None,
+    config: dict[str, object] | None = None,
+) -> AutomationOwner:
+    return AutomationOwner(
+        id="owner",
+        type="primary",
+        name="Primary",
+        automation={
+            "plugins": [
+                {
+                    "plugin_id": plugin_id,
+                    "enabled": True,
+                    "config": config or {},
+                }
+            ],
+            "lifecycle_interval_seconds": interval,
         },
-    }
-    runtime = AutomationRuntime(
-        request_id="package-request",
-        owners=[
-            AutomationOwner(
-                id="owner",
-                type="primary",
-                name="Primary",
-                hook_workflow=workflow,
-                lifecycle_workflow=None,
-                mapped_paths={},
-            )
-        ],
-        client_messages=[],
-        scripts_dir=scripts,
+        mapped_paths={},
+    )
+
+
+def runtime_for(
+    tmp_path: Path,
+    plugin_id: str,
+    *,
+    interval: float | None = None,
+    config: dict[str, object] | None = None,
+) -> AutomationRuntime:
+    return AutomationRuntime(
+        request_id="request-id",
+        owners=[owner(plugin_id, interval=interval, config=config)],
+        client_messages=[{"role": "user", "content": "original"}],
+        plugins_dir=tmp_path / "plugins",
         skills_dir=tmp_path / "skills",
         runtime_root=tmp_path / "runtime",
     )
 
-    async def scenario() -> None:
-        await runtime.prepare()
-        assert runtime.messages_for("owner") == [
-            {"role": "user", "content": "from-helper"}
-        ]
-        module_names = set(runtime._module_names)
-        assert module_names
-        assert all(name in __import__("sys").modules for name in module_names)
-        await runtime.finish({"status": "completed"})
-        assert all(name not in __import__("sys").modules for name in module_names)
 
-    asyncio.run(scenario())
+def test_plugin_scan_is_static_and_requires_the_v2_entrypoint_contract(
+    tmp_path: Path,
+) -> None:
+    plugins = tmp_path / "plugins"
+    marker = tmp_path / "imported.txt"
+    write_plugin(
+        plugins,
+        "static-plugin",
+        f"from pathlib import Path\nPath({str(marker)!r}).write_text('imported')\n"
+        "async def prepare(ctx):\n    return None\n",
+        entrypoints=("prepare",),
+    )
+    invalid = plugins / "old-plugin"
+    invalid.mkdir(parents=True)
+    (invalid / "script.json").write_text(
+        json.dumps(
+            {
+                "api_version": 1,
+                "id": "old-plugin",
+                "name": "Old",
+                "description": "",
+                "triggers": ["hook"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (invalid / "main.py").write_text(
+        "async def run(ctx):\n    return None\n",
+        encoding="utf-8",
+    )
+
+    result = scan_automation_scripts(plugins)
+
+    assert [item["id"] for item in result["catalog"]] == ["static-plugin"]
+    assert "old-plugin" in result["errors"]
+    assert not marker.exists()
 
 
-def test_variables_are_json_copied_scoped_and_size_limited() -> None:
-    request_values: dict[str, object] = {}
-    agent_values: dict[str, object] = {}
-    workflow_values: dict[str, object] = {}
-    variables = AutomationVariables(request_values, agent_values, workflow_values)
+@pytest.mark.anyio
+async def test_prepare_middleware_and_immutable_request_share_request_local_ctx(
+    tmp_path: Path,
+) -> None:
+    plugins = tmp_path / "plugins"
+    folder = write_plugin(
+        plugins,
+        "context-plugin",
+        "from .helper import EXTRA\n"
+        "from langchain.agents.middleware import AgentMiddleware\n"
+        "class PluginMiddleware(AgentMiddleware):\n"
+        "    state_schema = dict\n"
+        "    tools = []\n"
+        "    transformers = []\n"
+        "    def __init__(self, ctx):\n        self.ctx = ctx\n"
+        "    def before_agent(self, state, runtime):\n        return None\n"
+        "    async def abefore_agent(self, state, runtime):\n"
+        "        self.ctx.vars.set('agent.hook_seen', True)\n"
+        "        return None\n"
+        "    def before_model(self, state, runtime):\n        return None\n"
+        "    async def abefore_model(self, state, runtime):\n        return None\n"
+        "    def wrap_model_call(self, request, handler):\n        return handler(request)\n"
+        "    async def awrap_model_call(self, request, handler):\n        return await handler(request)\n"
+        "    def after_model(self, state, runtime):\n        return None\n"
+        "    async def aafter_model(self, state, runtime):\n        return None\n"
+        "    def wrap_tool_call(self, request, handler):\n        return handler(request)\n"
+        "    async def awrap_tool_call(self, request, handler):\n        return await handler(request)\n"
+        "    def after_agent(self, state, runtime):\n        return None\n"
+        "    async def aafter_agent(self, state, runtime):\n        return None\n"
+        "def create_middleware(ctx):\n    return PluginMiddleware(ctx)\n"
+        "async def prepare(ctx):\n"
+        "    assert ctx.request.messages[0]['content'] == 'original'\n"
+        "    ctx.messages.append({'role': 'assistant', 'content': EXTRA})\n"
+        "    ctx.vars.set('request.shared', {'value': 1})\n"
+        "    ctx.vars.set('plugin.prepared', True)\n",
+        entrypoints=("middleware", "prepare"),
+    )
+    (folder / "helper.py").write_text("EXTRA = 'prepared'\n", encoding="utf-8")
+    runtime = runtime_for(tmp_path, "context-plugin")
+
+    await runtime.prepare()
+    middleware = runtime.middleware_for("owner")
+
+    assert runtime.messages_for("owner") == [
+        {"role": "user", "content": "original"},
+        {"role": "assistant", "content": "prepared"},
+    ]
+    assert len(middleware) == 1
+    item = middleware[0]
+    assert type(item).__name__ == "PluginMiddleware"
+    assert item.ctx.request is runtime.request
+    assert item.ctx.vars.get("request.shared") == {"value": 1}
+    assert item.ctx.vars.get("plugin.prepared") is True
+    with pytest.raises(TypeError):
+        item.ctx.request.messages[0]["content"] = "changed"
+    with pytest.raises(AttributeError):
+        item.ctx.request.messages.append({"role": "user", "content": "changed"})
+    await item.abefore_agent({}, None)
+    assert item.ctx.vars.get("agent.hook_seen") is True
+    for hook in (
+        "before_agent",
+        "abefore_agent",
+        "before_model",
+        "abefore_model",
+        "wrap_model_call",
+        "awrap_model_call",
+        "after_model",
+        "aafter_model",
+        "wrap_tool_call",
+        "awrap_tool_call",
+        "after_agent",
+        "aafter_agent",
+    ):
+        assert hook in type(item).__dict__
+    assert item.state_schema is dict
+    assert item.tools == []
+    assert item.transformers == []
+    await runtime.finish({"status": "completed"})
+
+
+def test_variables_are_json_copied_and_use_request_agent_plugin_scopes() -> None:
+    variables = AutomationVariables({}, {}, {})
     source = {"items": ["first"]}
-
     variables.set("request.shared", source)
     source["items"].append("outside")
     returned = variables.get("request.shared")
     returned["items"].append("caller")
+    variables.set("agent.local", 1)
+    variables.set("plugin.local", 2)
 
     assert variables.get("request.shared") == {"items": ["first"]}
-    variables.set("agent.local", 1)
-    variables.set("workflow.local", 2)
-    assert agent_values == {"local": 1}
-    assert workflow_values == {"local": 2}
+    assert variables.get("agent.local") == 1
+    assert variables.get("plugin.local") == 2
+    with pytest.raises(ValueError, match="plugin"):
+        variables.set("workflow.old", True)
     with pytest.raises(ValueError, match="256 KiB"):
-        variables.set("request.large", "x" * (256 * 1024))
+        variables.set("request.large", "x" * (256 * 1024 + 1))
 
 
-def test_skill_preparation_is_limited_to_request_prepare(tmp_path: Path) -> None:
-    owner = AutomationOwner(
-        id="owner",
-        type="primary",
-        name="Primary",
-        hook_workflow=None,
-        lifecycle_workflow=None,
-        mapped_paths={},
+@pytest.mark.anyio
+async def test_lifecycle_drains_then_complete_runs_and_modules_are_cleaned(
+    tmp_path: Path,
+) -> None:
+    started = tmp_path / "started"
+    release = tmp_path / "release"
+    completed = tmp_path / "completed"
+    terminal = tmp_path / "terminal.json"
+    write_plugin(
+        tmp_path / "plugins",
+        "lifecycle-plugin",
+        "import asyncio\n"
+        "from pathlib import Path\n"
+        "async def lifecycle(ctx):\n"
+        "    Path(ctx.config['started']).touch()\n"
+        "    while not Path(ctx.config['release']).exists():\n        await asyncio.sleep(0)\n"
+        "    ctx.vars.set('plugin.tick', ctx.tick)\n"
+        "    Path(ctx.config['completed']).touch()\n"
+        "async def complete(ctx):\n"
+        "    Path(ctx.config['terminal']).write_text(str(dict(ctx.terminal)))\n",
+        entrypoints=("lifecycle", "complete"),
     )
-    runtime = AutomationRuntime(
-        request_id="request-id",
-        owners=[owner],
-        client_messages=[],
-        scripts_dir=tmp_path / "scripts",
-        skills_dir=tmp_path / "skills",
-        runtime_root=tmp_path / "runtime",
-    )
-    context = AutomationContext(
-        runtime=runtime,
-        owner=owner,
-        workflow_type="lifecycle-workflow",
-        workflow={"id": "workflow", "name": "Loop"},
-        node={"script_id": "script", "config": {}},
-        plugin_dir=tmp_path / "scripts" / "script",
-        variables=AutomationVariables({}, {}, {}),
-        hook="lifecycle",
-        tick=0,
-        messages=None,
-        initial_files=None,
-        terminal=None,
-    )
-
-    with pytest.raises(ValueError, match="request_prepare"):
-        context.prepare_skill("alpha")
-
-
-def test_hooks_lifecycle_and_owner_state_stay_request_local(tmp_path: Path) -> None:
-    scripts = tmp_path / "scripts"
-    mapped = tmp_path / "mapped"
-    mapped.mkdir()
-    write_script(
-        scripts,
-        "owner-hooks",
-        "import json\n"
-        "async def run(ctx):\n"
-        "    hook = ctx.node['hook']\n"
-        "    if hook == 'request_prepare':\n"
-        "        shared = ctx.vars.get('request.prepare_count', 0) + 1\n"
-        "        ctx.vars.set('request.prepare_count', shared)\n"
-        "        ctx.vars.set('agent.prepare_count', 1)\n"
-        "        ctx.messages.append({'role': 'user', 'content': f\"prepared:{ctx.agent['name']}:{shared}\"})\n"
-        "        ctx.initial_files[f\"/{ctx.agent['id']}.txt\"] = ctx.agent['name']\n"
-        "    elif hook == 'subagent_before_invoke':\n"
-        "        count = ctx.vars.get('agent.invocations', 0) + 1\n"
-        "        ctx.vars.set('agent.invocations', count)\n"
-        "        ctx.messages.append({'role': 'assistant', 'content': f'invocation:{count}'})\n"
-        "    elif hook == 'request_end':\n"
-        "        target = ctx.paths.mapped['/mapped/'] / f\"end-{ctx.agent['id']}.json\"\n"
-        "        target.write_text(json.dumps(dict(ctx.terminal)), encoding='utf-8')\n",
-    )
-    write_script(
-        scripts,
-        "owner-loop",
-        "async def run(ctx):\n"
-        "    count = ctx.vars.get('workflow.ticks', 0) + 1\n"
-        "    ctx.vars.set('workflow.ticks', count)\n"
-        "    target = ctx.paths.mapped['/mapped/'] / f\"tick-{ctx.agent['id']}.txt\"\n"
-        "    target.write_text(str(count), encoding='utf-8')\n",
-        triggers=("lifecycle",),
-    )
-    hook_workflow = {
-        "id": "hook-id",
-        "name": "Owner hooks",
-        "hooks": {
-            "request_prepare": [{"script_id": "owner-hooks", "config": {}}],
-            "subagent_before_invoke": [
-                {"script_id": "owner-hooks", "config": {}}
-            ],
-            "request_end": [{"script_id": "owner-hooks", "config": {}}],
+    runtime = runtime_for(
+        tmp_path,
+        "lifecycle-plugin",
+        interval=3600,
+        config={
+            "started": str(started),
+            "release": str(release),
+            "completed": str(completed),
+            "terminal": str(terminal),
         },
-    }
-    lifecycle_workflow = {
-        "id": "loop-id",
-        "name": "Owner loop",
-        "interval_seconds": 0.01,
-        "nodes": [{"script_id": "owner-loop", "config": {}}],
-    }
-    mapped_paths = {"/mapped/": mapped}
-    owners = [
-        AutomationOwner(
-            id="primary-id",
-            type="primary",
-            name="Primary",
-            hook_workflow=hook_workflow,
-            lifecycle_workflow=lifecycle_workflow,
-            mapped_paths=mapped_paths,
-        ),
-        AutomationOwner(
-            id="subagent-id",
-            type="subagent",
-            name="Worker",
-            hook_workflow=hook_workflow,
-            lifecycle_workflow=lifecycle_workflow,
-            mapped_paths=mapped_paths,
-        ),
-    ]
-    runtime = AutomationRuntime(
-        request_id="request-id",
-        owners=owners,
-        client_messages=[{"role": "user", "content": "original"}],
-        scripts_dir=scripts,
-        skills_dir=tmp_path / "skills",
-        runtime_root=tmp_path / "runtime",
     )
+    await runtime.prepare()
+    await runtime.start()
+    for _ in range(200):
+        if started.exists():
+            break
+        await asyncio.sleep(0)
+    finish = asyncio.create_task(runtime.finish({"status": "completed"}))
+    await asyncio.sleep(0)
+    assert not finish.done()
+    release.touch()
+    await finish
 
-    async def scenario() -> None:
-        await runtime.prepare()
-        assert runtime.messages_for("primary-id")[-1]["content"] == (
-            "prepared:Primary:1"
-        )
-        assert runtime.messages_for("subagent-id")[-1]["content"] == (
-            "prepared:Worker:2"
-        )
-        delegated = [{"role": "user", "content": "delegated"}]
-        first = await runtime.before_subagent_invoke("subagent-id", delegated)
-        second = await runtime.before_subagent_invoke("subagent-id", delegated)
-        assert first[-2:] == [
-            {"role": "assistant", "content": "invocation:1"},
-            delegated[0],
-        ]
-        assert second[-2:] == [
-            {"role": "assistant", "content": "invocation:2"},
-            delegated[0],
-        ]
-        await runtime.start()
-        for _ in range(100):
-            if all((mapped / f"tick-{owner.id}.txt").exists() for owner in owners):
-                break
-            await asyncio.sleep(0.005)
-        assert len(runtime._tasks) == 2
-        await runtime.finish({"status": "completed", "finish_reason": "stop"})
-
-    asyncio.run(scenario())
-
-    assert (mapped / "tick-primary-id.txt").read_text(encoding="utf-8")
-    assert (mapped / "tick-subagent-id.txt").read_text(encoding="utf-8")
-    assert json.loads((mapped / "end-primary-id.json").read_text(encoding="utf-8")) == {
-        "status": "completed",
-        "finish_reason": "stop",
-    }
+    assert completed.exists()
+    assert "completed" in terminal.read_text(encoding="utf-8")
     assert not (tmp_path / "runtime" / "automation" / "request-id").exists()
 
 
-def test_from_assembly_deduplicates_recursive_subagent_profiles(tmp_path: Path) -> None:
+@pytest.mark.anyio
+async def test_prepare_validates_every_owner_message_view_before_construction(
+    tmp_path: Path,
+) -> None:
+    write_plugin(
+        tmp_path / "plugins",
+        "invalid-message-plugin",
+        "async def prepare(ctx):\n"
+        "    ctx.messages.append({'role': 'tool', 'content': 'invalid'})\n",
+        entrypoints=("prepare",),
+    )
+    runtime = runtime_for(tmp_path, "invalid-message-plugin")
+
+    with pytest.raises(AgentRuntimeError) as error:
+        await runtime.prepare()
+    assert error.value.code == "input_message_role_unsupported"
+    await runtime.finish({"status": "failed"})
+
+
+def test_from_assembly_keeps_one_owner_per_recursive_subagent_profile(
+    tmp_path: Path,
+) -> None:
+    empty = {"plugins": [], "lifecycle_interval_seconds": None}
     edge_b = SimpleNamespace(target_key="B")
     edge_c = SimpleNamespace(target_key="C")
     node_b = SimpleNamespace(
-        key="B",
-        name="B",
-        blocks={},
-        hook_workflow=None,
-        lifecycle_workflow=None,
-        subagents=(edge_c,),
+        key="B", name="B", blocks={}, automation=empty, subagents=(edge_c,)
     )
     node_c = SimpleNamespace(
-        key="C",
-        name="C",
-        blocks={},
-        hook_workflow=None,
-        lifecycle_workflow=None,
-        subagents=(edge_b,),
+        key="C", name="C", blocks={}, automation=empty, subagents=(edge_b,)
     )
     assembly = SimpleNamespace(
         primary={"name": "A"},
         blocks={},
-        hook_workflow=None,
-        lifecycle_workflow=None,
+        automation=empty,
         subagents=(edge_b, edge_c),
         subagent_nodes={"B": node_b, "C": node_c},
     )
@@ -323,50 +311,9 @@ def test_from_assembly_deduplicates_recursive_subagent_profiles(tmp_path: Path) 
         [{"role": "user", "content": "input"}],
         primary_id="A",
         request_id="request",
-        scripts_dir=tmp_path / "scripts",
+        plugins_dir=tmp_path / "plugins",
         skills_dir=tmp_path / "skills",
         runtime_root=tmp_path / "runtime",
     )
 
-    assert [owner.id for owner in runtime._owners] == ["A", "B", "C"]
-
-
-def test_skill_overlay_is_request_only_and_persistent_mode_is_real(
-    tmp_path: Path,
-) -> None:
-    skills = tmp_path / "skills"
-    (skills / "alpha").mkdir(parents=True)
-    (skills / "alpha" / "SKILL.md").write_text("original", encoding="utf-8")
-    runtime = AutomationRuntime(
-        request_id="skill-request",
-        owners=[
-            AutomationOwner(
-                id="owner",
-                type="primary",
-                name="Primary",
-                hook_workflow=None,
-                lifecycle_workflow=None,
-                mapped_paths={},
-            )
-        ],
-        client_messages=[{"role": "user", "content": "input"}],
-        scripts_dir=tmp_path / "scripts",
-        skills_dir=skills,
-        runtime_root=tmp_path / "runtime",
-    )
-
-    overlay = runtime.prepare_skill("owner", "alpha", mode="overlay")
-    (overlay / "SKILL.md").write_text("overlay", encoding="utf-8")
-    assert (skills / "alpha" / "SKILL.md").read_text(encoding="utf-8") == (
-        "original"
-    )
-    assert runtime.effective_skills_dir("owner", ["alpha"]) == overlay.parent
-
-    persistent = runtime.prepare_skill("owner", "alpha", mode="persistent")
-    (persistent / "SKILL.md").write_text("persistent", encoding="utf-8")
-    assert (skills / "alpha" / "SKILL.md").read_text(encoding="utf-8") == (
-        "persistent"
-    )
-
-    asyncio.run(runtime.finish({"status": "completed"}))
-    assert not overlay.parent.parent.exists()
+    assert [item.id for item in runtime._owners] == ["A", "B", "C"]

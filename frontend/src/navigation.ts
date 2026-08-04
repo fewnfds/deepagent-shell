@@ -9,7 +9,7 @@ export const navigationItems: NavigationItem[] = [
   { path: '/', labelKey: 'navigation.home', icon: 'bi-house', sectionPrefix: '/' },
   { path: '/system/config', labelKey: 'navigation.system', icon: 'bi-gear', sectionPrefix: '/system' },
   { path: '/agents/primary', labelKey: 'navigation.agents', icon: 'bi-robot', sectionPrefix: '/agents' },
-  { path: '/automation/hook-workflow', labelKey: 'navigation.automation', icon: 'bi-arrow-clockwise', sectionPrefix: '/automation' },
+  { path: '/automation', labelKey: 'navigation.automation', icon: 'bi-arrow-clockwise', sectionPrefix: '/automation' },
   { path: '/components/model', labelKey: 'navigation.components', icon: 'bi-boxes', sectionPrefix: '/components' },
   { path: '/library/model', labelKey: 'navigation.library', icon: 'bi-archive', sectionPrefix: '/library' },
   { path: '/terminology', labelKey: 'navigation.terminology', icon: 'bi-book', sectionPrefix: '/terminology' },
@@ -41,13 +41,6 @@ const sectionNavigationGroups: SectionNavigationGroup[] = [
     items: [
       { path: '/agents/primary', labelKey: 'navigation.sections.primary' },
       { path: '/agents/subagents', labelKey: 'navigation.sections.subagents' },
-    ],
-  },
-  {
-    prefix: '/automation',
-    items: [
-      { path: '/automation/hook-workflow', labelKey: 'automation.hook.title' },
-      { path: '/automation/lifecycle-workflow', labelKey: 'automation.lifecycle.title' },
     ],
   },
 ]

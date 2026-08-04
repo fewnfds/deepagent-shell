@@ -7,7 +7,7 @@ Agent Shell 通过管理台组合 Deep Agents 配置，并把 Primary Agent 暴�
 1. [启动并认识管理台](getting-started.md)
 2. [创建组件](capabilities.md)
 3. [装配 Primary 与 Subagent](configuration-workflow.md)
-4. [使用自动化工作流](automation.md)
+4. [使用自动化插件](automation.md)
 5. [管理配置仓库](configuration-library.md)
 6. [调用 API Server](api-server.md)
 7. [查看最终 ModelRequest](interception-test.md)

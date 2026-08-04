@@ -1,39 +1,26 @@
 import type {
-  AutomationNode,
-  AutomationWorkflowPayload,
-  AutomationWorkflowType,
-  HookWorkflowPayload,
-  LifecycleWorkflowPayload,
-  SavedAutomationWorkflow,
+  AutomationPluginBinding,
+  PrimaryAutomation,
+  SubagentAutomation,
 } from '@/api'
 
-export interface AutomationNodeDraft {
+export interface AutomationPluginBindingDraft {
   key: string
-  script_id: string
+  plugin_id: string
+  enabled: boolean
   config_text: string
 }
 
-export interface HookWorkflowDraft {
-  id: string
-  name: string
-  hooks: {
-    request_prepare: AutomationNodeDraft[]
-    subagent_before_invoke: AutomationNodeDraft[]
-    request_end: AutomationNodeDraft[]
-  }
+export interface AutomationConfigurationDraft {
+  plugins: AutomationPluginBindingDraft[]
+  lifecycle_interval_seconds: number | null
 }
 
-export interface LifecycleWorkflowDraft {
-  id: string
-  name: string
-  interval_seconds: number
-  nodes: AutomationNodeDraft[]
+export interface SubagentAutomationDraft extends AutomationConfigurationDraft {
+  mode: 'inherit' | 'replace' | 'disabled'
 }
 
-export type AutomationWorkflowDraft = HookWorkflowDraft | LifecycleWorkflowDraft
-export type HookName = keyof HookWorkflowDraft['hooks']
-
-let nodeSequence = 0
+let bindingSequence = 0
 
 function record(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -45,100 +32,66 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value : ''
 }
 
-function nodeDraft(value: unknown = {}): AutomationNodeDraft {
+function bindingDraft(value: unknown = {}): AutomationPluginBindingDraft {
   const source = record(value)
-  nodeSequence += 1
+  bindingSequence += 1
   return {
-    key: `automation-node-${nodeSequence}`,
-    script_id: text(source.script_id),
+    key: `automation-plugin-${bindingSequence}`,
+    plugin_id: text(source.plugin_id),
+    enabled: source.enabled !== false,
     config_text: JSON.stringify(record(source.config), null, 2),
   }
 }
 
-export function blankAutomationNode(): AutomationNodeDraft {
-  return nodeDraft()
+export function blankAutomationPluginBinding(): AutomationPluginBindingDraft {
+  return bindingDraft()
 }
 
-export function blankAutomationWorkflow(
-  type: AutomationWorkflowType,
-): AutomationWorkflowDraft {
-  if (type === 'hook-workflow') {
-    return {
-      id: '',
-      name: '',
-      hooks: {
-        request_prepare: [],
-        subagent_before_invoke: [],
-        request_end: [],
-      },
-    }
-  }
-  return { id: '', name: '', interval_seconds: 2, nodes: [] }
-}
-
-export function automationWorkflowFromApi(
-  type: AutomationWorkflowType,
-  value: SavedAutomationWorkflow,
-): AutomationWorkflowDraft {
+export function normalizeAutomation(value: unknown): AutomationConfigurationDraft {
   const source = record(value)
-  if (type === 'hook-workflow') {
-    const hooks = record(source.hooks)
-    const list = (name: HookName): AutomationNodeDraft[] => (
-      Array.isArray(hooks[name]) ? hooks[name].map(nodeDraft) : []
-    )
-    return {
-      id: text(source.id),
-      name: text(source.name),
-      hooks: {
-        request_prepare: list('request_prepare'),
-        subagent_before_invoke: list('subagent_before_invoke'),
-        request_end: list('request_end'),
-      },
-    }
-  }
+  const plugins = Array.isArray(source.plugins) ? source.plugins : []
+  const interval = source.lifecycle_interval_seconds
   return {
-    id: text(source.id),
-    name: text(source.name),
-    interval_seconds: typeof source.interval_seconds === 'number'
-      ? source.interval_seconds
-      : 2,
-    nodes: Array.isArray(source.nodes) ? source.nodes.map(nodeDraft) : [],
+    plugins: plugins.map(bindingDraft),
+    lifecycle_interval_seconds: typeof interval === 'number' ? interval : null,
   }
 }
 
-function nodePayload(value: AutomationNodeDraft): AutomationNode {
-  const parsed: unknown = JSON.parse(value.config_text || '{}')
+export function normalizeSubagentAutomation(value: unknown): SubagentAutomationDraft {
+  const source = record(value)
+  const mode = source.mode
+  return {
+    mode: mode === 'replace' || mode === 'disabled' ? mode : 'inherit',
+    ...normalizeAutomation(source),
+  }
+}
+
+function parseConfig(value: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(value)
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Automation node config must be a JSON object.')
+    throw new Error('Plugin config must be a JSON object.')
   }
+  return parsed as Record<string, unknown>
+}
+
+function pluginPayload(value: AutomationPluginBindingDraft): AutomationPluginBinding {
   return {
-    script_id: value.script_id,
-    config: parsed as Record<string, unknown>,
+    plugin_id: value.plugin_id,
+    enabled: value.enabled,
+    config: parseConfig(value.config_text),
   }
 }
 
-export function automationWorkflowPayload(
-  type: AutomationWorkflowType,
-  value: AutomationWorkflowDraft,
-): AutomationWorkflowPayload {
-  if (type === 'hook-workflow') {
-    const draft = value as HookWorkflowDraft
-    const payload: HookWorkflowPayload = {
-      name: draft.name,
-      hooks: {
-        request_prepare: draft.hooks.request_prepare.map(nodePayload),
-        subagent_before_invoke: draft.hooks.subagent_before_invoke.map(nodePayload),
-        request_end: draft.hooks.request_end.map(nodePayload),
-      },
-    }
-    return payload
+export function automationPayload(value: AutomationConfigurationDraft): PrimaryAutomation {
+  return {
+    plugins: value.plugins.map(pluginPayload),
+    lifecycle_interval_seconds: value.lifecycle_interval_seconds,
   }
-  const draft = value as LifecycleWorkflowDraft
-  const payload: LifecycleWorkflowPayload = {
-    name: draft.name,
-    interval_seconds: draft.interval_seconds,
-    nodes: draft.nodes.map(nodePayload),
-  }
-  return payload
 }
 
+export function subagentAutomationPayload(value: SubagentAutomationDraft): SubagentAutomation {
+  if (value.mode !== 'replace') {
+    return { mode: value.mode, plugins: [], lifecycle_interval_seconds: null }
+  }
+  return { mode: 'replace', ...automationPayload(value) }
+}

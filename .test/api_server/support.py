@@ -127,51 +127,28 @@ def make_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
 def write_automation_script(
     tmp_path: Path,
-    script_id: str,
+    plugin_id: str,
     source: str,
     *,
-    triggers: tuple[str, ...] = ("hook",),
+    entrypoints: tuple[str, ...] = ("prepare",),
 ) -> None:
     script_dir = (
-        tmp_path / "data" / "resources" / "automation_scripts" / script_id
+        tmp_path / "data" / "resources" / "automation_scripts" / plugin_id
     )
     script_dir.mkdir(parents=True, exist_ok=True)
     (script_dir / "script.json").write_text(
         json.dumps(
             {
-                "api_version": 1,
-                "id": script_id,
-                "name": script_id,
-                "description": "Test automation script.",
-                "triggers": list(triggers),
+                "api_version": 2,
+                "id": plugin_id,
+                "name": plugin_id,
+                "description": "Test automation plugin.",
+                "entrypoints": list(entrypoints),
             }
         ),
         encoding="utf-8",
     )
     (script_dir / "main.py").write_text(source, encoding="utf-8")
-
-
-def create_hook_workflow(
-    client: TestClient,
-    name: str,
-    *,
-    request_prepare: list[dict[str, object]] | None = None,
-    subagent_before_invoke: list[dict[str, object]] | None = None,
-    request_end: list[dict[str, object]] | None = None,
-) -> dict:
-    response = client.post(
-        "/api/automation/hook-workflow",
-        json={
-            "name": name,
-            "hooks": {
-                "request_prepare": request_prepare or [],
-                "subagent_before_invoke": subagent_before_invoke or [],
-                "request_end": request_end or [],
-            },
-        },
-    )
-    assert response.status_code == 200, response.text
-    return response.json()
 
 
 def create_primary(

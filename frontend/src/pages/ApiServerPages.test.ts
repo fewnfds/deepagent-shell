@@ -156,7 +156,7 @@ describe('ApiServerSettingsPage', () => {
       '/',
       '/system/config',
       '/agents/primary',
-      '/automation/hook-workflow',
+      '/automation',
       '/components/model',
       '/library/model',
       '/terminology',

@@ -420,6 +420,19 @@ class AgentBuilder:
                     path="capability_refs.custom-middleware",
                 ) from exc
 
+        automation_middleware: tuple[Any, ...] = ()
+        if self._automation_runtime is not None:
+            try:
+                automation_middleware = self._automation_runtime.middleware_for(owner_id)
+            except AgentRuntimeError as exc:
+                raise reported_error(
+                    exc,
+                    scope=scope,
+                    owner_id=owner_id,
+                    owner_name=owner_name,
+                    path="automation.plugins",
+                ) from exc
+
         system_prompt = selected_blocks.get("system-prompt")
         exception_retry_runtime = (
             materialize_exception_retry(exception_retry)
@@ -439,6 +452,7 @@ class AgentBuilder:
             ),
             tools=tuple(tools),
             middleware=tuple(middleware),
+            automation_middleware=automation_middleware,
             custom_middleware=tuple(custom_middleware),
             backend=backend,
             initial_files=initial_files,
@@ -499,7 +513,7 @@ class AgentBuilder:
             messages,
             primary_id=primary_id,
             request_id=request_id,
-            scripts_dir=self._automation_scripts_dir,
+            plugins_dir=self._automation_scripts_dir,
             skills_dir=self._skills_dir,
             runtime_root=self._runtime_dir,
         )
@@ -543,7 +557,11 @@ class AgentBuilder:
         if materialized.skill_sources:
             constructor["skills"] = list(materialized.skill_sources)
 
-        middleware = [ToolErrorBoundaryMiddleware(), *materialized.middleware]
+        middleware = [
+            ToolErrorBoundaryMiddleware(),
+            *materialized.middleware,
+            *materialized.automation_middleware,
+        ]
         if materialized.tool_choice is not None or materialized.model_settings:
             middleware.append(
                 make_model_request_settings_middleware(

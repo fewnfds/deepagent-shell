@@ -14,7 +14,6 @@ from agent_shell.runtime.agent_builder import AgentBuilder
 from agent_shell.runtime.agent_runtime import AgentExecution, AgentRuntime
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.storage.agent_configs import AgentConfigStore
-from agent_shell.storage.automation import AutomationStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.database import SQLiteDatabase
 from agent_shell.storage.schema import SCHEMA_SQL
@@ -30,8 +29,6 @@ class _SnapshotDatabase:
         ("blocks", ("id", "block_type", "name", "payload")),
         ("primary_agents", ("id", "name", "payload")),
         ("subagents", ("id", "component_name", "payload")),
-        ("hook_workflows", ("id", "name", "payload")),
-        ("lifecycle_workflows", ("id", "name", "payload")),
     )
 
     def __init__(self, source: SQLiteDatabase) -> None:
@@ -131,7 +128,6 @@ class RequestSnapshotRuntime:
         try:
             blocks = BlockStore(database)  # type: ignore[arg-type]
             configs = AgentConfigStore(database)  # type: ignore[arg-type]
-            automation = AutomationStore(database)  # type: ignore[arg-type]
             secrets = ProviderSecretResolver(database)  # type: ignore[arg-type]
             automation_validation = AutomationValidationService(
                 scripts_dir=self._automation_scripts_dir,
@@ -140,7 +136,6 @@ class RequestSnapshotRuntime:
             validation = ConfigurationValidationService(
                 blocks,
                 configs,
-                automation,
                 automation_validation,
                 custom_tools_dir=self._custom_tools_dir,
             )
