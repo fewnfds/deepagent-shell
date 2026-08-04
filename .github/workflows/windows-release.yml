@@ -25,13 +25,10 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Verify frontend
+      - name: Build frontend
         working-directory: frontend
         run: |
           npm ci
-          npm run lint
-          npm run typecheck
-          npm test
           npm run build
 
       - name: Set up uv
@@ -43,15 +40,9 @@ jobs:
       - name: Install backend development dependencies
         run: uv sync --project server --extra dev --locked
 
-      - name: Verify Windows launchers, settings, and authored capability text
+      - name: Verify Windows launchers
         working-directory: server
-        run: >-
-          uv run pytest
-          ../.test/security/test_settings.py
-          ../.test/security/test_system_settings.py
-          ../.test/security/test_windows_launchers.py
-          ../.test/authoring/test_capability_manifest.py
-          -q
+        run: uv run pytest ../.test/security/test_windows_launchers.py -q
 
       - name: Verify public source surface
         run: uv run --project server python packaging/release/check_release_surface.py

@@ -7,7 +7,6 @@ import type { SavedAutomationWorkflow, WorkflowOverride } from '@/api'
 
 import PageShell from '@/components/PageShell.vue'
 import RecordPicker from '@/components/RecordPicker.vue'
-import FormField from '@/components/FormField.vue'
 import SubagentReferencesEditor from '@/components/SubagentReferencesEditor.vue'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
 import { useConfigurationValidation } from '@/composables/useConfigurationValidation'
@@ -331,20 +330,35 @@ watch(
           />
         </div>
 
-        <section class="row g-3 mb-3" :aria-label="t('agents.subagent.identityTitle')">
-          <div class="col-md-6">
-            <FormField field-path="name" label-key="agents.subagent.roleName">
-              <input
-                v-model="form.name"
-                autocomplete="off"
-                class="form-control"
-              >
-            </FormField>
-          </div>
-          <div class="col-md-6">
-            <FormField field-path="description">
-              <textarea v-model="form.description" class="form-control" rows="3" />
-            </FormField>
+        <section class="mb-3" :aria-label="t('agents.subagent.identityTitle')">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <section class="card h-100">
+                <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                  <label class="card-title mb-0" for="subagent-role-name">{{ t('agents.subagent.roleName') }}</label>
+                  <span class="badge text-bg-primary ms-auto">{{ t('agents.capability.required') }}</span>
+                </header>
+                <div class="card-body">
+                  <input
+                    id="subagent-role-name"
+                    v-model="form.name"
+                    autocomplete="off"
+                    class="form-control"
+                  >
+                </div>
+              </section>
+            </div>
+            <div class="col-md-6">
+              <section class="card h-100">
+                <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                  <label class="card-title mb-0" for="subagent-description">{{ t('fields.description') }}</label>
+                  <span class="badge text-bg-primary ms-auto">{{ t('agents.capability.required') }}</span>
+                </header>
+                <div class="card-body">
+                  <textarea id="subagent-description" v-model="form.description" class="form-control" rows="1" />
+                </div>
+              </section>
+            </div>
           </div>
         </section>
 
@@ -386,20 +400,28 @@ watch(
           </ul>
         </section>
 
-        <section class="card mb-3" :aria-label="t('agents.workspace.title')" data-testid="subagent-workspace-card">
-          <header class="card-header">
-            <h2 class="card-title h5 mb-0 fw-semibold">{{ t('agents.workspace.title') }}</h2>
-          </header>
-          <div class="card-body">
-            <div class="row g-3">
-              <div class="col-md-6">
-                <label class="form-label" for="subagent-capability-filesystem">{{ t('capabilities.filesystem.label') }}</label>
+        <section class="mb-3" :aria-label="t('agents.workspace.title')">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <section class="card h-100" data-testid="subagent-filesystem-card">
+                <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                  <label class="card-title mb-0" for="subagent-capability-filesystem">{{ t('capabilities.filesystem.label') }}</label>
+                  <span class="badge text-bg-primary ms-auto">{{ t('agents.capability.required') }}</span>
+                </header>
+                <div class="card-body">
                 <select id="subagent-capability-filesystem" class="form-select" data-testid="subagent-capability-filesystem" disabled>
                   <option :value="filesystemManifest?.subagent_policy === 'inherit' ? INHERIT_VALUE : INVALID_VALUE">{{ filesystemManifest?.subagent_policy === 'inherit' ? t('agents.override.mode.inherit') : t('agents.override.mode.invalid') }}</option>
                 </select>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label" for="subagent-capability-filesystem-permissions">{{ t('capabilities.filesystem-permissions.label') }}</label>
+                </div>
+              </section>
+            </div>
+            <div class="col-md-6">
+              <section class="card h-100" data-testid="subagent-filesystem-permissions-card">
+                <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                  <label class="card-title mb-0" for="subagent-capability-filesystem-permissions">{{ t('capabilities.filesystem-permissions.label') }}</label>
+                  <span class="badge text-bg-info ms-auto">{{ t('agents.capability.optional') }}</span>
+                </header>
+                <div class="card-body">
                 <select
                   id="subagent-capability-filesystem-permissions"
                   class="form-select"
@@ -411,7 +433,8 @@ watch(
                   <option :value="DISABLED_VALUE">{{ t('agents.override.mode.disabled') }}</option>
                   <option v-for="block in capabilityBlocks('filesystem-permissions')" :key="block.id" :value="block.id">{{ block.name }}</option>
                 </select>
-              </div>
+                </div>
+              </section>
             </div>
           </div>
         </section>
@@ -475,10 +498,11 @@ watch(
           <div class="row g-3">
             <div class="col-md-6">
               <section class="card h-100">
-                <header class="card-header">
+                <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                   <label class="card-title mb-0" for="subagent-hook-workflow">
                     {{ t('automation.hook.title') }}
                   </label>
+                  <span class="badge text-bg-info ms-auto">{{ t('agents.capability.optional') }}</span>
                 </header>
                 <div class="card-body">
                   <select
@@ -498,10 +522,11 @@ watch(
             </div>
             <div class="col-md-6">
               <section class="card h-100">
-                <header class="card-header">
+                <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                   <label class="card-title mb-0" for="subagent-lifecycle-workflow">
                     {{ t('automation.lifecycle.title') }}
                   </label>
+                  <span class="badge text-bg-info ms-auto">{{ t('agents.capability.optional') }}</span>
                 </header>
                 <div class="card-body">
                   <select

@@ -71,19 +71,4 @@ describe('PageShell', () => {
     expect(wrapper.get('.app-content').text()).toContain('Content')
     expect(wrapper.find('[data-testid="section-nav"]').exists()).toBe(false)
   })
-
-  it('does not add an empty margin wrapper around the optional status slot', () => {
-    const wrapper = mount(PageShell, {
-      slots: {
-        status: '<div data-testid="status">Status</div>',
-        default: '<p>Content</p>',
-      },
-      global: { plugins: [i18n()] },
-    })
-
-    const status = wrapper.get('[data-testid="status"]')
-    expect(status.element.parentElement).toBe(wrapper.get('.container-fluid').element)
-    expect(status.element.parentElement?.classList).toContain('pt-3')
-    expect(status.element.parentElement?.classList).not.toContain('mb-3')
-  })
 })

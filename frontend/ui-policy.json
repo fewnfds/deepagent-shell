@@ -363,8 +363,7 @@
           "src/editors/ModelEditor.vue",
           "src/editors/OutputModeEditor.vue",
           "src/pages/AutomationPage.vue",
-          "src/pages/ConfigLibraryPage.vue",
-          "src/pages/SubagentPage.vue"
+          "src/pages/ConfigLibraryPage.vue"
         ]
       },
       {
@@ -453,7 +452,7 @@
     ]
   },
   "testing": {
-    "adminLteIntegrationPaths": ["src/test/adminlteVue.integration.test.ts"]
+    "adminLteIntegrationPaths": []
   },
   "migration": {
     "temporaryRuntimeDependencies": [],

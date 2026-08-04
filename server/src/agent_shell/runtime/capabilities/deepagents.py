@@ -8,10 +8,13 @@ from pathlib import Path, PurePosixPath
 import stat
 from typing import Any
 
+from agent_shell.capability_manifest import (
+    FILESYSTEM_TOOL_NAMES,
+    MINIMAL_FILESYSTEM_TOOL_NAMES,
+)
 from agent_shell.contracts import (
     FilesystemBlock,
     FilesystemPermissionsBlock,
-    FilesystemToolConfigs,
     SkillBlock,
 )
 from agent_shell.registries.skills import scan_skill_folder
@@ -423,11 +426,16 @@ def build_deepagents_capabilities(
             "default filesystem mode does not accept a filesystem block"
         )
 
-    tool_configs = (
-        filesystem.tool_configs.model_dump()
-        if filesystem is not None
-        else FilesystemToolConfigs().model_dump()
-    )
+    if filesystem is not None:
+        tool_configs = filesystem.tool_configs.model_dump()
+    else:
+        tool_configs = {
+            name: {
+                "visible": name in MINIMAL_FILESYSTEM_TOOL_NAMES,
+                "description_override": None,
+            }
+            for name in FILESYSTEM_TOOL_NAMES
+        }
     if filesystem_permissions is not None:
         for name, override in filesystem_permissions.tool_overrides:
             if override is not None:

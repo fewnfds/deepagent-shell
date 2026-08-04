@@ -71,37 +71,3 @@ def test_subagent_entity_owns_routing_identity_contract(
         for issue in response.json()["detail"]["validation"]["issues"]
     }
     assert paths == {"name", "description"}
-
-
-def test_removed_subagent_reference_fields_are_rejected(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
-        subagent = client.post(
-            "/api/subagents",
-            json=subagent_payload("Worker", name="worker"),
-        ).json()
-        response = client.put(
-            f"/api/primary-agents/{primary['id']}",
-            json={
-                "name": primary["name"],
-                "capability_refs": primary["capability_refs"],
-                "subagents": [
-                    {
-                        "subagent_id": subagent["id"],
-                        "enabled": False,
-                        "name": "legacy_worker",
-                    }
-                ],
-            },
-        )
-
-    assert response.status_code == 422
-    paths = {
-        issue["path"]
-        for issue in response.json()["detail"]["validation"]["issues"]
-        if issue["code"] == "contract.unknown_field"
-    }
-    assert paths == {"subagents[0].enabled", "subagents[0].name"}

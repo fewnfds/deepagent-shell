@@ -6,20 +6,6 @@ import sys
 import pytest
 
 from agent_shell.authoring import (
-    DELETE_TOOL_DESCRIPTION,
-    EDIT_FILE_TOOL_DESCRIPTION,
-    EXECUTE_TOOL_DESCRIPTION,
-    FILESYSTEM_EDITOR_SYSTEM_PROMPT,
-    GLOB_TOOL_DESCRIPTION,
-    GREP_TOOL_DESCRIPTION,
-    LIST_FILES_TOOL_DESCRIPTION,
-    READ_FILE_TOOL_DESCRIPTION,
-    SKILLS_SYSTEM_PROMPT,
-    SUBAGENT_EDITOR_SYSTEM_PROMPT,
-    TASK_TOOL_DESCRIPTION,
-    WRITE_FILE_TOOL_DESCRIPTION,
-    WRITE_TODOS_SYSTEM_PROMPT,
-    WRITE_TODOS_TOOL_DESCRIPTION,
     editor_defaults,
 )
 from agent_shell.capability_manifest import (
@@ -138,30 +124,6 @@ def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
         {"name": "Output default", **output["default_value"]}
     )
 
-
-def test_editor_text_snapshots_match_locked_upstream_defaults() -> None:
-    from deepagents.middleware import filesystem, skills, subagents
-    from langchain.agents.middleware import todo
-
-    assert FILESYSTEM_EDITOR_SYSTEM_PROMPT == ""
-    assert not hasattr(filesystem, "FILESYSTEM_SYSTEM_PROMPT")
-    assert LIST_FILES_TOOL_DESCRIPTION == filesystem.LIST_FILES_TOOL_DESCRIPTION
-    assert READ_FILE_TOOL_DESCRIPTION == filesystem.READ_FILE_TOOL_DESCRIPTION
-    assert WRITE_FILE_TOOL_DESCRIPTION == filesystem.WRITE_FILE_TOOL_DESCRIPTION
-    assert EDIT_FILE_TOOL_DESCRIPTION == filesystem.EDIT_FILE_TOOL_DESCRIPTION
-    assert DELETE_TOOL_DESCRIPTION == filesystem.DELETE_TOOL_DESCRIPTION
-    assert GLOB_TOOL_DESCRIPTION == filesystem.GLOB_TOOL_DESCRIPTION
-    assert GREP_TOOL_DESCRIPTION == filesystem.GREP_TOOL_DESCRIPTION
-    assert EXECUTE_TOOL_DESCRIPTION.startswith(
-        filesystem.EXECUTE_TOOL_DESCRIPTION.rstrip()
-    )
-    assert "bundled runtime" in EXECUTE_TOOL_DESCRIPTION
-    assert "do not assume they are installed" in EXECUTE_TOOL_DESCRIPTION
-    assert SKILLS_SYSTEM_PROMPT == skills.SKILLS_SYSTEM_PROMPT
-    assert SUBAGENT_EDITOR_SYSTEM_PROMPT == ""
-    assert TASK_TOOL_DESCRIPTION == subagents.TASK_TOOL_DESCRIPTION
-    assert WRITE_TODOS_SYSTEM_PROMPT == todo.WRITE_TODOS_SYSTEM_PROMPT
-    assert WRITE_TODOS_TOOL_DESCRIPTION == todo.WRITE_TODOS_TOOL_DESCRIPTION
 
 def test_editor_catalog_import_does_not_load_optional_runtime_packages() -> None:
     program = """

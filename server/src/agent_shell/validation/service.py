@@ -10,6 +10,7 @@ from agent_shell.capability_manifest import (
     CAPABILITY_BY_TYPE,
     CAPABILITY_MANIFESTS,
     FILESYSTEM_TOOL_NAMES,
+    MINIMAL_FILESYSTEM_TOOL_NAMES,
 )
 from agent_shell.contracts import (
     BLOCK_MODELS,
@@ -647,10 +648,9 @@ class ConfigurationValidationService:
         owner_id: str,
         owner_name: str,
     ) -> ValidationIssue | None:
-        del filesystem_mode
         seen: dict[str, str] = {
             name: "Deep Agents filesystem harness"
-            for name in self._visible_filesystem_tools(blocks)
+            for name in self._visible_filesystem_tools(blocks, filesystem_mode)
         }
         if has_subagents:
             seen["task"] = "Deep Agents default harness"
@@ -711,8 +711,19 @@ class ConfigurationValidationService:
     @staticmethod
     def _visible_filesystem_tools(
         blocks: dict[str, dict[str, Any]],
+        filesystem_mode: FilesystemMode,
     ) -> tuple[str, ...]:
-        configs = FilesystemToolConfigs().model_dump(mode="json")
+        configs = (
+            FilesystemToolConfigs().model_dump(mode="json")
+            if filesystem_mode == "configured-shared"
+            else {
+                name: {
+                    "visible": name in MINIMAL_FILESYSTEM_TOOL_NAMES,
+                    "description_override": None,
+                }
+                for name in FILESYSTEM_TOOL_NAMES
+            }
+        )
         filesystem = blocks.get("filesystem")
         if filesystem is not None and isinstance(filesystem.get("tool_configs"), dict):
             configs.update(filesystem["tool_configs"])

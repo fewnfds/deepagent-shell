@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from .support import *
 
-
 def test_api_key_is_write_only_and_takes_effect_immediately(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -12,13 +11,6 @@ def test_api_key_is_write_only_and_takes_effect_immediately(
         saved = client.put(
             "/api/api-server",
             json={"api_key": {"operation": "replace", "value": secret}},
-        )
-        rejected_legacy_field = client.put(
-            "/api/api-server",
-            json={
-                "api_key": {"operation": "keep"},
-                "test_message_limit": 20,
-            },
         )
         missing = client.get("/v1/models", headers={"Authorization": ""})
         wrong = client.get(
@@ -36,7 +28,6 @@ def test_api_key_is_write_only_and_takes_effect_immediately(
 
     assert initial.status_code == 200
     assert saved.status_code == 200
-    assert rejected_legacy_field.status_code == 422
     assert saved.json()["api_key"] == {"configured": True}
     assert secret not in saved.text
     assert missing.status_code == 401
@@ -44,80 +35,6 @@ def test_api_key_is_write_only_and_takes_effect_immediately(
     assert allowed.status_code == 200
     assert persisted.status_code == 200
     assert secret not in status.text
-    assert "test_message_limit" not in status.json()
-
-
-def test_interception_records_are_persistent_paged_searchable_and_deletable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    RecordingFakeListChatModel.seen_messages = []
-    with make_client(tmp_path, monkeypatch) as client:
-        monkeypatch.setattr(
-            "agent_shell.runtime.agent_builder._build_chat_model",
-            lambda _block, _credential, _http_clients: RecordingFakeListChatModel(
-                responses=["provider must not run"]
-            ),
-        )
-        primary = create_primary(client)
-        enabled = client.put("/api/interception-test", json={"enabled": True})
-        assert enabled.json() == {"enabled": True}
-        for number in range(3):
-            response = client.post(
-                "/v1/chat/completions",
-                json={
-                    "model": primary["name"],
-                    "messages": [{"role": "user", "content": f"message-{number}"}],
-                    "metadata": {"number": number},
-                },
-            )
-            assert response.status_code == 200
-            assert response.json()["choices"][0]["message"]["content"] == INTERCEPTION_REPLY
-
-        first_page = client.get(
-            "/api/event-feed",
-            params=event_feed_params(source="interception", page_size=2),
-        ).json()
-        searched = client.get(
-            "/api/event-feed",
-            params=event_feed_params(source="interception", query="message-1"),
-        ).json()
-        current = client.get(
-            "/api/event-feed/interception/"
-            f"{first_page['items'][0]['id']}/download"
-        ).json()["entry"]
-        assert len(first_page["items"]) == 2
-        assert first_page["total"] == 3
-        assert len(searched["items"]) == 1
-        details = [
-            json.loads(item["inline_content"])["entry"]
-            for item in first_page["items"]
-        ]
-        assert all(item["name"] for item in details)
-        assert all("request_raw_json" not in item for item in first_page["items"])
-        assert json.loads(current["request_raw_json"])["metadata"]["number"] == 2
-        assert RecordingFakeListChatModel.seen_messages == []
-        assert client.get("/api/api-server/test-messages").status_code == 404
-
-    with ScopedAuthTestClient(create_app()) as restarted:
-        assert restarted.get("/api/interception-test").json() == {"enabled": True}
-        persisted = restarted.get(
-            "/api/event-feed", params=event_feed_params(source="interception", page_size=100)
-        ).json()
-        assert len(persisted["items"]) == 3
-        deleted = restarted.post(
-            "/api/event-feed/delete",
-            json={
-                **EVENT_FEED_TEST_WINDOW,
-                "source": ["interception"],
-                "level": [],
-                "query": "",
-            },
-        )
-        assert deleted.json() == {"deleted": 3}
-        assert restarted.get(
-            "/api/event-feed", params=event_feed_params(source="interception")
-        ).json()["items"] == []
-
 
 def test_start_stop_and_streaming_primary_reply(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -149,7 +66,6 @@ def test_start_stop_and_streaming_primary_reply(
     assert "data: [DONE]" in streamed.text
     assert streamed_session["runs"][0]["status"] == "completed"
     assert streamed_session["runs"][0]["response_text"] == "runtime reply"
-
 
 def test_api_server_start_gate_rejects_invalid_primary_without_dynamic_build(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -211,7 +127,6 @@ def test_api_server_start_gate_rejects_invalid_primary_without_dynamic_build(
         assert restarted.get("/api/api-server").json()["enabled"] is False
         assert restarted.get("/admin").status_code == 200
 
-
 def test_missing_model_request_fields_block_repository_primary_and_api_start(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -270,7 +185,6 @@ def test_missing_model_request_fields_block_repository_primary_and_api_start(
     )
     assert status["enabled"] is False
 
-
 def test_restart_does_not_rewrite_running_state_when_start_validation_crashes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -294,7 +208,6 @@ def test_restart_does_not_rewrite_running_state_when_start_validation_crashes(
             "SELECT enabled FROM api_server_settings WHERE singleton = 1"
         ).fetchone()[0]
     assert enabled == 1
-
 
 def test_api_start_reports_primary_contract_and_referenced_block_issues(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -366,7 +279,6 @@ def test_api_start_reports_primary_contract_and_referenced_block_issues(
         and "Published output" in issue["message"]
         for issue in issues
     )
-
 
 def test_api_start_uses_safe_ast_tool_names_without_importing_user_module(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

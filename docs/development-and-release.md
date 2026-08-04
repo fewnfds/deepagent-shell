@@ -74,6 +74,24 @@ uv run python ..\.test\smoke_http.py
 永久测试按职责放入 `.test/api_server/`、`.test/authoring/`、`.test/runtime/` 或 `.test/security/`。
 用户可观察行为、API 和持久化结果是验收证据。
 
+推送 `dev` 或 `main` 时，GitHub Actions 运行一次无凭据的确定性门禁：前端 typecheck、UI policy 与
+Vitest，以及后端 `.test/` 下由 pytest 默认收集的 `test_*.py`。本地需要复现完整门禁时使用：
+
+```powershell
+cd frontend
+npm run typecheck
+npm run ui:check
+npm test
+```
+
+```powershell
+cd server
+uv run pytest ..\.test -q
+```
+
+`.test/smoke_http.py` 是显式进程/发行 smoke，不在默认 pytest 收集范围；真实 Provider 与 Agent eval 也不进入
+日常门禁。普通局部修改仍只运行最接近的相关测试，完整门禁是分支集成入口，不是每次小改的固定本地流程。
+
 ## 发布
 
 版本权威字段是 `server/pyproject.toml` 的 `project.version`。tag 必须为 `v<project.version>`。

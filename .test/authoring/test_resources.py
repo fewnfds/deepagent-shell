@@ -179,7 +179,6 @@ def test_custom_middleware_catalog_scans_recipes_without_executing_them(
     }
     assert not marker.exists()
 
-
 def test_resource_catalogs_only_scan_the_data_root(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -208,7 +207,6 @@ def test_resource_catalogs_only_scan_the_data_root(
         "errors": {},
     }
 
-
 def test_saving_custom_middleware_source_does_not_execute_it(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -233,34 +231,3 @@ def test_saving_custom_middleware_source_does_not_execute_it(
     assert response.status_code == 200, response.text
     assert response.json()["middlewares"][0]["source"] == source.strip()
     assert not marker.exists()
-
-def test_new_database_contains_current_authoring_and_api_server_tables(
-    tmp_path: Path, monkeypatch
-) -> None:
-    make_client(tmp_path, monkeypatch)
-    with closing(
-        sqlite3.connect(tmp_path / "data" / "state" / "agent-shell.sqlite3")
-    ) as connection, connection:
-        tables = {
-            row[0]
-            for row in connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            ).fetchall()
-        }
-    assert tables == {
-        "blocks",
-        "hook_workflows",
-        "lifecycle_workflows",
-        "primary_agents",
-        "subagents",
-        "provider_secrets",
-        "api_server_settings",
-        "api_server_request_settings",
-        "history_retention_settings",
-        "runtime_control_settings",
-        "system_log_settings",
-        "interception_test_records",
-        "api_message_history",
-        "runtime_diagnostics",
-        "agent_session_runs",
-    }

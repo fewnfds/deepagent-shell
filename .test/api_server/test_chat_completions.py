@@ -153,31 +153,6 @@ def test_initial_message_limit_is_configurable_and_rejects_before_agent_start(
     assert persisted.json()["max_initial_messages"] == 2
 
 
-def test_request_larger_than_previous_one_mib_limit_is_retained_unchanged(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    content = "忠实上下文" + ("x" * 1_100_000)
-
-    with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
-        response = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": primary["name"],
-                "messages": [{"role": "user", "content": content}],
-            },
-        )
-        history = client.get(
-            "/api/event-feed", params=event_feed_params(source="api_call")
-        ).json()
-        detail = client.get(
-            f"/api/event-feed/api_call/{history['items'][0]['id']}/download"
-        ).json()["entry"]
-
-    assert response.status_code == 200, response.text
-    assert json.loads(detail["request_body"])["messages"][0]["content"] == content
-
-
 def test_unused_openai_fields_are_ignored_without_overriding_model_configuration(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

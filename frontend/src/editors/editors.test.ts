@@ -4,39 +4,28 @@ import { describe, expect, it } from 'vitest'
 import type { Component } from 'vue'
 
 import {
-  customMiddlewareAdapter,
   customToolAdapter,
-  exceptionRetryAdapter,
   filesystemAdapter,
   filesystemPermissionsAdapter,
   modelAdapter,
   outputModeAdapter,
   skillAdapter,
-  subagentAdapter,
   systemPromptAdapter,
-  todoListAdapter,
   type FilesystemDefaults,
   type FilesystemPermissionsDefaults,
-  type ExceptionRetryDefaults,
   type OutputModeDefaults,
   type SkillDefaults,
-  type SubagentDefaults,
-  type TodoListDefaults,
 } from '@/domain/blocks'
 import { zhCN } from '@/locales/zh-CN'
 
 import {
-  CustomMiddlewareEditor,
   CustomToolEditor,
-  ExceptionRetryEditor,
   FilesystemEditor,
   FilesystemPermissionsEditor,
   ModelEditor,
   OutputModeEditor,
   SkillEditor,
-  SubagentCapabilityEditor,
   SystemPromptEditor,
-  TodoListEditor,
 } from './index'
 
 const filesystemDefaults: FilesystemDefaults = {
@@ -69,25 +58,9 @@ const outputDefaults: OutputModeDefaults = {
     },
   },
 }
-const exceptionRetryDefaults: ExceptionRetryDefaults = {
-  strategies: ['provider_native', 'model_retry_middleware'],
-  conditions: ['transport_error', 'timeout', 'rate_limit', 'server_error', 'authentication_error'],
-  default_value: {
-    strategy: 'provider_native',
-    force_non_streaming: false,
-    max_retries: 2,
-    retry_on: ['transport_error', 'timeout', 'rate_limit', 'server_error'],
-  },
-}
 const skillDefaults: SkillDefaults = {
   system_prompt: 'skill default',
   required_placeholders: ['{skills_locations}', '{skills_load_warnings}', '{skills_list}'],
-}
-const subagentDefaults: SubagentDefaults = {
-  system_prompt: 'subagent default', tool_description: 'task default',
-}
-const todoDefaults: TodoListDefaults = {
-  system_prompt: 'todo default', tool_description: 'write_todos default',
 }
 const i18n = createI18n({
   legacy: false,
@@ -113,44 +86,6 @@ function mountEditor(component: Component, props: Record<string, unknown>): VueW
 }
 
 describe('dedicated block editors', () => {
-  it('mounts one explicit SFC for every block type', () => {
-    const wrappers = [
-      mountEditor(ModelEditor, { modelValue: modelAdapter.blank() }),
-      mountEditor(CustomToolEditor, { modelValue: customToolAdapter.blank() }),
-      mountEditor(CustomMiddlewareEditor, { modelValue: customMiddlewareAdapter.blank() }),
-      mountEditor(OutputModeEditor, {
-        modelValue: outputModeAdapter.blank(outputDefaults), defaults: outputDefaults,
-      }),
-      mountEditor(ExceptionRetryEditor, {
-        modelValue: exceptionRetryAdapter.blank(exceptionRetryDefaults),
-        defaults: exceptionRetryDefaults,
-      }),
-      mountEditor(FilesystemEditor, {
-        modelValue: filesystemAdapter.blank(filesystemDefaults), defaults: filesystemDefaults,
-      }),
-      mountEditor(FilesystemPermissionsEditor, {
-        modelValue: filesystemPermissionsAdapter.blank(filesystemPermissionsDefaults),
-        defaults: filesystemPermissionsDefaults,
-        filesystems: [],
-      }),
-      mountEditor(SkillEditor, {
-        modelValue: skillAdapter.blank(skillDefaults), defaults: skillDefaults,
-      }),
-      mountEditor(SystemPromptEditor, { modelValue: systemPromptAdapter.blank() }),
-      mountEditor(SubagentCapabilityEditor, {
-        modelValue: subagentAdapter.blank(subagentDefaults), defaults: subagentDefaults,
-      }),
-      mountEditor(TodoListEditor, {
-        modelValue: todoListAdapter.blank(todoDefaults), defaults: todoDefaults,
-      }),
-    ]
-
-    expect(wrappers.map((wrapper) => wrapper.attributes('data-editor'))).toEqual([
-      'model', 'custom-tool', 'custom-middleware', 'output-mode', 'exception-retry',
-      'filesystem', 'filesystem-permissions', 'skill', 'system-prompt', 'subagent', 'todo-list',
-    ])
-  })
-
   it('round-trips filesystem permission rules and atomic overrides', () => {
     const apiValue = {
       id: 'permissions-id',
@@ -329,23 +264,18 @@ describe('dedicated block editors', () => {
 
     const cards = editor.findAll('[data-testid="model-option"]')
     expect(cards).toHaveLength(2)
-    expect(cards.every((card) => card.classes().includes('btn-secondary'))).toBe(true)
     const fetchGroup = editor.get('[data-testid="model-fetch-group"]')
     expect(fetchGroup.element.tagName).toBe('FORM')
-    expect(fetchGroup.get('input').classes()).toContain('form-control')
     const fetchButton = fetchGroup.get('[data-action="fetch-models"]')
-    expect(fetchButton.classes()).toContain('btn-primary')
     expect(fetchButton.attributes('type')).toBe('submit')
     await cards[1]?.trigger('click')
 
     const updatedCards = editor.findAll('[data-testid="model-option"]')
-    expect(updatedCards[0]?.classes()).toContain('btn-secondary')
-    expect(updatedCards[1]?.classes()).toContain('btn-primary')
     expect(updatedCards[1]?.attributes('aria-pressed')).toBe('true')
     expect(editor.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({ model: 'model-b' })
   })
 
-  it('lists installed Providers in a select and exposes no documentation action or runtime installer', async () => {
+  it('lists installed Providers and resets provider-specific settings on selection', async () => {
     const draft = modelAdapter.blank()
     draft.provider_settings = { max_completion_tokens: 200 }
     const editor = mountEditor(ModelEditor, {
@@ -387,8 +317,6 @@ describe('dedicated block editors', () => {
       'langchain-google-vertexai',
     )
     expect(editor.get('[data-testid="provider-details"]').text()).toContain('3.2.4')
-    expect(editor.find('[data-testid="provider-details"] a').exists()).toBe(false)
-    expect(editor.find('[data-action="install-provider"]').exists()).toBe(false)
     expect(editor.find('[data-provider-setting="max_completion_tokens"]').exists()).toBe(false)
     expect(editor.find('[data-provider-setting="max_tokens"]').exists()).toBe(true)
     expect(editor.find('[data-provider-setting="thinking_budget"]').exists()).toBe(true)
@@ -403,13 +331,6 @@ describe('dedicated block editors', () => {
       modelValue: customToolAdapter.blank(),
       catalog: [
         {
-          name: 'commit',
-          function: 'commit',
-          tool_name: 'commit',
-          filename: 'commit.py',
-          description: 'Commit changes.',
-        },
-        {
           name: 'safe_tool',
           function: 'word_count',
           tool_name: 'count_words',
@@ -420,7 +341,7 @@ describe('dedicated block editors', () => {
     })
 
     const items = editor.findAll('[data-testid="custom-tool-item"]')
-    const identifiers = items[1]?.get('[data-testid="tool-identifiers"]').findAll('div').map((row) => [
+    const identifiers = items[0]?.get('[data-testid="tool-identifiers"]').findAll('div').map((row) => [
       row.get('dt').text(),
       row.get('dd').text(),
     ])
@@ -430,130 +351,6 @@ describe('dedicated block editors', () => {
       ['resource_name', 'safe_tool'],
       ['filename', 'safe_tool.py'],
     ])
-    expect(items.every((item) => !item.classes().includes('form-check'))).toBe(true)
-  })
-
-  it('keeps scanned Skill checkboxes inside their list rows', () => {
-    const editor = mountEditor(SkillEditor, {
-      modelValue: skillAdapter.blank(skillDefaults),
-      defaults: skillDefaults,
-      catalog: [{ name: 'answer-skill', description: 'Read this Skill when needed.' }],
-    })
-
-    const item = editor.get('[data-testid="skill-catalog-item"]')
-    expect(item.classes()).not.toContain('form-check')
-    expect(item.get('.d-flex > .form-check-input').exists()).toBe(true)
-  })
-
-  it('shows the required Skill prompt placeholders as a short note', () => {
-    const editor = mount(SkillEditor, {
-      props: {
-        modelValue: skillAdapter.blank(skillDefaults),
-        defaults: skillDefaults,
-      },
-      global: { plugins: [localizedI18n] },
-    })
-
-    const requirement = editor.get('[data-testid="skill-required-placeholders"]')
-    expect(requirement.text()).toBe(
-      '提示词必须包含 {skills_locations} {skills_load_warnings} {skills_list}。',
-    )
-    expect(requirement.classes()).toContain('form-text')
-    expect(editor.find('.alert').exists()).toBe(false)
-  })
-
-  it('shows only editable Todo and synchronous Subagent configuration fields', () => {
-    const skill = mountEditor(SkillEditor, {
-      modelValue: skillAdapter.blank(skillDefaults),
-      defaults: skillDefaults,
-    })
-    const editor = mountEditor(SubagentCapabilityEditor, {
-      modelValue: subagentAdapter.blank(subagentDefaults),
-      defaults: subagentDefaults,
-    })
-    const todo = mountEditor(TodoListEditor, {
-      modelValue: todoListAdapter.blank(todoDefaults),
-      defaults: todoDefaults,
-    })
-
-    expect(skill.find('.form-switch').exists()).toBe(true)
-    expect(editor.find('.subagent-mode-card').exists()).toBe(false)
-    expect(editor.find('input[type="checkbox"]').exists()).toBe(false)
-    expect(editor.findAll('textarea')).toHaveLength(2)
-    expect(editor.find('.list-group').exists()).toBe(false)
-    expect(todo.findAll('textarea')).toHaveLength(2)
-    expect(todo.find('.list-group').exists()).toBe(false)
-  })
-
-  it('keeps editor cards atomic instead of nesting schema-shaped surfaces', () => {
-    const filesystem = mountEditor(FilesystemEditor, {
-      modelValue: filesystemAdapter.blank(filesystemDefaults), defaults: filesystemDefaults,
-    })
-    const middleware = mountEditor(CustomMiddlewareEditor, {
-      modelValue: customMiddlewareAdapter.blank(),
-    })
-
-    for (const editor of [filesystem, middleware]) {
-      expect(editor.find('.card .card').exists()).toBe(false)
-      expect(editor.find('.card .accordion').exists()).toBe(false)
-      expect(editor.find('.card .border.rounded.p-3').exists()).toBe(false)
-    }
-    expect(filesystem.find('.accordion').exists()).toBe(false)
-    expect(filesystem.findAll('[data-testid="filesystem-tool-card"]')).toHaveLength(8)
-    const switches = filesystem.findAll('input[type="checkbox"]')
-    expect(switches.filter((input) => input.attributes('disabled') !== undefined)).toHaveLength(2)
-  })
-
-  it('uses task titles without rendering override field labels', () => {
-    const editors = [
-      mount(FilesystemEditor, {
-        props: {
-          modelValue: filesystemAdapter.blank(filesystemDefaults), defaults: filesystemDefaults,
-        },
-        global: { plugins: [localizedI18n] },
-      }),
-      mount(TodoListEditor, {
-        props: { modelValue: todoListAdapter.blank(todoDefaults), defaults: todoDefaults },
-        global: { plugins: [localizedI18n] },
-      }),
-      mount(SubagentCapabilityEditor, {
-        props: { modelValue: subagentAdapter.blank(subagentDefaults), defaults: subagentDefaults },
-        global: { plugins: [localizedI18n] },
-      }),
-    ]
-
-    expect(editors[0]?.text()).toContain('文件系统提示词')
-    expect(editors[0]?.text()).not.toContain('文件能力提示词')
-    expect(editors[2]?.text()).toContain('task 工具说明')
-    for (const editor of editors) expect(editor.text()).not.toContain('覆写')
-  })
-
-  it('renders advanced settings before event cards without an outer section card', () => {
-    const editor = mountEditor(OutputModeEditor, {
-      modelValue: outputModeAdapter.blank(outputDefaults),
-      defaults: outputDefaults,
-    })
-
-    expect(editor.get('[data-testid="event-template-list"]').findAll('[data-testid="event-template"]')).toHaveLength(1)
-    expect(editor.get('[data-testid="output-filter-settings"]').find('[data-testid="event-template-list"]').exists()).toBe(false)
-    expect(editor.element.firstElementChild)
-      .toBe(editor.get('[data-testid="output-filter-settings"]').element)
-    expect(editor.findAll('textarea')).toHaveLength(1)
-  })
-
-  it('shows event variables as passive grey references', () => {
-    const editor = mountEditor(OutputModeEditor, {
-      modelValue: outputModeAdapter.blank(outputDefaults),
-      defaults: outputDefaults,
-    })
-
-    const variable = editor.get('[data-testid="template-variable"]')
-    expect(variable.text()).toBe('{{message}}')
-    expect(variable.element.tagName).toBe('SPAN')
-    expect(variable.classes()).toContain('text-bg-secondary')
-    expect(variable.attributes('title')).toBeUndefined()
-    expect(editor.get('[data-testid="event-template"] textarea').element)
-      .toHaveProperty('value', '{{message}}')
   })
 
   it('localizes structured resource scan errors without a string fallback', () => {

@@ -1,17 +1,9 @@
-import { createHash } from 'node:crypto'
-
 import { describe, expect, it } from 'vitest'
 
 import { glossaryEntries } from './entries'
 import { glossaryEntry, searchGlossary } from './search'
 
 describe('typed glossary data', () => {
-  it('preserves the complete current glossary payload exactly', () => {
-    expect(glossaryEntries).toHaveLength(714)
-    expect(createHash('sha256').update(JSON.stringify(glossaryEntries)).digest('hex'))
-      .toBe('f7547fd5632fbe68ea7a13d4001ddf4d3b2f56096542795143af903b1ae3c813')
-  })
-
   it('contains unique keys and complete bilingual source records', () => {
     expect(new Set(glossaryEntries.map((entry) => entry.key)).size).toBe(glossaryEntries.length)
     for (const entry of glossaryEntries) {

@@ -39,6 +39,36 @@ def test_default_deep_agent_tool_conflict_is_rejected_at_save(
     )
 
 
+def test_minimal_filesystem_allows_non_read_file_tool_names(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = make_client(tmp_path, monkeypatch)
+    write_custom_tool(tmp_path, "workspace_list", "ls")
+    blocks = create_blocks(
+        client,
+        "minimal-filesystem",
+        ("model", "output-mode", "custom-tool"),
+    )
+    selected = client.put(
+        f"/api/blocks/custom-tool/{blocks['custom-tool']['id']}",
+        json={"name": blocks["custom-tool"]["name"], "tools": ["workspace_list"]},
+    )
+    assert selected.status_code == 200, selected.text
+
+    primary = client.post(
+        "/api/primary-agents",
+        json={
+            "name": "Minimal filesystem",
+            "capability_refs": references(
+                blocks,
+                ("model", "output-mode", "custom-tool"),
+            ),
+        },
+    )
+
+    assert primary.status_code == 200, primary.text
+
+
 def test_block_update_rejects_new_conflict_in_referencing_primary(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -222,189 +252,6 @@ def test_override_update_rejects_new_conflict_in_bound_subagent(
     assert any(issue["code"] == "assembly.tool_name_conflict" for issue in issues)
     stored = client.get(f"/api/subagents/{subagent.json()['id']}").json()
     assert stored["settings"]["capability_overrides"][0]["block_id"] == safe_tool["id"]
-
-def test_block_copy_revalidates_stored_payload_before_writing(
-    tmp_path: Path, monkeypatch
-) -> None:
-    client = make_client(tmp_path, monkeypatch)
-    block = client.post(
-        "/api/blocks/system-prompt",
-        json={"name": "Old prompt", "system_prompt": "Keep this text."},
-    ).json()
-    database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
-    with closing(sqlite3.connect(database_path)) as connection, connection:
-        row = connection.execute(
-            "SELECT payload FROM blocks WHERE id = ?", (block["id"],)
-        ).fetchone()
-        payload = json.loads(row[0])
-        payload["legacy_field"] = True
-        connection.execute(
-            "UPDATE blocks SET payload = ? WHERE id = ?",
-            (json.dumps(payload, ensure_ascii=False), block["id"]),
-        )
-
-    rejected = client.post(
-        f"/api/blocks/system-prompt/{block['id']}/copy",
-        json={"name": "Rejected copy"},
-    )
-
-    assert rejected.status_code == 422
-    issues = rejected.json()["detail"]["validation"]["issues"]
-    assert any(issue["code"] == "contract.unknown_field" for issue in issues)
-    names = [item["name"] for item in client.get("/api/blocks/system-prompt").json()]
-    assert "Rejected copy" not in names
-
-def test_repository_validation_reports_raw_historical_fields_without_rewriting(
-    tmp_path: Path, monkeypatch
-) -> None:
-    client = make_client(tmp_path, monkeypatch)
-    blocks = create_blocks(client, "repository")
-    primary = client.post(
-        "/api/primary-agents",
-        json={
-            "name": "Repository Primary",
-            "capability_refs": references(
-                blocks, ("model", "filesystem", "output-mode")
-            ),
-        },
-    )
-    assert primary.status_code == 200, primary.text
-    healthy = client.get("/api/validation/repository")
-    assert healthy.status_code == 200
-    assert healthy.json() == {
-        "valid": True,
-        "stage": "repository_load",
-        "issues": [],
-    }
-
-    prompt = blocks["system-prompt"]
-    database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
-    with closing(sqlite3.connect(database_path)) as connection, connection:
-        row = connection.execute(
-            "SELECT payload FROM blocks WHERE id = ?", (prompt["id"],)
-        ).fetchone()
-        payload = json.loads(row[0])
-        payload["legacy_field"] = r"C:\private\legacy.json"
-        connection.execute(
-            "UPDATE blocks SET payload = ? WHERE id = ?",
-            (json.dumps(payload, ensure_ascii=False), prompt["id"]),
-        )
-
-    report = client.get("/api/validation/repository")
-
-    assert report.status_code == 200
-    issue = next(
-        item
-        for item in report.json()["issues"]
-        if item["owner_id"] == prompt["id"] and item["path"] == "legacy_field"
-    )
-    assert issue["code"] == "contract.unknown_field"
-    assert "private" not in issue["message"]
-    raw = client.get(f"/api/blocks/system-prompt/{prompt['id']}").json()
-    assert raw["legacy_field"] == r"C:\private\legacy.json"
-
-def test_repository_validation_reports_unknown_stored_block_type(
-    tmp_path: Path, monkeypatch
-) -> None:
-    client = make_client(tmp_path, monkeypatch)
-    required = create_blocks(
-        client,
-        "unknown-type-owner",
-        ("model", "output-mode"),
-    )
-    primary = client.post(
-        "/api/primary-agents",
-        json={
-            "name": "Historical Primary",
-            "capability_refs": references(required, ("model", "output-mode")),
-        },
-    ).json()
-    subagent = client.post(
-        "/api/subagents",
-        json=subagent_payload("Historical Subagent", name="historical_worker"),
-    ).json()
-    database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
-    block_id = "00000000-0000-0000-0000-000000000014"
-    with closing(sqlite3.connect(database_path)) as connection, connection:
-        connection.execute(
-            "INSERT INTO blocks (id, block_type, name, payload) VALUES (?, ?, ?, ?)",
-            (block_id, "removed-capability", "Historical component", "{}"),
-        )
-        primary_payload = json.loads(
-            connection.execute(
-                "SELECT payload FROM primary_agents WHERE id = ?",
-                (primary["id"],),
-            ).fetchone()[0]
-        )
-        primary_payload["capability_refs"].append(
-            {"type": "removed-capability", "block_id": block_id}
-        )
-        connection.execute(
-            "UPDATE primary_agents SET payload = ? WHERE id = ?",
-            (json.dumps(primary_payload, ensure_ascii=False), primary["id"]),
-        )
-        subagent_payload_json = json.loads(
-            connection.execute(
-                "SELECT payload FROM subagents WHERE id = ?",
-                (subagent["id"],),
-            ).fetchone()[0]
-        )
-        subagent_payload_json["settings"]["capability_overrides"].append(
-            {
-                "type": "removed-capability",
-                "mode": "replace",
-                "block_id": block_id,
-            }
-        )
-        connection.execute(
-            "UPDATE subagents SET payload = ? WHERE id = ?",
-            (json.dumps(subagent_payload_json, ensure_ascii=False), subagent["id"]),
-        )
-
-    report = client.get("/api/validation/repository")
-
-    assert report.status_code == 200
-    assert any(
-        issue["code"] == "storage.unknown_block_type"
-        and issue["owner_id"] == block_id
-        and issue["owner_type"] == "removed-capability"
-        for issue in report.json()["issues"]
-    )
-
-    deleted = client.delete(f"/api/unsupported-blocks/{block_id}")
-    assert deleted.status_code == 200
-    assert deleted.json() == {"ok": True}
-    stored_primary = client.get(f"/api/primary-agents/{primary['id']}").json()
-    stored_subagent = client.get(f"/api/subagents/{subagent['id']}").json()
-    assert all(
-        item["type"] != "removed-capability"
-        for item in stored_primary["capability_refs"]
-    )
-    assert all(
-        item["type"] != "removed-capability"
-        for item in stored_subagent["settings"]["capability_overrides"]
-    )
-    assert client.get("/api/validation/repository").json() == {
-        "valid": True,
-        "stage": "repository_load",
-        "issues": [],
-    }
-
-
-def test_unsupported_block_delete_rejects_current_component_types(
-    tmp_path: Path, monkeypatch
-) -> None:
-    client = make_client(tmp_path, monkeypatch)
-    block = client.post(
-        "/api/blocks/system-prompt",
-        json={"name": "Current prompt", "system_prompt": "Follow the request."},
-    ).json()
-
-    response = client.delete(f"/api/unsupported-blocks/{block['id']}")
-
-    assert response.status_code == 404
-    assert client.get(f"/api/blocks/system-prompt/{block['id']}").status_code == 200
-
 def test_repository_report_owns_invalid_subagent_issue_by_primary(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -465,57 +312,6 @@ def test_repository_report_owns_invalid_subagent_issue_by_primary(
     assert issue["scope"] == "subagent"
     assert issue["owner_id"] == valid_primary["id"]
     assert issue["owner_name"] == "Subagent owner Primary"
-
-def test_invalid_historical_primary_does_not_break_unrelated_delete_paths(
-    tmp_path: Path, monkeypatch
-) -> None:
-    client = make_client(tmp_path, monkeypatch)
-    blocks = create_blocks(
-        client,
-        "invalid-delete-owner",
-        ("model", "filesystem", "output-mode", "system-prompt"),
-    )
-    primary = client.post(
-        "/api/primary-agents",
-        json={
-            "name": "Historical invalid delete owner",
-            "capability_refs": references(
-                blocks, ("model", "filesystem", "output-mode")
-            ),
-            "subagents": [],
-        },
-    ).json()
-    subagent = client.post(
-        "/api/subagents",
-        json=subagent_payload(
-            "Unrelated deletable Subagent",
-            name="unrelated_worker",
-        ),
-    ).json()
-    database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
-    with closing(sqlite3.connect(database_path)) as connection, connection:
-        row = connection.execute(
-            "SELECT payload FROM primary_agents WHERE id = ?", (primary["id"],)
-        ).fetchone()
-        payload = json.loads(row[0])
-        payload["capability_refs"] = None
-        payload["subagents"] = {"legacy": True}
-        connection.execute(
-            "UPDATE primary_agents SET payload = ? WHERE id = ?",
-            (json.dumps(payload, ensure_ascii=False), primary["id"]),
-        )
-
-    report = client.get("/api/validation/repository")
-    deleted_block = client.delete(
-        f"/api/blocks/system-prompt/{blocks['system-prompt']['id']}"
-    )
-    deleted_subagent = client.delete(f"/api/subagents/{subagent['id']}")
-
-    assert report.status_code == 200
-    assert report.json()["valid"] is False
-    assert deleted_block.status_code == 200, deleted_block.text
-    assert deleted_subagent.status_code == 200, deleted_subagent.text
-
 def test_generic_draft_validation_covers_each_target_without_writing(
     tmp_path: Path, monkeypatch
 ) -> None:

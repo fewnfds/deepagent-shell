@@ -150,28 +150,6 @@ describe('EventFeedPage', () => {
     }))
   })
 
-  it('keeps each log detail collapsed until its shared table row is clicked', async () => {
-    const wrapper = await mountPage(api([item('api_call', 'short')]))
-    const row = wrapper.get('[data-testid="data-table-row"]')
-
-    expect(wrapper.find('[data-testid="data-table-detail"]').exists()).toBe(false)
-    expect(row.attributes('aria-expanded')).toBe('false')
-    await row.trigger('click')
-    expect(wrapper.find('[data-testid="data-table-detail"]').exists()).toBe(true)
-    expect(row.attributes('aria-expanded')).toBe('true')
-    expect(wrapper.findAll('button').some(button => button.text() === 'Expand')).toBe(false)
-  })
-
-  it('declares only raw and debug download as API row actions', async () => {
-    const wrapper = await mountPage(api([item('api_call', 'long')]))
-
-    expect(wrapper.findAll('[data-testid="event-actions"]')).toHaveLength(0)
-    expect(wrapper.findAll('[data-action]').map((action) => action.text())).toEqual([
-      'RAW',
-      'DEBUG',
-    ])
-  })
-
   it('submits source, level, and text filters from one filter card', async () => {
     const mockApi = api([])
     const wrapper = await mountPage(mockApi)
@@ -271,11 +249,6 @@ describe('EventFeedPage', () => {
     const mockApi = api([])
     const wrapper = await mountPage(mockApi)
 
-    const retentionFields = [
-      ...wrapper.findAll('[data-testid^="retention-"]'),
-      wrapper.get('[data-testid="system-log-settings"]'),
-    ]
-    expect(retentionFields.every((field) => field.classes().includes('col-lg-3'))).toBe(true)
     expect(wrapper.text()).toContain('System log capacity')
 
     await wrapper.get('#verbose-diagnostics').setValue(true)

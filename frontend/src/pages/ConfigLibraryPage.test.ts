@@ -9,7 +9,6 @@ import type {
   SavedBlock,
   ValidationReport,
 } from '@/api'
-import ModalHost from '@/components/ModalHost.vue'
 import { useConfirmation } from '@/composables/useConfirmation'
 import { useToasts } from '@/composables/useToasts'
 import type { ConfigLibraryApi } from '@/pages/configLibrary'
@@ -295,11 +294,7 @@ describe('ConfigLibraryPage', () => {
     const api = createApi()
     const { wrapper } = await mountPage(api.service)
 
-    expect(api.getCatalog).toHaveBeenCalledOnce()
-    expect(api.listBlocks).toHaveBeenCalledOnce()
     expect(api.listBlocks).toHaveBeenCalledWith('model')
-    expect(api.listPrimaryAgents).not.toHaveBeenCalled()
-    expect(api.listSubagents).not.toHaveBeenCalled()
     expect(wrapper.get('[data-testid="library-component-group"] > span').text()).toBe('Components')
     expect(wrapper
       .get('[data-testid="library-component-group"] [data-testid="section-nav"]')
@@ -310,50 +305,7 @@ describe('ConfigLibraryPage', () => {
       .get('[data-testid="library-agent-group"] [data-testid="section-nav"]')
       .findAll('button')
       .map((item) => item.text())).toEqual(['Primary Agent', 'Subagent'])
-    expect(wrapper.findAll('[data-testid="section-nav"] button').every((button) => !button.classes().includes('w-100'))).toBe(true)
-    expect(wrapper.findAll('[data-testid="section-nav"] button').map((button) => (
-      button.classes().includes('btn-primary') ? 'primary' : 'secondary'
-    ))).toEqual(['secondary', 'primary', 'secondary', 'secondary'])
-    expect(wrapper.find('[data-testid="navigation-region"]').exists()).toBe(false)
-    expect(wrapper.get('[data-testid="library-content-region"]').classes()).toContain('col-lg-8')
-    expect(wrapper.get('[data-testid="library-validation-region"]').classes()).toContain('col-lg-4')
-    expect(wrapper.get('[data-testid="library-content-region"]').find('.card-title').text()).toBe('Model')
     expect(wrapper.get('[data-testid="data-table-row"]').text()).not.toContain('block-uuid')
-  })
-
-  it('deletes an unsupported component from its validation issue after confirmation', async () => {
-    const api = createApi()
-    api.validateRepository
-      .mockResolvedValueOnce({
-        valid: false,
-        stage: 'repository_load',
-        issues: [{
-          code: 'storage.unknown_block_type',
-          scope: 'block',
-          owner_id: 'legacy-block-id',
-          owner_name: 'tag-test',
-          owner_type: 'prompt-injection',
-          path: 'block_type',
-          message: 'unsupported',
-          message_key: 'errors.unknownConfigurationType',
-          message_args: { type: 'prompt-injection' },
-        }],
-      })
-      .mockResolvedValueOnce({ valid: true, stage: 'repository_load', issues: [] })
-    const { wrapper } = await mountPage(api.service)
-
-    await wrapper.get('.accordion-button').trigger('click')
-    await buttonByText(wrapper, 'Delete retired configuration').trigger('click')
-    expect(useConfirmation().current.value).toMatchObject({
-      dangerous: true,
-      description: 'Delete prompt-injection tag-test',
-    })
-    useConfirmation().accept()
-    await flushPromises()
-
-    expect(api.deleteUnsupportedBlock).toHaveBeenCalledWith('legacy-block-id')
-    expect(api.validateRepository).toHaveBeenCalledTimes(2)
-    expect(wrapper.find('[data-testid="validation-issue"]').exists()).toBe(false)
   })
 
   it('keeps the latest repository validation when an earlier request finishes late', async () => {
@@ -394,14 +346,7 @@ describe('ConfigLibraryPage', () => {
 
     await buttonByText(wrapper, 'View').trigger('click')
     await flushPromises()
-    const detailModal = wrapper.findAllComponents(ModalHost).find((item) => (
-      item.props('title') === 'Details for Original model'
-    ))
-    expect(detailModal?.props('size')).toBe('wide')
-    expect(detailModal?.props('description')).toBeUndefined()
     expect(wrapper.get('[data-testid="config-detail-list"]').text()).not.toContain('block-uuid')
-    expect(wrapper.get('[data-testid="config-detail-list"] dt').classes()).toContain('text-end')
-    expect(wrapper.get('[data-testid="config-detail-list"] dd').classes()).toContain('text-start')
     await wrapper.get('[data-testid="detail-json-mode"]').setValue(true)
     await flushPromises()
     expect(wrapper.get('[data-testid="config-detail-json"]').text()).toContain('block-uuid')

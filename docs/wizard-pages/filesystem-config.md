@@ -31,8 +31,9 @@
 
 ## 两档运行模式
 
-- 未选择项目 Filesystem：使用请求级默认 StateBackend，普通 workspace 初始为空；模型默认获得 `ls`、
-  `read_file`、`write_file`、`edit_file`、`glob`、`grep`。
+- 未选择项目 Filesystem：使用请求级默认 StateBackend 和“最小功能”，普通 workspace 初始为空；Deep Agents
+  的 FilesystemMiddleware 要求 `read_file` 始终存在，因此模型只获得 `read_file`。选择 Skill 后，该工具也用于
+  读取 Agent 独立的只读 `/skills/` 视图。
 - 选择项目 Filesystem：使用配置的共享 workspace，并按 `tool_configs` 开放 `ls`、`read_file`、
   `write_file`、`edit_file`、`delete`、`glob`、`grep`。`read_file` 固定可见；`execute` 固定不可见；
   `delete` 默认关闭。

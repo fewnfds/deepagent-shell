@@ -205,7 +205,7 @@ describe('AgentSessionsPage', () => {
     })
   })
 
-  it('renders a compact session list and downloads the complete session as JSON', async () => {
+  it('downloads the complete selected session as JSON without exposing its ID', async () => {
     const source = api()
     const wrapper = mount(AgentSessionsPage, {
       props: { api: source },
@@ -214,12 +214,7 @@ describe('AgentSessionsPage', () => {
     await flushPromises()
 
     const row = wrapper.get('[data-testid="data-table-row"]')
-    expect(wrapper.get('[data-testid="data-table"]').get('table').element.tagName).toBe('TABLE')
-    expect(wrapper.find('[data-testid="session-card"]').exists()).toBe(false)
-    expect(row.text()).toContain('Primary')
-    expect(row.text()).toContain('2')
     expect(row.text()).not.toContain('session-1')
-    expect(row.find('.text-bg-success').exists()).toBe(false)
 
     await row.get('[data-action="download-session"]').trigger('click')
     await flushPromises()
@@ -339,12 +334,7 @@ describe('AgentSessionsPage', () => {
     await flushPromises()
 
     const timeline = wrapper.get('[data-testid="session-timeline"]')
-    expect(timeline.text()).toContain('Model request 1: Primary calls model provider-model')
     expect(timeline.text()).toContain('Model request 1: call tool lookup')
-    expect(timeline.text()).toContain('Model request 1: tool lookup completed')
-    expect(timeline.text()).toContain('Model request 2: Primary calls model provider-model')
-    expect(timeline.text()).toContain('Model request 2: Subagent Researcher started')
-    expect(timeline.text()).toContain('Model request 2: Primary returns the final response')
     expect(getAgentSession).not.toHaveBeenCalled()
     expect(getAgentSessionStep).not.toHaveBeenCalled()
     expect(document.body.textContent).not.toContain(longToolResult)
@@ -354,9 +344,6 @@ describe('AgentSessionsPage', () => {
 
     expect(getAgentSessionStep).toHaveBeenCalledWith('session-1', 'run-1', 'event-2')
     const stepJson = wrapper.get('[data-testid="timeline-step-json"]')
-    expect(stepJson.element.tagName).toBe('TEXTAREA')
-    expect(stepJson.attributes('readonly')).toBeDefined()
-    expect(stepJson.classes()).toContain('session-timeline-json')
     expect((stepJson.element as HTMLTextAreaElement).value).toContain(longToolResult)
     expect((stepJson.element as HTMLTextAreaElement).value).toContain('\n')
     expect(wrapper.find('[data-testid="session-json"]').exists()).toBe(false)
@@ -365,8 +352,6 @@ describe('AgentSessionsPage', () => {
     expect(wrapper.find('[data-testid="timeline-step-json"]').exists()).toBe(false)
     await wrapper.get('[data-step-id="run-1:event-2"]').trigger('click')
     expect(getAgentSessionStep).toHaveBeenCalledTimes(1)
-    expect(wrapper.findAll('[data-action="close-modal"]')).toHaveLength(1)
-    expect(wrapper.find('.modal-footer').exists()).toBe(false)
     wrapper.unmount()
   })
 

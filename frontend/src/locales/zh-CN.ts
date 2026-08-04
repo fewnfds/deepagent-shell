@@ -1053,10 +1053,11 @@ export const zhCN = {
       saveFailed: '保存失败',
     },
     capability: {
-      required: '必需',
+      required: '必选',
       optional: '可选',
       selection: '当前选择',
       notAttached: '不装配',
+      minimal: '最小功能',
     },
     automation: {
       title: '自动化工作流',

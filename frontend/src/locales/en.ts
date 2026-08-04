@@ -1059,6 +1059,7 @@ export const en: MessageSchema = {
       optional: 'Optional',
       selection: 'Current selection',
       notAttached: 'Not attached',
+      minimal: 'Minimum features',
     },
     automation: {
       title: 'Automation workflows',

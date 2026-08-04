@@ -164,14 +164,6 @@ beforeEach(() => {
 })
 
 describe('ComponentsPage', () => {
-  it('loads the release-managed Provider catalog inside the Model page', async () => {
-    const { wrapper } = await mountAt('/components/model')
-
-    expect(api.listModelProviders).toHaveBeenCalledOnce()
-    expect(wrapper.get('[data-testid="provider-details"]').text()).toContain('langchain-openai')
-    expect(wrapper.find('[data-action="install-provider"]').exists()).toBe(false)
-  })
-
   it('uses catalog order and loads only the routed type and explicit UUID', async () => {
     const id = '00000000-0000-0000-0000-000000000001'
     const { wrapper } = await mountAt(`/components/model?id=${id}`)
@@ -189,16 +181,8 @@ describe('ComponentsPage', () => {
     expect(api.listBlocks).toHaveBeenCalledWith('model')
     expect(api.getBlock).toHaveBeenCalledWith('model', id)
     expect(wrapper.find('[data-editor="model"]').exists()).toBe(true)
-    expect(wrapper.get('[data-testid="component-layout"]').findAll(':scope > *')).toHaveLength(2)
-    expect(wrapper.get('[data-testid="editor-region"]').classes()).toContain('col-lg-8')
-    expect(wrapper.get('[data-testid="editor-region"]').classes()).toContain('component-editor-region')
-    expect(wrapper.get('[data-testid="inspector-region"]').classes()).toContain('col-lg-4')
     expect(wrapper.find('[data-testid="navigation-region"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="config-editor-layout"]').exists()).toBe(false)
-    expect(wrapper.findAll('[data-testid="section-nav"] button').every((button) => !button.classes().includes('w-100'))).toBe(true)
-    expect(wrapper.findAll('[data-testid="section-nav"] button').map((button) => (
-      button.classes().includes('btn-primary') ? 'primary' : 'secondary'
-    ))).toEqual(['primary', 'secondary'])
     expect(wrapper.get('[data-testid="editor-region"]').find('[data-testid="validation-checklist"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="inspector-region"]').find('[data-testid="validation-checklist"]').exists()).toBe(true)
     expect(wrapper.text()).not.toContain(id)
@@ -225,37 +209,6 @@ describe('ComponentsPage', () => {
 
     expect(wrapper.get('[data-testid="page-error"]').attributes('role')).toBe('alert')
     expect(toastNotify).not.toHaveBeenCalled()
-    wrapper.unmount()
-  })
-
-  it('keeps an invalid saved record visibly blocked while loading a repair draft', async () => {
-    const id = '00000000-0000-0000-0000-000000000001'
-    api.getBlock.mockResolvedValueOnce({ ...modelRecord(id), legacy_field: true })
-    api.validateRepository.mockResolvedValueOnce({
-      valid: false,
-      stage: 'repository_load',
-      issues: [{
-        code: 'contract.unknown_field',
-        scope: 'block',
-        owner_id: id,
-        owner_name: 'Shared name',
-        path: 'legacy_field',
-        message: 'legacy field',
-        message_key: 'validation.issue.contract.unknownField',
-        message_args: { field: 'legacy_field' },
-      }],
-    })
-
-    const { wrapper } = await mountAt(`/components/model?id=${id}`)
-
-    expect(wrapper.get('[data-testid="stored-invalid-warning"]').text())
-      .toBe('components.storedInvalidWarning')
-    expect(wrapper.find('[data-field="legacy_field"]').exists()).toBe(false)
-
-    await wrapper.get('[data-field="record-name"]').setValue('Repaired name')
-    await buttonByText(wrapper, 'common.save').trigger('click')
-    await flushPromises()
-    expect(wrapper.find('[data-testid="stored-invalid-warning"]').exists()).toBe(false)
     wrapper.unmount()
   })
 

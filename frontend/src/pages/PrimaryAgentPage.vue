@@ -316,14 +316,22 @@ watch(
           </ul>
         </section>
 
-        <section class="card mb-3" :aria-label="t('agents.workspace.title')" data-testid="primary-workspace-card">
-          <header class="card-header">
-            <h2 class="card-title h5 mb-0 fw-semibold">{{ t('agents.workspace.title') }}</h2>
-          </header>
-          <div class="card-body">
-            <div class="row g-3">
-              <div v-for="type in ['filesystem', 'filesystem-permissions'] as CapabilityType[]" :key="type" class="col-md-6">
-                <label class="form-label" :for="`primary-capability-${type}`">{{ t(`capabilities.${type}.label`) }}</label>
+        <section class="mb-3" :aria-label="t('agents.workspace.title')">
+          <div class="row g-3">
+            <div v-for="type in ['filesystem', 'filesystem-permissions'] as CapabilityType[]" :key="type" class="col-md-6">
+              <section class="card h-100" :data-testid="`primary-${type}-card`">
+                <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                  <label class="card-title mb-0" :for="`primary-capability-${type}`">
+                    {{ t(`capabilities.${type}.label`) }}
+                  </label>
+                  <span v-if="type === 'filesystem'" class="badge text-bg-primary ms-auto">
+                    {{ t('agents.capability.required') }}
+                  </span>
+                  <span v-else class="badge text-bg-info ms-auto">
+                    {{ t('agents.capability.optional') }}
+                  </span>
+                </header>
+                <div class="card-body">
                 <select
                   :id="`primary-capability-${type}`"
                   class="form-select"
@@ -331,10 +339,11 @@ watch(
                   :value="referenceId(form, type)"
                   @change="updateReference(type, ($event.target as HTMLSelectElement).value)"
                 >
-                  <option value="">{{ t('agents.capability.notAttached') }}</option>
+                  <option value="">{{ type === 'filesystem' ? t('agents.capability.minimal') : t('agents.capability.notAttached') }}</option>
                   <option v-for="block in capabilityBlocks(type)" :key="block.id" :value="block.id">{{ block.name }}</option>
                 </select>
-              </div>
+                </div>
+              </section>
             </div>
           </div>
         </section>
@@ -383,10 +392,11 @@ watch(
           <div class="row g-3">
             <div class="col-md-6">
               <section class="card h-100">
-                <header class="card-header">
+                <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                   <label class="card-title mb-0" for="primary-hook-workflow">
                     {{ t('automation.hook.title') }}
                   </label>
+                  <span class="badge text-bg-info ms-auto">{{ t('agents.capability.optional') }}</span>
                 </header>
                 <div class="card-body">
                   <select id="primary-hook-workflow" v-model="form.automation.hook_workflow_id" class="form-select">
@@ -400,10 +410,11 @@ watch(
             </div>
             <div class="col-md-6">
               <section class="card h-100">
-                <header class="card-header">
+                <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                   <label class="card-title mb-0" for="primary-lifecycle-workflow">
                     {{ t('automation.lifecycle.title') }}
                   </label>
+                  <span class="badge text-bg-info ms-auto">{{ t('agents.capability.optional') }}</span>
                 </header>
                 <div class="card-body">
                   <select id="primary-lifecycle-workflow" v-model="form.automation.lifecycle_workflow_id" class="form-select">

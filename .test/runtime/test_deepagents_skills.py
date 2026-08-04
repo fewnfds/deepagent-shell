@@ -1,0 +1,218 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from agent_shell.contracts import FilesystemBlock, SkillBlock
+from agent_shell.runtime.capabilities import DeepAgentsCapabilityError, build_deepagents_capabilities
+from agent_shell.runtime.capabilities import deepagents as deepagents_capability
+
+def test_skill_requires_at_least_one_selection() -> None:
+    with pytest.raises(ValidationError, match="At least one Skill"):
+        SkillBlock.model_validate({"name": "Empty skills", "skills": []})
+
+    unicode_name = SkillBlock.model_validate(
+        {"name": "Unicode skill", "skills": ["café"]}
+    )
+    assert unicode_name.skills == ["café"]
+    with pytest.raises(ValidationError, match="single hyphens"):
+        SkillBlock.model_validate(
+            {"name": "Invalid skill name", "skills": ["bad--name"]}
+        )
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        SkillBlock.model_validate(
+            {"name": "Removed switch", "enabled": False, "skills": ["valid"]}
+        )
+
+def test_selected_skill_with_invalid_current_metadata_is_not_materialized(
+    tmp_path: Path,
+) -> None:
+    skills_dir = tmp_path / "skills"
+    skill_dir = skills_dir / "invalid-metadata"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: invalid-metadata\n---\n",
+        encoding="utf-8",
+    )
+    filesystem = FilesystemBlock.model_validate({"name": "Thread files"})
+    skill = SkillBlock.model_validate(
+        {"name": "Invalid metadata", "skills": ["invalid-metadata"]}
+    )
+
+    with pytest.raises(DeepAgentsCapabilityError, match="selected skill is invalid"):
+        build_deepagents_capabilities(
+            filesystem,
+            skill,
+            filesystem_mode="configured-shared",
+            skills_dir=skills_dir,
+        )
+
+def test_skill_prompt_supports_default_override_and_disabled_modes(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    skill_dir = skills_dir / "outline"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: outline\ndescription: Outline a document.\n---\n",
+        encoding="utf-8",
+    )
+    filesystem = FilesystemBlock.model_validate({"name": "Thread files"})
+    default_skill = SkillBlock.model_validate(
+        {"name": "Default skills", "skills": ["outline"]}
+    )
+    custom_prompt = (
+        "Locations: {skills_locations}\n"
+        "Warnings: {skills_load_warnings}\n"
+        "Skills: {skills_list}"
+    )
+    custom_skill = SkillBlock.model_validate(
+        {
+            "name": "Custom skills",
+            "skills": ["outline"],
+            "instruction_override": custom_prompt,
+        }
+    )
+    disabled_skill = SkillBlock.model_validate(
+        {
+            "name": "Silent skills",
+            "skills": ["outline"],
+            "system_prompt_enabled": False,
+        }
+    )
+    with pytest.raises(ValidationError, match="instruction_override must be null"):
+        SkillBlock.model_validate(
+            {
+                "name": "Ambiguous skills",
+                "skills": ["outline"],
+                "system_prompt_enabled": False,
+                "instruction_override": custom_prompt,
+            }
+        )
+
+    default_capabilities = build_deepagents_capabilities(
+        filesystem,
+        default_skill,
+        filesystem_mode="configured-shared",
+        skills_dir=skills_dir,
+    )
+    custom_capabilities = build_deepagents_capabilities(
+        filesystem,
+        custom_skill,
+        filesystem_mode="configured-shared",
+        skills_dir=skills_dir,
+    )
+    disabled_capabilities = build_deepagents_capabilities(
+        filesystem,
+        disabled_skill,
+        filesystem_mode="configured-shared",
+        skills_dir=skills_dir,
+    )
+
+    assert default_capabilities.middleware[0].system_prompt_template != custom_prompt
+    assert custom_capabilities.middleware[0].system_prompt_template == custom_prompt
+    assert disabled_capabilities.middleware[0].system_prompt_template is None
+
+def test_default_workspace_keeps_consumer_skill_overlays_read_only_and_isolated(
+    tmp_path: Path,
+) -> None:
+    from deepagents.backends import StateBackend
+
+    skills_dir = tmp_path / "skills"
+    for name in ("alpha", "beta"):
+        folder = skills_dir / name
+        folder.mkdir(parents=True)
+        (folder / "SKILL.md").write_text(
+            f"---\nname: {name}\ndescription: {name} instructions.\n---\n",
+            encoding="utf-8",
+        )
+    alpha = SkillBlock.model_validate(
+        {"name": "Alpha only", "skills": ["alpha"]}
+    )
+    beta = SkillBlock.model_validate(
+        {"name": "Beta only", "skills": ["beta"]}
+    )
+
+    alpha_capabilities = build_deepagents_capabilities(
+        None,
+        alpha,
+        filesystem_mode="default-shared",
+        skills_dir=skills_dir,
+    )
+    beta_capabilities = build_deepagents_capabilities(
+        None,
+        beta,
+        filesystem_mode="default-shared",
+        skills_dir=skills_dir,
+        workspace=alpha_capabilities.workspace,
+    )
+
+    alpha_filesystem = alpha_capabilities.middleware[-1]
+    assert [tool.name for tool in alpha_filesystem.tools] == ["read_file"]
+    assert alpha_filesystem._tool_token_limit_before_evict is None
+    assert isinstance(alpha_capabilities.backend.default, StateBackend)
+    assert alpha_capabilities.backend is not beta_capabilities.backend
+    assert alpha_capabilities.workspace is beta_capabilities.workspace
+    assert alpha_capabilities.backend.default is beta_capabilities.backend.default
+    assert alpha_capabilities.skill_sources == ("/skills/alpha/",)
+    assert beta_capabilities.skill_sources == ("/skills/beta/",)
+    assert alpha_capabilities.backend.read(
+        "/skills/alpha/SKILL.md"
+    ).error is None
+    assert "not found" in alpha_capabilities.backend.read(
+        "/skills/beta/SKILL.md"
+    ).error.lower()
+    assert beta_capabilities.backend.read(
+        "/skills/beta/SKILL.md"
+    ).error is None
+    assert "not found" in beta_capabilities.backend.read(
+        "/skills/alpha/SKILL.md"
+    ).error.lower()
+    denied = alpha_capabilities.backend.write(
+        "/skills/alpha/created.md", "must not be written"
+    )
+    assert "read-only" in denied.error
+    assert not (skills_dir / "alpha" / "created.md").exists()
+
+def test_configured_workspace_routes_entire_skill_namespace_away_from_state(
+    tmp_path: Path,
+) -> None:
+    from deepagents.backends import StateBackend
+
+    skills_dir = tmp_path / "skills"
+    selected_folder = skills_dir / "selected"
+    selected_folder.mkdir(parents=True)
+    manifest = selected_folder / "SKILL.md"
+    manifest.write_text(
+        "---\nname: selected\ndescription: Selected instructions.\n---\n",
+        encoding="utf-8",
+    )
+    filesystem = FilesystemBlock.model_validate({"name": "Shared workspace"})
+    skill = SkillBlock.model_validate(
+        {"name": "Selected Skill", "skills": ["selected"]}
+    )
+
+    capabilities = build_deepagents_capabilities(
+        filesystem,
+        skill,
+        filesystem_mode="configured-shared",
+        skills_dir=skills_dir,
+    )
+
+    assert isinstance(capabilities.backend.default, StateBackend)
+    skills_backend = capabilities.backend.routes["/skills/"]
+    routed_backend, routed_path = capabilities.backend._get_backend_and_key(
+        "/skills/unselected/SKILL.md"
+    )
+    assert routed_backend is skills_backend
+    assert routed_path == "/unselected/SKILL.md"
+    assert "not found" in capabilities.backend.read(
+        "/skills/unselected/SKILL.md"
+    ).error.lower()
+    denied = capabilities.backend.edit(
+        "/skills/selected/SKILL.md",
+        "Selected instructions.",
+        "Changed instructions.",
+    )
+    assert "read-only" in denied.error
+    assert "Selected instructions." in manifest.read_text(encoding="utf-8")
