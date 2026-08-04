@@ -1007,7 +1007,7 @@ export const zhCN = {
     title: '自动化',
     hook: {
       title: '事件工作流',
-      requestPrepare: 'Agent 启动前',
+      requestPrepare: '准备阶段',
       subagentBeforeInvoke: 'Subagent 启动前',
       requestEnd: '请求结束',
     },

@@ -1009,7 +1009,7 @@ export const en: MessageSchema = {
     title: 'Automation',
     hook: {
       title: 'Event workflows',
-      requestPrepare: 'Before Agent startup',
+      requestPrepare: 'Preparation phase',
       subagentBeforeInvoke: 'Before Subagent invocation',
       requestEnd: 'Request end',
     },
