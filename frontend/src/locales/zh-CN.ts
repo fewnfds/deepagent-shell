@@ -556,8 +556,7 @@ export const zhCN = {
       permissionsTitle: '路径权限',
       emptyPermissions: '尚未添加路径权限；未匹配的路径默认可读写。',
       importFilesystem: '加载文件系统路径',
-      importPermission: '载入后的权限',
-      importAction: '追加文件系统路径',
+      importAction: '载入',
       permission: {
         'read-write': '可读写',
         'read-only': '只读',

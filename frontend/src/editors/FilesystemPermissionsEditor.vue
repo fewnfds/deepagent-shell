@@ -23,7 +23,6 @@ const { t } = useI18n()
 const draft = useEditorModel(() => props.modelValue, (value) => emit('update:modelValue', value))
 
 const importFilesystemId = ref('')
-const importPermission = ref<FilesystemPermissionValue>('read-only')
 const permissionOptions: FilesystemPermissionValue[] = ['read-write', 'read-only', 'no-access']
 const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
   const override = draft.tool_overrides[tool.name]
@@ -57,7 +56,7 @@ function importFilesystemPaths(): void {
   const existing = new Set(draft.permissions.map((item) => item.path.trim()))
   for (const path of paths) {
     if (!path || existing.has(path)) continue
-    draft.permissions.push({ path, permission: importPermission.value })
+    draft.permissions.push({ path, permission: 'read-write' })
     existing.add(path)
   }
 }
@@ -66,34 +65,23 @@ function importFilesystemPaths(): void {
 <template>
   <div data-editor="filesystem-permissions">
     <section class="card mb-3">
-      <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <header class="card-header">
         <h3 class="card-title h5 mb-0 fw-semibold">{{ t('editors.filesystemPermissions.permissionsTitle') }}</h3>
-        <LteButton :aria-label="t('editors.common.add')" :title="t('editors.common.add')" class="ms-auto" data-action="add-filesystem-permission" size="sm" theme="success" type="button" @click="addPermission">
-          <i class="bi bi-plus-lg" aria-hidden="true" />
-        </LteButton>
       </header>
       <div class="card-body">
-        <div class="row g-3 align-items-end">
+        <div class="row g-3">
           <div class="col-md-6">
             <FormField field-path="filesystem_import" label-key="editors.filesystemPermissions.importFilesystem">
-              <select v-model="importFilesystemId" class="form-select">
-                <option value="">{{ t('common.chooseConfiguration') }}</option>
-                <option v-for="filesystem in filesystems" :key="filesystem.id" :value="filesystem.id">{{ filesystem.name }}</option>
-              </select>
+              <div class="input-group">
+                <select v-model="importFilesystemId" class="form-select">
+                  <option value="">{{ t('common.chooseConfiguration') }}</option>
+                  <option v-for="filesystem in filesystems" :key="filesystem.id" :value="filesystem.id">{{ filesystem.name }}</option>
+                </select>
+                <LteButton :disabled="!importFilesystemId" data-action="import-filesystem-paths" theme="primary" type="button" @click="importFilesystemPaths">
+                  {{ t('editors.filesystemPermissions.importAction') }}
+                </LteButton>
+              </div>
             </FormField>
-          </div>
-          <div class="col-md-6">
-            <FormField field-path="import_permission" label-key="editors.filesystemPermissions.importPermission">
-              <select v-model="importPermission" class="form-select">
-                <option v-for="permission in permissionOptions" :key="permission" :value="permission">{{ t(`editors.filesystemPermissions.permission.${permission}`) }}</option>
-              </select>
-            </FormField>
-          </div>
-          <div class="col-12 d-flex justify-content-end">
-            <LteButton :disabled="!importFilesystemId" :title="t('editors.filesystemPermissions.importAction')" data-action="import-filesystem-paths" theme="primary" type="button" @click="importFilesystemPaths">
-              <i class="bi bi-download" aria-hidden="true" />
-              <span class="visually-hidden">{{ t('editors.filesystemPermissions.importAction') }}</span>
-            </LteButton>
           </div>
         </div>
         <div v-if="draft.permissions.length" class="simple-mapping-list mt-3">

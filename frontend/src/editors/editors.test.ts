@@ -143,7 +143,6 @@ describe('dedicated block editors', () => {
     })
     const selects = editor.findAll('select')
     await selects[0]?.setValue('filesystem-a')
-    await selects[1]?.setValue('no-access')
     await editor.get('[data-action="import-filesystem-paths"]').trigger('click')
     await editor.get('[data-action="import-filesystem-paths"]').trigger('click')
 
@@ -153,7 +152,7 @@ describe('dedicated block editors', () => {
     )).toEqual(['/workspace/**', '/drafts/**', '/README.md'])
     expect(editor.findAll('[data-testid="filesystem-permission-row"] select').map(
       (select) => (select.element as HTMLSelectElement).value,
-    )).toEqual(['no-access', 'no-access', 'no-access'])
+    )).toEqual(['read-write', 'read-write', 'read-write'])
 
     await selects[0]?.setValue('filesystem-b')
     await editor.get('[data-action="import-filesystem-paths"]').trigger('click')
@@ -165,7 +164,7 @@ describe('dedicated block editors', () => {
     expect(editor.findAll('[data-testid="filesystem-permission-row"]')).toHaveLength(3)
   })
 
-  it('keeps mapping labels product-facing and add actions available at both ends', async () => {
+  it('keeps mapping labels product-facing and one add action available', async () => {
     const permissionsDraft = filesystemPermissionsAdapter.blank(filesystemPermissionsDefaults)
     permissionsDraft.permissions.push({ path: '/workspace/**', permission: 'read-write' })
     const permissions = mount(FilesystemPermissionsEditor, {
@@ -179,8 +178,8 @@ describe('dedicated block editors', () => {
     const permissionRow = permissions.get('[data-testid="filesystem-permission-row"]')
     expect(permissionRow.text()).not.toContain('permissions.0.path')
     expect(permissionRow.get('label[for="filesystem-permission-path-0"]').text()).toBe('路径')
-    expect(permissions.findAll('[data-action="add-filesystem-permission"]')).toHaveLength(2)
-    await permissions.findAll('[data-action="add-filesystem-permission"]')[1]?.trigger('click')
+    expect(permissions.findAll('[data-action="add-filesystem-permission"]')).toHaveLength(1)
+    await permissions.get('[data-action="add-filesystem-permission"]').trigger('click')
     expect(permissions.findAll('[data-testid="filesystem-permission-row"]')).toHaveLength(2)
 
     const filesystemDraft = filesystemAdapter.blank(filesystemDefaults)

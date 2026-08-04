@@ -558,8 +558,7 @@ export const en: MessageSchema = {
       permissionsTitle: 'Path permissions',
       emptyPermissions: 'No path permission has been added. Unmatched paths are read-write by default.',
       importFilesystem: 'Load filesystem paths',
-      importPermission: 'Imported permission',
-      importAction: 'Append filesystem paths',
+      importAction: 'Load',
       permission: {
         'read-write': 'Read and write',
         'read-only': 'Read only',
