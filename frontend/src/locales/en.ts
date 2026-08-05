@@ -1013,7 +1013,6 @@ export const en: MessageSchema = {
     bindings: {
       add: 'Add {kind}',
       plugin: 'Automation plugin',
-      config: 'Plugin config (JSON)',
       interval: 'Interval (seconds)',
       mode: '{kind} mode',
       enabled: 'Enabled',
@@ -1154,6 +1153,7 @@ export const en: MessageSchema = {
       pluginDependenciesFailed: 'Correct the plugin requirements and restart Agent Shell.',
       pluginDependenciesRestartRequired: 'Restart Agent Shell to prepare the plugin requirements.',
       pluginEntrypointMismatch: 'Select an automation plugin that provides an entrypoint for this binding category.',
+      pluginConfigInvalid: 'Correct the plugin fields that do not satisfy its configuration schema.',
       credentialMetadataInvalid: 'Open the model configuration, re-enter or confirm its credential, and save it.',
       unknownBlockType: 'This configuration type is no longer supported. Delete the obsolete record or recreate the required configuration with the current editor.',
       outputEventTypesInvalid: 'Reopen the output mode editor, make sure every currently listed event is present, and save it in the current structure.',
@@ -1205,6 +1205,7 @@ export const en: MessageSchema = {
         pluginDependenciesFailed: 'Python dependencies for automation plugin {plugin_id} could not be prepared.',
         pluginDependenciesRestartRequired: 'Restart Agent Shell to prepare Python dependencies for automation plugin {plugin_id}.',
         pluginEntrypointMismatch: 'Automation plugin {plugin_id} does not provide an entrypoint for this binding category.',
+        pluginConfigInvalid: 'Configuration for automation plugin {plugin_id} is invalid ({keyword}).',
       },
       storage: {
         credentialMetadataInvalid: 'The saved credential state for this model configuration is damaged.',

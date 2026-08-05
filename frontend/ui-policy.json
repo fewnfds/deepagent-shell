@@ -373,6 +373,13 @@
         ]
       },
       {
+        "name": "AutomationPluginConfigForm",
+        "path": "src/components/AutomationPluginConfigForm.vue",
+        "kind": "domain-composition",
+        "reason": "Renders the backend-approved flat automation config schema as structured binding fields",
+        "callers": ["src/components/AutomationPluginBindings.vue"]
+      },
+      {
         "name": "SubagentReferencesEditor",
         "path": "src/components/SubagentReferencesEditor.vue",
         "kind": "domain-composition",

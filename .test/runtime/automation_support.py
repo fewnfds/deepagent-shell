@@ -12,17 +12,23 @@ def write_plugin(
     source: str,
     *,
     entrypoints: tuple[str, ...],
+    config_schema: dict[str, object] | None = None,
 ) -> Path:
     folder = root / plugin_id
     folder.mkdir(parents=True)
     (folder / "script.json").write_text(
         json.dumps(
             {
-                "api_version": 2,
+                "api_version": 3,
                 "id": plugin_id,
                 "name": plugin_id,
                 "description": "Test plugin",
                 "entrypoints": list(entrypoints),
+                "config_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                } if config_schema is None else config_schema,
             }
         ),
         encoding="utf-8",

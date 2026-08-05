@@ -1,0 +1,22 @@
+{
+  "api_version": 3,
+  "id": "subagent-message-injection",
+  "name": "Subagent message injection",
+  "description": "Transform and inject the original client messages at the start of every Subagent invocation.",
+  "entrypoints": ["middleware"],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "transform_source": {
+        "type": "string",
+        "title": "Message transform (Python)",
+        "description": "Edit the function body and return the messages to inject for this invocation.",
+        "contentMediaType": "text/x-python",
+        "format": "python",
+        "default": "async def transform_messages(messages, ctx, state, runtime):\n    # Edit the fresh mutable messages for this invocation.\n    return messages\n"
+      }
+    },
+    "required": ["transform_source"],
+    "additionalProperties": false
+  }
+}

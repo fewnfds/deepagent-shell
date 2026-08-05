@@ -128,6 +128,15 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
             "        {'role': 'user', 'content': str(ctx.config['role'])},\n"
             "        {'role': 'assistant', 'content': str(ctx.config['ready'])},\n"
             "    ])\n",
+            config_schema=automation_config_schema(
+                {
+                    "tag": "string",
+                    "replacement": "string",
+                    "role": "string",
+                    "ready": "string",
+                },
+                required=("tag", "replacement", "role", "ready"),
+            ),
         )
 
         def automation(role: str, ready: str) -> dict[str, object]:

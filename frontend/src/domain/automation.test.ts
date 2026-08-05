@@ -28,7 +28,7 @@ describe('automation binding adapters', () => {
       ...blankAutomationPluginBinding(),
       plugin_id: 'file-plugin',
       enabled: false,
-      config_text: '{"path":"/context.txt"}',
+      config: { path: '/context.txt' },
     })
     draft.periodic.push({
       ...blankPeriodicAutomationPluginBinding(),
@@ -69,10 +69,10 @@ describe('automation binding adapters', () => {
         plugins: [],
       },
     })
-    draft.hooks.plugins[0]!.config_text = '[]'
-    expect(() => subagentAutomationPayload(draft)).toThrow(
-      'Plugin config must be a JSON object.',
-    )
+    draft.hooks.plugins[0]!.config = { transform_source: 'return messages' }
+    expect(subagentAutomationPayload(draft).hooks.plugins[0]?.config).toEqual({
+      transform_source: 'return messages',
+    })
 
     draft.hooks.mode = 'inherit'
     expect(subagentAutomationPayload(draft)).toEqual({

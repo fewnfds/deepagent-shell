@@ -1,7 +1,8 @@
 # 使用自动化插件
 
 【自动化】是按 Agent 身份挂载的 Python 插件系统。每个 Primary 配置或 Subagent 配置都可以拥有一组有序
-插件 binding；binding 保存插件 ID、启用状态和一份 JSON config。
+插件 binding；binding 保存插件 ID、启用状态和一份由插件 Schema 定义的 config。管理台根据 Schema 显示固定
+字段表单，用户不再手写整段 config JSON；草稿校验和保存仍由后端执行权威 Schema 校验。
 
 插件有两类执行边界：
 
@@ -22,15 +23,28 @@ automation_scripts/market-context/
   requirements.txt  # 可选
 ```
 
-当前唯一 manifest 版本是 v2：
+当前唯一 manifest 版本是 v3：
 
 ```json
 {
-  "api_version": 2,
+  "api_version": 3,
   "id": "market-context",
   "name": "Market context",
   "description": "Prepare current market context for this Agent.",
-  "entrypoints": ["middleware", "prepare", "lifecycle", "complete"]
+  "entrypoints": ["middleware", "prepare", "lifecycle", "complete"],
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "market": {
+        "type": "string",
+        "title": "Market",
+        "description": "Market identifier used by this binding.",
+        "default": "example"
+      }
+    },
+    "required": ["market"],
+    "additionalProperties": false
+  }
 }
 ```
 
@@ -50,6 +64,19 @@ automation_scripts/market-context/
 ```python
 from .market_client import load_current_market
 ```
+
+### 配置 Schema
+
+`config_schema` 必须是 `type: object` 且 `additionalProperties: false`。当前只接受管理台可稳定渲染的扁平
+子集：`string/integer/number/boolean`、`enum/default/required`、字符串长度与 pattern、数字上下界，以及字符串
+`format: python` 和 `contentMediaType`。不接受 `$ref`、组合 Schema、数组、嵌套对象或递归结构。
+
+字符串字段在管理台初始显示为一行 textarea，可向下拉大；Python 字段使用等宽字体；枚举、布尔和数字分别
+显示为 select、switch 和 number input。切换插件时，旧插件 config 会被丢弃，并根据新 Schema 中明确声明的
+`default` 重建。前端只产生结构化 payload，不复制后端校验规则。
+
+`format: python` 会在保存前做语法检查，但该字段不是低权限表达式：插件若编译执行它，代码仍以 Agent Shell
+服务进程完整权限运行。不要把不受信任的终端用户输入放进这类配置。
 
 ## LangChain Hook
 
@@ -117,6 +144,29 @@ Shell 统一校验派生消息；空列表合法，无效 role/content 会在构
 Subagent 每次调用仍使用新的 LangGraph state。prepare 产出基础消息时，输入顺序是这些基础消息再加本次
 `task` delegated messages；没有产出时保持 Deep Agents 原生 delegated input，不执行 Shell 消息重建。静态
 system prompt 单独由 `create_deep_agent(system_prompt=...)` 装配。
+
+### 消息注入示例
+
+源码仓库 `examples/automation-plugins/` 提供两个可直接复制到实例自动化脚本目录的示例：
+
+- `primary-message-injection`：使用 `prepare`，每个 Primary API 请求转换并注入一次；
+- `subagent-message-injection`：使用原生 `AgentMiddleware.abefore_agent`，每次真实 Subagent invocation 都重新
+  从原始客户端消息建立副本并执行转换。它不使用 `wrap_model_call`，工具/模型循环不会重复注入。
+
+两者的 Schema 表单预置以下异步函数骨架：
+
+```python
+async def transform_messages(messages, ctx, state, runtime):
+    # Edit the fresh mutable messages here.
+    return messages
+```
+
+默认函数是身份变换，完整 `messages[]` 直接进入目标 Agent。返回 `[]` 表示本次不注入；Subagent 的父 Agent
+delegated task 仍然保留。Primary 的 `state/runtime` 为 `None`；Subagent 得到当前 LangGraph 原生对象，同一
+profile 被调用四次会执行四次函数，并得到四个 invocation ID。
+
+函数返回后，开头连续的 system 消息保持 system；首个非 system 之后的 system 原位改为 user。其他角色、消息
+楼层、文本和多模态 content blocks 不重排。无插件时 core 仍不会把客户端消息交给 Primary 或 Subagent。
 
 ### lifecycle
 
@@ -190,9 +240,12 @@ LangGraph state 仍然独立。
 - 下一次 API 请求根据客户端新提交的完整 messages 重新建立。
 
 插件要稳定切分 Primary 用户信息时，应始终从 `ctx.request.messages` 开始计算，并为当前 Agent 建立可写深复制后
-写入 `ctx.messages`；也可以直接把只读消息加入 `ctx.messages`，Shell 会在 prepare 终点规范化为该 owner 独立的
-可写副本。不要原地修改只读 block，也不要把前序插件已经修改的工作列表当作原始事实。多模态正文应留在消息
-content blocks 中，不要经 `ctx.vars` 进行无意义中转。
+写入 `ctx.messages`；也可以使用 `agent_shell.automation.messages.mutable_request_messages()` 递归解冻容器。不要
+原地修改只读 block，也不要把前序插件已经修改的工作列表当作原始事实。
+
+平台不会把 image/audio/video/file 从消息中卸载到 `ctx.vars` 或资源区。`base64/url/file_id` 始终留在所属楼层
+的 content block 中，也不存在资源 ID 自动补齐或 rehydrate。默认直通会保留这些叶子值；插件若主动落盘、替换
+链接或生成新资产，必须自行把最终 block 放回返回的消息结构。
 
 所有插件边界可用：
 

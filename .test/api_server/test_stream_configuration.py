@@ -220,6 +220,10 @@ def test_global_interception_captures_final_moved_prompt_tools_and_raw_request(
             "    for message in ctx.messages:\n"
             "        if message.get('role') == 'user':\n"
             "            message['content'] = message['content'].replace(tag, replacement)\n",
+            config_schema=automation_config_schema(
+                {"tag": "string", "replacement": "string"},
+                required=("tag", "replacement"),
+            ),
         )
         automation = {
             "hooks": [

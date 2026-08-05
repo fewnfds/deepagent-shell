@@ -14,7 +14,7 @@ from agent_shell.runtime.errors import AgentRuntimeError
 from .automation_support import runtime_for, write_plugin
 
 
-def test_plugin_scan_is_static_and_requires_the_v2_entrypoint_contract(
+def test_plugin_scan_is_static_and_requires_the_v3_entrypoint_contract(
     tmp_path: Path,
 ) -> None:
     plugins = tmp_path / "plugins"
@@ -48,8 +48,57 @@ def test_plugin_scan_is_static_and_requires_the_v2_entrypoint_contract(
     result = scan_automation_scripts(plugins)
 
     assert [item["id"] for item in result["catalog"]] == ["static-plugin"]
+    assert result["catalog"][0]["config_schema"] == {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": False,
+    }
     assert "old-plugin" in result["errors"]
     assert not marker.exists()
+
+
+@pytest.mark.parametrize(
+    "config_schema",
+    [
+        {
+            "type": "object",
+            "properties": {
+                "items": {"type": "array", "title": "Items"},
+            },
+            "additionalProperties": False,
+        },
+        {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "title": "Mode",
+                    "enum": [1, 2],
+                },
+            },
+            "additionalProperties": False,
+        },
+    ],
+)
+def test_plugin_scan_rejects_unrenderable_config_schema(
+    tmp_path: Path,
+    config_schema: dict[str, object],
+) -> None:
+    write_plugin(
+        tmp_path / "plugins",
+        "invalid-schema",
+        "async def prepare(ctx):\n    return None\n",
+        entrypoints=("prepare",),
+        config_schema=config_schema,
+    )
+
+    result = scan_automation_scripts(tmp_path / "plugins")
+
+    assert result["catalog"] == []
+    assert result["errors"]["invalid-schema"]["message_key"] == (
+        "resource.error.automationScript.manifestInvalid"
+    )
 
 
 @pytest.mark.anyio
@@ -234,6 +283,15 @@ async def test_lifecycle_drains_then_complete_runs_and_modules_are_cleaned(
         "async def complete(ctx):\n"
         "    Path(ctx.config['terminal']).write_text(str(dict(ctx.terminal)))\n",
         entrypoints=("lifecycle", "complete"),
+        config_schema={
+            "type": "object",
+            "properties": {
+                name: {"type": "string", "title": name}
+                for name in ("started", "release", "completed", "terminal")
+            },
+            "required": ["started", "release", "completed", "terminal"],
+            "additionalProperties": False,
+        },
     )
     runtime = runtime_for(
         tmp_path,
@@ -276,6 +334,14 @@ async def test_periodic_bindings_have_independent_tasks_and_failure_boundaries(
         "    if ctx.config.get('fail'):\n        raise RuntimeError('stopped')\n"
         "    Path(ctx.config['marker']).write_text(f\"{ctx.plugin['kind']}:{ctx.tick}\")\n",
         entrypoints=("lifecycle",),
+        config_schema={
+            "type": "object",
+            "properties": {
+                "fail": {"type": "boolean", "title": "fail"},
+                "marker": {"type": "string", "title": "marker"},
+            },
+            "additionalProperties": False,
+        },
     )
     runtime = AutomationRuntime(
         request_id="request-id",

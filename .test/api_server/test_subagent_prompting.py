@@ -214,7 +214,10 @@ def test_subagent_prompt_override_uses_only_plugin_messages_and_delegation(
             tmp_path,
             "append-subagent-startup",
             "async def prepare(ctx):\n"
-            "    ctx.messages.extend(dict(message) for message in ctx.config['messages'])\n",
+            "    ctx.messages.extend([\n"
+            "        {'role': 'user', 'content': 'Delegated work.'},\n"
+            "        {'role': 'assistant', 'content': 'Ready for delegated work.'},\n"
+            "    ])\n",
         )
         startup_automation = {
             "hooks": {
@@ -223,15 +226,7 @@ def test_subagent_prompt_override_uses_only_plugin_messages_and_delegation(
                     {
                         "plugin_id": "append-subagent-startup",
                         "enabled": True,
-                        "config": {
-                            "messages": [
-                                {"role": "user", "content": "Delegated work."},
-                                {
-                                    "role": "assistant",
-                                    "content": "Ready for delegated work.",
-                                },
-                            ]
-                        },
+                        "config": {},
                     }
                 ],
             },

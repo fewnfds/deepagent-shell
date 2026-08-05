@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from agent_shell.automation.config_schema import validate_automation_config
 from agent_shell.automation.scripts import resolve_automation_script
 from agent_shell.registries.errors import ResourceScanError
 from agent_shell.validation.models import ValidationIssue
@@ -117,6 +118,35 @@ class AutomationValidationService:
                         message_args={
                             "plugin_id": plugin_id,
                             "kind": binding_kind,
+                        },
+                    )
+                )
+                continue
+            config_issue = validate_automation_config(
+                metadata["config_schema"],
+                binding.get("config", {}),
+            )
+            if config_issue is not None:
+                config_path = f"{path_prefix}[{index}].config"
+                if config_issue.path:
+                    config_path += "." + ".".join(config_issue.path)
+                issues.append(
+                    ValidationIssue(
+                        code="automation.plugin_config_invalid",
+                        scope=scope,
+                        owner_id=owner_id,
+                        owner_name=owner_name,
+                        path=config_path,
+                        message=(
+                            "The automation plugin configuration does not satisfy "
+                            "its declared schema."
+                        ),
+                        message_key=(
+                            "validation.issue.automation.pluginConfigInvalid"
+                        ),
+                        message_args={
+                            "plugin_id": plugin_id,
+                            "keyword": config_issue.keyword,
                         },
                     )
                 )

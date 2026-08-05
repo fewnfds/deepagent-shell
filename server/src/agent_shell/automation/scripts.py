@@ -12,6 +12,7 @@ from agent_shell.automation.dependencies import (
     dependency_metadata,
     read_plugin_requirements,
 )
+from agent_shell.automation.config_schema import AutomationConfigSchema
 from agent_shell.registries.errors import ResourceScanError
 
 
@@ -27,11 +28,12 @@ _ENTRYPOINT_FUNCTIONS: dict[str, tuple[str, bool]] = {
 class AutomationScriptManifest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    api_version: Literal[2]
+    api_version: Literal[3]
     id: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9-]*$")
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=1024)
     entrypoints: list[PluginEntrypoint] = Field(min_length=1, max_length=4)
+    config_schema: AutomationConfigSchema
 
     @field_validator("entrypoints")
     @classmethod
@@ -155,7 +157,11 @@ def scan_automation_script_folder(
         _validate_entrypoint(tree, entrypoint)
     requirements = read_plugin_requirements(folder)
     return {
-        **manifest.model_dump(mode="json"),
+        **manifest.model_dump(
+            mode="json",
+            by_alias=True,
+            exclude_none=True,
+        ),
         "folder": folder.name,
         **dependency_metadata(manifest.id, requirements, runtime_root),
     }

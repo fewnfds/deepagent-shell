@@ -9,7 +9,7 @@ export interface AutomationPluginBindingDraft {
   key: string
   plugin_id: string
   enabled: boolean
-  config_text: string
+  config: Record<string, unknown>
 }
 
 export interface PeriodicAutomationPluginBindingDraft extends AutomationPluginBindingDraft {
@@ -50,7 +50,7 @@ function bindingDraft(value: unknown = {}): AutomationPluginBindingDraft {
     key: `automation-plugin-${bindingSequence}`,
     plugin_id: text(source.plugin_id),
     enabled: source.enabled !== false,
-    config_text: JSON.stringify(record(source.config), null, 2),
+    config: { ...record(source.config) },
   }
 }
 
@@ -103,19 +103,11 @@ export function normalizeSubagentAutomation(value: unknown): SubagentAutomationD
   }
 }
 
-function parseConfig(value: string): Record<string, unknown> {
-  const parsed: unknown = JSON.parse(value)
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Plugin config must be a JSON object.')
-  }
-  return parsed as Record<string, unknown>
-}
-
 function pluginPayload(value: AutomationPluginBindingDraft): AutomationPluginBinding {
   return {
     plugin_id: value.plugin_id,
     enabled: value.enabled,
-    config: parseConfig(value.config_text),
+    config: { ...value.config },
   }
 }
 

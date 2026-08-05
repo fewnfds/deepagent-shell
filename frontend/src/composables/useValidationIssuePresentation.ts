@@ -27,6 +27,7 @@ const resolutionKeys: Record<string, string> = {
   'automation.plugin_dependencies_failed': 'pluginDependenciesFailed',
   'automation.plugin_dependencies_restart_required': 'pluginDependenciesRestartRequired',
   'automation.plugin_entrypoint_mismatch': 'pluginEntrypointMismatch',
+  'automation.plugin_config_invalid': 'pluginConfigInvalid',
   'storage.credential_metadata_invalid': 'credentialMetadataInvalid',
   'storage.unknown_block_type': 'unknownBlockType',
   'runtime.configuration': 'runtimeConfiguration',

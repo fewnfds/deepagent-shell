@@ -172,12 +172,37 @@ export interface PeriodicAutomationPluginBinding extends AutomationPluginBinding
   interval_seconds: number
 }
 
+export type AutomationConfigScalar = boolean | number | string
+
+export interface AutomationConfigField {
+  type: 'string' | 'integer' | 'number' | 'boolean'
+  title: string
+  description: string
+  default?: AutomationConfigScalar
+  enum?: AutomationConfigScalar[]
+  minLength?: number
+  maxLength?: number
+  pattern?: string
+  minimum?: number
+  maximum?: number
+  contentMediaType?: 'text/plain' | 'text/x-python'
+  format?: 'python'
+}
+
+export interface AutomationConfigSchema {
+  type: 'object'
+  properties: Record<string, AutomationConfigField>
+  required: string[]
+  additionalProperties: false
+}
+
 export interface AutomationScriptResource {
-  api_version: 2
+  api_version: 3
   id: string
   name: string
   description: string
   entrypoints: ('middleware' | 'prepare' | 'lifecycle' | 'complete')[]
+  config_schema: AutomationConfigSchema
   folder: string
   python_requirements: string[]
   requirements_fingerprint: string

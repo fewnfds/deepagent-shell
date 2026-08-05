@@ -29,11 +29,17 @@ describe('AutomationPage', () => {
   it('shows installed plugin entrypoints and requirements', async () => {
     vi.spyOn(managementApi, 'listAutomationPlugins').mockResolvedValue({
       catalog: [{
-        api_version: 2,
+        api_version: 3,
         id: 'market-context',
         name: 'Market context',
         description: 'Prepares current market messages.',
         entrypoints: ['middleware', 'prepare', 'complete'],
+        config_schema: {
+          type: 'object',
+          properties: {},
+          required: [],
+          additionalProperties: false,
+        },
         folder: 'market-context',
         python_requirements: ['example-market-sdk>=2'],
         requirements_fingerprint: 'market-fingerprint',
@@ -58,11 +64,17 @@ describe('AutomationPage', () => {
   it('reports dependency restart state and invalid plugin folders', async () => {
     vi.spyOn(managementApi, 'listAutomationPlugins').mockResolvedValue({
       catalog: [{
-        api_version: 2,
+        api_version: 3,
         id: 'image-reader',
         name: 'Image reader',
         description: 'Reads image metadata.',
         entrypoints: ['prepare'],
+        config_schema: {
+          type: 'object',
+          properties: {},
+          required: [],
+          additionalProperties: false,
+        },
         folder: 'image-reader',
         python_requirements: ['Pillow>=11'],
         requirements_fingerprint: 'pillow-fingerprint',

@@ -202,6 +202,9 @@ def test_native_middleware_hook_shares_prepare_context_and_original_messages(
             "async def prepare(ctx):\n"
             "    ctx.vars['prepared'] = True\n",
             entrypoints=("middleware", "prepare"),
+            config_schema=automation_config_schema(
+                {"marker": "string"}, required=("marker",)
+            ),
         )
         primary = create_primary(client)
         attached = client.put(
@@ -230,6 +233,92 @@ def test_native_middleware_hook_shares_prepare_context_and_original_messages(
     assert response.status_code == 200, response.text
     assert response.json()["choices"][0]["message"]["content"] == "runtime reply"
     assert marker.read_text(encoding="utf-8") == "original|True"
+
+
+def test_binding_config_must_satisfy_the_plugin_schema(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        write_automation_script(
+            tmp_path,
+            "schema-plugin",
+            "async def prepare(ctx):\n    return None\n",
+            config_schema=automation_config_schema(
+                {"transform_source": "string"},
+                required=("transform_source",),
+            ),
+        )
+        primary = create_primary(client)
+        response = client.put(
+            f"/api/primary-agents/{primary['id']}",
+            json=primary_update(
+                primary,
+                {
+                    "hooks": [{
+                        "plugin_id": "schema-plugin",
+                        "enabled": True,
+                        "config": {"transform_source": 42},
+                    }],
+                    "periodic": [],
+                },
+            ),
+        )
+
+    assert response.status_code == 422
+    issue = response.json()["detail"]["validation"]["issues"][0]
+    assert issue["code"] == "automation.plugin_config_invalid"
+    assert issue["path"].endswith(".config.transform_source")
+    assert issue["message_args"] == {
+        "plugin_id": "schema-plugin",
+        "keyword": "type",
+    }
+
+
+def test_python_plugin_config_must_parse_before_save(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        write_automation_script(
+            tmp_path,
+            "python-config-plugin",
+            "async def prepare(ctx):\n    return None\n",
+            config_schema={
+                "type": "object",
+                "properties": {
+                    "transform_source": {
+                        "type": "string",
+                        "title": "Transform",
+                        "format": "python",
+                        "contentMediaType": "text/x-python",
+                        "default": "",
+                    },
+                },
+                "additionalProperties": False,
+            },
+        )
+        primary = create_primary(client)
+        response = client.put(
+            f"/api/primary-agents/{primary['id']}",
+            json=primary_update(
+                primary,
+                {
+                    "hooks": [{
+                        "plugin_id": "python-config-plugin",
+                        "enabled": True,
+                        "config": {"transform_source": "async def broken(:\n"},
+                    }],
+                    "periodic": [],
+                },
+            ),
+        )
+
+    assert response.status_code == 422
+    issue = response.json()["detail"]["validation"]["issues"][0]
+    assert issue["code"] == "automation.plugin_config_invalid"
+    assert issue["message_args"] == {
+        "plugin_id": "python-config-plugin",
+        "keyword": "format",
+    }
 
 
 def test_prepare_can_relay_normalized_multimodal_message_to_langchain(

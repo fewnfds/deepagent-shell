@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { AutomationScriptResource } from '@/api'
+import AutomationPluginConfigForm from '@/components/AutomationPluginConfigForm.vue'
 import {
   blankAutomationPluginBinding,
   blankPeriodicAutomationPluginBinding,
@@ -12,6 +13,7 @@ import {
   type PeriodicAutomationPluginBindingDraft,
   type SubagentAutomationDraft,
 } from '@/domain/automation'
+import { automationConfigDefaults } from '@/domain/automationConfigSchema'
 
 type BindingKind = 'hooks' | 'periodic'
 type OverrideMode = 'inherit' | 'replace' | 'disabled'
@@ -116,6 +118,18 @@ function pluginLabel(plugin: AutomationScriptResource): string {
     : ` - ${t(`automation.scripts.status.${plugin.dependency_status === 'failed' ? 'failed' : 'restartRequired'}`)}`
   return `${plugin.name} (${plugin.id})${status}`
 }
+
+function selectedPlugin(binding: BindingDraft): AutomationScriptResource | undefined {
+  return props.plugins.find((plugin) => plugin.id === binding.plugin_id)
+}
+
+function changePlugin(kind: BindingKind, index: number, pluginId: string): void {
+  const plugin = props.plugins.find((item) => item.id === pluginId)
+  updateBinding(kind, index, {
+    plugin_id: pluginId,
+    config: plugin ? automationConfigDefaults(plugin.config_schema) : {},
+  })
+}
 </script>
 
 <template>
@@ -170,7 +184,7 @@ function pluginLabel(plugin: AutomationScriptResource): string {
               class="form-select"
               :data-testid="`automation-${kind}-plugin`"
               :value="binding.plugin_id"
-              @change="updateBinding(kind, index, { plugin_id: ($event.target as HTMLSelectElement).value })"
+              @change="changePlugin(kind, index, ($event.target as HTMLSelectElement).value)"
             >
               <option value="">{{ t('agents.capability.notAttached') }}</option>
               <option
@@ -243,16 +257,12 @@ function pluginLabel(plugin: AutomationScriptResource): string {
               ><i class="bi bi-trash" aria-hidden="true" /></LteButton>
             </div>
           </div>
-          <div class="col-12">
-            <label class="form-label" :for="`${pathPrefix}-${kind}-config-${binding.key}`">
-              {{ t('automation.bindings.config') }}
-            </label>
-            <textarea
-              :id="`${pathPrefix}-${kind}-config-${binding.key}`"
-              class="form-control font-monospace"
-              rows="4"
-              :value="binding.config_text"
-              @input="updateBinding(kind, index, { config_text: ($event.target as HTMLTextAreaElement).value })"
+          <div v-if="selectedPlugin(binding)" class="col-12">
+            <AutomationPluginConfigForm
+              :id-prefix="`${pathPrefix}-${kind}-config-${binding.key}`"
+              :model-value="binding.config"
+              :schema="selectedPlugin(binding)!.config_schema"
+              @update:model-value="updateBinding(kind, index, { config: $event })"
             />
           </div>
         </div>

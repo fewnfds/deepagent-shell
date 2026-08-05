@@ -17,11 +17,16 @@ def write_script(root: Path, script_id: str, source: str) -> Path:
     (folder / "script.json").write_text(
         json.dumps(
             {
-                "api_version": 2,
+                "api_version": 3,
                 "id": script_id,
                 "name": script_id,
                 "description": "Dependency test plugin.",
                 "entrypoints": ["prepare"],
+                "config_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
             }
         ),
         encoding="utf-8",

@@ -131,6 +131,7 @@ def write_automation_script(
     source: str,
     *,
     entrypoints: tuple[str, ...] = ("prepare",),
+    config_schema: dict[str, object] | None = None,
 ) -> None:
     script_dir = (
         tmp_path / "data" / "resources" / "automation_scripts" / plugin_id
@@ -139,16 +140,37 @@ def write_automation_script(
     (script_dir / "script.json").write_text(
         json.dumps(
             {
-                "api_version": 2,
+                "api_version": 3,
                 "id": plugin_id,
                 "name": plugin_id,
                 "description": "Test automation plugin.",
                 "entrypoints": list(entrypoints),
+                "config_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                } if config_schema is None else config_schema,
             }
         ),
         encoding="utf-8",
     )
     (script_dir / "main.py").write_text(source, encoding="utf-8")
+
+
+def automation_config_schema(
+    fields: dict[str, str],
+    *,
+    required: tuple[str, ...] = (),
+) -> dict[str, object]:
+    return {
+        "type": "object",
+        "properties": {
+            name: {"type": field_type, "title": name}
+            for name, field_type in fields.items()
+        },
+        "required": list(required),
+        "additionalProperties": False,
+    }
 
 
 def create_primary(
