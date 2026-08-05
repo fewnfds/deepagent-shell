@@ -1018,27 +1018,8 @@ export const zhCN = {
       empty: '尚未挂载{kind}。',
     },
     plugins: {
-      entrypoints: '执行节点',
       requirements: 'Python 依赖与状态',
       empty: '尚未安装自动化插件。',
-    },
-    entrypoints: {
-      middleware: {
-        scope: 'Agent Hook 插件',
-        timing: 'Agent 图内由 LangChain 原生 Hook 调度',
-      },
-      prepare: {
-        scope: 'Agent Hook 插件',
-        timing: '当前 Agent 图构造前执行一次',
-      },
-      lifecycle: {
-        scope: '周期插件',
-        timing: '请求期间按固定间隔循环执行',
-      },
-      complete: {
-        scope: 'Hook / 周期插件',
-        timing: '请求进入任一终态后执行一次',
-      },
     },
     dependencies: {
       installed: '已安装',

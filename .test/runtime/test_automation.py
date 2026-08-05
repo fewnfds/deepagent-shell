@@ -220,7 +220,8 @@ async def test_no_binding_keeps_client_messages_out_of_owner_activity(
     await runtime.finish({"status": "completed"})
 
 
-def test_vars_is_one_request_local_mapping_shared_by_all_bindings(
+@pytest.mark.anyio
+async def test_vars_is_one_request_local_mapping_shared_by_all_bindings(
     tmp_path: Path,
 ) -> None:
     write_plugin(
@@ -229,6 +230,8 @@ def test_vars_is_one_request_local_mapping_shared_by_all_bindings(
         "from langchain.agents.middleware import AgentMiddleware\n"
         "class Capture(AgentMiddleware):\n"
         "    def __init__(self, ctx):\n        self.ctx = ctx\n"
+        "    async def abefore_agent(self, state, runtime):\n"
+        "        self.ctx.vars['second_called'] = True\n"
         "def create_middleware(ctx):\n    return Capture(ctx)\n",
         entrypoints=("middleware",),
     )
@@ -257,9 +260,12 @@ def test_vars_is_one_request_local_mapping_shared_by_all_bindings(
     first, second = runtime.middleware_for("owner")
     value = object()
     first.ctx.vars[("owner", "value")] = value
+    await second.abefore_agent({}, None)
 
+    assert first.name != second.name
     assert first.ctx.vars is second.ctx.vars
     assert second.ctx.vars[("owner", "value")] is value
+    assert first.ctx.vars["second_called"] is True
 
 
 @pytest.mark.anyio

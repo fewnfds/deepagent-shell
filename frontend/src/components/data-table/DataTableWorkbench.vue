@@ -343,7 +343,7 @@ defineExpose<{
         :aria-label="label(config.ariaLabel)"
         :data-table-id="config.id"
       >
-        <thead class="table-light">
+        <thead class="management-table-head">
           <tr>
             <th v-for="column in config.columns" :key="column.key" scope="col">{{ label(column.label) }}</th>
             <th v-if="rowActions.length" scope="col">{{ t('common.dataTable.actions') }}</th>

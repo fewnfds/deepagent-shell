@@ -579,12 +579,15 @@ onMounted(() => {
       @select="selectType"
     />
 
-    <div v-if="activeType && draft" class="row g-3 align-items-start" data-testid="component-layout">
-      <section class="col-lg-8 component-editor-region" data-testid="editor-region" :aria-busy="loading">
-        <div v-if="loading" class="d-flex align-items-center gap-2 mb-3" role="status">
-          <span class="spinner-border spinner-border-sm" aria-hidden="true" />
-          <span>{{ t('common.loading') }}</span>
-        </div>
+    <div
+      v-if="activeType && draft"
+      class="row g-3 align-items-start configuration-loading-surface"
+      data-testid="component-layout"
+      :aria-busy="loading"
+      :data-loading="loading"
+      :inert="loading || undefined"
+    >
+      <section class="col-lg-8 component-editor-region" data-testid="editor-region">
         <LteAlert
           v-if="storedRecordInvalid"
           class="mb-3"
@@ -621,12 +624,5 @@ onMounted(() => {
       </aside>
     </div>
 
-    <p
-      v-else-if="loading"
-      class="text-center text-body-secondary p-3"
-      role="status"
-    >
-      {{ t('common.loading') }}
-    </p>
   </PageShell>
 </template>

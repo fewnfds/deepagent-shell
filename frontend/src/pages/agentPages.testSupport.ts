@@ -21,6 +21,7 @@ vi.mock('@/composables/useToasts', () => ({
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
+    locale: { value: 'en' },
     t: (key: string) => key,
     te: () => true,
   }),

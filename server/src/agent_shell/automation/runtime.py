@@ -27,6 +27,103 @@ from agent_shell.validation.service import StaticAssembly
 
 _LOGGER = logging.getLogger("agent_shell.automation")
 
+_MIDDLEWARE_HOOKS = (
+    "before_agent",
+    "abefore_agent",
+    "before_model",
+    "abefore_model",
+    "wrap_model_call",
+    "awrap_model_call",
+    "after_model",
+    "aafter_model",
+    "wrap_tool_call",
+    "awrap_tool_call",
+    "after_agent",
+    "aafter_agent",
+)
+_ASYNC_MIDDLEWARE_HOOKS = frozenset({
+    "abefore_agent",
+    "abefore_model",
+    "awrap_model_call",
+    "aafter_model",
+    "awrap_tool_call",
+    "aafter_agent",
+})
+
+
+class _AutomationMiddlewareBinding(AgentMiddleware):
+    """Give one plugin-produced Middleware a graph-unique binding identity."""
+
+    def __init__(self, middleware: AgentMiddleware, name: str) -> None:
+        self._middleware = middleware
+        self._name = name
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def state_schema(self) -> Any:
+        return self._middleware.state_schema
+
+    @property
+    def tools(self) -> Any:
+        return getattr(self._middleware, "tools", ())
+
+    @property
+    def transformers(self) -> Any:
+        return getattr(self._middleware, "transformers", ())
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._middleware, name)
+
+
+def _sync_middleware_delegate(hook: str) -> Any:
+    def delegated(
+        self: _AutomationMiddlewareBinding,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        return getattr(self._middleware, hook)(*args, **kwargs)
+
+    delegated.__name__ = hook
+    return delegated
+
+
+def _async_middleware_delegate(hook: str) -> Any:
+    async def delegated(
+        self: _AutomationMiddlewareBinding,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        return await getattr(self._middleware, hook)(*args, **kwargs)
+
+    delegated.__name__ = hook
+    return delegated
+
+
+def _bind_automation_middleware(
+    middleware: AgentMiddleware,
+    *,
+    name: str,
+) -> AgentMiddleware:
+    namespace: dict[str, Any] = {}
+    middleware_type = type(middleware)
+    for hook in _MIDDLEWARE_HOOKS:
+        if getattr(middleware_type, hook) is getattr(AgentMiddleware, hook):
+            continue
+        namespace[hook] = (
+            _async_middleware_delegate(hook)
+            if hook in _ASYNC_MIDDLEWARE_HOOKS
+            else _sync_middleware_delegate(hook)
+        )
+    binding_type = type(
+        f"Bound{middleware_type.__name__}",
+        (_AutomationMiddlewareBinding,),
+        namespace,
+    )
+    return binding_type(middleware, name)
+
 
 @dataclass(frozen=True, slots=True)
 class AutomationOwner:
@@ -398,6 +495,7 @@ class AutomationRuntime:
             return cached
         owner = self._owner_by_id[owner_id]
         middleware: list[AgentMiddleware] = []
+        middleware_names: set[str] = set()
         for binding_index, binding in enumerate(owner.automation.get("hooks", [])):
             if not binding.get("enabled", True):
                 continue
@@ -440,7 +538,19 @@ class AutomationRuntime:
                     f"Automation plugin {plugin_id!r} must return AgentMiddleware instances.",
                     status_code=422,
                 )
-            middleware.extend(values)
+            for produced_index, item in enumerate(values):
+                original_name = item.name
+                if original_name not in middleware_names:
+                    middleware.append(item)
+                    middleware_names.add(original_name)
+                    continue
+                binding_name = (
+                    f"{original_name}:automation:{owner.id}:hook:"
+                    f"{binding_index}:{produced_index}:{plugin_id}"
+                )
+                bound = _bind_automation_middleware(item, name=binding_name)
+                middleware.append(bound)
+                middleware_names.add(bound.name)
         result = tuple(middleware)
         self._middleware[owner_id] = result
         return result

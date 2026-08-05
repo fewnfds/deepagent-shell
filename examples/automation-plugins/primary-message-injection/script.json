@@ -13,7 +13,7 @@
         "description": "Edit the function body and return the messages to inject.",
         "contentMediaType": "text/x-python",
         "format": "python",
-        "default": "async def transform_messages(messages, ctx, state, runtime):\n    # Edit the mutable messages here.\n    return messages\n"
+        "default": "async def transform_messages(messages, ctx, state, runtime):\n    # Replace all client message turns with one user message when needed:\n    # messages = [{\"role\": \"user\", \"content\": \"开始任务吧\"}]\n    return messages\n"
       }
     },
     "required": ["transform_source"],

@@ -526,7 +526,7 @@ onMounted(() => { void loadScopes() })
         </div>
         <div v-else class="table-responsive" data-testid="file-manager-roots">
           <table class="table table-hover align-middle">
-            <thead class="table-light">
+            <thead class="management-table-head">
               <tr>
                 <th>{{ t('fileManager.columns.name') }}</th>
                 <th>{{ t('fileManager.columns.kind') }}</th>
@@ -577,7 +577,7 @@ onMounted(() => { void loadScopes() })
         </div>
         <div v-else class="table-responsive">
         <table class="table table-hover align-middle">
-          <thead class="table-light">
+          <thead class="management-table-head">
             <tr>
               <th>
                 <input

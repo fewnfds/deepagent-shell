@@ -26,7 +26,7 @@ async function mountPage() {
 }
 
 describe('AutomationPage', () => {
-  it('shows installed plugin entrypoints and requirements', async () => {
+  it('shows installed plugins and requirements', async () => {
     vi.spyOn(managementApi, 'listAutomationPlugins').mockResolvedValue({
       catalog: [{
         api_version: 3,
@@ -53,10 +53,7 @@ describe('AutomationPage', () => {
 
     expect(wrapper.text()).toContain('Market context')
     expect(wrapper.text()).toContain('market-context')
-    expect(wrapper.text()).toContain('automation.entrypoints.middleware.scope')
-    expect(wrapper.text()).toContain('automation.entrypoints.middleware.timing')
-    expect(wrapper.text()).toContain('automation.entrypoints.prepare.scope')
-    expect(wrapper.text()).toContain('automation.entrypoints.complete.scope')
+    expect(wrapper.text()).not.toContain('automation.plugins.entrypoints')
     expect(wrapper.text()).toContain('example-market-sdk>=2')
     expect(wrapper.text()).toContain('automation.dependencies.installed')
     wrapper.unmount()
@@ -125,7 +122,6 @@ describe('AutomationPage', () => {
     const wrapper = await mountPage()
 
     expect(wrapper.text()).toContain('common.none')
-    expect(wrapper.text()).toContain('automation.entrypoints.lifecycle.scope')
     wrapper.unmount()
   })
 })

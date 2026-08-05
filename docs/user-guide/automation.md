@@ -147,11 +147,13 @@ system prompt 单独由 `create_deep_agent(system_prompt=...)` 装配。
 
 ### 消息注入示例
 
-源码仓库 `examples/automation-plugins/` 提供两个可直接复制到实例自动化脚本目录的示例：
+源码仓库 `examples/automation-plugins/` 提供三个可直接复制到实例自动化脚本目录的示例：
 
 - `primary-message-injection`：使用 `prepare`，每个 Primary API 请求转换并注入一次；
-- `subagent-message-injection`：使用原生 `AgentMiddleware.abefore_agent`，每次真实 Subagent invocation 都重新
-  从原始客户端消息建立副本并执行转换。它不使用 `wrap_model_call`，工具/模型循环不会重复注入。
+- `subagent-message-injection`：使用原生 `AgentMiddleware.abefore_agent`，每次真实 Subagent invocation 都编辑
+  当前 `state["messages"]` 的深复制。它不使用 `wrap_model_call`，工具/模型循环不会重复注入；
+- `subagent-filesystem-prompt-injection`：读取当前 Subagent filesystem 中的分组文件，将生成的消息插到 delegated
+  task 前。配置是普通多行文本字段，管理端直接显示为文本框。
 
 两者的 Schema 表单预置以下异步函数骨架：
 
@@ -161,12 +163,55 @@ async def transform_messages(messages, ctx, state, runtime):
     return messages
 ```
 
-默认函数是身份变换，完整 `messages[]` 直接进入目标 Agent。返回 `[]` 表示本次不注入；Subagent 的父 Agent
-delegated task 仍然保留。Primary 的 `state/runtime` 为 `None`；Subagent 得到当前 LangGraph 原生对象，同一
-profile 被调用四次会执行四次函数，并得到四个 invocation ID。
+默认函数是身份变换，完整 `messages[]` 直接进入目标 Agent。Primary 返回 `[]` 表示本次不注入；Subagent 返回
+`[]` 表示有意清空本次 invocation 输入。Primary 的 `state/runtime` 为 `None`；Subagent 得到当前 LangGraph 原生
+对象，同一 profile 被调用四次会执行四次函数，并得到四个 invocation ID。
 
-函数返回后，开头连续的 system 消息保持 system；首个非 system 之后的 system 原位改为 user。其他角色、消息
-楼层、文本和多模态 content blocks 不重排。无插件时 core 仍不会把客户端消息交给 Primary 或 Subagent。
+Subagent 变换函数拿到的最后一条消息通常是 Primary delegated task。标准的 Task 前插入写法是：
+
+```python
+async def transform_messages(messages, ctx, state, runtime):
+    messages.insert(-1, {"role": "user", "content": "当前插件的提示词"})
+    return messages
+```
+
+插件按页面绑定顺序依次读取前一插件已经更新的当前 state。因此 A、B、C 都用上述写法时，顺序是
+`[A, B, C, delegated task]`，task 只有一条。实现通过 `REMOVE_ALL_MESSAGES` 重建本次内存列表顺序，因为默认
+`add_messages` reducer 只支持末尾追加和按消息 ID 原位替换，不提供任意下标插入；它不删除持久化历史。
+
+Primary 变换函数返回后，开头连续的 system 消息保持 system；首个非 system 之后的 system 原位改为 user。
+Subagent 变换直接返回当前 LangGraph 消息对象或可转换的消息 dict，不额外改写 role、楼层或 content。无插件时
+core 仍不会把客户端消息交给 Primary 或 Subagent。
+
+Filesystem 提示词插件使用以下严格文本格式：
+
+```ini
+[group: cot]
+[assistant]
+# cot
+[/draft/cot.md][1000]
+
+[group: parts]
+[assistant]
+# part 1
+[/draft/draft-1.md][1000]
+[/output/output-1.md][1000]
+
+[assistant]
+# part 2
+[/draft/draft-2.md][1000]
+[/output/output-2.md][1000]
+```
+
+`[group: ...]` 是独立回退组；`[assistant]`、`[user]` 或 `[system]` 是配置身份，其中 `[system]` 输出时统一转为
+`user`，避免普通消息之后的 system message 被部分 Provider 拒绝。下一行 Markdown title 原样写入消息；每个
+`[/虚拟路径][字符数]` 是一个按位置排列的文件层。同一 group 的所有条目必须声明相同层数。第一层
+始终作为基线，缺失时写入 `缺失`，不足字符数也不阻断后续条目。从第二层开始按顺序整组检查：只有该层全部文件
+都存在、是 UTF-8 文本且达到各自字符数时才整组升级；遇到第一个不合格层就停止，不能跳到更高层。不同 group
+独立选择层级，所以单层 cot 不参与 parts 的回退。配置中的文件全部不存在时不生成任何消息，也不改动 state。
+
+插件读取 Deep Agents StateBackend 的当前 `state["files"]`，同时按 `ctx.paths.mapped` 读取当前 Agent 配置的 mapped
+目录；虚拟路径必须是规范化绝对文件路径，不能用 `..` 或反斜杠越过映射边界。
 
 ### lifecycle
 
@@ -217,7 +262,9 @@ Primary 的 `automation` 直接保存：
 
 Hook binding 只执行 `prepare`、`middleware` 和 `complete`；周期 binding 只执行 `lifecycle` 和 `complete`。
 同一个插件可以分别挂在两类列表，也可以用不同 config 挂载多次；每个 binding 有独立模块实例，但共享本请求的
-`ctx.vars`。`enabled=false` 的 binding 不 import、不执行，也不因第三方依赖未准备而阻止请求。
+`ctx.vars`。Hook 插件返回的 Middleware 名称发生碰撞时，平台会按 Agent、binding 和返回序号为后续实例追加唯一
+运行后缀，不要求不同插件使用不同 Python 类名；第一个原名仍保留 Deep Agents 的同名替换语义。
+`enabled=false` 的 binding 不 import、不执行，也不因第三方依赖未准备而阻止请求。
 
 Subagent 使用相同的直接列表结构，自行添加适用于该身份的 Hook 与周期 binding，不继承 Primary 的插件配置。
 Primary 与 Subagent 的 Hook、上下文和插件自定义参数可以不同。同一个 Subagent profile 无论从 diamond 还是

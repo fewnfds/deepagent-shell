@@ -40,6 +40,7 @@ vi.mock('@/composables/useToasts', () => ({
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
+    locale: { value: 'en' },
     t: (key: string) => key,
     te: () => true,
   }),
@@ -185,6 +186,9 @@ describe('ComponentsPage', () => {
     expect(wrapper.find('[data-testid="config-editor-layout"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="editor-region"]').find('[data-testid="validation-checklist"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="inspector-region"]').find('[data-testid="validation-checklist"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="component-layout"]').classes()).toContain('configuration-loading-surface')
+    expect(wrapper.get('[data-testid="component-layout"]').attributes('data-loading')).toBe('false')
+    expect(wrapper.text()).not.toContain('common.loading')
     expect(wrapper.text()).not.toContain(id)
     expect(api.listSkills).not.toHaveBeenCalled()
     expect(api.fetchModels).not.toHaveBeenCalled()

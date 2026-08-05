@@ -1020,27 +1020,8 @@ export const en: MessageSchema = {
       empty: 'No {kind} attached.',
     },
     plugins: {
-      entrypoints: 'Execution nodes',
       requirements: 'Python dependencies and status',
       empty: 'No automation plugin is installed.',
-    },
-    entrypoints: {
-      middleware: {
-        scope: 'Agent hook plugin',
-        timing: 'scheduled through native LangChain hooks inside the Agent graph',
-      },
-      prepare: {
-        scope: 'Agent hook plugin',
-        timing: 'runs once before this Agent graph is constructed',
-      },
-      lifecycle: {
-        scope: 'Periodic plugin',
-        timing: 'runs at a fixed delay during the request',
-      },
-      complete: {
-        scope: 'Hook / periodic plugin',
-        timing: 'runs once after the request reaches any terminal state',
-      },
     },
     dependencies: {
       installed: 'installed',

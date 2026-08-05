@@ -191,7 +191,7 @@ function remix(): void {
         </header>
         <div class="table-responsive lab-table-frame">
           <table class="table table-hover table-striped align-middle mb-0">
-            <thead class="table-light">
+            <thead class="management-table-head">
               <tr>
                 <th scope="col">{{ t('styleLab.samples.name') }}</th>
                 <th scope="col">{{ t('styleLab.samples.type') }}</th>

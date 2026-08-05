@@ -264,7 +264,12 @@ watch(
       </LteAlert>
     </template>
 
-    <div class="row g-3 align-items-start">
+    <div
+      class="row g-3 align-items-start configuration-loading-surface"
+      :aria-busy="loading"
+      :data-loading="loading"
+      :inert="loading || undefined"
+    >
       <section class="col-lg-8">
         <div class="mb-3">
           <RecordPicker

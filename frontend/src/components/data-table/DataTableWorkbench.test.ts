@@ -79,7 +79,7 @@ describe('DataTableWorkbench', () => {
 
     expect(wrapper.findAll('.card')).toHaveLength(2)
     expect(wrapper.findAll('.card-header')).toHaveLength(0)
-    expect(wrapper.get('thead').classes()).toContain('table-light')
+    expect(wrapper.get('thead').classes()).toContain('management-table-head')
     expect(wrapper.text()).toContain('3 items, 1–2, page 1 of 2')
     expect(wrapper.findAll('[data-testid="data-table-row"]')).toHaveLength(2)
     const filterActions = wrapper.findAll('form[role="search"] button')

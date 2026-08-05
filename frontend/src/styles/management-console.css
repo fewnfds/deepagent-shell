@@ -150,6 +150,21 @@ pre code {
   display: none;
 }
 
+.configuration-loading-surface {
+  opacity: 1;
+  transition: opacity 180ms ease;
+}
+
+.configuration-loading-surface[data-loading='true'] {
+  opacity: 0.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .configuration-loading-surface {
+    transition: none;
+  }
+}
+
 .component-editor-region textarea {
   height: 200px;
   resize: vertical;
@@ -243,6 +258,13 @@ pre code {
 .collection-table {
   width: 100%;
   margin-bottom: 0;
+}
+
+.management-table-head {
+  --bs-table-bg: var(--bs-tertiary-bg);
+  --bs-table-color: var(--bs-emphasis-color);
+
+  border-bottom: calc(var(--bs-border-width) * 2) solid var(--bs-border-color);
 }
 
 .collection-table tbody tr[aria-expanded] {

@@ -75,6 +75,11 @@ describe('agent authoring pages', () => {
 
     await primaryPage.router.push({ path: '/agents/primary', query: { id: firstPrimaryId } })
     await primaryPage.router.push({ path: '/agents/primary', query: { id: secondPrimaryId } })
+    await flushPromises()
+    const primarySurface = primaryPage.wrapper.get('.configuration-loading-surface')
+    expect(primarySurface.attributes('data-loading')).toBe('true')
+    expect(primarySurface.attributes('inert')).toBeDefined()
+    expect(primaryPage.wrapper.text()).not.toContain('common.loading')
     secondPrimary.resolve({
       id: secondPrimaryId,
       name: 'Latest Primary',
@@ -82,6 +87,8 @@ describe('agent authoring pages', () => {
       subagents: [],
     })
     await flushPromises()
+    expect(primarySurface.attributes('data-loading')).toBe('false')
+    expect(primarySurface.attributes('inert')).toBeUndefined()
     firstPrimary.resolve({
       id: firstPrimaryId,
       name: 'Late Primary',
@@ -110,6 +117,11 @@ describe('agent authoring pages', () => {
 
     await subagentPage.router.push({ path: '/agents/subagents', query: { id: firstSubagentId } })
     await subagentPage.router.push({ path: '/agents/subagents', query: { id: secondSubagentId } })
+    await flushPromises()
+    const subagentSurface = subagentPage.wrapper.get('.configuration-loading-surface')
+    expect(subagentSurface.attributes('data-loading')).toBe('true')
+    expect(subagentSurface.attributes('inert')).toBeDefined()
+    expect(subagentPage.wrapper.text()).not.toContain('common.loading')
     secondSubagent.resolve({
       id: secondSubagentId,
       component_name: 'Latest Subagent',
@@ -118,6 +130,8 @@ describe('agent authoring pages', () => {
       settings: { capability_overrides: [], subagents: [] },
     })
     await flushPromises()
+    expect(subagentSurface.attributes('data-loading')).toBe('false')
+    expect(subagentSurface.attributes('inert')).toBeUndefined()
     firstSubagent.resolve({
       id: firstSubagentId,
       component_name: 'Late Subagent',

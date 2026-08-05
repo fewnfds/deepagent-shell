@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+from copy import deepcopy
 import inspect
 from typing import Any, Awaitable, Callable
 
@@ -7,13 +9,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages import RemoveMessage
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 
-from agent_shell.automation.messages import (
-    mutable_request_messages,
-    prepared_transformed_messages,
-)
-
-
-Transform = Callable[[list[dict[str, Any]], Any, Any, Any], Awaitable[object]]
+Transform = Callable[[list[Any], Any, Any, Any], Awaitable[object]]
 
 
 def _compile_transform(source: object) -> Transform | None:
@@ -61,21 +57,23 @@ class SubagentMessageInjectionMiddleware(AgentMiddleware):
         if self._ctx.agent["type"] != "subagent":
             return None
         try:
-            messages = mutable_request_messages(self._ctx.request.messages)
+            messages = deepcopy(list(state.get("messages", [])))
             transformed = (
                 await self._transform(messages, self._ctx, state, runtime)
                 if self._transform is not None
                 else messages
             )
-            prepared = prepared_transformed_messages(transformed)
+            if not isinstance(transformed, Sequence) or isinstance(
+                transformed, (str, bytes)
+            ):
+                raise TypeError("transform_messages must return a message sequence")
+            prepared = list(transformed)
         except Exception:
             raise RuntimeError("Subagent message transform failed") from None
-        delegated = list(state.get("messages", []))
         return {
             "messages": [
                 RemoveMessage(id=REMOVE_ALL_MESSAGES),
                 *prepared,
-                *delegated,
             ]
         }
 

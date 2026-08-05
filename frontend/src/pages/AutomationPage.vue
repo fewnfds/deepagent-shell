@@ -87,10 +87,9 @@ onMounted(() => {
     <section class="card">
       <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
-          <thead class="table-light">
+          <thead class="management-table-head">
             <tr>
               <th scope="col">{{ t('fields.name') }}</th>
-              <th scope="col">{{ t('automation.plugins.entrypoints') }}</th>
               <th scope="col">{{ t('automation.plugins.requirements') }}</th>
             </tr>
           </thead>
@@ -100,18 +99,6 @@ onMounted(() => {
                 <div class="fw-semibold">{{ plugin.name }}</div>
                 <div class="small font-monospace text-body-secondary">{{ plugin.id }}</div>
                 <div v-if="plugin.description" class="small text-body-secondary">{{ plugin.description }}</div>
-              </td>
-              <td>
-                <div
-                  v-for="entrypoint in plugin.entrypoints"
-                  :key="entrypoint"
-                  class="mb-1"
-                >
-                  <span class="fw-semibold">{{ t(`automation.entrypoints.${entrypoint}.scope`) }}</span>
-                  <span class="text-body-secondary">
-                    {{ t('common.detailSeparator') }}{{ t(`automation.entrypoints.${entrypoint}.timing`) }}
-                  </span>
-                </div>
               </td>
               <td>
                 <span v-if="!plugin.python_requirements.length" class="text-body-secondary">
@@ -137,7 +124,7 @@ onMounted(() => {
               </td>
             </tr>
             <tr v-if="!loading && !plugins.length">
-              <td class="text-center text-body-secondary" colspan="3">{{ t('automation.plugins.empty') }}</td>
+              <td class="text-center text-body-secondary" colspan="2">{{ t('automation.plugins.empty') }}</td>
             </tr>
           </tbody>
         </table>

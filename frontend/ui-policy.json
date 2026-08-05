@@ -196,7 +196,7 @@
           "accordion", "alert", "alert-danger", "align-middle", "badge", "border", "breadcrumb", "breadcrumb-item", "card", "card-body", "card-danger", "card-footer",
           "card-primary", "bg-danger", "bg-info", "bg-primary", "bg-success", "bg-warning",
           "card-header", "card-outline", "card-text", "card-title", "dropdown", "dropdown-item", "dropdown-menu", "dropdown-menu-end", "info-box-number", "page-item", "page-link", "pagination", "progress", "rounded", "spinner-border", "spinner-border-sm",
-          "list-group", "list-group-flush", "list-group-item", "row", "table", "table-hover", "table-light", "table-responsive", "table-striped", "text-bg-danger", "text-bg-info",
+          "list-group", "list-group-flush", "list-group-item", "row", "table", "table-hover", "table-responsive", "table-striped", "text-bg-danger", "text-bg-info",
           "text-bg-primary",
           "text-bg-secondary", "text-bg-success", "text-bg-warning", "time", "timeline", "timeline-body", "timeline-footer", "timeline-header", "timeline-item"
         ]
@@ -226,9 +226,23 @@
         ]
       },
       {
+        "name": "management-tables",
+        "paths": [
+          "src/components/data-table/*.vue",
+          "src/pages/AutomationPage.vue",
+          "src/pages/FileManagerPage.vue",
+          "src/pages/StyleLabPage.vue"
+        ],
+        "classes": ["management-table-head"]
+      },
+      {
         "name": "component-editor",
-        "paths": ["src/pages/ComponentsPage.vue"],
-        "classes": ["component-editor-region"]
+        "paths": [
+          "src/pages/ComponentsPage.vue",
+          "src/pages/PrimaryAgentPage.vue",
+          "src/pages/SubagentPage.vue"
+        ],
+        "classes": ["component-editor-region", "configuration-loading-surface"]
       },
       {
         "name": "simple-mapping-list",
