@@ -170,7 +170,7 @@ describe('ComponentsPage', () => {
     const { wrapper } = await mountAt(`/components/model?id=${id}`)
 
     const navLabels = wrapper.findAll('[data-testid="section-nav"] button').map((item) => item.text())
-    expect(navLabels).toEqual(['Model manifest label', 'Skill manifest label'])
+    expect(navLabels).toEqual(['capabilities.model.label', 'capabilities.skill.label'])
     expect(wrapper.find('.app-content-header').exists()).toBe(false)
     expect(wrapper.find('[data-testid="editor-region"] > h2').exists()).toBe(false)
     expect(wrapper.get('.page-action-dock').findAll('button').map((button) => button.text())).toEqual([
@@ -332,7 +332,7 @@ describe('ComponentsPage', () => {
     await wrapper.get('[data-field="record-name"]').setValue('Unsaved name')
 
     const skillButton = wrapper.findAll('[data-testid="section-nav"] button')
-      .find((button) => button.text().includes('Skill manifest label'))
+      .find((button) => button.text().includes('capabilities.skill.label'))
     if (!skillButton) throw new Error('skill navigation button not found')
 
     await skillButton.trigger('click')

@@ -133,7 +133,7 @@ const activeDefaults = computed(() => defaultsForType(activeType.value))
 const currentEditor = computed(() => activeType.value ? editorComponents[activeType.value] : null)
 const navigationItems = computed<SectionNavItem[]>(() => manifests.value.map((manifest) => ({
   id: manifest.type,
-  label: manifest.label,
+  label: t(`capabilities.${manifest.type}.label`),
 })))
 
 const editorProps = computed<Record<string, unknown>>(() => {
