@@ -45,6 +45,29 @@ class _ClientDisconnected(RuntimeError):
     pass
 
 
+class _BodyTooLarge(RuntimeError):
+    pass
+
+
+async def _read_bounded_body(request: Request, limit: int) -> bytes:
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            declared_length = int(content_length)
+        except ValueError:
+            pass
+        else:
+            if declared_length > limit:
+                raise _BodyTooLarge
+
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(chunk) > limit - len(body):
+            raise _BodyTooLarge
+        body.extend(chunk)
+    return bytes(body)
+
+
 class ApiKeyCommand(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -491,8 +514,9 @@ def build_api_server_router(
         server_settings = store.settings()
         if not server_settings["enabled"]:
             return _openai_error(503, "api_server_stopped", "The API server is stopped.")
-        body = await request.body()
-        if len(body) > MAX_CHAT_COMPLETION_BODY_BYTES:
+        try:
+            body = await _read_bounded_body(request, MAX_CHAT_COMPLETION_BODY_BYTES)
+        except _BodyTooLarge:
             return _openai_error(
                 413,
                 "input_body_too_large",

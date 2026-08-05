@@ -172,10 +172,16 @@ class EventFeedStore:
     def get_api_call(self, item_id: str) -> dict[str, object] | None:
         with self._database.transaction() as connection:
             row = connection.execute(
-                "SELECT id, request_id, model, agent_name, started_at, finished_at, "
-                "status, request_body, response_body, response_content_type, "
-                "http_status, error_code, response_blocks_json, media_assets_json "
-                "FROM api_message_history WHERE id = ?",
+                "SELECT history.id, history.request_id, history.model, "
+                "history.agent_name, history.started_at, history.finished_at, "
+                "history.status, history.request_body, history.response_body, "
+                "history.response_content_type, history.http_status, "
+                "history.error_code, "
+                "COALESCE(output.response_blocks_json, '[]') AS response_blocks_json, "
+                "COALESCE(output.media_assets_json, '[]') AS media_assets_json "
+                "FROM api_message_history AS history "
+                "LEFT JOIN api_message_history_outputs AS output "
+                "ON output.history_id = history.id WHERE history.id = ?",
                 (item_id,),
             ).fetchone()
         if row is None:

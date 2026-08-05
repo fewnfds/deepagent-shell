@@ -227,9 +227,8 @@ class AgentSessionStore:
             connection.execute(
                 "INSERT INTO agent_session_runs "
                 "(id, session_id, request_id, model, agent_name, started_at, finished_at, "
-                "status, error_code, input_messages_json, timeline_json, response_text, "
-                "response_blocks_json, media_assets_json) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "status, error_code, input_messages_json, timeline_json, response_text) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     item_id,
                     session_id,
@@ -243,6 +242,14 @@ class AgentSessionStore:
                     json.dumps(input_messages, ensure_ascii=False, separators=(",", ":")),
                     json.dumps(timeline, ensure_ascii=False, separators=(",", ":")),
                     response_text,
+                ),
+            )
+            connection.execute(
+                "INSERT INTO agent_session_run_outputs "
+                "(run_id, response_blocks_json, media_assets_json) "
+                "VALUES (?, ?, ?)",
+                (
+                    item_id,
                     json.dumps(
                         response_blocks,
                         ensure_ascii=False,
@@ -378,11 +385,15 @@ class AgentSessionStore:
     def get_session(self, session_id: str) -> dict[str, object] | None:
         with self._database.transaction() as connection:
             rows = connection.execute(
-                "SELECT id, session_id, request_id, model, agent_name, started_at, "
-                "finished_at, status, error_code, input_messages_json, timeline_json, "
-                "response_text, response_blocks_json, media_assets_json "
-                "FROM agent_session_runs WHERE session_id = ? "
-                "ORDER BY started_at ASC, rowid ASC",
+                "SELECT run.id, run.session_id, run.request_id, run.model, "
+                "run.agent_name, run.started_at, run.finished_at, run.status, "
+                "run.error_code, run.input_messages_json, run.timeline_json, "
+                "run.response_text, "
+                "COALESCE(output.response_blocks_json, '[]') AS response_blocks_json, "
+                "COALESCE(output.media_assets_json, '[]') AS media_assets_json "
+                "FROM agent_session_runs AS run "
+                "LEFT JOIN agent_session_run_outputs AS output ON output.run_id = run.id "
+                "WHERE run.session_id = ? ORDER BY run.started_at ASC, run.rowid ASC",
                 (session_id,),
             ).fetchall()
         if not rows:
@@ -457,7 +468,8 @@ class AgentSessionStore:
         elif step_id == "output":
             columns = (
                 "finished_at, status, error_code, response_text, "
-                "response_blocks_json, media_assets_json"
+                "COALESCE(output.response_blocks_json, '[]') AS response_blocks_json, "
+                "COALESCE(output.media_assets_json, '[]') AS media_assets_json"
             )
             event_index = None
         elif step_id.startswith("event-"):
@@ -477,8 +489,9 @@ class AgentSessionStore:
         )
         with self._database.transaction() as connection:
             raw = connection.execute(
-                f"SELECT {columns} FROM agent_session_runs "
-                "WHERE session_id = ? AND id = ?",
+                f"SELECT {columns} FROM agent_session_runs AS run "
+                "LEFT JOIN agent_session_run_outputs AS output ON output.run_id = run.id "
+                "WHERE run.session_id = ? AND run.id = ?",
                 parameters,
             ).fetchone()
         if raw is None:

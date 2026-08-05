@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from agent_shell.api import api_server
 
 from .support import *
@@ -119,6 +121,43 @@ def test_chat_completion_body_limit_rejects_before_agent_start(
 
     assert response.status_code == 413
     assert response.json()["error"]["code"] == "input_body_too_large"
+
+
+def test_bounded_body_reader_stops_when_the_next_chunk_exceeds_the_limit() -> None:
+    calls = 0
+
+    async def receive() -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return {
+                "type": "http.request",
+                "body": b"a" * 80,
+                "more_body": True,
+            }
+        if calls == 2:
+            return {
+                "type": "http.request",
+                "body": b"b" * 80,
+                "more_body": True,
+            }
+        raise AssertionError("the oversized request body was read past the limit")
+
+    async def run() -> None:
+        request = Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/v1/chat/completions",
+                "headers": [],
+            },
+            receive,
+        )
+        with pytest.raises(api_server._BodyTooLarge):
+            await api_server._read_bounded_body(request, 128)
+
+    asyncio.run(run())
+    assert calls == 2
 
 
 def test_initial_message_limit_is_configurable_and_rejects_before_agent_start(

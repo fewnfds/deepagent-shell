@@ -4,6 +4,7 @@ import base64
 import binascii
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import logging
 import os
 from pathlib import Path, PurePosixPath
 import sqlite3
@@ -15,6 +16,7 @@ from agent_shell.storage.permissions import secure_directory, secure_file
 
 
 MAX_MEDIA_OUTPUT_BYTES = 64 * 1024 * 1024
+_LOGGER = logging.getLogger(__name__)
 _MEDIA_LABELS = {
     "image": "图片",
     "audio": "音频",
@@ -241,35 +243,46 @@ class MediaOutputStore:
             rows = connection.execute(
                 "SELECT id, relative_path FROM media_output_assets AS asset "
                 "WHERE finalized = 1 AND NOT EXISTS ("
-                "SELECT 1 FROM api_message_history AS history, "
-                "json_each(history.media_assets_json) AS reference "
+                "SELECT 1 FROM api_message_history_outputs AS output, "
+                "json_each(output.media_assets_json) AS reference "
                 "WHERE json_extract(reference.value, '$.id') = asset.id"
                 ") AND NOT EXISTS ("
-                "SELECT 1 FROM agent_session_runs AS run, "
-                "json_each(run.media_assets_json) AS reference "
+                "SELECT 1 FROM agent_session_run_outputs AS output, "
+                "json_each(output.media_assets_json) AS reference "
                 "WHERE json_extract(reference.value, '$.id') = asset.id"
                 ")"
             ).fetchall()
-            if rows:
+        deleted_ids = []
+        for row in rows:
+            if self._delete_relative_path(str(row["relative_path"])):
+                deleted_ids.append(str(row["id"]))
+            else:
+                _LOGGER.warning(
+                    "Unable to remove media output asset %s; cleanup will retry.",
+                    row["id"],
+                )
+        if deleted_ids:
+            with self._database.transaction() as connection:
                 connection.executemany(
                     "DELETE FROM media_output_assets WHERE id = ?",
-                    ((row["id"],) for row in rows),
+                    ((asset_id,) for asset_id in deleted_ids),
                 )
                 connection.commit()
-        for row in rows:
-            self._delete_relative_path(str(row["relative_path"]))
 
-    def _delete_relative_path(self, relative_path: str) -> None:
+    def _delete_relative_path(self, relative_path: str) -> bool:
         parts = PurePosixPath(relative_path).parts
         prefix = ("data", "media", "outputs")
         if parts[:3] != prefix:
-            return
+            return False
         target = (self.root.joinpath(*parts[3:])).resolve()
         try:
             target.relative_to(self.root)
         except ValueError:
-            return
-        target.unlink(missing_ok=True)
+            return False
+        try:
+            target.unlink(missing_ok=True)
+        except OSError:
+            return False
         parent = target.parent
         while parent != self.root:
             try:
@@ -277,3 +290,4 @@ class MediaOutputStore:
             except OSError:
                 break
             parent = parent.parent
+        return True

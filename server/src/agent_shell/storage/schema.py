@@ -139,9 +139,7 @@ CREATE TABLE IF NOT EXISTS api_message_history (
     response_body TEXT,
     response_content_type TEXT,
     http_status INTEGER,
-    error_code TEXT,
-    response_blocks_json TEXT NOT NULL,
-    media_assets_json TEXT NOT NULL
+    error_code TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_api_message_history_started
@@ -152,6 +150,12 @@ ON api_message_history(model);
 
 CREATE INDEX IF NOT EXISTS idx_api_message_history_status
 ON api_message_history(status);
+
+CREATE TABLE IF NOT EXISTS api_message_history_outputs (
+    history_id TEXT PRIMARY KEY REFERENCES api_message_history(id) ON DELETE CASCADE,
+    response_blocks_json TEXT NOT NULL,
+    media_assets_json TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS runtime_diagnostics (
     sequence INTEGER PRIMARY KEY,
@@ -187,9 +191,7 @@ CREATE TABLE IF NOT EXISTS agent_session_runs (
     error_code TEXT,
     input_messages_json TEXT NOT NULL,
     timeline_json TEXT NOT NULL,
-    response_text TEXT NOT NULL,
-    response_blocks_json TEXT NOT NULL,
-    media_assets_json TEXT NOT NULL
+    response_text TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_agent_session_runs_session
@@ -197,6 +199,12 @@ ON agent_session_runs(session_id, started_at);
 
 CREATE INDEX IF NOT EXISTS idx_agent_session_runs_started
 ON agent_session_runs(started_at DESC);
+
+CREATE TABLE IF NOT EXISTS agent_session_run_outputs (
+    run_id TEXT PRIMARY KEY REFERENCES agent_session_runs(id) ON DELETE CASCADE,
+    response_blocks_json TEXT NOT NULL,
+    media_assets_json TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS media_output_assets (
     id TEXT PRIMARY KEY,

@@ -35,13 +35,23 @@ class PrimaryMediaResponse:
         )
         if event_key in self._by_event_key:
             return None
-        projection = await asyncio.to_thread(
-            self._store.persist,
-            request_id=self._request_id,
-            message_id=event.message_id,
-            block_index=event.block_index,
-            block=dict(event.content),
+        persist_task = asyncio.create_task(
+            asyncio.to_thread(
+                self._store.persist,
+                request_id=self._request_id,
+                message_id=event.message_id,
+                block_index=event.block_index,
+                block=dict(event.content),
+            )
         )
+        try:
+            projection = await asyncio.shield(persist_task)
+        except asyncio.CancelledError:
+            try:
+                await persist_task
+            except Exception:
+                pass
+            raise
         handled = _HandledMedia(
             message_id=event.message_id,
             block_index=event.block_index,

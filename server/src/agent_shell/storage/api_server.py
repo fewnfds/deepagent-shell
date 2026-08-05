@@ -268,8 +268,8 @@ class ApiServerStore:
                 "INSERT INTO api_message_history "
                 "(id, request_id, model, agent_name, started_at, finished_at, "
                 "status, request_body, response_body, response_content_type, "
-                "http_status, error_code, response_blocks_json, media_assets_json) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "http_status, error_code) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 tuple(item[key] for key in (
                     "id",
                     "request_id",
@@ -283,9 +283,17 @@ class ApiServerStore:
                     "response_content_type",
                     "http_status",
                     "error_code",
-                    "response_blocks_json",
-                    "media_assets_json",
                 )),
+            )
+            connection.execute(
+                "INSERT INTO api_message_history_outputs "
+                "(history_id, response_blocks_json, media_assets_json) "
+                "VALUES (?, ?, ?)",
+                (
+                    item["id"],
+                    item["response_blocks_json"],
+                    item["media_assets_json"],
+                ),
             )
             self._prune(
                 connection,
