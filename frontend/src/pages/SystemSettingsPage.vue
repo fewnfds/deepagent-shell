@@ -34,7 +34,7 @@ interface SystemSettingsApi {
 
 const props = defineProps<{ api?: SystemSettingsApi }>()
 const api = props.api ?? managementApi
-const { t } = useI18n()
+const { locale, t } = useI18n()
 const managementError = useManagementError()
 const { notify } = useToasts()
 const validationSettingsController = useConfigurationValidationSettings()
@@ -63,6 +63,10 @@ const trustedProxies = ref('')
 const apiKeyPlaceholder = computed(() => apiServerSettings.value?.api_key.configured
   ? t('common.configuredSecretPlaceholder')
   : t('common.apiKeyPlaceholder'))
+
+function fieldLabel(messageKey: string, wireField: string): string {
+  return locale.value === 'debug' ? wireField : t(messageKey)
+}
 
 const settingsValid = computed(() => {
   const normalizedPort = Number(port.value)
@@ -244,11 +248,11 @@ onMounted(() => { void load() })
             <div class="card-body">
             <div class="row g-3">
               <div class="col-md-6">
-                <LteInput v-model="host" :label="t('systemSettings.host')" spellcheck="false" />
+                <LteInput v-model="host" :label="fieldLabel('systemSettings.host', 'host')" spellcheck="false" />
               </div>
               <div class="col-md-6">
                 <label class="form-label" for="system-port">
-                  {{ t('systemSettings.port') }}
+                  {{ fieldLabel('systemSettings.port', 'port') }}
                 </label>
                 <input
                   id="system-port"
@@ -272,7 +276,7 @@ onMounted(() => { void load() })
                   type="checkbox"
                 >
                 <label class="form-check-label" for="allow-remote">
-                  {{ t('systemSettings.allowRemote') }}
+                  {{ fieldLabel('systemSettings.allowRemote', 'allow_remote') }}
                 </label>
               </div>
             </div>
@@ -289,7 +293,7 @@ onMounted(() => { void load() })
             <div class="card-body">
             <div class="mb-3">
               <label class="form-label" for="management-password">
-                {{ t('systemSettings.managementPassword') }}
+                {{ fieldLabel('systemSettings.managementPassword', 'management_token') }}
               </label>
               <div class="input-group">
                 <input
@@ -315,7 +319,7 @@ onMounted(() => { void load() })
             </div>
 
             <div>
-              <label class="form-label" for="api-server-key">{{ t('apiServer.key.title') }}</label>
+              <label class="form-label" for="api-server-key">{{ fieldLabel('apiServer.key.title', 'api_key') }}</label>
               <div class="input-group">
                 <input
                   id="api-server-key"
@@ -354,7 +358,7 @@ onMounted(() => { void load() })
             <div class="card-body">
             <div class="mb-3">
               <label class="form-label" for="max-initial-messages">
-                {{ t('apiServer.request.maxInitialMessages') }}
+                {{ fieldLabel('apiServer.request.maxInitialMessages', 'max_initial_messages') }}
               </label>
               <input
                 id="max-initial-messages"
@@ -370,7 +374,7 @@ onMounted(() => { void load() })
 
             <div>
               <label class="form-label" for="configuration-validation-debounce">
-                {{ t('systemSettings.validationDebounceMs') }}
+                {{ fieldLabel('systemSettings.validationDebounceMs', 'debounce_ms') }}
               </label>
               <input
                 id="configuration-validation-debounce"
@@ -395,7 +399,7 @@ onMounted(() => { void load() })
                     type="checkbox"
                   >
                   <label class="form-check-label" for="interception-test">
-                    {{ t('eventFeed.controls.interception') }}
+                    {{ fieldLabel('eventFeed.controls.interception', 'enabled') }}
                   </label>
                 </div>
               </div>
@@ -412,9 +416,9 @@ onMounted(() => { void load() })
             </header>
             <div class="card-body">
             <div class="mb-3">
-              <LteTextarea v-model="corsOrigins" :label="t('systemSettings.corsOrigins')" :rows="4" />
+              <LteTextarea v-model="corsOrigins" :label="fieldLabel('systemSettings.corsOrigins', 'cors_origins')" :rows="4" />
             </div>
-            <LteTextarea v-model="trustedProxies" :label="t('systemSettings.trustedProxies')" :rows="4" />
+            <LteTextarea v-model="trustedProxies" :label="fieldLabel('systemSettings.trustedProxies', 'trusted_proxy_cidrs')" :rows="4" />
             </div>
           </section>
         </div>

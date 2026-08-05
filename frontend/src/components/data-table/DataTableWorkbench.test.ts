@@ -28,7 +28,6 @@ function i18n() {
 function baseConfig(): Omit<DataTableConfig<Row>, 'provider'> {
   return {
     id: 'records',
-    title: 'Records',
     ariaLabel: 'Record pages',
     emptyMessage: 'No records',
     loadErrorTitle: 'Load failed',
@@ -79,8 +78,13 @@ describe('DataTableWorkbench', () => {
     })
 
     expect(wrapper.findAll('.card')).toHaveLength(2)
+    expect(wrapper.findAll('.card-header')).toHaveLength(0)
+    expect(wrapper.get('thead').classes()).toContain('table-light')
     expect(wrapper.text()).toContain('3 items, 1–2, page 1 of 2')
     expect(wrapper.findAll('[data-testid="data-table-row"]')).toHaveLength(2)
+    const filterActions = wrapper.findAll('form[role="search"] button')
+    expect(filterActions).toHaveLength(3)
+    expect(filterActions.every((button) => button.classes().includes('fs-6'))).toBe(true)
     await wrapper.get('#records-query').setValue('ＧＡＭＭＡ 中文')
     await wrapper.get('#records-filter-scope-one').setValue(true)
     await wrapper.get('form[role="search"]').trigger('submit')

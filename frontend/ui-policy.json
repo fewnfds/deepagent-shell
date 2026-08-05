@@ -196,7 +196,7 @@
           "accordion", "alert", "alert-danger", "align-middle", "badge", "border", "breadcrumb", "breadcrumb-item", "card", "card-body", "card-danger", "card-footer",
           "card-primary", "bg-danger", "bg-info", "bg-primary", "bg-success", "bg-warning",
           "card-header", "card-outline", "card-text", "card-title", "dropdown", "dropdown-item", "dropdown-menu", "dropdown-menu-end", "info-box-number", "page-item", "page-link", "pagination", "progress", "rounded", "spinner-border", "spinner-border-sm",
-          "list-group", "list-group-flush", "list-group-item", "row", "table", "table-hover", "table-responsive", "table-striped", "text-bg-danger", "text-bg-info",
+          "list-group", "list-group-flush", "list-group-item", "row", "table", "table-hover", "table-light", "table-responsive", "table-striped", "text-bg-danger", "text-bg-info",
           "text-bg-primary",
           "text-bg-secondary", "text-bg-success", "text-bg-warning", "time", "timeline", "timeline-body", "timeline-footer", "timeline-header", "timeline-item"
         ]
@@ -206,7 +206,7 @@
         "paths": ["src/components/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
         "classes": [
           "align-items-center", "align-items-end", "align-items-start", "bg-body-tertiary", "col-12", "col-lg-3", "col-lg-4", "col-lg-6", "col-lg-8", "col-md-6", "col-xl-5", "col-xl-7", "col-xxl-4", "d-block", "d-flex", "d-none", "d-sm-inline", "flex-wrap", "font-monospace", "form-text", "fw-semibold", "g-3", "gap-1", "gap-2", "gap-3", "h-100", "h4", "h5",
-          "justify-content-between", "justify-content-end", "lh-sm", "mb-0", "mb-1", "mb-2", "mb-3", "me-2", "ms-auto", "mt-2", "mt-3", "overflow-auto", "p-3", "small",
+          "fs-6", "justify-content-between", "justify-content-end", "lh-sm", "mb-0", "mb-1", "mb-2", "mb-3", "me-2", "ms-auto", "mt-2", "mt-3", "overflow-auto", "p-3", "small",
           "text-body-secondary", "text-break", "text-center", "text-danger", "text-end", "text-start", "text-success", "text-uppercase", "visually-hidden", "w-100"
         ]
       },
@@ -237,6 +237,11 @@
           "simple-mapping-actions", "simple-mapping-footer", "simple-mapping-list",
           "simple-mapping-primary", "simple-mapping-row", "simple-mapping-secondary"
         ]
+      },
+      {
+        "name": "record-picker",
+        "paths": ["src/components/RecordPicker.vue"],
+        "classes": ["record-picker-name-field"]
       },
       {
         "name": "validation-sidebar",

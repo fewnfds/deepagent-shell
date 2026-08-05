@@ -42,7 +42,7 @@ function pathTokens(path: string): Array<string | number> {
 }
 
 export function useValidationIssuePresentation() {
-  const { t, te } = useI18n()
+  const { locale, t, te } = useI18n()
 
   function scopeLabel(issue: ValidationIssue): string {
     return t(`validation.scope.${issue.scope}`)
@@ -105,6 +105,7 @@ export function useValidationIssuePresentation() {
   }
 
   function location(issue: ValidationIssue): string {
+    if (locale.value === 'debug') return issue.path || '$'
     const tokens = pathTokens(issue.path)
     if (tokens.length === 0) return t('validation.location.wholeConfiguration')
 
@@ -145,6 +146,7 @@ export function useValidationIssuePresentation() {
   }
 
   function message(issue: ValidationIssue): string {
+    if (locale.value === 'debug') return issue.code
     if (issue.code === 'contract.text_too_short' && fieldName(issue) === 'name') {
       return t('validation.issue.contract.requiredText', { field: fieldLabel(issue) })
     }

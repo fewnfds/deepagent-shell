@@ -225,11 +225,11 @@ defineExpose<{
               :placeholder="label(config.search.placeholder)"
               type="search"
             >
-            <LteButton :disabled="loading" theme="primary" type="submit">
+            <LteButton class="fs-6" :disabled="loading" theme="primary" type="submit">
               <i class="bi bi-search" aria-hidden="true" />
               {{ t('common.search') }}
             </LteButton>
-            <LteButton :disabled="loading" theme="warning" type="button" @click="clearQuery">
+            <LteButton class="fs-6" :disabled="loading" theme="warning" type="button" @click="clearQuery">
               {{ t('common.reset') }}
             </LteButton>
           </div>
@@ -286,17 +286,18 @@ defineExpose<{
           <legend class="collection-filter-legend">{{ t('common.dataTable.operations') }}</legend>
           <div class="collection-filter-options">
             <template v-if="!config.search && filters.length">
-              <LteButton :disabled="loading" theme="primary" type="submit">
+              <LteButton class="fs-6" :disabled="loading" theme="primary" type="submit">
                 <i class="bi bi-search" aria-hidden="true" />
                 {{ t('common.search') }}
               </LteButton>
-              <LteButton :disabled="loading" theme="warning" type="button" @click="clearQuery">
+              <LteButton class="fs-6" :disabled="loading" theme="warning" type="button" @click="clearQuery">
                 {{ t('common.reset') }}
               </LteButton>
             </template>
             <slot name="filter-actions" />
             <LteButton
               v-if="config.bulkAction"
+              class="fs-6"
               :disabled="loading || runningBulkAction || !bulkEnabled"
               theme="danger"
               type="button"
@@ -317,7 +318,7 @@ defineExpose<{
     </form>
   </LteCard>
 
-  <LteCard :title="label(config.title)">
+  <LteCard>
     <div v-if="loading" class="d-flex align-items-center gap-2 p-3" role="status">
       <span class="spinner-border" aria-hidden="true" />
       <span>{{ t('common.loading') }}</span>
@@ -342,7 +343,7 @@ defineExpose<{
         :aria-label="label(config.ariaLabel)"
         :data-table-id="config.id"
       >
-        <thead>
+        <thead class="table-light">
           <tr>
             <th v-for="column in config.columns" :key="column.key" scope="col">{{ label(column.label) }}</th>
             <th v-if="rowActions.length" scope="col">{{ t('common.dataTable.actions') }}</th>

@@ -21,6 +21,7 @@ import type {
 import ModalHost from '@/components/ModalHost.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useConfirmation } from '@/composables/useConfirmation'
+import { formattingLocale } from '@/locales'
 import {
   useManagementEvents,
   type ManagementEventSource,
@@ -213,7 +214,6 @@ function deletedCount(result: unknown): number {
 
 const sessionTableConfig: DataTableConfig<AgentSessionSummary> = {
   id: 'agent-sessions',
-  title: () => t('agentSessions.listTitle'),
   ariaLabel: () => t('agentSessions.pagination.ariaLabel'),
   emptyMessage: () => t('agentSessions.empty'),
   loadErrorTitle: () => t('agentSessions.loadFailed'),
@@ -323,7 +323,7 @@ function formatTime(value: string | null | undefined): string {
   if (!value) return t('common.notAvailable')
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return new Intl.DateTimeFormat(locale.value, {
+  return new Intl.DateTimeFormat(formattingLocale(locale.value), {
     dateStyle: 'medium',
     timeStyle: 'medium',
     hour12: false,
@@ -337,7 +337,7 @@ function statusLabel(value: TerminalStatus): string {
 function formatTokenCount(value: number | null): string {
   if (value === null) return t('agentSessions.detail.tokenUsageUnreported')
   return t('agentSessions.detail.tokenCount', {
-    count: new Intl.NumberFormat(locale.value).format(value),
+    count: new Intl.NumberFormat(formattingLocale(locale.value)).format(value),
   })
 }
 

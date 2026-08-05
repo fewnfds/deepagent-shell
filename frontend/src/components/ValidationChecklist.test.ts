@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { describe, expect, it } from 'vitest'
 
+import { debugMessages } from '@/locales'
 import { zhCN } from '@/locales/zh-CN'
 
 import ValidationChecklist from './ValidationChecklist.vue'
@@ -10,6 +11,11 @@ const i18n = createI18n({
   legacy: false,
   locale: 'zh-CN',
   messages: { 'zh-CN': zhCN },
+})
+const debugI18n = createI18n({
+  legacy: false,
+  locale: 'debug',
+  messages: { debug: debugMessages },
 })
 
 function mountChecklist(validation: Record<string, unknown>) {
@@ -344,5 +350,39 @@ describe('ValidationChecklist', () => {
       .toContain('在所属配置中选择一份输出模式配置。')
     expect(card.get('[data-testid="validation-technical-path"]').text()).toBe('capability_refs.output-mode')
     expect(card.text()).not.toContain('raw backend report message')
+  })
+
+  it('shows backend validation paths and codes in debug locale', () => {
+    const path = 'automation_plugins[0].plugin_id'
+    const wrapper = mount(ValidationChecklist, {
+      props: {
+        title: 'validation.title',
+        validation: {
+          status: 'invalid',
+          error: '',
+          report: {
+            valid: false,
+            stage: 'draft_validation',
+            issues: [{
+              code: 'automation.plugin_not_found',
+              scope: 'primary',
+              owner_id: 'primary-id',
+              owner_name: 'coordinator',
+              path,
+              message: 'safe backend detail',
+              message_key: 'validation.issue.automation.pluginNotFound',
+              message_args: { plugin_id: 'missing-plugin' },
+            }],
+          },
+        },
+      },
+      global: { plugins: [debugI18n] },
+    })
+
+    expect(wrapper.get('[data-testid="validation-location"]').text()).toBe(path)
+    expect(wrapper.get('[data-testid="validation-reason"]').text())
+      .toBe('automation.plugin_not_found')
+    expect(wrapper.get('[data-testid="validation-resolution"]').text())
+      .toBe('validation.resolution.pluginNotFound')
   })
 })

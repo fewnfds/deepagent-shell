@@ -85,12 +85,9 @@ onMounted(() => {
     </template>
 
     <section class="card">
-      <header class="card-header">
-        <h2 class="card-title mb-0">{{ t('automation.plugins.title') }}</h2>
-      </header>
       <div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
-          <thead>
+          <thead class="table-light">
             <tr>
               <th scope="col">{{ t('fields.name') }}</th>
               <th scope="col">{{ t('automation.plugins.entrypoints') }}</th>

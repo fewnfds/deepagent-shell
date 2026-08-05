@@ -68,4 +68,42 @@ describe('SystemSettingsPage', () => {
     expect(api.updateValidationSettings).toHaveBeenCalledWith(500)
     wrapper.unmount()
   })
+
+  it('shows backend wire fields instead of frontend refs in debug locale', async () => {
+    i18n.global.locale.value = 'debug'
+    const api = {
+      getSystemSettings: vi.fn(async () => systemSettings),
+      updateSystemSettings: vi.fn(async () => systemSettings),
+      getApiServer: vi.fn(async () => apiServerSettings),
+      saveApiServer: vi.fn(async () => apiServerSettings),
+      getInterceptionTest: vi.fn(async () => ({ enabled: false })),
+      updateInterceptionTest: vi.fn(async () => ({ enabled: false })),
+      getValidationSettings: vi.fn(async () => validationSettings(1000)),
+      updateValidationSettings: vi.fn(async (value: number) => validationSettings(value)),
+    }
+    const wrapper = mount(SystemSettingsPage, {
+      props: { api },
+      global: { plugins: [i18n] },
+    })
+    await flushPromises()
+
+    for (const wireField of [
+      'host',
+      'port',
+      'allow_remote',
+      'management_token',
+      'api_key',
+      'max_initial_messages',
+      'debounce_ms',
+      'cors_origins',
+      'trusted_proxy_cidrs',
+    ]) {
+      expect(wrapper.text()).toContain(wireField)
+    }
+    expect(wrapper.text()).not.toContain('managementPassword')
+    expect(wrapper.text()).not.toContain('trustedProxies')
+
+    wrapper.unmount()
+    i18n.global.locale.value = 'zh-CN'
+  })
 })

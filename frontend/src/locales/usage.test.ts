@@ -9,6 +9,9 @@ import { zhCN } from './zh-CN'
 
 const srcRoot = join(process.cwd(), 'src')
 const backendRoot = join(process.cwd(), '..', 'server', 'src', 'agent_shell')
+const nonLocaleDottedLiterals = new Set([
+  'fields.length',
+])
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -30,7 +33,13 @@ function staticLocaleKeys(): string[] {
     const source = readFileSync(file, 'utf8')
     for (const match of source.matchAll(stringLiteral)) {
       const key = match[1]
-      if (key && roots.has(key.split('.')[0]) && !key.includes('${')) candidates.add(key)
+      if (
+        key
+        && roots.has(key.split('.')[0])
+        && !key.includes('${')
+        && !key.startsWith('automation.plugin_')
+        && !nonLocaleDottedLiterals.has(key)
+      ) candidates.add(key)
     }
   }
   return [...candidates].filter((key) => !catalog.has(key)).sort()

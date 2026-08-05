@@ -274,7 +274,21 @@ describe('AppShell', () => {
 
     expect(document.documentElement.lang).toBe('en')
     expect(shell.text()).toContain('System settings')
-    expect(languageButton.attributes('aria-label')).toBe('切换到中文')
+    expect(languageButton.attributes('aria-label')).toBe('Switch to variable names')
+
+    await languageButton.trigger('click')
+    await nextTick()
+
+    expect(document.documentElement.lang).toBe('en')
+    expect(shell.text()).toContain('navigation.sections.systemSettings')
+    expect(languageButton.attributes('aria-label')).toBe('preferences.switchToChinese')
+
+    await languageButton.trigger('click')
+    await nextTick()
+
+    expect(document.documentElement.lang).toBe('zh-CN')
+    expect(shell.text()).toContain('系统配置')
+    expect(languageButton.attributes('aria-label')).toBe('Switch to English')
   })
 
   it('collapses desktop navigation and closes the mobile sidebar after routing', async () => {

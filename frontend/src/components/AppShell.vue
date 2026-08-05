@@ -18,7 +18,7 @@ import {
 } from '@/composables/useManagementEvents'
 import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
-import { setLocale } from '@/locales'
+import { setLocale, type SupportedLocale } from '@/locales'
 import { navigationItems, sectionNavigationForPath } from '@/navigation'
 
 interface AppShellApi extends ManagementEventSource {
@@ -81,6 +81,17 @@ const themeButtonLabel = computed(() => t('preferences.themeToggle', {
   current: t(`preferences.themes.${colorMode.value}`),
   next: t(`preferences.themes.${nextColorMode.value}`),
 }))
+const localeOrder: SupportedLocale[] = ['zh-CN', 'en', 'debug']
+const localeSwitchKeys: Record<SupportedLocale, string> = {
+  'zh-CN': 'preferences.switchToChinese',
+  en: 'preferences.switchToEnglish',
+  debug: 'preferences.switchToVariables',
+}
+const nextLocale = computed<SupportedLocale>(() => {
+  const index = localeOrder.indexOf(locale.value as SupportedLocale)
+  return localeOrder[(index + 1) % localeOrder.length] ?? 'zh-CN'
+})
+const localeButtonLabel = computed(() => t(localeSwitchKeys[nextLocale.value]))
 const apiServerRunning = computed(() => (
   apiServerSettings.value?.enabled === true
   && apiServerSettings.value.status === 'running'
@@ -93,7 +104,7 @@ const apiServerStatusLabel = computed(() => {
 })
 
 function toggleLocale(): void {
-  setLocale(locale.value === 'zh-CN' ? 'en' : 'zh-CN')
+  setLocale(nextLocale.value)
 }
 
 function toggleTheme(): void {
@@ -222,8 +233,8 @@ onBeforeUnmount(() => {
               id="app-language"
               type="button"
               class="nav-link"
-              :aria-label="locale === 'zh-CN' ? t('preferences.switchToEnglish') : t('preferences.switchToChinese')"
-              :title="locale === 'zh-CN' ? t('preferences.switchToEnglish') : t('preferences.switchToChinese')"
+              :aria-label="localeButtonLabel"
+              :title="localeButtonLabel"
               @click="toggleLocale"
             >
               <i class="bi bi-translate" aria-hidden="true" />

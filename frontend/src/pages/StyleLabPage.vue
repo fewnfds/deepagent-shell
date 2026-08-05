@@ -133,8 +133,7 @@ function remix(): void {
           </div>
           <div>
             <label class="form-label" for="lab-invalid">{{ t('styleLab.samples.configurationName') }}</label>
-            <input id="lab-invalid" class="form-control is-invalid" value="">
-            <div class="invalid-feedback">{{ t('styleLab.samples.invalid') }}</div>
+            <input id="lab-invalid" aria-invalid="true" class="form-control is-invalid" required value="">
           </div>
           <div>
             <label class="form-label" for="lab-readonly">{{ t('styleLab.samples.readonly') }}</label>
@@ -192,7 +191,7 @@ function remix(): void {
         </header>
         <div class="table-responsive lab-table-frame">
           <table class="table table-hover table-striped align-middle mb-0">
-            <thead>
+            <thead class="table-light">
               <tr>
                 <th scope="col">{{ t('styleLab.samples.name') }}</th>
                 <th scope="col">{{ t('styleLab.samples.type') }}</th>

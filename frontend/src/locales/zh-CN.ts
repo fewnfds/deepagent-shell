@@ -130,7 +130,6 @@ export const zhCN = {
   },
   eventFeed: {
     title: '日志中心',
-    listTitle: '日志列表',
     columns: { time: '时间', source: '来源', level: '级别', summary: '摘要' },
     loadNew: '载入新事件',
     empty: '没有符合条件的事件。',
@@ -326,6 +325,7 @@ export const zhCN = {
     },
     switchToChinese: '切换到中文',
     switchToEnglish: 'Switch to English',
+    switchToVariables: '切换到变量名',
   },
   auth: {
     title: '输入管理密码',
@@ -630,7 +630,7 @@ export const zhCN = {
     configuredSecretPlaceholder: '••••••••',
     recordPicker: {
       load: '载入配置',
-      name: '当前配置名称',
+      name: '配置名称',
       newOption: '新建配置',
     },
     next: '下一步',
@@ -688,7 +688,6 @@ export const zhCN = {
   },
   terminology: {
     title: '词库',
-    listTitle: '词库列表',
     searchLabel: '搜索词条',
     searchPlaceholder: '输入英文、变体、中文或说明内容',
     categoryFilter: '分类',
@@ -805,7 +804,6 @@ export const zhCN = {
   },
   agentSessions: {
     title: '历史会话',
-    listTitle: '会话列表',
     loadFailed: '载入历史会话失败',
     download: '下载',
     downloadFailed: '下载历史会话失败',
@@ -1020,7 +1018,6 @@ export const zhCN = {
       empty: '尚未挂载{kind}。',
     },
     plugins: {
-      title: '已安装的自动化插件',
       entrypoints: '执行节点',
       requirements: 'Python 依赖与状态',
       empty: '尚未安装自动化插件。',

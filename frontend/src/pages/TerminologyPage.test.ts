@@ -13,7 +13,6 @@ const i18n = createI18n({
         eyebrow: 'Glossary',
         title: 'Terminology',
         description: 'Bilingual terminology',
-        listTitle: 'Terminology list',
         searchLabel: 'Search terminology',
         searchPlaceholder: 'Search',
         resultCount: '{count} of {total}',

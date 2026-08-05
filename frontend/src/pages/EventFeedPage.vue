@@ -18,6 +18,7 @@ import {
   type SystemLogSettings,
 } from '@/api'
 import DataTableWorkbench from '@/components/data-table/DataTableWorkbench.vue'
+import { formattingLocale } from '@/locales'
 import type {
   DataTableAppliedQuery,
   DataTableConfig,
@@ -136,7 +137,7 @@ function deletedCount(result: unknown): number {
 
 function formatTime(value: string): string {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(locale.value, {
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(formattingLocale(locale.value), {
     dateStyle: 'short',
     timeStyle: 'medium',
   }).format(date)
@@ -182,7 +183,6 @@ async function loadPreview(item: EventFeedItem, expanded: boolean): Promise<void
 
 const eventTableConfig: DataTableConfig<EventFeedItem> = {
   id: 'event-feed',
-  title: () => t('eventFeed.listTitle'),
   ariaLabel: () => t('eventFeed.pagination.ariaLabel'),
   emptyMessage: () => t('eventFeed.empty'),
   loadErrorTitle: () => t('eventFeed.feedback.loadFailed'),
@@ -537,7 +537,7 @@ onMounted(() => { void loadControls() })
       @query-applied="stale = false"
     >
       <template #filter-actions>
-        <LteButton :disabled="controlsLoading" theme="primary" type="button" @click="refreshAll">
+        <LteButton class="fs-6" :disabled="controlsLoading" theme="primary" type="button" @click="refreshAll">
           <span v-if="controlsLoading" class="spinner-border spinner-border-sm" aria-hidden="true" />
           {{ t('common.refresh') }}
         </LteButton>

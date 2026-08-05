@@ -17,7 +17,6 @@ function scopeLabel(scope: GlossaryScope): string {
 
 const table: DataTableConfig<GlossaryEntry> = {
   id: 'terminology',
-  title: () => t('terminology.listTitle'),
   ariaLabel: () => t('terminology.pagination.ariaLabel'),
   emptyMessage: () => t('terminology.empty'),
   loadErrorTitle: () => t('errors.requestFailed'),

@@ -39,4 +39,16 @@ describe('FormField', () => {
     expect(wrapper.get('.form-label').text()).toBe('max_tokens')
     expect(wrapper.get('.form-label').classes()).toContain('font-monospace')
   })
+
+  it('shows the full payload path in debug locale', () => {
+    i18n.global.locale.value = 'debug'
+    const wrapper = mount(FormField, {
+      props: { fieldPath: 'middlewares.0.source' },
+      slots: { default: '<input name="source">' },
+      global: { plugins: [i18n] },
+    })
+
+    expect(wrapper.get('.form-label').text()).toBe('middlewares.0.source')
+    expect(wrapper.get('.form-label').classes()).toContain('font-monospace')
+  })
 })

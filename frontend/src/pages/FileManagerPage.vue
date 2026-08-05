@@ -18,6 +18,7 @@ import PageShell from '@/components/PageShell.vue'
 import { useConfirmation } from '@/composables/useConfirmation'
 import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
+import { formattingLocale } from '@/locales'
 import { triggerBrowserDownload } from '@/utils/download'
 
 interface FileManagerApi {
@@ -450,7 +451,7 @@ async function downloadArchive(items: ManagedFileItem[]): Promise<void> {
 
 function formatSize(value: number | null): string {
   if (value === null) return '—'
-  return new Intl.NumberFormat(locale.value, {
+  return new Intl.NumberFormat(formattingLocale(locale.value), {
     style: 'unit',
     unit: value >= 1024 * 1024 ? 'megabyte' : value >= 1024 ? 'kilobyte' : 'byte',
     unitDisplay: 'short',
@@ -460,7 +461,7 @@ function formatSize(value: number | null): string {
 
 function formatTime(value: string): string {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(locale.value, {
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(formattingLocale(locale.value), {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(date)
@@ -525,7 +526,7 @@ onMounted(() => { void loadScopes() })
         </div>
         <div v-else class="table-responsive" data-testid="file-manager-roots">
           <table class="table table-hover align-middle">
-            <thead>
+            <thead class="table-light">
               <tr>
                 <th>{{ t('fileManager.columns.name') }}</th>
                 <th>{{ t('fileManager.columns.kind') }}</th>
@@ -576,7 +577,7 @@ onMounted(() => { void loadScopes() })
         </div>
         <div v-else class="table-responsive">
         <table class="table table-hover align-middle">
-          <thead>
+          <thead class="table-light">
             <tr>
               <th>
                 <input

@@ -230,7 +230,6 @@ function deletedCount(result: unknown): number {
 
 const libraryTableConfig: DataTableConfig<LibraryItem> = {
   id: 'configuration-library',
-  title: () => currentCategoryLabel.value,
   ariaLabel: () => t('library.pagination.ariaLabel'),
   emptyMessage: () => t('library.empty'),
   filteredEmptyMessage: () => t('library.search.empty'),

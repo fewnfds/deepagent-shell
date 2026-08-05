@@ -124,7 +124,6 @@ interface DataTableBulkAction<Row> {
 
 export interface DataTableConfig<Row> {
   id: string
-  title: DataTableText
   ariaLabel: DataTableText
   emptyMessage: DataTableText
   filteredEmptyMessage?: DataTableText

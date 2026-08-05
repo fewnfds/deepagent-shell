@@ -132,7 +132,6 @@ export const en: MessageSchema = {
   },
   eventFeed: {
     title: 'Log center',
-    listTitle: 'Log list',
     columns: { time: 'Time', source: 'Source', level: 'Level', summary: 'Summary' },
     loadNew: 'Load new events',
     empty: 'No events match the current filters.',
@@ -328,6 +327,7 @@ export const en: MessageSchema = {
     },
     switchToChinese: '切换到中文',
     switchToEnglish: 'Switch to English',
+    switchToVariables: 'Switch to variable names',
   },
   auth: {
     title: 'Enter the management password',
@@ -632,7 +632,7 @@ export const en: MessageSchema = {
     configuredSecretPlaceholder: '••••••••',
     recordPicker: {
       load: 'Load configuration',
-      name: 'Current configuration name',
+      name: 'Configuration name',
       newOption: 'New configuration',
     },
     next: 'Next',
@@ -690,7 +690,6 @@ export const en: MessageSchema = {
   },
   terminology: {
     title: 'Terminology',
-    listTitle: 'Terminology list',
     searchLabel: 'Search terminology',
     searchPlaceholder: 'Search English, variants, Chinese, or explanations',
     categoryFilter: 'Categories',
@@ -807,7 +806,6 @@ export const en: MessageSchema = {
   },
   agentSessions: {
     title: 'Session history',
-    listTitle: 'Session list',
     loadFailed: 'Could not load session history',
     download: 'Download',
     downloadFailed: 'Could not download the historical session',
@@ -1022,7 +1020,6 @@ export const en: MessageSchema = {
       empty: 'No {kind} attached.',
     },
     plugins: {
-      title: 'Installed automation plugins',
       entrypoints: 'Execution nodes',
       requirements: 'Python dependencies and status',
       empty: 'No automation plugin is installed.',
