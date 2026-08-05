@@ -16,6 +16,7 @@ from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.database import SQLiteDatabase
+from agent_shell.storage.media_outputs import MediaOutputStore
 from agent_shell.storage.schema import SCHEMA_SQL
 from agent_shell.automation.validation import AutomationValidationService
 from agent_shell.validation.service import ConfigurationValidationService
@@ -114,6 +115,7 @@ class RequestSnapshotRuntime:
         skills_dir: Path,
         diagnostics: RuntimeDiagnostics,
         provider_http_clients: ProviderHttpClients,
+        media_outputs: MediaOutputStore,
     ) -> None:
         self._database = database
         self._custom_tools_dir = custom_tools_dir
@@ -122,6 +124,7 @@ class RequestSnapshotRuntime:
         self._skills_dir = skills_dir
         self._diagnostics = diagnostics
         self._provider_http_clients = provider_http_clients
+        self._media_outputs = media_outputs
 
     def capture(self) -> RequestRuntimeSnapshot:
         database = _SnapshotDatabase(self._database)
@@ -149,6 +152,7 @@ class RequestSnapshotRuntime:
                     validation=validation,
                     provider_http_clients=self._provider_http_clients,
                 ),
+                self._media_outputs,
                 self._diagnostics,
             )
             return RequestRuntimeSnapshot(

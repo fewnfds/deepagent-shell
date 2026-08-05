@@ -6,81 +6,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from langchain.agents.middleware import AgentMiddleware
 
-from agent_shell.automation.context import AutomationVariables
 from agent_shell.automation.runtime import AutomationOwner, AutomationRuntime
 from agent_shell.automation.scripts import scan_automation_scripts
 from agent_shell.runtime.errors import AgentRuntimeError
 
-
-def write_plugin(
-    root: Path,
-    plugin_id: str,
-    source: str,
-    *,
-    entrypoints: tuple[str, ...],
-) -> Path:
-    folder = root / plugin_id
-    folder.mkdir(parents=True)
-    (folder / "script.json").write_text(
-        json.dumps(
-            {
-                "api_version": 2,
-                "id": plugin_id,
-                "name": plugin_id,
-                "description": "Test plugin",
-                "entrypoints": list(entrypoints),
-            }
-        ),
-        encoding="utf-8",
-    )
-    (folder / "main.py").write_text(source, encoding="utf-8")
-    return folder
-
-
-def owner(
-    plugin_id: str,
-    *,
-    interval: float | None = None,
-    config: dict[str, object] | None = None,
-) -> AutomationOwner:
-    binding = {
-        "plugin_id": plugin_id,
-        "enabled": True,
-        "config": config or {},
-    }
-    return AutomationOwner(
-        id="owner",
-        type="primary",
-        name="Primary",
-        automation={
-            "hooks": [binding] if interval is None else [],
-            "periodic": (
-                [{**binding, "interval_seconds": interval}]
-                if interval is not None
-                else []
-            ),
-        },
-        mapped_paths={},
-    )
-
-
-def runtime_for(
-    tmp_path: Path,
-    plugin_id: str,
-    *,
-    interval: float | None = None,
-    config: dict[str, object] | None = None,
-) -> AutomationRuntime:
-    return AutomationRuntime(
-        request_id="request-id",
-        owners=[owner(plugin_id, interval=interval, config=config)],
-        client_messages=[{"role": "user", "content": "original"}],
-        plugins_dir=tmp_path / "plugins",
-        skills_dir=tmp_path / "skills",
-        runtime_root=tmp_path / "runtime",
-    )
+from .automation_support import runtime_for, write_plugin
 
 
 def test_plugin_scan_is_static_and_requires_the_v2_entrypoint_contract(
@@ -138,7 +69,7 @@ async def test_prepare_middleware_and_immutable_request_share_request_local_ctx(
         "    def __init__(self, ctx):\n        self.ctx = ctx\n"
         "    def before_agent(self, state, runtime):\n        return None\n"
         "    async def abefore_agent(self, state, runtime):\n"
-        "        self.ctx.vars.set('agent.hook_seen', True)\n"
+        "        self.ctx.vars['hook_seen'] = True\n"
         "        return None\n"
         "    def before_model(self, state, runtime):\n        return None\n"
         "    async def abefore_model(self, state, runtime):\n        return None\n"
@@ -154,8 +85,10 @@ async def test_prepare_middleware_and_immutable_request_share_request_local_ctx(
         "async def prepare(ctx):\n"
         "    assert ctx.request.messages[0]['content'] == 'original'\n"
         "    ctx.messages.append({'role': 'assistant', 'content': EXTRA})\n"
-        "    ctx.vars.set('request.shared', {'value': 1})\n"
-        "    ctx.vars.set('plugin.prepared', True)\n",
+        "    ctx.vars['shared'] = {'value': 1}\n"
+        "    ctx.vars['prepared'] = True\n"
+        "    ctx.vars['non_json'] = object()\n"
+        "    ctx.vars['large'] = 'x' * (256 * 1024 + 1)\n",
         entrypoints=("middleware", "prepare"),
     )
     (folder / "helper.py").write_text("EXTRA = 'prepared'\n", encoding="utf-8")
@@ -165,21 +98,22 @@ async def test_prepare_middleware_and_immutable_request_share_request_local_ctx(
     middleware = runtime.middleware_for("owner")
 
     assert runtime.messages_for("owner") == [
-        {"role": "user", "content": "original"},
         {"role": "assistant", "content": "prepared"},
     ]
     assert len(middleware) == 1
     item = middleware[0]
     assert type(item).__name__ == "PluginMiddleware"
     assert item.ctx.request is runtime.request
-    assert item.ctx.vars.get("request.shared") == {"value": 1}
-    assert item.ctx.vars.get("plugin.prepared") is True
+    assert item.ctx.vars["shared"] == {"value": 1}
+    assert item.ctx.vars["prepared"] is True
+    assert type(item.ctx.vars["non_json"]) is object
+    assert len(item.ctx.vars["large"]) == 256 * 1024 + 1
     with pytest.raises(TypeError):
         item.ctx.request.messages[0]["content"] = "changed"
     with pytest.raises(AttributeError):
         item.ctx.request.messages.append({"role": "user", "content": "changed"})
     await item.abefore_agent({}, None)
-    assert item.ctx.vars.get("agent.hook_seen") is True
+    assert item.ctx.vars["hook_seen"] is True
     for hook in (
         "before_agent",
         "abefore_agent",
@@ -201,23 +135,82 @@ async def test_prepare_middleware_and_immutable_request_share_request_local_ctx(
     await runtime.finish({"status": "completed"})
 
 
-def test_variables_are_json_copied_and_use_request_agent_plugin_scopes() -> None:
-    variables = AutomationVariables({}, {}, {})
-    source = {"items": ["first"]}
-    variables.set("request.shared", source)
-    source["items"].append("outside")
-    returned = variables.get("request.shared")
-    returned["items"].append("caller")
-    variables.set("agent.local", 1)
-    variables.set("plugin.local", 2)
+@pytest.mark.anyio
+async def test_no_binding_keeps_client_messages_out_of_owner_activity(
+    tmp_path: Path,
+) -> None:
+    runtime = AutomationRuntime(
+        request_id="request-id",
+        owners=[
+            AutomationOwner(
+                id="primary",
+                type="primary",
+                name="Primary",
+                automation={"hooks": [], "periodic": []},
+                mapped_paths={},
+            ),
+            AutomationOwner(
+                id="child",
+                type="subagent",
+                name="Child",
+                automation={"hooks": [], "periodic": []},
+                mapped_paths={},
+            ),
+        ],
+        client_messages=[{"role": "user", "content": "original"}],
+        plugins_dir=tmp_path / "plugins",
+        skills_dir=tmp_path / "skills",
+        runtime_root=tmp_path / "runtime",
+    )
 
-    assert variables.get("request.shared") == {"items": ["first"]}
-    assert variables.get("agent.local") == 1
-    assert variables.get("plugin.local") == 2
-    with pytest.raises(ValueError, match="plugin"):
-        variables.set("workflow.old", True)
-    with pytest.raises(ValueError, match="256 KiB"):
-        variables.set("request.large", "x" * (256 * 1024 + 1))
+    await runtime.prepare()
+
+    assert runtime.request.messages[0]["content"] == "original"
+    assert runtime.messages_for("primary") == []
+    assert runtime.messages_for("child") == []
+    await runtime.finish({"status": "completed"})
+
+
+def test_vars_is_one_request_local_mapping_shared_by_all_bindings(
+    tmp_path: Path,
+) -> None:
+    write_plugin(
+        tmp_path / "plugins",
+        "shared-vars-plugin",
+        "from langchain.agents.middleware import AgentMiddleware\n"
+        "class Capture(AgentMiddleware):\n"
+        "    def __init__(self, ctx):\n        self.ctx = ctx\n"
+        "def create_middleware(ctx):\n    return Capture(ctx)\n",
+        entrypoints=("middleware",),
+    )
+    binding = {
+        "plugin_id": "shared-vars-plugin",
+        "enabled": True,
+        "config": {},
+    }
+    runtime = AutomationRuntime(
+        request_id="request-id",
+        owners=[
+            AutomationOwner(
+                id="owner",
+                type="primary",
+                name="Primary",
+                automation={"hooks": [binding, binding], "periodic": []},
+                mapped_paths={},
+            )
+        ],
+        client_messages=[{"role": "user", "content": "original"}],
+        plugins_dir=tmp_path / "plugins",
+        skills_dir=tmp_path / "skills",
+        runtime_root=tmp_path / "runtime",
+    )
+
+    first, second = runtime.middleware_for("owner")
+    value = object()
+    first.ctx.vars[("owner", "value")] = value
+
+    assert first.ctx.vars is second.ctx.vars
+    assert second.ctx.vars[("owner", "value")] is value
 
 
 @pytest.mark.anyio
@@ -236,7 +229,7 @@ async def test_lifecycle_drains_then_complete_runs_and_modules_are_cleaned(
         "async def lifecycle(ctx):\n"
         "    Path(ctx.config['started']).touch()\n"
         "    while not Path(ctx.config['release']).exists():\n        await asyncio.sleep(0)\n"
-        "    ctx.vars.set('plugin.tick', ctx.tick)\n"
+        "    ctx.vars['tick'] = ctx.tick\n"
         "    Path(ctx.config['completed']).touch()\n"
         "async def complete(ctx):\n"
         "    Path(ctx.config['terminal']).write_text(str(dict(ctx.terminal)))\n",

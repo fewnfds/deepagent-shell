@@ -33,3 +33,5 @@ profile 基础消息与 delegated input。插件的 model/tool 逻辑由 Shell �
 
 升级 Deep Agents 时必须重新核对 constructor、Middleware 默认集合、SubAgentMiddleware 替换、backend
 state transfer、v3 事件和 prompt caching 行为，并用最接近的行为测试确认。
+同时重新运行锁定 Provider adapter 的 system 位置、assistant prefill 和多模态 content-block 序列化 probe；只有
+探针行为变化时才调整 Shell 或后续消息接力插件 contract。

@@ -74,6 +74,7 @@ def test_execution_yields_each_completed_semantic_event_once() -> None:
             rectifier=OutputEventRectifier(OutputProjector(settings)),
             normalizer=V3EventNormalizer("Primary"),
             automation=noop_automation(),
+            media_response=noop_media_response(),
         )
         parts = [part async for part in execution.stream_text()]
         return parts, execution.usage

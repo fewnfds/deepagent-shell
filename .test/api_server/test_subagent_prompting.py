@@ -144,9 +144,14 @@ def test_named_subagent_can_reference_itself_with_matching_task_schema(
         available_agents="- recursive_worker: Continues the recursive task."
     )
     assert len(ChildModel.seen_messages) == 3
+    assert all(
+        message.text != "Run recursion."
+        for invocation in ChildModel.seen_messages
+        for message in invocation
+    )
 
 
-def test_subagent_prompt_override_builds_from_frozen_client_messages(
+def test_subagent_prompt_override_uses_only_plugin_messages_and_delegation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class ParentModel(ToolCallingFakeModel):
@@ -315,16 +320,14 @@ def test_subagent_prompt_override_builds_from_frozen_client_messages(
         "Run a fully specified task with this catalog:"
     )
 
-    def messages_from_client_prefix(messages: list[object]) -> list[tuple[str, str]]:
-        pairs = [(message.type, message.text) for message in messages]
-        start = pairs.index(("system", "CLIENT SYSTEM"))
-        return pairs[start:]
-
-    assert messages_from_client_prefix(ChildModel.seen_messages[0]) == [
-        ("system", "CLIENT SYSTEM"),
-        ("human", "Earlier request"),
-        ("ai", "Earlier response"),
-        ("human", "Current request"),
+    child_messages = [
+        (message.type, message.text) for message in ChildModel.seen_messages[0]
+    ]
+    assert ("system", "CLIENT SYSTEM") not in child_messages
+    assert ("human", "Earlier request") not in child_messages
+    assert ("ai", "Earlier response") not in child_messages
+    assert ("human", "Current request") not in child_messages
+    assert child_messages[-3:] == [
         ("human", "Delegated work."),
         ("ai", "Ready for delegated work."),
         ("human", "Run the override prompt."),

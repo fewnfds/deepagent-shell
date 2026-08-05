@@ -14,6 +14,8 @@ def test_real_provider_finish_reason_reaches_both_api_transports(
         }
         finish_reason = "length"
         finish_reason_source = "response_metadata.finish_reason"
+        response_blocks = []
+        media_assets = []
 
         async def run(self):
             return "partial answer", dict(self.usage)
@@ -216,6 +218,8 @@ def test_closing_non_stream_request_cancels_execution_and_records_disconnect(
             self.started = asyncio.Event()
             self.cancelled = False
             self.usage = {}
+            self.response_blocks = []
+            self.media_assets = []
 
         async def run(self):
             self.started.set()

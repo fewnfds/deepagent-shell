@@ -47,5 +47,6 @@ Subagent 组合。
 
 `automation` 不属于 `capability_refs`。Hook bindings 负责 prepare、LangChain 原生 Middleware 和 complete；
 周期 bindings 各自保存 interval，在本次请求期间独立运行 lifecycle，并在终态 complete。两类列表、配置与
-plugin scope 相互独立。原始客户端消息通过插件只读的 `ctx.request.messages` 保持不变。
+模块实例相互独立，但 `ctx.vars` 是本请求全部 binding 共享的普通 dict。原始客户端消息通过插件只读的
+`ctx.request.messages` 保持不变；无插件时不会进入 Primary 活动消息。
 磁盘资源、Python import 和 Provider 连接在真实请求中再次检查。配置变更只影响之后开始的请求。

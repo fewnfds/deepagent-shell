@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from agent_shell.api import api_server
+
 from .support import *
 
 
@@ -36,6 +38,39 @@ def test_models_publish_only_primary_agents_and_each_runs_the_minimal_runtime(
     }
 
 
+def test_primary_without_plugins_does_not_receive_client_messages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    model = RecordingFakeListChatModel(responses=["no relay"])
+    RecordingFakeListChatModel.seen_messages = []
+    with make_client(tmp_path, monkeypatch) as client:
+        monkeypatch.setattr(
+            "agent_shell.runtime.agent_builder._build_chat_model",
+            lambda _block, _credential, _http_clients: model,
+        )
+        primary = create_primary(client, include_filesystem=False)
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": primary["name"],
+                "messages": [
+                    {"role": "system", "content": "CLIENT SYSTEM"},
+                    {"role": "user", "content": "CLIENT USER"},
+                    {"role": "assistant", "content": "CLIENT ASSISTANT"},
+                ],
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    visible_text = {
+        message.text
+        for message in RecordingFakeListChatModel.seen_messages[0]
+    }
+    assert visible_text.isdisjoint(
+        {"CLIENT SYSTEM", "CLIENT USER", "CLIENT ASSISTANT"}
+    )
+
+
 def test_primary_runtime_returns_stable_input_message_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -48,7 +83,7 @@ def test_primary_runtime_returns_stable_input_message_errors(
         ),
         (["not-an-object"], "input_message_invalid"),
         ([{"role": "tool", "content": "unsupported"}], "input_message_role_unsupported"),
-        ([{"role": "user", "content": ["not", "text"]}], "input_message_content_unsupported"),
+        ([{"role": "user", "content": ["not", "text"]}], "input_content_part_invalid"),
         ([{"role": "user", "content": "named", "name": ""}], "input_message_name_invalid"),
     )
 
@@ -66,6 +101,24 @@ def test_primary_runtime_returns_stable_input_message_errors(
     assert [response.json()["error"]["code"] for response in responses] == [
         expected for _messages, expected in cases
     ]
+
+
+def test_chat_completion_body_limit_rejects_before_agent_start(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        primary = create_primary(client)
+        monkeypatch.setattr(api_server, "MAX_CHAT_COMPLETION_BODY_BYTES", 128)
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": primary["name"],
+                "messages": [{"role": "user", "content": "x" * 256}],
+            },
+        )
+
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "input_body_too_large"
 
 
 def test_initial_message_limit_is_configurable_and_rejects_before_agent_start(

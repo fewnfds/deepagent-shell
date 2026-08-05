@@ -64,7 +64,7 @@ class MarketMiddleware(AgentMiddleware):
         self.ctx = ctx
 
     async def abefore_model(self, state, runtime):
-        market = self.ctx.vars.get("plugin.market")
+        market = self.ctx.vars.get((self.ctx.agent["id"], "market"))
         self.ctx.log(f"market context ready: {market is not None}")
         return None
 
@@ -103,18 +103,20 @@ binding 顺序就是最终 Middleware 顺序。before、after 和 wrap 的正序
 ```python
 async def prepare(ctx):
     current = await load_current_market()
-    ctx.vars.set("plugin.market", current)
+    ctx.vars[(ctx.agent["id"], "market")] = current
     ctx.messages.extend([
         {"role": "user", "content": "Current market data follows."},
         {"role": "assistant", "content": str(current)},
     ])
 ```
 
-此阶段可以修改当前 Agent 身份自己的 `ctx.messages`、写入 `ctx.initial_files`，或准备 Skill overlay。所有
-Agent 身份的 prepare 结束后，Shell 统一校验派生消息；无效 role/content 会在构造 Agent 图前失败。
+每个 Agent 身份的 `ctx.messages` 初始为空。此阶段可以显式追加当前身份需要的活动消息、写入
+`ctx.initial_files`，或准备 Skill overlay；原始客户端消息不会自动复制进来。所有 Agent 身份的 prepare 结束后，
+Shell 统一校验派生消息；空列表合法，无效 role/content 会在构造 Agent 图前失败。
 
-Subagent 每次调用仍使用新的 LangGraph state。它的输入顺序是：该 Subagent 身份 prepare 后的基础多轮消息，
-再追加 Primary 本次 `task` 委派消息。静态 system prompt 单独由 `create_deep_agent(system_prompt=...)` 装配。
+Subagent 每次调用仍使用新的 LangGraph state。prepare 产出基础消息时，输入顺序是这些基础消息再加本次
+`task` delegated messages；没有产出时保持 Deep Agents 原生 delegated input，不执行 Shell 消息重建。静态
+system prompt 单独由 `create_deep_agent(system_prompt=...)` 装配。
 
 ### lifecycle
 
@@ -164,8 +166,8 @@ Primary 的 `automation` 直接保存：
 ```
 
 Hook binding 只执行 `prepare`、`middleware` 和 `complete`；周期 binding 只执行 `lifecycle` 和 `complete`。
-同一个插件可以分别挂在两类列表，也可以用不同 config 挂载多次；每个 binding 有独立模块实例和 plugin-scope
-变量。`enabled=false` 的 binding 不 import、不执行，也不因第三方依赖未准备而阻止请求。
+同一个插件可以分别挂在两类列表，也可以用不同 config 挂载多次；每个 binding 有独立模块实例，但共享本请求的
+`ctx.vars`。`enabled=false` 的 binding 不 import、不执行，也不因第三方依赖未准备而阻止请求。
 
 Subagent 对 `hooks` 和 `periodic` 分别使用一种模式：
 
@@ -179,16 +181,18 @@ LangGraph state 仍然独立。
 
 ## ctx 与不可变原始消息
 
-`ctx.request.messages` 是本次 OpenAI 请求通过权威校验后的原始 `messages[]`。它是只读 tuple，其中每条消息
-也是只读 mapping：
+`ctx.request.messages` 是本次 OpenAI 请求通过权威校验并规范化后的 `messages[]`。OpenAI parts 已转为 LangChain
+标准 blocks；API history 另行保留原始 wire。该对象是只读 tuple，每条消息、content 列表和嵌套 block 都递归只读：
 
 - 同一请求的 prepare、Middleware、lifecycle、complete 和全部 Agent 身份看到相同内容；
 - prepare 对 `ctx.messages` 的修改不会改变它；
 - LangChain state 更新不会改变它；
 - 下一次 API 请求根据客户端新提交的完整 messages 重新建立。
 
-插件要稳定切分 Primary 用户信息时，应始终从 `ctx.request.messages` 开始计算，把结果写入当前 Agent 的
-`ctx.messages` 或 `ctx.vars`，不要把前序插件已经修改的工作列表当作原始事实。
+插件要稳定切分 Primary 用户信息时，应始终从 `ctx.request.messages` 开始计算，并为当前 Agent 建立可写深复制后
+写入 `ctx.messages`；也可以直接把只读消息加入 `ctx.messages`，Shell 会在 prepare 终点规范化为该 owner 独立的
+可写副本。不要原地修改只读 block，也不要把前序插件已经修改的工作列表当作原始事实。多模态正文应留在消息
+content blocks 中，不要经 `ctx.vars` 进行无意义中转。
 
 所有插件边界可用：
 
@@ -196,7 +200,7 @@ LangGraph state 仍然独立。
 - `ctx.agent`：只读 `id/type/name`
 - `ctx.plugin`：只读 `id/kind/binding_index`，`kind` 为 `hook` 或 `periodic`
 - `ctx.config`：当前 binding 的只读 JSON 配置
-- `ctx.vars.get/set/delete(path)`
+- `ctx.vars`：本次请求全部 binding 共享的普通 Python dict
 - `ctx.paths.plugin_dir`、`runtime_dir`、`mapped`
 - `ctx.stage`、`ctx.tick`、`ctx.terminal`
 - `ctx.log(value)`
@@ -208,9 +212,55 @@ overlay = ctx.prepare_skill("my-skill", mode="overlay")
 persistent = ctx.prepare_skill("my-skill", mode="persistent")
 ```
 
-变量路径必须使用 `request.key`、`agent.key` 或 `plugin.key`：request scope 在本次请求全部 Agent 间共享；
-agent scope 属于唯一 Primary/Subagent profile；plugin scope 属于该身份的具体 binding。值会做 JSON copy，
-单值最大 256 KiB，不跨 API 请求保留。需要跨请求持久化时由插件自行使用数据库、文件或外部服务。
+`ctx.vars` 不自动建立 request/agent/plugin namespace，也不复制或序列化值，不设单值 256 KiB 限制。全部 binding
+拿到同一个 dict 对象，可用任意 hashable key 保存 Python 对象引用。需要隔离时使用 `ctx.agent["id"]`、
+`ctx.plugin["id"]`、`kind` 和 `binding_index` 自行构造 tuple 或字符串 key；展示名称不适合作唯一键。平台不为该
+dict 提供锁、CAS 或事务，并行 Hook 对共享可变对象的协调由插件负责。dict 只存活于一次 API 请求；跨请求持久化
+仍由插件自行使用数据库、文件或外部服务。
+
+## Invocation 身份与 scratch
+
+Primary 每次请求有一个 root invocation；每次实际 `task` 委派，包括同 profile 的并行、嵌套和递归调用，都会建立
+新的 Shell UUID。插件 Middleware 在 Agent Hook 的 LangGraph runtime 中读取只读身份：
+
+```python
+class WorkspaceMiddleware(AgentMiddleware):
+    def __init__(self, ctx):
+        self.ctx = ctx
+
+    async def abefore_agent(self, state, runtime):
+        invocation = runtime.context["agent_shell_invocation"]
+        binding_key = (
+            f"{self.ctx.plugin['kind']}:"
+            f"{self.ctx.plugin['binding_index']}"
+        )
+        scratch = invocation["workspaces"][binding_key]
+        (scratch / "result.tmp").write_bytes(b"working data")
+```
+
+`agent_shell_invocation` 提供：
+
+- `request_id`、`id`、`parent_id`、`cause_tool_call_id`；
+- `agent_id`、`agent_type`、`agent_name`；
+- `workspaces`：当前 Agent 各启用 Hook binding 的只读 scratch `Path` mapping，key 为 `hook:<binding_index>`。
+
+同一 invocation 内的多次 model/tool call 使用同一个 ID 和 scratch；四次并发启动同一个 Subagent 会得到四个目录。
+平台目录形状为：
+
+```text
+runtime/automation/<request-id>/owners/<agent-id>/
+  bindings/<kind>-<binding-index>/
+    invocations/<invocation-id>/scratch/
+```
+
+`ctx.paths.runtime_dir` 是当前 binding 的 request-local 根目录，适用于 prepare/lifecycle/complete 等没有“当前
+invocation”的边界；不要把它误当作并行 Subagent scratch。Middleware factory 和共享 `ctx` 也没有可变的
+`ctx.invocation_id`，因为同一实例会被并发 invocation 复用。需要 invocation 私有变量时使用 LangGraph state，或把
+`invocation["id"]` 编入共享 `ctx.vars` key。
+
+请求终态会在所有 `complete` 返回后删除整棵 `runtime/automation/<request-id>/`。这只是默认目录隔离，不是
+filesystem sandbox，也不改变 Deep Agents 的请求级共享 workspace。插件主动写 mapped path、数据库、对象存储或
+其他宿主文件时，仍需自行建立副本、唯一命名、锁、事务或原子替换。
 
 ## Python 依赖（Windows）
 

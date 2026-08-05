@@ -12,13 +12,16 @@ from agent_shell.automation.runtime import AutomationRuntime
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.model_response import ModelResponse
+from agent_shell.runtime.media_response import PrimaryMediaResponse
 from agent_shell.runtime.output_event_pool import OutputEventRectifier
 from agent_shell.runtime.output_projection import OutputProjector
 from agent_shell.runtime.output_stream import (
     ModelCallBoundary,
     OutputEvent,
+    PrimaryMediaBlock,
     V3EventNormalizer,
 )
+from agent_shell.storage.media_outputs import MediaOutputStore
 from langgraph.errors import GraphRecursionError
 
 EXECUTION_TIMEOUT_SECONDS = 600
@@ -32,6 +35,7 @@ class AgentExecution:
     rectifier: OutputEventRectifier
     normalizer: V3EventNormalizer
     automation: AutomationRuntime
+    media_response: PrimaryMediaResponse
     context: dict[str, Any] = field(default_factory=dict)
     event_observers: tuple[Callable[[OutputEvent], None], ...] = ()
     _started: bool = False
@@ -47,6 +51,16 @@ class AgentExecution:
     @property
     def finish_reason_source(self) -> str | None:
         return self.normalizer.finish_reason_source
+
+    @property
+    def response_blocks(self) -> list[dict[str, Any]]:
+        return self.media_response.structured_blocks(
+            self.normalizer.last_primary_response
+        )
+
+    @property
+    def media_assets(self) -> list[dict[str, Any]]:
+        return self.media_response.assets
 
     async def stream_text(self) -> AsyncIterator[str]:
         if self._started:
@@ -149,11 +163,21 @@ class AgentExecution:
                                 break
                             next_envelope = asyncio.ensure_future(anext(envelopes))
                             for event in self.normalizer.feed(envelope):
-                                projected = (
-                                    self.rectifier.flush()
-                                    if isinstance(event, ModelCallBoundary)
-                                    else project_event(event)
-                                )
+                                if isinstance(event, ModelCallBoundary):
+                                    projected = self.rectifier.flush()
+                                elif isinstance(event, PrimaryMediaBlock):
+                                    notification = await self.media_response.project(event)
+                                    projected = (
+                                        project_event(
+                                            self.normalizer.media_notification(
+                                                event, notification
+                                            )
+                                        )
+                                        if notification is not None
+                                        else []
+                                    )
+                                else:
+                                    projected = project_event(event)
                                 for rendered in projected:
                                     if rendered:
                                         yield rendered
@@ -215,9 +239,13 @@ class AgentExecution:
 
 class AgentRuntime:
     def __init__(
-        self, builder: AgentBuilder, diagnostics: RuntimeDiagnostics | None = None
+        self,
+        builder: AgentBuilder,
+        media_outputs: MediaOutputStore,
+        diagnostics: RuntimeDiagnostics | None = None,
     ) -> None:
         self._builder = builder
+        self._media_outputs = media_outputs
         self._diagnostics = diagnostics
 
     async def start(
@@ -260,6 +288,7 @@ class AgentRuntime:
             input_state=built.input_state,
             context=built.context,
             automation=built.automation,
+            media_response=PrimaryMediaResponse(self._media_outputs, request_id),
             rectifier=OutputEventRectifier(OutputProjector(built.output_config)),
             normalizer=V3EventNormalizer(
                 built.agent_name,

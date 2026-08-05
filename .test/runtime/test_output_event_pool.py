@@ -383,6 +383,7 @@ def test_non_streaming_model_messages_use_the_same_tool_pairing_cycle() -> None:
             rectifier=OutputEventRectifier(OutputProjector(settings)),
             normalizer=V3EventNormalizer("Primary"),
             automation=noop_automation(),
+            media_response=noop_media_response(),
         )
         return [part async for part in execution.stream_text()]
 
@@ -519,6 +520,7 @@ def test_next_model_start_drains_compat_bridge_order_before_the_new_call() -> No
             rectifier=OutputEventRectifier(OutputProjector(settings)),
             normalizer=V3EventNormalizer("Primary"),
             automation=noop_automation(),
+            media_response=noop_media_response(),
         )
         return [part async for part in execution.stream_text()]
 

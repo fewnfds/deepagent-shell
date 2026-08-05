@@ -256,6 +256,20 @@ def test_subagent_model_content_stays_private_but_lifecycle_is_available() -> No
             namespace=["task:research"],
         ),
         message_envelope(
+            {
+                "event": "content-block-finish",
+                "index": 1,
+                "content": {
+                    "type": "image",
+                    "base64": "cHJpdmF0ZQ==",
+                    "mime_type": "image/png",
+                },
+            },
+            run_id="run-subagent",
+            agent_name="Researcher",
+            namespace=["task:research"],
+        ),
+        message_envelope(
             {"event": "message-finish", "usage": {}},
             run_id="run-subagent",
             agent_name="Researcher",

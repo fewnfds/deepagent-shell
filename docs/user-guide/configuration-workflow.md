@@ -30,9 +30,15 @@
 选择继承 Primary、使用自己的插件或关闭。同一个 Subagent 实体在一次请求中只有一套 request-local ctx，每个
 周期 binding 至多一个循环，即使被多条路径或递归调用；每次真实委派仍使用新的 LangGraph state。
 
-Primary 和每个 Subagent 都有自己的派生消息副本。插件 `prepare` 可以在任何 Agent 图构造前修改对应
-`ctx.messages`；原始客户端消息始终通过不可变 `ctx.request.messages` 提供。需要每次 invocation 运行的逻辑
-使用插件返回的 LangChain 原生 Middleware Hook。详细格式见[使用自动化插件](automation.md)。
+无插件时，客户端 `messages[]` 不进入 Primary 或 Subagent 的活动消息：Primary 以空 messages 启动，Subagent 保持
+Deep Agents 原生 delegated input。插件 `prepare` 可以在任何 Agent 图构造前从不可变
+`ctx.request.messages` 读取原始事实，并显式写入对应身份的空 `ctx.messages`；只有这样产生的消息才会进入 Agent。
+需要每次 invocation 运行的逻辑使用插件返回的 LangChain 原生 Middleware Hook。详细格式见
+[使用自动化插件](automation.md)。
+
+每个请求的 Primary 有独立 root invocation；每次真实 Subagent `task` 调用有新的 invocation ID、parent ID 和
+cause tool-call ID。同 profile 构造一次不等于四次调用共享执行身份：四次并发委派仍有四套插件 scratch。该隔离
+只覆盖平台提供的 `runtime/automation/` 临时目录，不拆分整棵 Agent 树共享的 Deep Agents filesystem。
 
 ## 校验与生效
 

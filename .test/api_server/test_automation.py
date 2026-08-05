@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+
 from agent_shell.automation.dependencies import dependency_state_path
 
 from .support import *
@@ -37,7 +39,7 @@ def test_plugin_catalog_direct_binding_and_old_workflow_routes_are_removed(
         write_automation_script(
             tmp_path,
             "open-plugin",
-            "async def prepare(ctx):\n    ctx.vars.set('request.seen', True)\n"
+            "async def prepare(ctx):\n    ctx.vars['seen'] = True\n"
             "async def lifecycle(ctx):\n    return None\n",
             entrypoints=("prepare", "lifecycle"),
         )
@@ -193,12 +195,12 @@ def test_native_middleware_hook_shares_prepare_context_and_original_messages(
             "    def __init__(self, ctx):\n        self.ctx = ctx\n"
             "    async def awrap_model_call(self, request, handler):\n"
             "        original = self.ctx.request.messages[0]['content']\n"
-            "        shared = self.ctx.vars.get('plugin.prepared')\n"
+            "        shared = self.ctx.vars.get('prepared')\n"
             "        Path(self.ctx.config['marker']).write_text(f'{original}|{shared}')\n"
             "        return await handler(request)\n"
             "def create_middleware(ctx):\n    return NativeHook(ctx)\n"
             "async def prepare(ctx):\n"
-            "    ctx.vars.set('plugin.prepared', True)\n",
+            "    ctx.vars['prepared'] = True\n",
             entrypoints=("middleware", "prepare"),
         )
         primary = create_primary(client)
@@ -228,3 +230,57 @@ def test_native_middleware_hook_shares_prepare_context_and_original_messages(
     assert response.status_code == 200, response.text
     assert response.json()["choices"][0]["message"]["content"] == "runtime reply"
     assert marker.read_text(encoding="utf-8") == "original|True"
+
+
+def test_prepare_can_relay_normalized_multimodal_message_to_langchain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    model = RecordingFakeListChatModel(responses=["multimodal accepted"])
+    RecordingFakeListChatModel.seen_messages = []
+    image = base64.b64encode(b"image-bytes").decode("ascii")
+    with make_client(tmp_path, monkeypatch) as client:
+        monkeypatch.setattr(
+            "agent_shell.runtime.agent_builder._build_chat_model",
+            lambda _block, _credential, _http_clients: model,
+        )
+        write_automation_script(
+            tmp_path,
+            "relay-for-test",
+            "async def prepare(ctx):\n    ctx.messages.extend(ctx.request.messages)\n",
+        )
+        primary = create_primary(client, include_filesystem=False)
+        attached = client.put(
+            f"/api/primary-agents/{primary['id']}",
+            json=primary_update(primary, automation_config("relay-for-test")),
+        )
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": primary["name"],
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "inspect"},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{image}"
+                                },
+                            },
+                        ],
+                    }
+                ],
+            },
+        )
+
+    assert attached.status_code == 200, attached.text
+    assert response.status_code == 200, response.text
+    human = next(
+        message
+        for message in RecordingFakeListChatModel.seen_messages[0]
+        if message.type == "human"
+    )
+    assert [block["type"] for block in human.content_blocks] == ["text", "image"]
+    assert human.content_blocks[1]["base64"] == image
+    assert human.content_blocks[1]["mime_type"] == "image/png"

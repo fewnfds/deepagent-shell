@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, timezone
+import json
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
@@ -12,6 +14,7 @@ from agent_shell.storage.history_retention import (
 
 if TYPE_CHECKING:
     from agent_shell.storage.database import SQLiteDatabase
+    from agent_shell.storage.media_outputs import MediaOutputStore
 
 
 ApiKeyOperation = Literal["keep", "replace", "clear"]
@@ -28,10 +31,12 @@ class ApiServerStore:
         database: SQLiteDatabase,
         event_logger: SecurityEventLogger | None = None,
         history_retention: HistoryRetentionStore | None = None,
+        media_outputs: MediaOutputStore | None = None,
     ) -> None:
         self._database = database
         self._events = event_logger
         self._history_retention = history_retention or HistoryRetentionStore(database)
+        self._media_outputs = media_outputs
         with self._database.transaction() as connection:
             self._prune(
                 connection,
@@ -50,6 +55,8 @@ class ApiServerStore:
                 ),
             )
             connection.commit()
+        if self._media_outputs is not None:
+            self._media_outputs.cleanup_unreferenced()
 
     @staticmethod
     def _prune(
@@ -94,6 +101,8 @@ class ApiServerStore:
                 retention_limit=retention_limit,
             )
             connection.commit()
+        if self._media_outputs is not None and history_type == "api_history":
+            self._media_outputs.cleanup_unreferenced()
         return {
             "retention_limit": retention_limit,
             "max_retention_limit": MAX_HISTORY_RETENTION_LIMIT,
@@ -231,6 +240,8 @@ class ApiServerStore:
         response_content_type: str | None,
         http_status: int | None,
         error_code: str | None,
+        response_blocks: Sequence[dict[str, object]] = (),
+        media_assets: Sequence[dict[str, object]] = (),
     ) -> dict[str, object]:
         item: dict[str, object] = {
             "id": str(uuid4()),
@@ -245,13 +256,20 @@ class ApiServerStore:
             "response_content_type": response_content_type,
             "http_status": http_status,
             "error_code": error_code,
+            "response_blocks_json": json.dumps(
+                response_blocks, ensure_ascii=False, separators=(",", ":")
+            ),
+            "media_assets_json": json.dumps(
+                media_assets, ensure_ascii=False, separators=(",", ":")
+            ),
         }
         with self._database.transaction() as connection:
             connection.execute(
                 "INSERT INTO api_message_history "
                 "(id, request_id, model, agent_name, started_at, finished_at, "
                 "status, request_body, response_body, response_content_type, "
-                "http_status, error_code) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "http_status, error_code, response_blocks_json, media_assets_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 tuple(item[key] for key in (
                     "id",
                     "request_id",
@@ -265,6 +283,8 @@ class ApiServerStore:
                     "response_content_type",
                     "http_status",
                     "error_code",
+                    "response_blocks_json",
+                    "media_assets_json",
                 )),
             )
             self._prune(
@@ -276,6 +296,8 @@ class ApiServerStore:
                 ),
             )
             connection.commit()
+        if self._media_outputs is not None:
+            self._media_outputs.cleanup_unreferenced()
         return item
 
     def _emit_updated(self, *, state: str = "") -> None:

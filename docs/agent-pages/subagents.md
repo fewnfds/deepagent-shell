@@ -50,9 +50,15 @@ Subagent 页面保存可复用的完整 Subagent 实体。实体只有被 Primar
 `settings.subagents[]` 是该 Subagent 自己可以调用的有序实体引用。父级引用不会自动复制给 child。同一个
 实体在请求内无论从多少分支或显式循环到达，都只构造一个 Subagent graph；各次 `task` 调用仍分别执行。
 
-同样地，一个实体在一次请求中只有一套 automation owner、三层变量和 Skill overlay；每个周期 binding 至多
-一个 lifecycle loop。Hook 插件的 prepare 为该 profile 建立基础多轮消息；每次 `task` 调用使用新的 graph state，并在基础消息末尾
-追加本次 delegated messages。需要每次 invocation 执行的逻辑使用插件原生 `before_agent` 等 Middleware Hook。
+同样地，一个实体在一次请求中只有一套 automation owner 和 Skill overlay；全部身份与 binding 共享本请求的
+`ctx.vars` dict，每个周期 binding 至多一个 lifecycle loop。无插件时 Subagent 只接收 Deep Agents 原生 delegated
+messages。Hook 插件的 prepare 显式建立基础多轮消息后，每次 `task` 调用才在其末尾追加本次 delegated messages。
+需要每次 invocation 执行的逻辑使用插件原生 `before_agent` 等 Middleware Hook。
+
+每次实际 `task` 调用都有新的 Shell invocation ID，并记录父 invocation 和 cause `tool_call_id`；同一 invocation 的
+多轮 model/tool 循环保持同一身份。Hook binding 在 `runtime.context["agent_shell_invocation"]` 中取得只读身份和自己的
+scratch 路径。因此同 profile 四次并行调用可以在各自 scratch 使用同名中间文件，而 prepare 和 Middleware factory
+仍只按 owner/binding 执行一次。请求终态统一清理 scratch；插件写入 mapped 或其他外部路径时仍需自行协调并发。
 
 同一次请求中的 Primary 与同步 Subagent 共享普通 workspace 和 mapped routes。每个 Agent 根据自己的
 最终文件系统权限获得路径访问和文件工具，再根据最终 Skill 配置获得只读 `/skills/` 视图。请求结束后，

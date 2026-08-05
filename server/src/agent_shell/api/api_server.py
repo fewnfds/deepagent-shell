@@ -25,6 +25,7 @@ from agent_shell.runtime.agent_runtime import AgentExecution
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.interception import InterceptionTestController
+from agent_shell.runtime.input_messages import MAX_CHAT_COMPLETION_BODY_BYTES
 from agent_shell.runtime.model_response import termination_block
 from agent_shell.runtime.request_snapshot import RequestSnapshotRuntime
 from agent_shell.runtime.session_recording import AgentRunCapture
@@ -33,6 +34,7 @@ from agent_shell.settings import Settings, bearer_token_is_valid
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.agent_sessions import AgentRunStatus, AgentSessionStore
 from agent_shell.storage.api_server import ApiServerStore
+from agent_shell.storage.media_outputs import MediaOutputStore
 from agent_shell.validation.models import validation_failure_detail
 from agent_shell.validation.service import ConfigurationValidationService
 
@@ -209,6 +211,7 @@ def build_api_server_router(
     diagnostics: RuntimeDiagnostics,
     agent_sessions: AgentSessionStore,
     validation: ConfigurationValidationService,
+    media_outputs: MediaOutputStore,
 ) -> APIRouter:
     router = APIRouter()
     history = MessageHistoryRecorder(store, events, diagnostics)
@@ -369,6 +372,8 @@ def build_api_server_router(
                         else terminal_error_code or "unknown"
                     ),
                     reasoning_tokens=execution.usage.get("reasoning_tokens"),
+                    response_blocks=execution.response_blocks,
+                    media_assets=execution.media_assets,
                 )
             )
 
@@ -487,6 +492,12 @@ def build_api_server_router(
         if not server_settings["enabled"]:
             return _openai_error(503, "api_server_stopped", "The API server is stopped.")
         body = await request.body()
+        if len(body) > MAX_CHAT_COMPLETION_BODY_BYTES:
+            return _openai_error(
+                413,
+                "input_body_too_large",
+                f"The request body may not exceed {MAX_CHAT_COMPLETION_BODY_BYTES} bytes.",
+            )
         try:
             raw_json = body.decode("utf-8")
             payload = json.loads(raw_json)
@@ -611,6 +622,7 @@ def build_api_server_router(
                 agent_sessions=agent_sessions,
                 events=events,
                 history=history,
+                media_outputs=media_outputs,
             )
 
             diagnostics.request_started(
@@ -728,6 +740,8 @@ def build_api_server_router(
                         http_status=499,
                         finish_reason="client_disconnected",
                         reasoning_tokens=execution.usage.get("reasoning_tokens"),
+                        response_blocks=execution.response_blocks,
+                        media_assets=execution.media_assets,
                     )
                 )
                 return Response(status_code=499, headers=session_headers)
@@ -748,6 +762,8 @@ def build_api_server_router(
                         http_status=exc.status_code,
                         finish_reason=exc.code,
                         reasoning_tokens=execution.usage.get("reasoning_tokens"),
+                        response_blocks=execution.response_blocks,
+                        media_assets=execution.media_assets,
                     )
                 )
                 return JSONResponse(
@@ -768,6 +784,8 @@ def build_api_server_router(
                         http_status=500,
                         finish_reason="internal_error",
                         reasoning_tokens=execution.usage.get("reasoning_tokens"),
+                        response_blocks=execution.response_blocks,
+                        media_assets=execution.media_assets,
                     )
                 )
                 return JSONResponse(
@@ -790,6 +808,8 @@ def build_api_server_router(
                     http_status=200,
                     finish_reason=execution.finish_reason,
                     reasoning_tokens=usage.get("reasoning_tokens"),
+                    response_blocks=execution.response_blocks,
+                    media_assets=execution.media_assets,
                 )
             )
             return JSONResponse(content=response_payload, headers=session_headers)

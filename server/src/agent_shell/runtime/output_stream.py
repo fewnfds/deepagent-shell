@@ -126,6 +126,18 @@ class ModelCallBoundary:
     run_key: str
 
 
+@dataclass(frozen=True, slots=True)
+class PrimaryMediaBlock:
+    timestamp: str
+    namespace: str
+    agent_name: str
+    node: str
+    message_id: str
+    block_index: int
+    content: dict[str, object]
+    stream_id: str = ""
+
+
 @dataclass(slots=True)
 class _MessageBlock:
     timestamp: str
@@ -168,6 +180,10 @@ class V3EventNormalizer:
     def finish_reason_source(self) -> str | None:
         return self._responses.last_primary_finish_reason_source
 
+    @property
+    def last_primary_response(self) -> ModelResponse | None:
+        return self._responses.last_primary_response
+
     def lifecycle(
         self,
         phase: str,
@@ -186,7 +202,9 @@ class V3EventNormalizer:
             error_code=error_code,
         )
 
-    def feed(self, envelope: object) -> list[OutputEvent | ModelCallBoundary]:
+    def feed(
+        self, envelope: object
+    ) -> list[OutputEvent | ModelCallBoundary | PrimaryMediaBlock]:
         if not isinstance(envelope, dict):
             return []
         method = str(envelope.get("method") or "")
@@ -319,6 +337,7 @@ class V3EventNormalizer:
                 ModelCallBoundary(run_key),
                 *self._whole_message_events(
                     payload,
+                    run_key=run_key,
                     timestamp=timestamp,
                     namespace=namespace,
                     agent_name=agent_name,
@@ -521,7 +540,10 @@ class V3EventNormalizer:
                     )
                 ]
             return self._finished_block_events(
-                content, block, stream_id=f"{run_key}:{index}"
+                content,
+                block,
+                block_index=index,
+                stream_id=f"{run_key}:{index}",
             )
         return []
 
@@ -529,17 +551,18 @@ class V3EventNormalizer:
         self,
         message: object,
         *,
+        run_key: str,
         timestamp: str,
         namespace: str,
         agent_name: str,
         node: str,
-    ) -> list[OutputEvent]:
+    ) -> list[OutputEvent | PrimaryMediaBlock]:
         message_id = str(getattr(message, "id", "") or "")
         blocks = getattr(message, "content_blocks", None)
         if not isinstance(blocks, list):
             text = _message_text(message)
             blocks = [{"type": "text", "text": text}] if text else []
-        events: list[OutputEvent] = []
+        events: list[OutputEvent | PrimaryMediaBlock] = []
         for index, content in enumerate(blocks):
             if not isinstance(content, dict):
                 continue
@@ -550,7 +573,14 @@ class V3EventNormalizer:
                 node=node,
                 message_id=message_id,
             )
-            events.extend(self._finished_block_events(content, block))
+            events.extend(
+                self._finished_block_events(
+                    content,
+                    block,
+                    block_index=index,
+                    stream_id=f"{run_key}:{index}",
+                )
+            )
         return events
 
     def _finished_block_events(
@@ -558,8 +588,9 @@ class V3EventNormalizer:
         content: dict[str, object],
         block: _MessageBlock,
         *,
+        block_index: int = 0,
         stream_id: str = "",
-    ) -> list[OutputEvent]:
+    ) -> list[OutputEvent | PrimaryMediaBlock]:
         block_type = str(content.get("type") or "")
         if block_type in {"text", "reasoning"}:
             return [
@@ -572,6 +603,19 @@ class V3EventNormalizer:
                     node=block.node,
                     message=self._block_text(content),
                     message_id=block.message_id,
+                )
+            ]
+        if block_type in {"image", "audio", "video", "file"}:
+            return [
+                PrimaryMediaBlock(
+                    timestamp=block.timestamp,
+                    namespace=block.namespace,
+                    agent_name=block.agent_name,
+                    node=block.node,
+                    message_id=block.message_id,
+                    block_index=block_index,
+                    content=dict(content),
+                    stream_id=stream_id,
                 )
             ]
         if block_type in {"tool_call", "server_tool_call"}:
@@ -660,6 +704,21 @@ class V3EventNormalizer:
                 )
             ]
         return []
+
+    def media_notification(
+        self, block: PrimaryMediaBlock, message: str
+    ) -> OutputEvent:
+        return self._event(
+            "assistant_text",
+            "end",
+            timestamp=block.timestamp,
+            namespace=block.namespace,
+            agent_name=block.agent_name,
+            node=block.node,
+            message=message,
+            message_id=block.message_id,
+            stream_id=block.stream_id,
+        )
 
     @staticmethod
     def _block_text(content: dict[str, object]) -> str:
@@ -817,4 +876,9 @@ class V3EventNormalizer:
         )
 
 
-__all__ = ["ModelCallBoundary", "OutputEvent", "V3EventNormalizer"]
+__all__ = [
+    "ModelCallBoundary",
+    "OutputEvent",
+    "PrimaryMediaBlock",
+    "V3EventNormalizer",
+]

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+
 from agent_shell.storage.database import SQLiteDatabase
+from agent_shell.storage.media_outputs import MediaOutputStore
 
 
 def _escaped_needle(query: str) -> str:
@@ -25,8 +28,13 @@ def _time_window(
 class EventFeedStore:
     """Query and delete the two SQLite-backed event sources."""
 
-    def __init__(self, database: SQLiteDatabase) -> None:
+    def __init__(
+        self,
+        database: SQLiteDatabase,
+        media_outputs: MediaOutputStore | None = None,
+    ) -> None:
         self._database = database
+        self._media_outputs = media_outputs
 
     def list_api_calls(
         self,
@@ -166,10 +174,16 @@ class EventFeedStore:
             row = connection.execute(
                 "SELECT id, request_id, model, agent_name, started_at, finished_at, "
                 "status, request_body, response_body, response_content_type, "
-                "http_status, error_code FROM api_message_history WHERE id = ?",
+                "http_status, error_code, response_blocks_json, media_assets_json "
+                "FROM api_message_history WHERE id = ?",
                 (item_id,),
             ).fetchone()
-        return dict(row) if row else None
+        if row is None:
+            return None
+        item = dict(row)
+        item["response_blocks"] = json.loads(item.pop("response_blocks_json"))
+        item["media_assets"] = json.loads(item.pop("media_assets_json"))
+        return item
 
     def get_interception(self, item_id: str) -> dict[str, object] | None:
         with self._database.transaction() as connection:
@@ -221,6 +235,8 @@ class EventFeedStore:
                 "DELETE FROM api_message_history WHERE " + " AND ".join(clauses),
                 parameters,
             )
+        if self._media_outputs is not None:
+            self._media_outputs.cleanup_unreferenced()
         return cursor.rowcount
 
     def delete_interceptions(

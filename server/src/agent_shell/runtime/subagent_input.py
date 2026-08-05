@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Mapping
 from typing import Any, TypedDict
 
 from agent_shell.automation.runtime import AutomationRuntime
@@ -14,6 +14,7 @@ class AgentRequestContext(TypedDict):
     """Request-only data shared with compiled Subagent graphs."""
 
     automation_runtime: AutomationRuntime
+    agent_shell_invocation: Mapping[str, Any]
 
 
 class SubagentInputMiddleware(AgentMiddleware):
@@ -23,13 +24,9 @@ class SubagentInputMiddleware(AgentMiddleware):
         self,
         *,
         owner_id: str,
-        agent_name: str,
-        observer: Callable[[dict[str, object]], Any] | None = None,
     ) -> None:
         super().__init__()
         self._owner_id = owner_id
-        self._agent_name = agent_name
-        self._observer = observer
 
     def before_agent(
         self,
@@ -51,15 +48,6 @@ class SubagentInputMiddleware(AgentMiddleware):
             self._owner_id,
             delegated_messages,
         )
-        if self._observer is not None:
-            self._observer(
-                {
-                    "agent_type": "subagent",
-                    "agent_name": self._agent_name,
-                    "tool_call_id": "",
-                    "message_count": len(rebuilt_messages),
-                }
-            )
         return {
             "messages": [
                 RemoveMessage(id=REMOVE_ALL_MESSAGES),

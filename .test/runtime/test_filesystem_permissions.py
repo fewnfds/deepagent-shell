@@ -81,6 +81,8 @@ def test_subagent_compiler_passes_distinct_permissions_over_shared_workspace(
         workspace=workspace,
         materialize_profile=materialize,
         agent_input_observer=None,
+        has_prepared_messages=lambda _owner_id: False,
+        child_context=lambda _owner_id, _parent, _cause: {},
     ).compile(
         roots=(
             ResolvedSubagentEdge(target_key="reader-id"),

@@ -49,6 +49,9 @@ class AgentRunCapture:
             for key in (
                 "agent_type",
                 "agent_name",
+                "owner_id",
+                "invocation_id",
+                "parent_invocation_id",
                 "tool_call_id",
                 "message_count",
             )

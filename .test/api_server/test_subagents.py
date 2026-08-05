@@ -139,7 +139,7 @@ def test_selected_subagent_applies_effective_overrides_and_returns_result(
         message.text
         for message in ChildModel.seen_messages[0]
         if message.type == "human"
-    ] == ["Delegate this.", "Solve the delegated check."]
+    ] == ["Solve the delegated check."]
     task_result = next(
         message
         for message in ParentModel.seen_messages[1]
@@ -168,6 +168,25 @@ def test_selected_subagent_applies_effective_overrides_and_returns_result(
         subagent_events[0]["data"]["namespace"]
         == subagent_events[1]["data"]["namespace"]
     )
+    agent_inputs = [
+        item["data"]
+        for item in session["runs"][0]["timeline"]
+        if item["kind"] == "agent_input"
+    ]
+    assert [item["agent_type"] for item in agent_inputs] == [
+        "primary",
+        "subagent",
+    ]
+    root_invocation, child_invocation = agent_inputs
+    assert root_invocation["invocation_id"]
+    assert root_invocation["parent_invocation_id"] == ""
+    assert root_invocation["tool_call_id"] == ""
+    assert child_invocation["invocation_id"] != root_invocation["invocation_id"]
+    assert (
+        child_invocation["parent_invocation_id"]
+        == root_invocation["invocation_id"]
+    )
+    assert child_invocation["tool_call_id"] == "call-subagent"
 
 
 def test_subagent_entity_can_inherit_current_primary_capabilities(

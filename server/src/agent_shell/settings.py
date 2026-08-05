@@ -211,6 +211,9 @@ class Settings(BaseSettings):
     def resolved_files_dir(self) -> Path:
         return self.data_root / "files"
 
+    def resolved_media_outputs_dir(self) -> Path:
+        return self.data_root / "media" / "outputs"
+
     def resolved_custom_tools_dir(self) -> Path:
         return self.data_root / "resources" / "custom_tools"
 
@@ -228,6 +231,7 @@ class Settings(BaseSettings):
             self.data_root / "config",
             self.data_root / "state",
             self.resolved_files_dir(),
+            self.resolved_media_outputs_dir(),
             self.resolved_custom_tools_dir(),
             self.resolved_custom_middlewares_dir(),
             self.resolved_automation_scripts_dir(),

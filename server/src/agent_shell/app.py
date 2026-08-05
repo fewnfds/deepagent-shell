@@ -44,6 +44,7 @@ from agent_shell.storage.api_server import ApiServerStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.database import SQLiteDatabase
 from agent_shell.storage.history_retention import HistoryRetentionStore
+from agent_shell.storage.media_outputs import MediaOutputStore
 from agent_shell.storage.runtime_controls import RuntimeControlSettingsStore
 from agent_shell.storage.runtime_diagnostics import RuntimeDiagnosticStore
 from agent_shell.storage.system_log_settings import MIB_BYTES, SystemLogSettingsStore
@@ -95,6 +96,7 @@ def create_app(
         )
     )
     database = SQLiteDatabase(settings.resolved_database_path())
+    media_outputs = MediaOutputStore(database, settings.resolved_media_outputs_dir())
     system_log_settings = SystemLogSettingsStore(database)
     event_logger = SecurityEventLogger(
         logs_dir,
@@ -116,7 +118,9 @@ def create_app(
         automation_validation,
         custom_tools_dir=custom_tools_dir,
     )
-    api_server_store = ApiServerStore(database, event_logger, history_retention)
+    api_server_store = ApiServerStore(
+        database, event_logger, history_retention, media_outputs
+    )
     if api_server_store.is_enabled():
         api_start_report = configuration_validation.validate_api_start()
         if not api_start_report.valid:
@@ -127,7 +131,9 @@ def create_app(
         raise SettingsError(
             ("API Server API Key",), exc.safe_message
         ) from None
-    agent_session_store = AgentSessionStore(database, history_retention)
+    agent_session_store = AgentSessionStore(
+        database, history_retention, media_outputs
+    )
     api_server_events = ApiServerEventHub()
     event_logger.set_publisher(api_server_events.publish_nowait)
     runtime_diagnostics = RuntimeDiagnostics(
@@ -146,7 +152,7 @@ def create_app(
     )
     interception_tests = InterceptionTestController(runtime_control_settings)
     event_feed = EventFeedService(
-        EventFeedStore(database),
+        EventFeedStore(database, media_outputs),
         event_logger,
         runtime_diagnostics,
         system_log_settings,
@@ -172,6 +178,7 @@ def create_app(
         skills_dir=skills_dir,
         diagnostics=runtime_diagnostics,
         provider_http_clients=provider_http_clients,
+        media_outputs=media_outputs,
     )
 
     frontend_dir = Path(__file__).parent / "frontend_dist"
@@ -191,6 +198,7 @@ def create_app(
         *runtime_permissions,
         database.directory_permission,
         *database.file_permissions,
+        media_outputs.directory_permission,
         *event_logger.permission_statuses,
     )
     readiness = ReadinessService(
@@ -381,6 +389,7 @@ def create_app(
     app.state.runtime_diagnostic_store = runtime_diagnostic_store
     app.state.agent_sessions = agent_session_store
     app.state.api_server_store = api_server_store
+    app.state.media_outputs = media_outputs
     app.state.provider_http_clients = provider_http_clients
     app.state.event_feed = event_feed
     app.state.system_log_settings = system_log_settings
@@ -462,6 +471,7 @@ def create_app(
             runtime_diagnostics,
             agent_session_store,
             configuration_validation,
+            media_outputs,
         )
     )
 

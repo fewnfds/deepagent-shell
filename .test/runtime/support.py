@@ -151,3 +151,21 @@ class NoopAutomation:
 
 def noop_automation() -> NoopAutomation:
     return NoopAutomation()
+
+
+class NoopMediaResponse:
+    @staticmethod
+    async def project(_event) -> None:
+        return None
+
+    @property
+    def assets(self) -> list[dict]:
+        return []
+
+    @staticmethod
+    def structured_blocks(_response) -> list[dict]:
+        return []
+
+
+def noop_media_response() -> NoopMediaResponse:
+    return NoopMediaResponse()

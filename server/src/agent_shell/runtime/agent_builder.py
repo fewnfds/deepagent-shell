@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, cast
 
 from langchain.chat_models import init_chat_model
 from pydantic import SecretStr
@@ -41,6 +41,8 @@ from agent_shell.runtime.agent_compilation import (
     validate_model_visible_tool_names,
 )
 from agent_shell.runtime.errors import AgentRuntimeError
+from agent_shell.runtime.input_messages import validate_client_messages
+from agent_shell.runtime.invocation import AgentInvocationMiddleware
 from agent_shell.runtime.limits import (
     ProviderErrorBoundaryMiddleware,
     ToolErrorBoundaryMiddleware,
@@ -105,49 +107,6 @@ def _build_chat_model(
             "The selected model configuration cannot construct its Provider adapter.",
             status_code=422,
         ) from exc
-
-
-def validate_openai_messages(value: object) -> list[dict[str, str]]:
-    if not isinstance(value, list) or not value:
-        raise AgentRuntimeError(
-            "input_messages_required",
-            "messages must be a non-empty array.",
-            status_code=422,
-        )
-    messages: list[dict[str, str]] = []
-    for index, item in enumerate(value):
-        if not isinstance(item, dict):
-            raise AgentRuntimeError(
-                "input_message_invalid",
-                f"messages[{index}] must be an object.",
-                status_code=422,
-            )
-        role = item.get("role")
-        content = item.get("content")
-        if role not in {"system", "user", "assistant"}:
-            raise AgentRuntimeError(
-                "input_message_role_unsupported",
-                f"messages[{index}].role is not supported by the current text runtime.",
-                status_code=422,
-            )
-        if not isinstance(content, str):
-            raise AgentRuntimeError(
-                "input_message_content_unsupported",
-                f"messages[{index}].content must be a string in the current text runtime.",
-                status_code=422,
-            )
-        message = {"role": role, "content": content}
-        name = item.get("name")
-        if name is not None:
-            if not isinstance(name, str) or not name:
-                raise AgentRuntimeError(
-                    "input_message_name_invalid",
-                    f"messages[{index}].name must be a non-empty string.",
-                    status_code=422,
-                )
-            message["name"] = name
-        messages.append(message)
-    return messages
 
 
 @dataclass(frozen=True, slots=True)
@@ -474,7 +433,7 @@ class AgentBuilder:
     ) -> BuiltAgent:
         # Validate the immutable request snapshot before any selected user module
         # can be imported or any optional capability can be materialized.
-        messages = validate_openai_messages(raw_messages)
+        messages = validate_client_messages(raw_messages)
         report, assembly = self._validation.resolve_primary(primary_id)
         if not report.valid:
             issue = report.issues[0]
@@ -519,18 +478,7 @@ class AgentBuilder:
         )
         self._automation_runtime = automation
         await automation.prepare()
-        prepared_messages = validate_openai_messages(
-            automation.messages_for(primary_id)
-        )
-        if agent_input_observer is not None:
-            agent_input_observer(
-                {
-                    "agent_type": "primary",
-                    "agent_name": primary_name,
-                    "tool_call_id": "",
-                    "message_count": len(prepared_messages),
-                }
-            )
+        prepared_messages = automation.messages_for(primary_id)
         materialized = self._materialize_profile(
             references,
             selected_blocks,
@@ -559,6 +507,11 @@ class AgentBuilder:
 
         middleware = [
             ToolErrorBoundaryMiddleware(),
+            AgentInvocationMiddleware(
+                agent_type="primary",
+                agent_name=primary_name,
+                observer=agent_input_observer,
+            ),
             *materialized.middleware,
             *materialized.automation_middleware,
         ]
@@ -570,9 +523,10 @@ class AgentBuilder:
                 )
             )
         input_state: dict[str, Any] = {"messages": prepared_messages}
-        request_context: AgentRequestContext = {
-            "automation_runtime": automation
-        }
+        request_context = cast(
+            AgentRequestContext,
+            automation.root_context(primary_id),
+        )
 
         compiled_subagents: list[dict[str, Any]] = []
         task_description_override: str | None = None
@@ -583,6 +537,8 @@ class AgentBuilder:
                 workspace=materialized.workspace,
                 materialize_profile=self._materialize_profile,
                 agent_input_observer=agent_input_observer,
+                has_prepared_messages=automation.has_messages_for,
+                child_context=automation.child_context,
             ).compile(roots=resolved_subagents, nodes=assembly.subagent_nodes)
             delegation_instruction = selected_blocks["subagent"][
                 "instruction_override"

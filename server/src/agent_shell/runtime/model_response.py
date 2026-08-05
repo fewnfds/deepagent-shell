@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -124,6 +125,7 @@ class ModelResponseTracker:
         self._content_blocks: dict[str, dict[int, dict[str, object]]] = {}
         self.last_primary_finish_reason: str | None = None
         self.last_primary_finish_reason_source: str | None = None
+        self.last_primary_response: ModelResponse | None = None
 
     def begin(self, run_key: str, metadata: object) -> None:
         self._start_metadata[run_key] = (
@@ -197,5 +199,7 @@ class ModelResponseTracker:
             provider_finish_reason=reason,
             finish_reason_source=source,
         )
+        if is_primary:
+            self.last_primary_response = deepcopy(response)
         for observer in self._observers:
             observer(response)

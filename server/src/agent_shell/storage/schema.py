@@ -139,7 +139,9 @@ CREATE TABLE IF NOT EXISTS api_message_history (
     response_body TEXT,
     response_content_type TEXT,
     http_status INTEGER,
-    error_code TEXT
+    error_code TEXT,
+    response_blocks_json TEXT NOT NULL,
+    media_assets_json TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_api_message_history_started
@@ -185,7 +187,9 @@ CREATE TABLE IF NOT EXISTS agent_session_runs (
     error_code TEXT,
     input_messages_json TEXT NOT NULL,
     timeline_json TEXT NOT NULL,
-    response_text TEXT NOT NULL
+    response_text TEXT NOT NULL,
+    response_blocks_json TEXT NOT NULL,
+    media_assets_json TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_agent_session_runs_session
@@ -193,5 +197,22 @@ ON agent_session_runs(session_id, started_at);
 
 CREATE INDEX IF NOT EXISTS idx_agent_session_runs_started
 ON agent_session_runs(started_at DESC);
+
+CREATE TABLE IF NOT EXISTS media_output_assets (
+    id TEXT PRIMARY KEY,
+    request_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    block_index INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    media_type TEXT NOT NULL CHECK (media_type IN ('image', 'audio', 'video', 'file')),
+    mime_type TEXT NOT NULL,
+    relative_path TEXT NOT NULL UNIQUE,
+    byte_size INTEGER NOT NULL CHECK (byte_size >= 0),
+    original_filename TEXT NOT NULL,
+    finalized INTEGER NOT NULL CHECK (finalized IN (0, 1))
+);
+
+CREATE INDEX IF NOT EXISTS idx_media_output_assets_request
+ON media_output_assets(request_id);
 
 """

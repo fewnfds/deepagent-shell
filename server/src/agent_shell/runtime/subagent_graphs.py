@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from agent_shell.capability_manifest import FILESYSTEM_TOOL_NAMES
@@ -18,6 +18,7 @@ from agent_shell.runtime.limits import (
     ProviderErrorBoundaryMiddleware,
     ToolErrorBoundaryMiddleware,
 )
+from agent_shell.runtime.invocation import AgentInvocationMiddleware
 from agent_shell.runtime.model_request_settings import (
     make_model_request_settings_middleware,
 )
@@ -51,10 +52,16 @@ class SubagentGraphCompiler:
         workspace: DeepAgentsWorkspace,
         materialize_profile: ProfileMaterializer,
         agent_input_observer: Callable[[dict[str, object]], Any] | None,
+        has_prepared_messages: Callable[[str], bool],
+        child_context: Callable[
+            [str, Mapping[str, Any], str], dict[str, Any]
+        ],
     ) -> None:
         self._workspace = workspace
         self._materialize_profile = materialize_profile
         self._agent_input_observer = agent_input_observer
+        self._has_prepared_messages = has_prepared_messages
+        self._child_context = child_context
 
     def compile(
         self,
@@ -63,7 +70,10 @@ class SubagentGraphCompiler:
         nodes: dict[SubagentNodeKey, ResolvedSubagent],
     ) -> list[dict[str, Any]]:
         runnables = {
-            key: DeferredSubagentRunnable(node.name) for key, node in nodes.items()
+            key: DeferredSubagentRunnable(
+                node.name, key, self._child_context
+            )
+            for key, node in nodes.items()
         }
         for key, node in nodes.items():
             self._compile_node(node, runnables[key], runnables, nodes)
@@ -85,14 +95,20 @@ class SubagentGraphCompiler:
             owner_name=node.name,
             workspace=self._workspace,
         )
-        middleware = [ToolErrorBoundaryMiddleware(), *child.middleware]
-        middleware.insert(
-            1,
-            SubagentInputMiddleware(
-                owner_id=node.key,
-                agent_name=node.name,
-                observer=self._agent_input_observer,
-            ),
+        middleware = [ToolErrorBoundaryMiddleware()]
+        if self._has_prepared_messages(node.key):
+            middleware.append(
+                SubagentInputMiddleware(owner_id=node.key)
+            )
+        middleware.extend(
+            (
+                AgentInvocationMiddleware(
+                    agent_type="subagent",
+                    agent_name=node.name,
+                    observer=self._agent_input_observer,
+                ),
+                *child.middleware,
+            )
         )
         middleware.extend(child.automation_middleware)
         if child.tool_choice is not None or child.model_settings:

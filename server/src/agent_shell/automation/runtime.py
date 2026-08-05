@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass
 import logging
 import os
@@ -17,7 +18,6 @@ from langchain.agents.middleware import AgentMiddleware
 from agent_shell.automation.context import (
     AutomationContext,
     AutomationRequest,
-    AutomationVariables,
     immutable_request,
 )
 from agent_shell.automation.loader import AutomationPluginLoader
@@ -68,7 +68,7 @@ class AutomationRuntime:
         *,
         request_id: str,
         owners: list[AutomationOwner],
-        client_messages: list[dict[str, str]],
+        client_messages: list[dict[str, Any]],
         plugins_dir: Path,
         skills_dir: Path,
         runtime_root: Path,
@@ -80,17 +80,13 @@ class AutomationRuntime:
         )
         self._owners = owners
         self._owner_by_id = {owner.id: owner for owner in owners}
-        self._messages = {
-            owner.id: [dict(message) for message in client_messages] for owner in owners
+        self._messages: dict[str, list[dict[str, Any]]] = {
+            owner.id: [] for owner in owners
         }
         self._initial_files: dict[str, dict[str, str | bytes]] = {
             owner.id: {} for owner in owners
         }
-        self._request_variables: dict[str, Any] = {}
-        self._agent_variables: dict[str, dict[str, Any]] = {
-            owner.id: {} for owner in owners
-        }
-        self._plugin_variables: dict[tuple[str, str, int], dict[str, Any]] = {}
+        self._variables: dict[Any, Any] = {}
         self._skills_dir = skills_dir
         self._request_runtime_dir = (
             runtime_root / "automation" / self.request_id
@@ -111,7 +107,7 @@ class AutomationRuntime:
     def from_assembly(
         cls,
         assembly: StaticAssembly,
-        client_messages: list[dict[str, str]],
+        client_messages: list[dict[str, Any]],
         *,
         primary_id: str,
         request_id: str,
@@ -174,9 +170,82 @@ class AutomationRuntime:
         return self._request
 
     def owner_runtime_dir(self, owner_id: str) -> Path:
-        path = self._request_runtime_dir / owner_id
+        path = self._request_runtime_dir / "owners" / owner_id
         path.mkdir(parents=True, exist_ok=True)
         return path
+
+    def binding_runtime_dir(
+        self,
+        owner_id: str,
+        binding_kind: str,
+        binding_index: int,
+    ) -> Path:
+        path = (
+            self.owner_runtime_dir(owner_id)
+            / "bindings"
+            / f"{binding_kind}-{binding_index}"
+        )
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def _invocation(
+        self,
+        owner_id: str,
+        *,
+        parent: Mapping[str, Any] | None,
+        cause_tool_call_id: str,
+    ) -> Mapping[str, Any]:
+        owner = self._owner_by_id[owner_id]
+        invocation_id = str(uuid4())
+        workspaces: dict[str, Path] = {}
+        for binding_index, binding in enumerate(owner.automation.get("hooks", [])):
+            if not binding.get("enabled", True):
+                continue
+            scratch = (
+                self.binding_runtime_dir(owner_id, "hook", binding_index)
+                / "invocations"
+                / invocation_id
+                / "scratch"
+            )
+            scratch.mkdir(parents=True, exist_ok=False)
+            workspaces[f"hook:{binding_index}"] = scratch
+        return MappingProxyType(
+            {
+                "request_id": self.request_id,
+                "id": invocation_id,
+                "parent_id": str(parent["id"]) if parent is not None else "",
+                "cause_tool_call_id": cause_tool_call_id,
+                "agent_id": owner.id,
+                "agent_type": owner.type,
+                "agent_name": owner.name,
+                "workspaces": MappingProxyType(workspaces),
+            }
+        )
+
+    def root_context(self, owner_id: str) -> dict[str, Any]:
+        return {
+            "automation_runtime": self,
+            "agent_shell_invocation": self._invocation(
+                owner_id,
+                parent=None,
+                cause_tool_call_id="",
+            ),
+        }
+
+    def child_context(
+        self,
+        owner_id: str,
+        parent: Mapping[str, Any],
+        cause_tool_call_id: str,
+    ) -> dict[str, Any]:
+        return {
+            "automation_runtime": self,
+            "agent_shell_invocation": self._invocation(
+                owner_id,
+                parent=parent,
+                cause_tool_call_id=cause_tool_call_id,
+            ),
+        }
 
     def prepare_skill(self, owner_id: str, name: str, *, mode: str) -> Path:
         if not name or Path(name).name != name:
@@ -208,25 +277,17 @@ class AutomationRuntime:
                 _copy_plain_tree(self._skills_dir / name, overlay)
         return overlay_root
 
-    def messages_for(self, owner_id: str) -> list[dict[str, str]]:
-        return [dict(message) for message in self._messages[owner_id]]
+    def messages_for(self, owner_id: str) -> list[dict[str, Any]]:
+        return deepcopy(self._messages[owner_id])
+
+    def has_messages_for(self, owner_id: str) -> bool:
+        return bool(self._messages[owner_id])
 
     def input_for(self, owner_id: str, delegated_messages: list[Any]) -> list[Any]:
         return [*self.messages_for(owner_id), *delegated_messages]
 
     def initial_files_for(self, owner_id: str) -> dict[str, str | bytes]:
         return dict(self._initial_files[owner_id])
-
-    def _variables(
-        self, owner_id: str, binding_kind: str, binding_index: int
-    ) -> AutomationVariables:
-        return AutomationVariables(
-            self._request_variables,
-            self._agent_variables[owner_id],
-            self._plugin_variables.setdefault(
-                (owner_id, binding_kind, binding_index), {}
-            ),
-        )
 
     def _context(
         self,
@@ -237,7 +298,7 @@ class AutomationRuntime:
         plugin_dir: Path,
         *,
         stage: str,
-        messages: list[dict[str, str]] | None = None,
+        messages: list[dict[str, Any]] | None = None,
         initial_files: dict[str, str | bytes] | None = None,
         tick: int | None = None,
         terminal: Mapping[str, Any] | None = None,
@@ -252,10 +313,12 @@ class AutomationRuntime:
             binding_index=binding_index,
             plugin_id=str(binding["plugin_id"]),
             plugin_dir=plugin_dir,
-            runtime_dir=self.owner_runtime_dir(owner.id),
+            runtime_dir=self.binding_runtime_dir(
+                owner.id, binding_kind, binding_index
+            ),
             mapped_paths=owner.mapped_paths,
             config=dict(binding.get("config", {})),
-            variables=self._variables(owner.id, binding_kind, binding_index),
+            variables=self._variables,
             stage=stage,
             messages=messages,
             initial_files=initial_files,
@@ -271,7 +334,7 @@ class AutomationRuntime:
         binding: dict[str, Any],
         entrypoint: str,
         *,
-        messages: list[dict[str, str]] | None = None,
+        messages: list[dict[str, Any]] | None = None,
         initial_files: dict[str, str | bytes] | None = None,
         tick: int | None = None,
         terminal: Mapping[str, Any] | None = None,
@@ -310,7 +373,7 @@ class AutomationRuntime:
             ) from exc
 
     async def prepare(self) -> None:
-        from agent_shell.runtime.agent_builder import validate_openai_messages
+        from agent_shell.runtime.input_messages import validate_prepared_messages
 
         for owner in self._owners:
             for binding_index, binding in enumerate(owner.automation.get("hooks", [])):
@@ -325,7 +388,7 @@ class AutomationRuntime:
                     messages=self._messages[owner.id],
                     initial_files=self._initial_files[owner.id],
                 )
-            self._messages[owner.id] = validate_openai_messages(
+            self._messages[owner.id] = validate_prepared_messages(
                 self._messages[owner.id]
             )
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 import json
 import unicodedata
 from typing import Literal, TYPE_CHECKING
@@ -12,6 +13,7 @@ from agent_shell.storage.history_retention import (
 
 if TYPE_CHECKING:
     from agent_shell.storage.database import SQLiteDatabase
+    from agent_shell.storage.media_outputs import MediaOutputStore
 
 
 AgentRunStatus = Literal["completed", "failed", "client_disconnected"]
@@ -155,9 +157,11 @@ class AgentSessionStore:
         self,
         database: SQLiteDatabase,
         history_retention: HistoryRetentionStore | None = None,
+        media_outputs: MediaOutputStore | None = None,
     ) -> None:
         self._database = database
         self._history_retention = history_retention or HistoryRetentionStore(database)
+        self._media_outputs = media_outputs
         with self._database.transaction() as connection:
             self._prune(
                 connection,
@@ -166,6 +170,8 @@ class AgentSessionStore:
                 ),
             )
             connection.commit()
+        if self._media_outputs is not None:
+            self._media_outputs.cleanup_unreferenced()
 
     @staticmethod
     def _prune(connection, retention_limit: int) -> None:
@@ -192,6 +198,8 @@ class AgentSessionStore:
             )
             self._prune(connection, retention_limit)
             connection.commit()
+        if self._media_outputs is not None:
+            self._media_outputs.cleanup_unreferenced()
         return {
             "retention_limit": retention_limit,
             "max_retention_limit": MAX_HISTORY_RETENTION_LIMIT,
@@ -211,14 +219,17 @@ class AgentSessionStore:
         timeline: list[dict[str, object]],
         response_text: str,
         error_code: str | None,
+        response_blocks: Sequence[dict[str, object]] = (),
+        media_assets: Sequence[dict[str, object]] = (),
     ) -> None:
         item_id = str(uuid4())
         with self._database.transaction() as connection:
             connection.execute(
                 "INSERT INTO agent_session_runs "
                 "(id, session_id, request_id, model, agent_name, started_at, finished_at, "
-                "status, error_code, input_messages_json, timeline_json, response_text) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "status, error_code, input_messages_json, timeline_json, response_text, "
+                "response_blocks_json, media_assets_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     item_id,
                     session_id,
@@ -232,6 +243,16 @@ class AgentSessionStore:
                     json.dumps(input_messages, ensure_ascii=False, separators=(",", ":")),
                     json.dumps(timeline, ensure_ascii=False, separators=(",", ":")),
                     response_text,
+                    json.dumps(
+                        response_blocks,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
+                    json.dumps(
+                        media_assets,
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    ),
                 ),
             )
             self._prune(
@@ -241,6 +262,8 @@ class AgentSessionStore:
                 ),
             )
             connection.commit()
+        if self._media_outputs is not None:
+            self._media_outputs.cleanup_unreferenced()
 
     @staticmethod
     def _matching_session_summaries(
@@ -348,6 +371,8 @@ class AgentSessionStore:
                     ((session_id,) for session_id in session_ids),
                 )
                 connection.commit()
+        if self._media_outputs is not None:
+            self._media_outputs.cleanup_unreferenced()
         return len(session_ids)
 
     def get_session(self, session_id: str) -> dict[str, object] | None:
@@ -355,7 +380,8 @@ class AgentSessionStore:
             rows = connection.execute(
                 "SELECT id, session_id, request_id, model, agent_name, started_at, "
                 "finished_at, status, error_code, input_messages_json, timeline_json, "
-                "response_text FROM agent_session_runs WHERE session_id = ? "
+                "response_text, response_blocks_json, media_assets_json "
+                "FROM agent_session_runs WHERE session_id = ? "
                 "ORDER BY started_at ASC, rowid ASC",
                 (session_id,),
             ).fetchall()
@@ -367,6 +393,8 @@ class AgentSessionStore:
             item = dict(raw)
             item["input_messages"] = json.loads(item.pop("input_messages_json"))
             item["timeline"] = json.loads(item.pop("timeline_json"))
+            item["response_blocks"] = json.loads(item.pop("response_blocks_json"))
+            item["media_assets"] = json.loads(item.pop("media_assets_json"))
             timelines.append(
                 [event for event in item["timeline"] if isinstance(event, dict)]
                 if isinstance(item["timeline"], list)
@@ -427,7 +455,10 @@ class AgentSessionStore:
             columns = "started_at, input_messages_json"
             event_index = None
         elif step_id == "output":
-            columns = "finished_at, status, error_code, response_text"
+            columns = (
+                "finished_at, status, error_code, response_text, "
+                "response_blocks_json, media_assets_json"
+            )
             event_index = None
         elif step_id.startswith("event-"):
             try:
@@ -467,6 +498,8 @@ class AgentSessionStore:
                     "status": run.get("status"),
                     "error_code": run.get("error_code"),
                     "response_text": run.get("response_text"),
+                    "response_blocks": json.loads(run["response_blocks_json"]),
+                    "media_assets": json.loads(run["media_assets_json"]),
                 },
             }
         event_json = run.get("event_json")
@@ -481,4 +514,6 @@ class AgentSessionStore:
                 "DELETE FROM agent_session_runs WHERE session_id = ?", (session_id,)
             )
             connection.commit()
+        if self._media_outputs is not None:
+            self._media_outputs.cleanup_unreferenced()
         return cursor.rowcount > 0

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Protocol
@@ -9,6 +10,7 @@ from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.session_recording import AgentRunCapture
 from agent_shell.storage.agent_sessions import AgentRunStatus, AgentSessionStore
 from agent_shell.storage.api_server import ApiServerStore, MessageHistoryStatus
+from agent_shell.storage.media_outputs import MediaOutputStore
 
 
 class CompletionEventPublisher(Protocol):
@@ -27,6 +29,8 @@ class CompletionTerminal:
     http_status: int
     finish_reason: str
     reasoning_tokens: int | None
+    response_blocks: Sequence[dict[str, object]] = ()
+    media_assets: Sequence[dict[str, object]] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +69,8 @@ class MessageHistoryRecorder:
         response_content_type: str | None,
         http_status: int | None,
         error_code: str | None,
+        response_blocks: Sequence[dict[str, object]] = (),
+        media_assets: Sequence[dict[str, object]] = (),
     ) -> bool:
         try:
             self._store.add_message_history(
@@ -81,6 +87,8 @@ class MessageHistoryRecorder:
                 response_content_type=response_content_type,
                 http_status=http_status,
                 error_code=error_code,
+                response_blocks=response_blocks,
+                media_assets=media_assets,
             )
             await self._events.publish({"type": "history_changed"})
         except Exception as exc:
@@ -107,6 +115,7 @@ class CompletionFinalizer:
         agent_sessions: AgentSessionStore,
         events: CompletionEventPublisher,
         history: MessageHistoryRecorder,
+        media_outputs: MediaOutputStore | None = None,
     ) -> None:
         self._context = context
         self._capture = capture
@@ -114,6 +123,7 @@ class CompletionFinalizer:
         self._agent_sessions = agent_sessions
         self._events = events
         self._history = history
+        self._media_outputs = media_outputs
         self._finalized = False
 
     def runtime_error(self, error: Exception, *, code: str) -> None:
@@ -143,19 +153,25 @@ class CompletionFinalizer:
                 reasoning_tokens=terminal.reasoning_tokens,
             )
 
-        self._record_agent_run(terminal)
-        await self._history.record(
-            request_id=self._context.request_id,
-            model=self._context.model,
-            agent_name=self._context.agent_name,
-            started_at=self._context.started_at,
-            status=terminal.status,
-            request_body=self._context.request_body,
-            response_body=terminal.response_body,
-            response_content_type=terminal.response_content_type,
-            http_status=terminal.http_status,
-            error_code=terminal.error_code,
-        )
+        try:
+            self._record_agent_run(terminal)
+            await self._history.record(
+                request_id=self._context.request_id,
+                model=self._context.model,
+                agent_name=self._context.agent_name,
+                started_at=self._context.started_at,
+                status=terminal.status,
+                request_body=self._context.request_body,
+                response_body=terminal.response_body,
+                response_content_type=terminal.response_content_type,
+                http_status=terminal.http_status,
+                error_code=terminal.error_code,
+                response_blocks=terminal.response_blocks,
+                media_assets=terminal.media_assets,
+            )
+        finally:
+            if self._media_outputs is not None:
+                self._media_outputs.finish_request(self._context.request_id)
         return True
 
     def _record_agent_run(self, terminal: CompletionTerminal) -> bool:
@@ -174,6 +190,8 @@ class CompletionFinalizer:
                 timeline=self._capture.snapshot(),
                 response_text=terminal.response_text,
                 error_code=terminal.error_code,
+                response_blocks=terminal.response_blocks,
+                media_assets=terminal.media_assets,
             )
             self._events.publish_nowait(
                 {
