@@ -7,7 +7,6 @@ import { RouterLink, RouterView, useRoute } from 'vue-router'
 import {
   managementApi,
   type ApiServerSettings,
-  type CatalogResponse,
   type ConfigurationValidationSettings,
   type ManagementEvent,
 } from '@/api'
@@ -19,10 +18,9 @@ import {
 import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
 import { setLocale, type SupportedLocale } from '@/locales'
-import { navigationItems, sectionNavigationForPath } from '@/navigation'
+import { navigationItems } from '@/navigation'
 
 interface AppShellApi extends ManagementEventSource {
-  getCatalog(): Promise<CatalogResponse>
   getApiServer(): Promise<ApiServerSettings>
   getValidationSettings(): Promise<ConfigurationValidationSettings>
   startApiServer(): Promise<ApiServerSettings>
@@ -41,32 +39,12 @@ const mainContent = ref<HTMLElement | null>(null)
 const apiServerSettings = ref<ApiServerSettings | null>(null)
 const apiServerLoading = ref(true)
 const lifecycleAction = ref<'start' | 'stop' | ''>('')
-const componentNavigation = ref<Array<{ path: string, labelKey: string }>>([])
-
-const menuItems = computed<MenuNode[]>(() => navigationItems.map((item) => {
-  const children = item.sectionPrefix === '/components'
-    ? componentNavigation.value
-    : sectionNavigationForPath(item.path)
-  if (children.length > 0) {
-    return {
-      type: 'group',
-      text: t(item.labelKey),
-      icon: item.icon,
-      children: children.map((child) => ({
-        type: 'item',
-        text: t(child.labelKey),
-        href: child.path,
-        icon: 'bi-circle',
-      })),
-    }
-  }
-  return {
-    type: 'item',
-    text: t(item.labelKey),
-    href: item.path,
-    icon: item.icon,
-  }
-}))
+const menuItems = computed<MenuNode[]>(() => navigationItems.map((item) => ({
+  type: 'item',
+  text: t(item.labelKey),
+  href: item.path,
+  icon: item.icon,
+})))
 const pageTitle = computed(() => {
   const titleKey = route.meta.titleKey
   return typeof titleKey === 'string' ? t(titleKey) : ''
@@ -119,20 +97,6 @@ async function loadApiServer(): Promise<void> {
     apiServerSettings.value = null
   } finally {
     apiServerLoading.value = false
-  }
-}
-
-async function loadComponentNavigation(): Promise<void> {
-  try {
-    const catalog = await api.getCatalog()
-    componentNavigation.value = [...catalog.block_types]
-      .sort((left, right) => left.order - right.order)
-      .map((manifest) => ({
-        path: `/components/${manifest.type}`,
-        labelKey: `capabilities.${manifest.type}.label`,
-      }))
-  } catch {
-    componentNavigation.value = []
   }
 }
 
@@ -194,7 +158,6 @@ useManagementEvents(onManagementEvent, api, () => {
 onMounted(() => {
   document.body.classList.add('layout-fixed', 'sidebar-expand-lg', 'sidebar-mini', 'bg-body-tertiary')
   void loadApiServer()
-  void loadComponentNavigation()
   void validationSettings.load()
 })
 

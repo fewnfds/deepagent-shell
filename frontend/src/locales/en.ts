@@ -711,6 +711,7 @@ export const en: MessageSchema = {
     groups: {
       components: 'Components',
       agents: 'Agents',
+      plugins: 'Plugins',
     },
     catalogUnavailable: 'The capability catalog is currently unavailable.',
     unknownCategory: 'Unknown configuration type',

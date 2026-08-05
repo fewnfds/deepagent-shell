@@ -16,10 +16,17 @@ afterEach(() => {
 async function mountPage() {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/automation', component: AutomationPage }],
+    routes: [
+      { path: '/library/automation', component: AutomationPage },
+      { path: '/library/:type', component: { template: '<div />' } },
+    ],
   })
-  await router.push('/automation')
+  await router.push('/library/automation')
   await router.isReady()
+  vi.spyOn(managementApi, 'getCatalog').mockResolvedValue({
+    block_types: [],
+    editor_defaults: {},
+  })
   const wrapper = mount(AutomationPage, { global: { plugins: [router] } })
   await flushPromises()
   return wrapper
@@ -51,6 +58,7 @@ describe('AutomationPage', () => {
 
     const wrapper = await mountPage()
 
+    expect(wrapper.get('[data-testid="library-plugin-group"] button').attributes('aria-current')).toBe('page')
     expect(wrapper.text()).toContain('Market context')
     expect(wrapper.text()).toContain('market-context')
     expect(wrapper.text()).not.toContain('automation.plugins.entrypoints')

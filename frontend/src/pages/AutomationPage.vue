@@ -3,13 +3,19 @@ import { LteAlert, LteButton } from '@adminlte/vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { managementApi, type AutomationScriptResource } from '@/api'
+import {
+  managementApi,
+  type AutomationScriptResource,
+  type CapabilityManifest,
+} from '@/api'
+import ConfigurationLibraryNav from '@/components/ConfigurationLibraryNav.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useManagementError } from '@/composables/useManagementError'
 
 const { t } = useI18n()
 const managementError = useManagementError()
 const plugins = ref<AutomationScriptResource[]>([])
+const manifests = ref<CapabilityManifest[]>([])
 const pluginErrors = ref<Record<string, unknown>>({})
 const loading = ref(true)
 const pageError = ref('')
@@ -45,8 +51,18 @@ async function load(): Promise<void> {
   }
 }
 
+async function loadNavigation(): Promise<void> {
+  try {
+    const catalog = await managementApi.getCatalog()
+    manifests.value = [...catalog.block_types].sort((left, right) => left.order - right.order)
+  } catch {
+    manifests.value = []
+  }
+}
+
 onMounted(() => {
   void load()
+  void loadNavigation()
 })
 </script>
 
@@ -83,6 +99,8 @@ onMounted(() => {
         :title="t('automation.scripts.dependenciesRestartRequired', { count: dependencyRestartCount })"
       />
     </template>
+
+    <ConfigurationLibraryNav :manifests="manifests" />
 
     <section class="card">
       <div class="table-responsive">

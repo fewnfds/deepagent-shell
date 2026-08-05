@@ -366,6 +366,16 @@
         ]
       },
       {
+        "name": "ConfigurationLibraryNav",
+        "path": "src/components/ConfigurationLibraryNav.vue",
+        "kind": "layout-composition",
+        "reason": "Owns the shared component, Agent and plugin navigation rows across configuration repository pages",
+        "callers": [
+          "src/pages/AutomationPage.vue",
+          "src/pages/ConfigLibraryPage.vue"
+        ]
+      },
+      {
         "name": "FormField",
         "path": "src/components/FormField.vue",
         "kind": "domain-composition",
@@ -427,7 +437,7 @@
         "callers": [
           "src/components/PageShell.vue",
           "src/pages/ComponentsPage.vue",
-          "src/pages/ConfigLibraryPage.vue"
+          "src/components/ConfigurationLibraryNav.vue"
         ]
       },
       {

@@ -17,11 +17,15 @@ export const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', component: ApiServerSettingsPage, meta: { titleKey: 'apiServer.homeTitle' } },
+    { path: '/agents', redirect: '/agents/primary' },
     { path: '/agents/primary', component: PrimaryAgentPage, meta: { titleKey: 'navigation.agents' } },
     { path: '/agents/subagents', component: SubagentPage, meta: { titleKey: 'navigation.agents' } },
-    { path: '/automation', component: AutomationPage, meta: { titleKey: 'navigation.automation' } },
+    { path: '/components', redirect: '/components/model' },
     { path: '/components/:type', component: ComponentsPage, meta: { titleKey: 'components.title' } },
+    { path: '/library', redirect: '/library/model' },
+    { path: '/library/automation', component: AutomationPage, meta: { titleKey: 'library.title' } },
     { path: '/library/:type', component: ConfigLibraryPage, meta: { titleKey: 'library.title' } },
+    { path: '/system', redirect: '/system/config' },
     {
       path: '/system/config',
       component: SystemSettingsPage,

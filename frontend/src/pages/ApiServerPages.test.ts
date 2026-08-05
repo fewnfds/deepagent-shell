@@ -154,11 +154,10 @@ describe('ApiServerSettingsPage', () => {
     expect(navigationItems[0]).toMatchObject({ path: '/', labelKey: 'navigation.home' })
     expect(navigationItems.map((item) => item.path)).toEqual([
       '/',
-      '/system/config',
-      '/agents/primary',
-      '/automation',
-      '/components/model',
-      '/library/model',
+      '/system',
+      '/agents',
+      '/components',
+      '/library',
       '/terminology',
       '/style-lab',
     ])

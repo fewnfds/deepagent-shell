@@ -6,12 +6,12 @@ import { useRoute, useRouter } from 'vue-router'
 
 import { managementApi, type CapabilityManifest, type ValidationIssue } from '@/api'
 import ConfigDetail from '@/components/ConfigDetail.vue'
+import ConfigurationLibraryNav from '@/components/ConfigurationLibraryNav.vue'
 import DataTableWorkbench from '@/components/data-table/DataTableWorkbench.vue'
 import type { DataTableConfig } from '@/components/data-table/types'
 import FormField from '@/components/FormField.vue'
 import ModalHost from '@/components/ModalHost.vue'
 import PageShell from '@/components/PageShell.vue'
-import SectionNav from '@/components/SectionNav.vue'
 import type { SectionNavItem } from '@/components/sectionNav'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
 import { useConfirmation } from '@/composables/useConfirmation'
@@ -125,11 +125,6 @@ async function refresh(): Promise<void> {
   refreshing.value = true
   await Promise.all([libraryTable.value?.reload(), refreshRepositoryValidation()])
   refreshing.value = false
-}
-
-function selectCategory(id: string): void {
-  if (id === activeCategoryId.value) return
-  void router.push(`/library/${encodeURIComponent(id)}`)
 }
 
 function showDetail(item: LibraryItem): void {
@@ -348,34 +343,7 @@ onMounted(async () => {
       </LteButton>
     </template>
 
-    <div
-      v-if="componentCategoryItems.length"
-      class="d-flex flex-wrap align-items-center gap-2 mb-2"
-      data-testid="library-component-group"
-    >
-      <span class="fw-semibold">{{ t('library.groups.components') }}</span>
-      <SectionNav
-        :active-id="activeCategoryId"
-        :aria-label="t('library.groups.components')"
-        :items="componentCategoryItems"
-        layout="inline"
-        @select="selectCategory"
-      />
-    </div>
-    <div
-      v-if="agentCategoryItems.length"
-      class="d-flex flex-wrap align-items-center gap-2 mb-3"
-      data-testid="library-agent-group"
-    >
-      <span class="fw-semibold">{{ t('library.groups.agents') }}</span>
-      <SectionNav
-        :active-id="activeCategoryId"
-        :aria-label="t('library.groups.agents')"
-        :items="agentCategoryItems"
-        layout="inline"
-        @select="selectCategory"
-      />
-    </div>
+    <ConfigurationLibraryNav :manifests="manifests" />
 
     <div class="row g-3 align-items-start" data-testid="library-layout">
       <section class="col-lg-8" data-testid="library-content-region">

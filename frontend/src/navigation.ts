@@ -2,18 +2,16 @@ interface NavigationItem {
   path: string
   labelKey: string
   icon: string
-  sectionPrefix: string
 }
 
 export const navigationItems: NavigationItem[] = [
-  { path: '/', labelKey: 'navigation.home', icon: 'bi-house', sectionPrefix: '/' },
-  { path: '/system/config', labelKey: 'navigation.system', icon: 'bi-gear', sectionPrefix: '/system' },
-  { path: '/agents/primary', labelKey: 'navigation.agents', icon: 'bi-robot', sectionPrefix: '/agents' },
-  { path: '/automation', labelKey: 'navigation.automation', icon: 'bi-arrow-clockwise', sectionPrefix: '/automation' },
-  { path: '/components/model', labelKey: 'navigation.components', icon: 'bi-boxes', sectionPrefix: '/components' },
-  { path: '/library/model', labelKey: 'navigation.library', icon: 'bi-archive', sectionPrefix: '/library' },
-  { path: '/terminology', labelKey: 'navigation.terminology', icon: 'bi-book', sectionPrefix: '/terminology' },
-  { path: '/style-lab', labelKey: 'navigation.styleLab', icon: 'bi-sliders', sectionPrefix: '/style-lab' },
+  { path: '/', labelKey: 'navigation.home', icon: 'bi-house' },
+  { path: '/system', labelKey: 'navigation.system', icon: 'bi-gear' },
+  { path: '/agents', labelKey: 'navigation.agents', icon: 'bi-robot' },
+  { path: '/components', labelKey: 'navigation.components', icon: 'bi-boxes' },
+  { path: '/library', labelKey: 'navigation.library', icon: 'bi-archive' },
+  { path: '/terminology', labelKey: 'navigation.terminology', icon: 'bi-book' },
+  { path: '/style-lab', labelKey: 'navigation.styleLab', icon: 'bi-sliders' },
 ]
 
 interface SectionNavigationItem {

@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ManagementApiError,
   type ApiServerSettings,
-  type CatalogResponse,
 } from '@/api'
 import { useToasts } from '@/composables/useToasts'
 import { i18n, setLocale } from '@/locales'
@@ -41,35 +40,6 @@ const stoppedSettings: ApiServerSettings = {
 
 function createShellApi(overrides: Record<string, unknown> = {}) {
   return {
-    getCatalog: vi.fn(async (): Promise<CatalogResponse> => ({
-      block_types: [
-        {
-          type: 'skill',
-          terminology_key: 'skill',
-          label: 'Ignored',
-          order: 2,
-          icon_key: 'book',
-          editor_key: 'skill',
-          subagent_overrideable: true,
-          required: false,
-          subagent_policy: 'inherit',
-          tool_names: [],
-        },
-        {
-          type: 'model',
-          terminology_key: 'model',
-          label: 'Ignored',
-          order: 1,
-          icon_key: 'bot',
-          editor_key: 'model',
-          subagent_overrideable: true,
-          required: true,
-          subagent_policy: 'inherit',
-          tool_names: [],
-        },
-      ],
-      editor_defaults: {},
-    })),
     getApiServer: vi.fn(async () => stoppedSettings),
     getValidationSettings: vi.fn(async () => ({
       debounce_ms: 1000,
@@ -117,6 +87,7 @@ async function mountShell(path = '/', api = createShellApi()) {
       '/components/model',
       '/components/skill',
       '/library/model',
+      '/library/automation',
       '/terminology',
     ].map((routePath) => ({
       path: routePath,
@@ -159,19 +130,18 @@ describe('AppShell', () => {
   it('renders real hash-router navigation without AdminLTE demo content', async () => {
     const { wrapper: shell } = await mountShell('/system/files')
 
-    expect(shell.get('a[href="/system/files"]').classes()).toContain('active')
-    expect(shell.text()).toContain('文件管理')
+    expect(shell.get('a[href="/system"]').classes()).toContain('active')
     expect(shell.text()).not.toContain('Alexander Pierce')
     expect(shell.text()).not.toContain('Followers')
     expect(shell.find('[data-bs-toggle="dropdown"]').exists()).toBe(false)
     expect(shell.find('.app-footer').exists()).toBe(false)
     expect(shell.get('a[href="/"] .nav-icon').classes()).toContain('bi-house')
-    expect(shell.get('a[href="/system/files"] .nav-icon').classes()).toContain('bi-circle')
-    expect(shell.get('a[href="/system/agent-sessions"]').text()).toContain('历史会话')
-    expect(shell.get('a[href="/system/agent-sessions"]').element.closest('ul')?.textContent).toContain('系统配置')
+    expect(shell.find('.app-sidebar .nav-treeview').exists()).toBe(false)
+    expect(shell.find('a[href="/system/files"]').exists()).toBe(false)
+    expect(shell.find('a[href="/agents/primary"]').exists()).toBe(false)
+    expect(shell.find('a[href^="/components/"]').exists()).toBe(false)
     expect(shell.get('a[href="/style-lab"] .nav-icon').classes()).toContain('bi-sliders')
-    expect(shell.findAll('a[href^="/components/"]').map((link) => link.attributes('href')))
-      .toEqual(['/components/model', '/components/skill'])
+    expect(shell.findAll('.app-sidebar .nav-link')).toHaveLength(7)
   })
 
   it('renders the localized route title beside the navigation toggle', async () => {
@@ -188,6 +158,11 @@ describe('AppShell', () => {
     await shell.get('#app-language').trigger('click')
     await nextTick()
     expect(title.text()).toBe('Component configuration')
+
+    await router.push('/library/automation')
+    await nextTick()
+    expect(title.text()).toBe('Configuration library')
+    expect(shell.get('a[href="/library"]').classes()).toContain('active')
   })
 
   it('uses the official color-mode state and persists user changes', async () => {
@@ -273,21 +248,21 @@ describe('AppShell', () => {
     await nextTick()
 
     expect(document.documentElement.lang).toBe('en')
-    expect(shell.text()).toContain('System settings')
+    expect(shell.text()).toContain('System')
     expect(languageButton.attributes('aria-label')).toBe('Switch to variable names')
 
     await languageButton.trigger('click')
     await nextTick()
 
     expect(document.documentElement.lang).toBe('en')
-    expect(shell.text()).toContain('navigation.sections.systemSettings')
+    expect(shell.text()).toContain('navigation.system')
     expect(languageButton.attributes('aria-label')).toBe('preferences.switchToChinese')
 
     await languageButton.trigger('click')
     await nextTick()
 
     expect(document.documentElement.lang).toBe('zh-CN')
-    expect(shell.text()).toContain('系统配置')
+    expect(shell.text()).toContain('系统')
     expect(languageButton.attributes('aria-label')).toBe('Switch to English')
   })
 
