@@ -45,19 +45,22 @@ def owner(
     interval: float | None = None,
     config: dict[str, object] | None = None,
 ) -> AutomationOwner:
+    binding = {
+        "plugin_id": plugin_id,
+        "enabled": True,
+        "config": config or {},
+    }
     return AutomationOwner(
         id="owner",
         type="primary",
         name="Primary",
         automation={
-            "plugins": [
-                {
-                    "plugin_id": plugin_id,
-                    "enabled": True,
-                    "config": config or {},
-                }
-            ],
-            "lifecycle_interval_seconds": interval,
+            "hooks": [binding] if interval is None else [],
+            "periodic": (
+                [{**binding, "interval_seconds": interval}]
+                if interval is not None
+                else []
+            ),
         },
         mapped_paths={},
     )
@@ -268,6 +271,63 @@ async def test_lifecycle_drains_then_complete_runs_and_modules_are_cleaned(
 
 
 @pytest.mark.anyio
+async def test_periodic_bindings_have_independent_tasks_and_failure_boundaries(
+    tmp_path: Path,
+) -> None:
+    marker = tmp_path / "healthy-tick"
+    write_plugin(
+        tmp_path / "plugins",
+        "periodic-plugin",
+        "from pathlib import Path\n"
+        "async def lifecycle(ctx):\n"
+        "    if ctx.config.get('fail'):\n        raise RuntimeError('stopped')\n"
+        "    Path(ctx.config['marker']).write_text(f\"{ctx.plugin['kind']}:{ctx.tick}\")\n",
+        entrypoints=("lifecycle",),
+    )
+    runtime = AutomationRuntime(
+        request_id="request-id",
+        owners=[
+            AutomationOwner(
+                id="owner",
+                type="primary",
+                name="Primary",
+                automation={
+                    "hooks": [],
+                    "periodic": [
+                        {
+                            "plugin_id": "periodic-plugin",
+                            "enabled": True,
+                            "config": {"fail": True},
+                            "interval_seconds": 0.1,
+                        },
+                        {
+                            "plugin_id": "periodic-plugin",
+                            "enabled": True,
+                            "config": {"marker": str(marker)},
+                            "interval_seconds": 3600,
+                        },
+                    ],
+                },
+                mapped_paths={},
+            )
+        ],
+        client_messages=[{"role": "user", "content": "original"}],
+        plugins_dir=tmp_path / "plugins",
+        skills_dir=tmp_path / "skills",
+        runtime_root=tmp_path / "runtime",
+    )
+
+    await runtime.start()
+    for _ in range(200):
+        if marker.exists():
+            break
+        await asyncio.sleep(0)
+    await runtime.finish({"status": "completed"})
+
+    assert marker.read_text(encoding="utf-8") == "periodic:0"
+
+
+@pytest.mark.anyio
 async def test_prepare_validates_every_owner_message_view_before_construction(
     tmp_path: Path,
 ) -> None:
@@ -289,7 +349,7 @@ async def test_prepare_validates_every_owner_message_view_before_construction(
 def test_from_assembly_keeps_one_owner_per_recursive_subagent_profile(
     tmp_path: Path,
 ) -> None:
-    empty = {"plugins": [], "lifecycle_interval_seconds": None}
+    empty = {"hooks": [], "periodic": []}
     edge_b = SimpleNamespace(target_key="B")
     edge_c = SimpleNamespace(target_key="C")
     node_b = SimpleNamespace(

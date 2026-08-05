@@ -34,7 +34,7 @@ automation_scripts/market-context/
 }
 ```
 
-`entrypoints` 至少声明一项，只能包含：
+`entrypoints` 至少声明一项主要入口（`middleware`、`prepare` 或 `lifecycle`），并可附带 `complete`；只能包含：
 
 | 声明 | `main.py` 入口 | 所属边界 |
 | --- | --- | --- |
@@ -98,7 +98,7 @@ binding 顺序就是最终 Middleware 顺序。before、after 和 wrap 的正序
 
 ### prepare
 
-`prepare` 在配置快照解析完成后、任何 Primary/Subagent `create_deep_agent()` 之前按 Agent 和 binding 顺序执行：
+`prepare` 在配置快照解析完成后、任何 Primary/Subagent `create_deep_agent()` 之前按 Agent 和 Hook binding 顺序执行：
 
 ```python
 async def prepare(ctx):
@@ -118,17 +118,18 @@ Subagent 每次调用仍使用新的 LangGraph state。它的输入顺序是：�
 
 ### lifecycle
 
-Agent 配置填写 `lifecycle_interval_seconds` 后，该身份在一次 API 请求内最多启动一个 fixed-delay 循环。首轮在
-所有 Agent 构造成功后立即开始；每轮按 binding 顺序调用所有声明 `lifecycle` 的启用插件，一轮结束后再等待
-间隔，不重叠、不补跑。
+每个启用的周期 binding 都保存自己的 `interval_seconds`，并在一次 API 请求内拥有一个独立 fixed-delay
+循环。首轮在所有 Agent 构造成功后立即开始；本轮 `lifecycle(ctx)` 返回后再等待该 binding 的间隔，不重叠、
+不补跑。不同周期 binding 可以使用不同间隔并彼此独立运行。
 
-一次 lifecycle 调用失败只停止该 Agent 身份的循环，不接管 Agent graph，也不自动 retry。lifecycle 不热修改
+一次 lifecycle 调用失败只停止这个周期 binding 的循环，不影响同一 Agent 的其他周期插件，不接管 Agent
+graph，也不自动 retry。lifecycle 不热修改
 已经启动的模型上下文；可以更新 `ctx.vars`、外部服务或 mapped 文件，供后续 Hook/工具读取。
 
 ### complete
 
 请求正常完成、失败、超时、取消或客户端断开后，Shell 先停止产生新的 lifecycle tick，等待正在运行的一轮
-自然返回，再按 binding 顺序调用 `complete`：
+自然返回，再分别按 Hook 和周期 binding 顺序调用声明的 `complete`：
 
 ```python
 async def complete(ctx):
@@ -144,28 +145,37 @@ Primary 的 `automation` 直接保存：
 
 ```json
 {
-  "plugins": [
+  "hooks": [
     {
       "plugin_id": "market-context",
       "enabled": true,
       "config": {"market": "example"}
     }
   ],
-  "lifecycle_interval_seconds": 5
+  "periodic": [
+    {
+      "plugin_id": "market-refresh",
+      "enabled": true,
+      "config": {"market": "example"},
+      "interval_seconds": 5
+    }
+  ]
 }
 ```
 
-同一个插件可以用不同 config 挂载多次；每个 binding 有独立 plugin-scope 变量。`enabled=false` 的 binding 不
-import、不执行，也不因第三方依赖未准备而阻止请求。
+Hook binding 只执行 `prepare`、`middleware` 和 `complete`；周期 binding 只执行 `lifecycle` 和 `complete`。
+同一个插件可以分别挂在两类列表，也可以用不同 config 挂载多次；每个 binding 有独立模块实例和 plugin-scope
+变量。`enabled=false` 的 binding 不 import、不执行，也不因第三方依赖未准备而阻止请求。
 
-Subagent 的整组 `settings.automation` 使用一种模式：
+Subagent 对 `hooks` 和 `periodic` 分别使用一种模式：
 
-- `inherit`：使用当前 Primary 的整组 bindings 和 interval；
-- `replace`：使用这个 Subagent 自己保存的 bindings 和 interval；
-- `disabled`：不使用自动化插件。
+- `inherit`：使用当前 Primary 的同类 bindings；
+- `replace`：使用这个 Subagent 自己保存的同类 bindings；
+- `disabled`：不使用这类插件。
 
-同一个 Subagent profile 无论从 diamond 还是显式递归到达，在一次请求中只有一个 Agent 身份上下文和一个可选
-lifecycle loop；每次 `task` invocation 的 LangGraph state 仍然独立。
+因此可以继承 Hook 插件同时关闭周期插件，反之亦然。同一个 Subagent profile 无论从 diamond 还是显式递归
+到达，在一次请求中只有一个 Agent 身份上下文；每个周期 binding 最多有一个循环。每次 `task` invocation 的
+LangGraph state 仍然独立。
 
 ## ctx 与不可变原始消息
 
@@ -184,7 +194,7 @@ lifecycle loop；每次 `task` invocation 的 LangGraph state 仍然独立。
 
 - `ctx.request.id`、`ctx.request.messages`
 - `ctx.agent`：只读 `id/type/name`
-- `ctx.plugin`：只读 `id/binding_index`
+- `ctx.plugin`：只读 `id/kind/binding_index`，`kind` 为 `hook` 或 `periodic`
 - `ctx.config`：当前 binding 的只读 JSON 配置
 - `ctx.vars.get/set/delete(path)`
 - `ctx.paths.plugin_dir`、`runtime_dir`、`mapped`

@@ -3,53 +3,81 @@ import { describe, expect, it } from 'vitest'
 import {
   automationPayload,
   blankAutomationPluginBinding,
+  blankPeriodicAutomationPluginBinding,
   normalizeAutomation,
   normalizeSubagentAutomation,
   subagentAutomationPayload,
 } from './automation'
 
 describe('automation binding adapters', () => {
-  it('round-trips ordered plugin bindings and JSON object config', () => {
+  it('round-trips separate Hook and independently scheduled periodic bindings', () => {
     const draft = normalizeAutomation({
-      plugins: [{
+      hooks: [{
         plugin_id: 'message-plugin',
         enabled: true,
         config: { slot: 'user' },
       }],
-      lifecycle_interval_seconds: 2.5,
+      periodic: [{
+        plugin_id: 'refresh-plugin',
+        enabled: true,
+        config: { source: 'market' },
+        interval_seconds: 2.5,
+      }],
     })
-    draft.plugins.push({
+    draft.hooks.push({
       ...blankAutomationPluginBinding(),
       plugin_id: 'file-plugin',
       enabled: false,
       config_text: '{"path":"/context.txt"}',
     })
+    draft.periodic.push({
+      ...blankPeriodicAutomationPluginBinding(),
+      plugin_id: 'slow-refresh-plugin',
+      interval_seconds: 30,
+    })
 
     expect(automationPayload(draft)).toEqual({
-      plugins: [
+      hooks: [
         { plugin_id: 'message-plugin', enabled: true, config: { slot: 'user' } },
         { plugin_id: 'file-plugin', enabled: false, config: { path: '/context.txt' } },
       ],
-      lifecycle_interval_seconds: 2.5,
+      periodic: [
+        {
+          plugin_id: 'refresh-plugin',
+          enabled: true,
+          config: { source: 'market' },
+          interval_seconds: 2.5,
+        },
+        {
+          plugin_id: 'slow-refresh-plugin',
+          enabled: true,
+          config: {},
+          interval_seconds: 30,
+        },
+      ],
     })
   })
 
-  it('requires object config and clears configuration outside replace mode', () => {
+  it('keeps Hook and periodic Subagent overrides independent', () => {
     const draft = normalizeSubagentAutomation({
-      mode: 'replace',
-      plugins: [{ plugin_id: 'refresh-plugin', config: {} }],
-      lifecycle_interval_seconds: 5,
+      hooks: {
+        mode: 'replace',
+        plugins: [{ plugin_id: 'context-plugin', config: {} }],
+      },
+      periodic: {
+        mode: 'disabled',
+        plugins: [],
+      },
     })
-    draft.plugins[0]!.config_text = '[]'
+    draft.hooks.plugins[0]!.config_text = '[]'
     expect(() => subagentAutomationPayload(draft)).toThrow(
       'Plugin config must be a JSON object.',
     )
 
-    draft.mode = 'disabled'
+    draft.hooks.mode = 'inherit'
     expect(subagentAutomationPayload(draft)).toEqual({
-      mode: 'disabled',
-      plugins: [],
-      lifecycle_interval_seconds: null,
+      hooks: { mode: 'inherit', plugins: [] },
+      periodic: { mode: 'disabled', plugins: [] },
     })
   })
 })

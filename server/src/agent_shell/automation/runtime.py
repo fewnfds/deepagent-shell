@@ -90,7 +90,7 @@ class AutomationRuntime:
         self._agent_variables: dict[str, dict[str, Any]] = {
             owner.id: {} for owner in owners
         }
-        self._plugin_variables: dict[tuple[str, int], dict[str, Any]] = {}
+        self._plugin_variables: dict[tuple[str, str, int], dict[str, Any]] = {}
         self._skills_dir = skills_dir
         self._request_runtime_dir = (
             runtime_root / "automation" / self.request_id
@@ -217,16 +217,21 @@ class AutomationRuntime:
     def initial_files_for(self, owner_id: str) -> dict[str, str | bytes]:
         return dict(self._initial_files[owner_id])
 
-    def _variables(self, owner_id: str, binding_index: int) -> AutomationVariables:
+    def _variables(
+        self, owner_id: str, binding_kind: str, binding_index: int
+    ) -> AutomationVariables:
         return AutomationVariables(
             self._request_variables,
             self._agent_variables[owner_id],
-            self._plugin_variables.setdefault((owner_id, binding_index), {}),
+            self._plugin_variables.setdefault(
+                (owner_id, binding_kind, binding_index), {}
+            ),
         )
 
     def _context(
         self,
         owner: AutomationOwner,
+        binding_kind: str,
         binding_index: int,
         binding: dict[str, Any],
         plugin_dir: Path,
@@ -243,13 +248,14 @@ class AutomationRuntime:
             owner_id=owner.id,
             owner_type=owner.type,
             owner_name=owner.name,
+            binding_kind=binding_kind,
             binding_index=binding_index,
             plugin_id=str(binding["plugin_id"]),
             plugin_dir=plugin_dir,
             runtime_dir=self.owner_runtime_dir(owner.id),
             mapped_paths=owner.mapped_paths,
             config=dict(binding.get("config", {})),
-            variables=self._variables(owner.id, binding_index),
+            variables=self._variables(owner.id, binding_kind, binding_index),
             stage=stage,
             messages=messages,
             initial_files=initial_files,
@@ -260,6 +266,7 @@ class AutomationRuntime:
     async def _run_shell_entrypoint(
         self,
         owner: AutomationOwner,
+        binding_kind: str,
         binding_index: int,
         binding: dict[str, Any],
         entrypoint: str,
@@ -272,6 +279,7 @@ class AutomationRuntime:
         plugin_id = str(binding["plugin_id"])
         function, plugin_dir = self._loader.entrypoint(
             owner.id,
+            binding_kind,
             binding_index,
             plugin_id,
             entrypoint,
@@ -280,6 +288,7 @@ class AutomationRuntime:
             return
         context = self._context(
             owner,
+            binding_kind,
             binding_index,
             binding,
             plugin_dir,
@@ -304,11 +313,12 @@ class AutomationRuntime:
         from agent_shell.runtime.agent_builder import validate_openai_messages
 
         for owner in self._owners:
-            for binding_index, binding in enumerate(owner.automation.get("plugins", [])):
+            for binding_index, binding in enumerate(owner.automation.get("hooks", [])):
                 if not binding.get("enabled", True):
                     continue
                 await self._run_shell_entrypoint(
                     owner,
+                    "hook",
                     binding_index,
                     binding,
                     "prepare",
@@ -325,12 +335,13 @@ class AutomationRuntime:
             return cached
         owner = self._owner_by_id[owner_id]
         middleware: list[AgentMiddleware] = []
-        for binding_index, binding in enumerate(owner.automation.get("plugins", [])):
+        for binding_index, binding in enumerate(owner.automation.get("hooks", [])):
             if not binding.get("enabled", True):
                 continue
             plugin_id = str(binding["plugin_id"])
             factory, plugin_dir = self._loader.entrypoint(
                 owner.id,
+                "hook",
                 binding_index,
                 plugin_id,
                 "middleware",
@@ -339,6 +350,7 @@ class AutomationRuntime:
                 continue
             context = self._context(
                 owner,
+                "hook",
                 binding_index,
                 binding,
                 plugin_dir,
@@ -377,37 +389,49 @@ class AutomationRuntime:
         if self._stop_event.is_set():
             return
         for owner in self._owners:
-            interval = owner.automation.get("lifecycle_interval_seconds")
-            if interval is not None:
+            for binding_index, binding in enumerate(
+                owner.automation.get("periodic", [])
+            ):
+                if not binding.get("enabled", True):
+                    continue
                 self._tasks.append(
                     asyncio.create_task(
-                        self._lifecycle_loop(owner, float(interval)),
-                        name=f"automation:{self.request_id}:{owner.id}",
+                        self._lifecycle_loop(owner, binding_index, binding),
+                        name=(
+                            f"automation:{self.request_id}:{owner.id}:"
+                            f"periodic:{binding_index}"
+                        ),
                     )
                 )
         if self._tasks:
             await asyncio.sleep(0)
 
-    async def _lifecycle_loop(self, owner: AutomationOwner, interval: float) -> None:
+    async def _lifecycle_loop(
+        self,
+        owner: AutomationOwner,
+        binding_index: int,
+        binding: dict[str, Any],
+    ) -> None:
         tick = 0
+        interval = float(binding["interval_seconds"])
         while not self._stop_event.is_set():
             try:
-                for binding_index, binding in enumerate(owner.automation.get("plugins", [])):
-                    if binding.get("enabled", True):
-                        await self._run_shell_entrypoint(
-                            owner,
-                            binding_index,
-                            binding,
-                            "lifecycle",
-                            tick=tick,
-                        )
+                await self._run_shell_entrypoint(
+                    owner,
+                    "periodic",
+                    binding_index,
+                    binding,
+                    "lifecycle",
+                    tick=tick,
+                )
             except asyncio.CancelledError:
                 raise
             except Exception:
                 _LOGGER.exception(
-                    "lifecycle automation stopped request=%s agent=%s",
+                    "periodic automation stopped request=%s agent=%s plugin=%s",
                     self.request_id,
                     owner.id,
+                    binding.get("plugin_id", ""),
                 )
                 return
             tick += 1
@@ -426,24 +450,29 @@ class AutomationRuntime:
         if self._tasks:
             await asyncio.gather(*self._tasks, return_exceptions=True)
         for owner in self._owners:
-            for binding_index, binding in enumerate(owner.automation.get("plugins", [])):
-                if not binding.get("enabled", True):
-                    continue
-                try:
-                    await self._run_shell_entrypoint(
-                        owner,
-                        binding_index,
-                        binding,
-                        "complete",
-                        terminal=terminal,
-                    )
-                except Exception:
-                    _LOGGER.exception(
-                        "complete automation failed request=%s agent=%s plugin=%s",
-                        self.request_id,
-                        owner.id,
-                        binding.get("plugin_id", ""),
-                    )
+            for binding_kind, bindings in (
+                ("hook", owner.automation.get("hooks", [])),
+                ("periodic", owner.automation.get("periodic", [])),
+            ):
+                for binding_index, binding in enumerate(bindings):
+                    if not binding.get("enabled", True):
+                        continue
+                    try:
+                        await self._run_shell_entrypoint(
+                            owner,
+                            binding_kind,
+                            binding_index,
+                            binding,
+                            "complete",
+                            terminal=terminal,
+                        )
+                    except Exception:
+                        _LOGGER.exception(
+                            "complete automation failed request=%s agent=%s plugin=%s",
+                            self.request_id,
+                            owner.id,
+                            binding.get("plugin_id", ""),
+                        )
         self._loader.close()
         if self._request_runtime_dir.exists():
             shutil.rmtree(self._request_runtime_dir, ignore_errors=True)

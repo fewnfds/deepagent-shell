@@ -132,7 +132,7 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
 
         def automation(role: str, ready: str) -> dict[str, object]:
             return {
-                "plugins": [{
+                "hooks": [{
                     "plugin_id": "prepare-shared-prefix",
                     "enabled": True,
                     "config": {
@@ -142,7 +142,7 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
                         "ready": ready,
                     },
                 }],
-                "lifecycle_interval_seconds": None,
+                "periodic": [],
             }
 
         primary_automation = automation(
@@ -168,8 +168,11 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
                 subagents=children,
             )
             payload["settings"]["automation"] = {
-                "mode": "replace",
-                **worker_automation,
+                "hooks": {
+                    "mode": "replace",
+                    "plugins": worker_automation["hooks"],
+                },
+                "periodic": {"mode": "inherit", "plugins": []},
             }
             return payload
 

@@ -895,21 +895,20 @@ class ConfigurationValidationService:
             subagent_name = str(profile["name"])
 
             automation_selection = settings.get("automation", {})
-            automation_mode = automation_selection.get("mode", "inherit")
-            if automation_mode == "inherit":
-                child_automation = primary_automation
-            elif automation_mode == "disabled":
-                child_automation = {
-                    "plugins": [],
-                    "lifecycle_interval_seconds": None,
-                }
-            else:
-                child_automation = {
-                    "plugins": list(automation_selection.get("plugins", [])),
-                    "lifecycle_interval_seconds": automation_selection.get(
-                        "lifecycle_interval_seconds"
-                    ),
-                }
+
+            def resolve_automation_group(group: str) -> list[dict[str, Any]]:
+                selection = automation_selection.get(group, {})
+                mode = selection.get("mode", "inherit")
+                if mode == "inherit":
+                    return list(primary_automation.get(group, []))
+                if mode == "disabled":
+                    return []
+                return list(selection.get("plugins", []))
+
+            child_automation = {
+                "hooks": resolve_automation_group("hooks"),
+                "periodic": resolve_automation_group("periodic"),
+            }
 
             (
                 child_blocks,
@@ -934,16 +933,15 @@ class ConfigurationValidationService:
             )
             if child_tool_issue is not None:
                 child_issues.append(child_tool_issue)
-            if automation_mode == "replace":
-                child_issues.extend(
-                    self._automation_validation.configuration_issues(
-                        child_automation,
-                        scope="subagent",
-                        owner_id=profile_id,
-                        owner_name=subagent_name,
-                        path_prefix="settings.automation",
-                    )
+            child_issues.extend(
+                self._automation_validation.configuration_issues(
+                    automation_selection,
+                    scope="subagent",
+                    owner_id=profile_id,
+                    owner_name=subagent_name,
+                    path_prefix="settings.automation",
                 )
+            )
             issues.extend(child_issues)
             child_edges: list[ResolvedSubagentEdge] = []
             if len(issues) == issue_count:

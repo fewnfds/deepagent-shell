@@ -2,7 +2,6 @@
 import { LteButton } from '@adminlte/vue'
 import { useI18n } from 'vue-i18n'
 
-import FormField from '@/components/FormField.vue'
 import {
   blankSubagentReference,
   type SubagentProfile,
@@ -37,10 +36,6 @@ function updateReference(index: number, subagentId: string): void {
 function profileFor(reference: SubagentReference): SubagentProfile | undefined {
   return props.profiles.find((profile) => profile.id === reference.subagent_id)
 }
-
-function fieldPath(index: number): string {
-  return `${props.pathPrefix ?? 'subagents'}.${index}.subagent_id`
-}
 </script>
 
 <template>
@@ -50,6 +45,7 @@ function fieldPath(index: number): string {
         {{ t('agents.primary.referencesTitle') }}
       </h2>
       <LteButton theme="success" type="button" @click="addReference">
+        <i class="bi bi-plus-lg" aria-hidden="true" />
         {{ t('agents.primary.addReference') }}
       </LteButton>
     </header>
@@ -62,23 +58,13 @@ function fieldPath(index: number): string {
       class="card mb-3"
       data-testid="subagent-reference-card"
     >
-      <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-        <h3 class="card-title mb-0">
-          {{ profileFor(reference)?.component_name || t('agents.primary.unselectedReference') }}
-        </h3>
-        <LteButton
-          class="ms-auto"
-          data-action="remove-subagent-reference"
-          theme="danger"
-          type="button"
-          @click="removeReference(index)"
-        >
-          {{ t('common.remove') }}
-        </LteButton>
-      </header>
       <div class="card-body">
-        <FormField :field-path="fieldPath(index)">
+        <div class="d-flex align-items-center gap-2">
+          <label class="visually-hidden" :for="`subagent-reference-${index}`">
+            {{ t('agents.primary.reference') }}
+          </label>
           <select
+            :id="`subagent-reference-${index}`"
             class="form-select"
             data-testid="subagent-reference"
             :value="reference.subagent_id"
@@ -89,7 +75,18 @@ function fieldPath(index: number): string {
               {{ profile.component_name }} · {{ profile.name }}
             </option>
           </select>
-        </FormField>
+          <LteButton
+            class="ms-auto"
+            data-action="remove-subagent-reference"
+            :aria-label="t('common.remove')"
+            :title="t('common.remove')"
+            theme="danger"
+            type="button"
+            @click="removeReference(index)"
+          >
+            <i class="bi bi-trash" aria-hidden="true" />
+          </LteButton>
+        </div>
         <p v-if="profileFor(reference)" class="form-text mb-0">
           {{ profileFor(reference)?.description }}
         </p>

@@ -114,7 +114,7 @@ export function blankPrimaryAgent(): PrimaryAgentProfile {
     name: '',
     capability_refs: [],
     subagents: [],
-    automation: { plugins: [], lifecycle_interval_seconds: null },
+    automation: { hooks: [], periodic: [] },
   }
 }
 
@@ -165,9 +165,8 @@ export function blankSubagent(): SubagentProfile {
       capability_overrides: [],
       subagents: [],
       automation: {
-        mode: 'inherit',
-        plugins: [],
-        lifecycle_interval_seconds: null,
+        hooks: { mode: 'inherit', plugins: [] },
+        periodic: { mode: 'inherit', plugins: [] },
       },
     },
   }

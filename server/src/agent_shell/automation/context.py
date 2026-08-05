@@ -96,6 +96,7 @@ class AutomationContext:
         owner_id: str,
         owner_type: str,
         owner_name: str,
+        binding_kind: str,
         binding_index: int,
         plugin_id: str,
         plugin_dir: Path,
@@ -114,7 +115,11 @@ class AutomationContext:
             {"id": owner_id, "type": owner_type, "name": owner_name}
         )
         self.plugin = MappingProxyType(
-            {"id": plugin_id, "binding_index": binding_index}
+            {
+                "id": plugin_id,
+                "kind": binding_kind,
+                "binding_index": binding_index,
+            }
         )
         self.config = freeze(deepcopy(config))
         self.vars = variables

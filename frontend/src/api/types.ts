@@ -168,6 +168,10 @@ export interface AutomationPluginBinding {
   config: Record<string, unknown>
 }
 
+export interface PeriodicAutomationPluginBinding extends AutomationPluginBinding {
+  interval_seconds: number
+}
+
 export interface AutomationScriptResource {
   api_version: 2
   id: string
@@ -182,14 +186,23 @@ export interface AutomationScriptResource {
 }
 
 export interface PrimaryAutomation {
+  hooks: AutomationPluginBinding[]
+  periodic: PeriodicAutomationPluginBinding[]
+}
+
+export interface HookAutomationOverride {
+  mode: 'inherit' | 'replace' | 'disabled'
   plugins: AutomationPluginBinding[]
-  lifecycle_interval_seconds: number | null
+}
+
+export interface PeriodicAutomationOverride {
+  mode: 'inherit' | 'replace' | 'disabled'
+  plugins: PeriodicAutomationPluginBinding[]
 }
 
 export interface SubagentAutomation {
-  mode: 'inherit' | 'replace' | 'disabled'
-  plugins: AutomationPluginBinding[]
-  lifecycle_interval_seconds: number | null
+  hooks: HookAutomationOverride
+  periodic: PeriodicAutomationOverride
 }
 
 export interface SubagentReference {

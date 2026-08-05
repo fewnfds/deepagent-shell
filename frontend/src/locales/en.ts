@@ -1006,19 +1006,21 @@ export const en: MessageSchema = {
   },
   automation: {
     title: 'Automation',
-    lifecycle: {
-      enabled: 'Run request lifecycle loop',
-      interval: 'Interval (seconds)',
+    groups: {
+      hooks: 'Hook plugins',
+      periodic: 'Periodic plugins',
     },
     bindings: {
-      add: 'Add automation plugin',
+      add: 'Add {kind}',
       plugin: 'Automation plugin',
       config: 'Plugin config (JSON)',
+      interval: 'Interval (seconds)',
+      mode: '{kind} mode',
       enabled: 'Enabled',
       moveUp: 'Move up',
       moveDown: 'Move down',
       remove: 'Remove plugin',
-      empty: 'No automation plugin is attached.',
+      empty: 'No {kind} attached.',
     },
     plugins: {
       title: 'Installed automation plugins',
@@ -1077,6 +1079,7 @@ export const en: MessageSchema = {
       referencesTitle: 'Subagent references',
       addReference: 'Add Subagent',
       noReferences: 'No Subagent entities are referenced.',
+      reference: 'Subagent entity',
       unselectedReference: 'Unselected Subagent',
       inheritPrimary: 'Same as Primary Agent',
       validationTitle: 'Primary Agent draft validation',
@@ -1150,7 +1153,7 @@ export const en: MessageSchema = {
       pluginInvalid: 'Correct the plugin package or select another automation plugin.',
       pluginDependenciesFailed: 'Correct the plugin requirements and restart Agent Shell.',
       pluginDependenciesRestartRequired: 'Restart Agent Shell to prepare the plugin requirements.',
-      lifecyclePluginRequired: 'Attach and enable a plugin that provides the Lifecycle node, or turn off the lifecycle loop.',
+      pluginEntrypointMismatch: 'Select an automation plugin that provides an entrypoint for this binding category.',
       credentialMetadataInvalid: 'Open the model configuration, re-enter or confirm its credential, and save it.',
       unknownBlockType: 'This configuration type is no longer supported. Delete the obsolete record or recreate the required configuration with the current editor.',
       outputEventTypesInvalid: 'Reopen the output mode editor, make sure every currently listed event is present, and save it in the current structure.',
@@ -1201,7 +1204,7 @@ export const en: MessageSchema = {
         pluginInvalid: 'Automation plugin {plugin_id} failed static validation.',
         pluginDependenciesFailed: 'Python dependencies for automation plugin {plugin_id} could not be prepared.',
         pluginDependenciesRestartRequired: 'Restart Agent Shell to prepare Python dependencies for automation plugin {plugin_id}.',
-        lifecyclePluginRequired: 'The lifecycle loop has no enabled plugin with a Lifecycle entrypoint.',
+        pluginEntrypointMismatch: 'Automation plugin {plugin_id} does not provide an entrypoint for this binding category.',
       },
       storage: {
         credentialMetadataInvalid: 'The saved credential state for this model configuration is damaged.',

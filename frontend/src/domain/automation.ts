@@ -1,5 +1,6 @@
 import type {
   AutomationPluginBinding,
+  PeriodicAutomationPluginBinding,
   PrimaryAutomation,
   SubagentAutomation,
 } from '@/api'
@@ -11,13 +12,23 @@ export interface AutomationPluginBindingDraft {
   config_text: string
 }
 
-export interface AutomationConfigurationDraft {
-  plugins: AutomationPluginBindingDraft[]
-  lifecycle_interval_seconds: number | null
+export interface PeriodicAutomationPluginBindingDraft extends AutomationPluginBindingDraft {
+  interval_seconds: number
 }
 
-export interface SubagentAutomationDraft extends AutomationConfigurationDraft {
+export interface AutomationConfigurationDraft {
+  hooks: AutomationPluginBindingDraft[]
+  periodic: PeriodicAutomationPluginBindingDraft[]
+}
+
+interface AutomationOverrideDraft<TBinding> {
   mode: 'inherit' | 'replace' | 'disabled'
+  plugins: TBinding[]
+}
+
+export interface SubagentAutomationDraft {
+  hooks: AutomationOverrideDraft<AutomationPluginBindingDraft>
+  periodic: AutomationOverrideDraft<PeriodicAutomationPluginBindingDraft>
 }
 
 let bindingSequence = 0
@@ -43,26 +54,52 @@ function bindingDraft(value: unknown = {}): AutomationPluginBindingDraft {
   }
 }
 
+function periodicBindingDraft(value: unknown = {}): PeriodicAutomationPluginBindingDraft {
+  const source = record(value)
+  return {
+    ...bindingDraft(source),
+    interval_seconds: typeof source.interval_seconds === 'number'
+      ? source.interval_seconds
+      : 2,
+  }
+}
+
 export function blankAutomationPluginBinding(): AutomationPluginBindingDraft {
   return bindingDraft()
 }
 
+export function blankPeriodicAutomationPluginBinding(): PeriodicAutomationPluginBindingDraft {
+  return periodicBindingDraft()
+}
+
 export function normalizeAutomation(value: unknown): AutomationConfigurationDraft {
   const source = record(value)
-  const plugins = Array.isArray(source.plugins) ? source.plugins : []
-  const interval = source.lifecycle_interval_seconds
+  const hooks = Array.isArray(source.hooks) ? source.hooks : []
+  const periodic = Array.isArray(source.periodic) ? source.periodic : []
   return {
-    plugins: plugins.map(bindingDraft),
-    lifecycle_interval_seconds: typeof interval === 'number' ? interval : null,
+    hooks: hooks.map(bindingDraft),
+    periodic: periodic.map(periodicBindingDraft),
   }
+}
+
+function overrideMode(value: unknown): 'inherit' | 'replace' | 'disabled' {
+  return value === 'replace' || value === 'disabled' ? value : 'inherit'
 }
 
 export function normalizeSubagentAutomation(value: unknown): SubagentAutomationDraft {
   const source = record(value)
-  const mode = source.mode
+  const hooks = record(source.hooks)
+  const periodic = record(source.periodic)
   return {
-    mode: mode === 'replace' || mode === 'disabled' ? mode : 'inherit',
-    ...normalizeAutomation(source),
+    hooks: {
+      mode: overrideMode(hooks.mode),
+      plugins: (Array.isArray(hooks.plugins) ? hooks.plugins : []).map(bindingDraft),
+    },
+    periodic: {
+      mode: overrideMode(periodic.mode),
+      plugins: (Array.isArray(periodic.plugins) ? periodic.plugins : [])
+        .map(periodicBindingDraft),
+    },
   }
 }
 
@@ -82,16 +119,33 @@ function pluginPayload(value: AutomationPluginBindingDraft): AutomationPluginBin
   }
 }
 
+function periodicPluginPayload(
+  value: PeriodicAutomationPluginBindingDraft,
+): PeriodicAutomationPluginBinding {
+  return {
+    ...pluginPayload(value),
+    interval_seconds: value.interval_seconds,
+  }
+}
+
 export function automationPayload(value: AutomationConfigurationDraft): PrimaryAutomation {
   return {
-    plugins: value.plugins.map(pluginPayload),
-    lifecycle_interval_seconds: value.lifecycle_interval_seconds,
+    hooks: value.hooks.map(pluginPayload),
+    periodic: value.periodic.map(periodicPluginPayload),
   }
 }
 
 export function subagentAutomationPayload(value: SubagentAutomationDraft): SubagentAutomation {
-  if (value.mode !== 'replace') {
-    return { mode: value.mode, plugins: [], lifecycle_interval_seconds: null }
+  return {
+    hooks: {
+      mode: value.hooks.mode,
+      plugins: value.hooks.mode === 'replace' ? value.hooks.plugins.map(pluginPayload) : [],
+    },
+    periodic: {
+      mode: value.periodic.mode,
+      plugins: value.periodic.mode === 'replace'
+        ? value.periodic.plugins.map(periodicPluginPayload)
+        : [],
+    },
   }
-  return { mode: 'replace', ...automationPayload(value) }
 }

@@ -353,7 +353,6 @@
         "reason": "Owns localized backend field labels, technical field names and contextual hints without wrapping controls",
         "callers": [
           "src/components/RecordPicker.vue",
-          "src/components/SubagentReferencesEditor.vue",
           "src/editors/CustomMiddlewareEditor.vue",
           "src/editors/ExceptionRetryEditor.vue",
           "src/editors/FilesystemEditor.vue",
@@ -367,7 +366,7 @@
         "name": "AutomationPluginBindings",
         "path": "src/components/AutomationPluginBindings.vue",
         "kind": "domain-composition",
-        "reason": "Owns ordered Agent automation plugin bindings and the single request lifecycle interval",
+        "reason": "Owns independently ordered Agent Hook and periodic plugin bindings with per-plugin intervals",
         "callers": [
           "src/pages/PrimaryAgentPage.vue",
           "src/pages/SubagentPage.vue"

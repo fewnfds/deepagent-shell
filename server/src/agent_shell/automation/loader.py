@@ -23,16 +23,19 @@ class AutomationPluginLoader:
         self._request_id = request_id
         self._plugins_dir = plugins_dir
         self._runtime_root = runtime_root
-        self._modules: dict[tuple[str, int], tuple[ModuleType, dict[str, object], Path]] = {}
+        self._modules: dict[
+            tuple[str, str, int], tuple[ModuleType, dict[str, object], Path]
+        ] = {}
         self._module_names: set[str] = set()
 
     def load(
         self,
         owner_id: str,
+        binding_kind: str,
         binding_index: int,
         plugin_id: str,
     ) -> tuple[ModuleType, dict[str, object], Path]:
-        key = (owner_id, binding_index)
+        key = (owner_id, binding_kind, binding_index)
         cached = self._modules.get(key)
         if cached is not None:
             return cached
@@ -95,11 +98,14 @@ class AutomationPluginLoader:
     def entrypoint(
         self,
         owner_id: str,
+        binding_kind: str,
         binding_index: int,
         plugin_id: str,
         name: str,
     ) -> tuple[Callable[[Any], Any] | None, Path]:
-        module, metadata, plugin_dir = self.load(owner_id, binding_index, plugin_id)
+        module, metadata, plugin_dir = self.load(
+            owner_id, binding_kind, binding_index, plugin_id
+        )
         if name not in metadata["entrypoints"]:
             return None, plugin_dir
         function_name = "create_middleware" if name == "middleware" else name

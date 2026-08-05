@@ -22,13 +22,48 @@ class AutomationValidationService:
         owner_name: str,
         path_prefix: str,
     ) -> list[ValidationIssue]:
-        if automation.get("mode") in {"inherit", "disabled"}:
-            return []
         issues: list[ValidationIssue] = []
-        has_lifecycle = False
-        for index, binding in enumerate(automation.get("plugins", [])):
+        for binding_kind, required_entrypoints in (
+            ("hooks", {"middleware", "prepare"}),
+            ("periodic", {"lifecycle"}),
+        ):
+            selection = automation.get(binding_kind, [])
+            if isinstance(selection, dict):
+                if selection.get("mode", "inherit") != "replace":
+                    continue
+                bindings = selection.get("plugins", [])
+                binding_path = f"{path_prefix}.{binding_kind}.plugins"
+            else:
+                bindings = selection
+                binding_path = f"{path_prefix}.{binding_kind}"
+            issues.extend(
+                self._binding_issues(
+                    bindings,
+                    binding_kind=binding_kind,
+                    required_entrypoints=required_entrypoints,
+                    scope=scope,
+                    owner_id=owner_id,
+                    owner_name=owner_name,
+                    path_prefix=binding_path,
+                )
+            )
+        return issues
+
+    def _binding_issues(
+        self,
+        bindings: list[dict[str, Any]],
+        *,
+        binding_kind: str,
+        required_entrypoints: set[str],
+        scope: str,
+        owner_id: str,
+        owner_name: str,
+        path_prefix: str,
+    ) -> list[ValidationIssue]:
+        issues: list[ValidationIssue] = []
+        for index, binding in enumerate(bindings):
             plugin_id = str(binding.get("plugin_id", ""))
-            path = f"{path_prefix}.plugins[{index}].plugin_id"
+            path = f"{path_prefix}[{index}].plugin_id"
             try:
                 resolved = resolve_automation_script(
                     plugin_id,
@@ -65,8 +100,27 @@ class AutomationValidationService:
                 continue
             metadata, _folder = resolved
             enabled = bool(binding.get("enabled", True))
-            if enabled and "lifecycle" in metadata["entrypoints"]:
-                has_lifecycle = True
+            if not required_entrypoints.intersection(metadata["entrypoints"]):
+                issues.append(
+                    ValidationIssue(
+                        code="automation.plugin_entrypoint_mismatch",
+                        scope=scope,
+                        owner_id=owner_id,
+                        owner_name=owner_name,
+                        path=path,
+                        message=(
+                            f"The automation plugin does not provide a {binding_kind} entrypoint."
+                        ),
+                        message_key=(
+                            "validation.issue.automation.pluginEntrypointMismatch"
+                        ),
+                        message_args={
+                            "plugin_id": plugin_id,
+                            "kind": binding_kind,
+                        },
+                    )
+                )
+                continue
             if not enabled:
                 continue
             dependency_status = str(metadata["dependency_status"])
@@ -90,21 +144,6 @@ class AutomationValidationService:
                     plugin_id,
                     message,
                     key,
-                )
-            )
-        if automation.get("lifecycle_interval_seconds") is not None and not has_lifecycle:
-            issues.append(
-                ValidationIssue(
-                    code="automation.lifecycle_plugin_required",
-                    scope=scope,
-                    owner_id=owner_id,
-                    owner_name=owner_name,
-                    path=f"{path_prefix}.lifecycle_interval_seconds",
-                    message=(
-                        "Lifecycle requires an enabled plugin that declares the lifecycle entrypoint."
-                    ),
-                    message_key="validation.issue.automation.lifecyclePluginRequired",
-                    message_args={},
                 )
             )
         return issues

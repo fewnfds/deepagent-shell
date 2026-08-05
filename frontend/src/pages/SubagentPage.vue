@@ -141,14 +141,6 @@ function removeObsoleteOverride(index: number): void {
   form.value.settings.capability_overrides.splice(index, 1)
 }
 
-function updateAutomationMode(value: string): void {
-  const mode = value === 'replace' || value === 'disabled' ? value : 'inherit'
-  const current = form.value.settings.automation
-  form.value.settings.automation = mode === 'replace'
-    ? { ...current, mode }
-    : { mode, plugins: [], lifecycle_interval_seconds: null }
-}
-
 async function startNew(): Promise<void> {
   await runAfterDiscard(() => {
     profileLoadSequence += 1
@@ -483,27 +475,7 @@ watch(
             </div>
           </div>
         </section>
-        <section class="card mb-3" :aria-label="t('agents.automation.title')">
-          <header class="card-header">
-            <label class="card-title mb-0" for="subagent-automation-mode">
-              {{ t('agents.automation.title') }}
-            </label>
-          </header>
-          <div class="card-body">
-            <select
-              id="subagent-automation-mode"
-              class="form-select"
-              :value="form.settings.automation.mode"
-              @change="updateAutomationMode(($event.target as HTMLSelectElement).value)"
-            >
-              <option value="inherit">{{ t('agents.override.mode.inherit') }}</option>
-              <option value="replace">{{ t('agents.override.mode.replace') }}</option>
-              <option value="disabled">{{ t('agents.override.mode.disabled') }}</option>
-            </select>
-          </div>
-        </section>
         <AutomationPluginBindings
-          v-if="form.settings.automation.mode === 'replace'"
           v-model="form.settings.automation"
           path-prefix="settings-automation"
           :plugins="automationPlugins"

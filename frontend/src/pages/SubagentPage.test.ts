@@ -157,9 +157,8 @@ describe('Subagent authoring page', () => {
         ],
         subagents: [],
         automation: {
-          mode: 'inherit',
-          plugins: [],
-          lifecycle_interval_seconds: null,
+          hooks: { mode: 'inherit', plugins: [] },
+          periodic: { mode: 'inherit', plugins: [] },
         },
       },
     })

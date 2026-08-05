@@ -61,7 +61,7 @@ def test_subagent_compiler_passes_distinct_permissions_over_shared_workspace(
             references={},
             blocks={},
             filesystem_mode="configured-shared",
-            automation={"plugins": [], "lifecycle_interval_seconds": None},
+            automation={"hooks": [], "periodic": []},
             subagents=(),
         ),
         "writer-id": ResolvedSubagent(
@@ -72,7 +72,7 @@ def test_subagent_compiler_passes_distinct_permissions_over_shared_workspace(
             references={},
             blocks={},
             filesystem_mode="configured-shared",
-            automation={"plugins": [], "lifecycle_interval_seconds": None},
+            automation={"hooks": [], "periodic": []},
             subagents=(),
         ),
     }

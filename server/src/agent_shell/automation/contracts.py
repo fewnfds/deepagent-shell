@@ -19,46 +19,61 @@ class AutomationPluginBinding(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
 
 
+class PeriodicAutomationPluginBinding(AutomationPluginBinding):
+    interval_seconds: float = Field(ge=0.1, le=86_400)
+
+
 class PrimaryAutomation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    hooks: list[AutomationPluginBinding] = Field(default_factory=list, max_length=100)
+    periodic: list[PeriodicAutomationPluginBinding] = Field(
+        default_factory=list,
+        max_length=100,
+    )
+
+
+class HookAutomationOverride(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["inherit", "replace", "disabled"] = "inherit"
     plugins: list[AutomationPluginBinding] = Field(default_factory=list, max_length=100)
-    lifecycle_interval_seconds: float | None = Field(
-        default=None,
-        ge=0.1,
-        le=86_400,
+
+    @model_validator(mode="after")
+    def validate_selection(self) -> "HookAutomationOverride":
+        if self.mode == "replace":
+            if not self.plugins:
+                raise ValueError("replace mode requires at least one plugin")
+            return self
+        if self.plugins:
+            raise ValueError("only replace mode may contain plugins")
+        return self
+
+
+class PeriodicAutomationOverride(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["inherit", "replace", "disabled"] = "inherit"
+    plugins: list[PeriodicAutomationPluginBinding] = Field(
+        default_factory=list,
+        max_length=100,
     )
 
     @model_validator(mode="after")
-    def validate_lifecycle(self) -> "PrimaryAutomation":
-        if self.lifecycle_interval_seconds is not None and not any(
-            binding.enabled for binding in self.plugins
-        ):
-            raise ValueError("lifecycle requires at least one enabled plugin")
+    def validate_selection(self) -> "PeriodicAutomationOverride":
+        if self.mode == "replace":
+            if not self.plugins:
+                raise ValueError("replace mode requires at least one plugin")
+            return self
+        if self.plugins:
+            raise ValueError("only replace mode may contain plugins")
         return self
 
 
 class SubagentAutomation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    mode: Literal["inherit", "replace", "disabled"] = "inherit"
-    plugins: list[AutomationPluginBinding] = Field(default_factory=list, max_length=100)
-    lifecycle_interval_seconds: float | None = Field(
-        default=None,
-        ge=0.1,
-        le=86_400,
+    hooks: HookAutomationOverride = Field(default_factory=HookAutomationOverride)
+    periodic: PeriodicAutomationOverride = Field(
+        default_factory=PeriodicAutomationOverride
     )
-
-    @model_validator(mode="after")
-    def validate_selection(self) -> "SubagentAutomation":
-        if self.mode == "replace":
-            if not self.plugins:
-                raise ValueError("replace mode requires at least one plugin")
-            if self.lifecycle_interval_seconds is not None and not any(
-                binding.enabled for binding in self.plugins
-            ):
-                raise ValueError("lifecycle requires at least one enabled plugin")
-            return self
-        if self.plugins or self.lifecycle_interval_seconds is not None:
-            raise ValueError("only replace mode may contain automation configuration")
-        return self

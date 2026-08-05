@@ -10,11 +10,14 @@ def automation_config(
     *,
     interval: float | None = None,
 ) -> dict[str, object]:
+    binding = {"plugin_id": plugin_id, "enabled": True, "config": {}}
     return {
-        "plugins": [
-            {"plugin_id": plugin_id, "enabled": True, "config": {}}
-        ],
-        "lifecycle_interval_seconds": interval,
+        "hooks": [binding],
+        "periodic": (
+            [{**binding, "interval_seconds": interval}]
+            if interval is not None
+            else []
+        ),
     }
 
 
@@ -204,12 +207,12 @@ def test_native_middleware_hook_shares_prepare_context_and_original_messages(
             json=primary_update(
                 primary,
                 {
-                    "plugins": [{
+                    "hooks": [{
                         "plugin_id": "native-hook",
                         "enabled": True,
                         "config": {"marker": str(marker)},
                     }],
-                    "lifecycle_interval_seconds": None,
+                    "periodic": [],
                 },
             ),
         )

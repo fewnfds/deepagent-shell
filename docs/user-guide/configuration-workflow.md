@@ -26,9 +26,9 @@
 
 ## 自动化装配
 
-自动化不是组件。Primary 直接保存有序插件 bindings 和可选 lifecycle interval；Subagent 对整组自动化选择
-继承 Primary、使用自己的插件或关闭。同一个 Subagent 实体在一次请求中只有一套 request-local ctx 和至多一个
-lifecycle loop，即使被多条路径或递归调用；每次真实委派仍使用新的 LangGraph state。
+自动化不是组件。Primary 分别保存有序 Hook bindings 和带独立间隔的周期 bindings；Subagent 对两类插件分别
+选择继承 Primary、使用自己的插件或关闭。同一个 Subagent 实体在一次请求中只有一套 request-local ctx，每个
+周期 binding 至多一个循环，即使被多条路径或递归调用；每次真实委派仍使用新的 LangGraph state。
 
 Primary 和每个 Subagent 都有自己的派生消息副本。插件 `prepare` 可以在任何 Agent 图构造前修改对应
 `ctx.messages`；原始客户端消息始终通过不可变 `ctx.request.messages` 提供。需要每次 invocation 运行的逻辑

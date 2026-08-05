@@ -222,7 +222,7 @@ def test_global_interception_captures_final_moved_prompt_tools_and_raw_request(
             "            message['content'] = message['content'].replace(tag, replacement)\n",
         )
         automation = {
-            "plugins": [
+            "hooks": [
                 {
                     "plugin_id": "capture-message-rewrite",
                     "enabled": True,
@@ -232,7 +232,7 @@ def test_global_interception_captures_final_moved_prompt_tools_and_raw_request(
                     },
                 }
             ],
-            "lifecycle_interval_seconds": None,
+            "periodic": [],
         }
         prompt = client.post(
             "/api/blocks/system-prompt",

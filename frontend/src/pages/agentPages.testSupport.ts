@@ -106,7 +106,7 @@ export function service(overrides: Partial<AgentAuthoringService> = {}): AgentAu
     name: 'Shared name',
     capability_refs: [],
     subagents: [],
-    automation: { plugins: [], lifecycle_interval_seconds: null },
+    automation: { hooks: [], periodic: [] },
   }
   const subagent: SubagentProfile = {
     id: '00000000-0000-0000-0000-000000000020',
@@ -116,7 +116,10 @@ export function service(overrides: Partial<AgentAuthoringService> = {}): AgentAu
     settings: {
       capability_overrides: [],
       subagents: [],
-      automation: { mode: 'inherit', plugins: [], lifecycle_interval_seconds: null },
+      automation: {
+        hooks: { mode: 'inherit', plugins: [] },
+        periodic: { mode: 'inherit', plugins: [] },
+      },
     },
   }
   return {

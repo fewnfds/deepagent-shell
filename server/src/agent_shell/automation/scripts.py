@@ -38,6 +38,10 @@ class AutomationScriptManifest(BaseModel):
     def unique_entrypoints(cls, value: list[str]) -> list[str]:
         if len(value) != len(set(value)):
             raise ValueError("plugin entrypoints must be unique")
+        if not {"middleware", "prepare", "lifecycle"}.intersection(value):
+            raise ValueError(
+                "plugin must provide middleware, prepare, or lifecycle"
+            )
         return value
 
 

@@ -1004,19 +1004,21 @@ export const zhCN = {
   },
   automation: {
     title: '自动化',
-    lifecycle: {
-      enabled: '运行请求生命周期循环',
-      interval: '执行间隔（秒）',
+    groups: {
+      hooks: 'Hook 插件',
+      periodic: '周期插件',
     },
     bindings: {
-      add: '添加自动化插件',
+      add: '添加{kind}',
       plugin: '自动化插件',
       config: '插件配置（JSON）',
+      interval: '间隔（秒）',
+      mode: '{kind}配置方式',
       enabled: '启用',
       moveUp: '上移',
       moveDown: '下移',
       remove: '移除插件',
-      empty: '尚未挂载自动化插件。',
+      empty: '尚未挂载{kind}。',
     },
     plugins: {
       title: '已安装的自动化插件',
@@ -1075,6 +1077,7 @@ export const zhCN = {
       referencesTitle: 'Subagent 引用',
       addReference: '添加 Subagent',
       noReferences: '尚未引用 Subagent 实体。',
+      reference: 'Subagent 实体',
       unselectedReference: '未选择 Subagent',
       inheritPrimary: '与主代理相同',
       validationTitle: 'Primary Agent 草稿校验',
@@ -1148,7 +1151,7 @@ export const zhCN = {
       pluginInvalid: '修正插件包，或选择其他自动化插件。',
       pluginDependenciesFailed: '修正插件依赖并重启 Agent Shell。',
       pluginDependenciesRestartRequired: '重启 Agent Shell 以准备插件依赖。',
-      lifecyclePluginRequired: '挂载并启用一个提供生命周期节点的插件，或关闭生命周期循环。',
+      pluginEntrypointMismatch: '选择一个提供当前类别执行入口的自动化插件。',
       credentialMetadataInvalid: '打开该模型配置，重新填写或确认访问凭据，然后保存。',
       unknownBlockType: '这类配置已不受当前版本支持；请删除该旧记录，或使用当前页面重新建立所需配置。',
       outputEventTypesInvalid: '重新打开输出模式编辑器，确认当前列出的全部事件都存在，再保存为当前结构。',
@@ -1199,7 +1202,7 @@ export const zhCN = {
         pluginInvalid: '自动化插件 {plugin_id} 未通过静态检查。',
         pluginDependenciesFailed: '自动化插件 {plugin_id} 的 Python 依赖准备失败。',
         pluginDependenciesRestartRequired: '请重启 Agent Shell，以准备自动化插件 {plugin_id} 的 Python 依赖。',
-        lifecyclePluginRequired: '生命周期循环没有可运行的插件入口。',
+        pluginEntrypointMismatch: '自动化插件 {plugin_id} 不提供当前绑定类别需要的执行入口。',
       },
       storage: {
         credentialMetadataInvalid: '该模型配置保存的访问凭据状态已损坏。',

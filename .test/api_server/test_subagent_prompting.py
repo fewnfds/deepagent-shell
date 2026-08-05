@@ -212,23 +212,25 @@ def test_subagent_prompt_override_builds_from_frozen_client_messages(
             "    ctx.messages.extend(dict(message) for message in ctx.config['messages'])\n",
         )
         startup_automation = {
-            "mode": "replace",
-            "plugins": [
-                {
-                    "plugin_id": "append-subagent-startup",
-                    "enabled": True,
-                    "config": {
-                        "messages": [
-                            {"role": "user", "content": "Delegated work."},
-                            {
-                                "role": "assistant",
-                                "content": "Ready for delegated work.",
-                            },
-                        ]
-                    },
-                }
-            ],
-            "lifecycle_interval_seconds": None,
+            "hooks": {
+                "mode": "replace",
+                "plugins": [
+                    {
+                        "plugin_id": "append-subagent-startup",
+                        "enabled": True,
+                        "config": {
+                            "messages": [
+                                {"role": "user", "content": "Delegated work."},
+                                {
+                                    "role": "assistant",
+                                    "content": "Ready for delegated work.",
+                                },
+                            ]
+                        },
+                    }
+                ],
+            },
+            "periodic": {"mode": "inherit", "plugins": []},
         }
 
         def create_subagent(
