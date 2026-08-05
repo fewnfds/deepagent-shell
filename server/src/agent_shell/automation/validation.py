@@ -28,15 +28,8 @@ class AutomationValidationService:
             ("hooks", {"middleware", "prepare"}),
             ("periodic", {"lifecycle"}),
         ):
-            selection = automation.get(binding_kind, [])
-            if isinstance(selection, dict):
-                if selection.get("mode", "inherit") != "replace":
-                    continue
-                bindings = selection.get("plugins", [])
-                binding_path = f"{path_prefix}.{binding_kind}.plugins"
-            else:
-                bindings = selection
-                binding_path = f"{path_prefix}.{binding_kind}"
+            bindings = automation.get(binding_kind, [])
+            binding_path = f"{path_prefix}.{binding_kind}"
             issues.extend(
                 self._binding_issues(
                     bindings,

@@ -215,20 +215,7 @@ export interface PrimaryAutomation {
   periodic: PeriodicAutomationPluginBinding[]
 }
 
-export interface HookAutomationOverride {
-  mode: 'inherit' | 'replace' | 'disabled'
-  plugins: AutomationPluginBinding[]
-}
-
-export interface PeriodicAutomationOverride {
-  mode: 'inherit' | 'replace' | 'disabled'
-  plugins: PeriodicAutomationPluginBinding[]
-}
-
-export interface SubagentAutomation {
-  hooks: HookAutomationOverride
-  periodic: PeriodicAutomationOverride
-}
+export type SubagentAutomation = PrimaryAutomation
 
 export interface SubagentReference {
   subagent_id: string

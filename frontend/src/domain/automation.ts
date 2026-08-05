@@ -2,7 +2,6 @@ import type {
   AutomationPluginBinding,
   PeriodicAutomationPluginBinding,
   PrimaryAutomation,
-  SubagentAutomation,
 } from '@/api'
 
 export interface AutomationPluginBindingDraft {
@@ -19,16 +18,6 @@ export interface PeriodicAutomationPluginBindingDraft extends AutomationPluginBi
 export interface AutomationConfigurationDraft {
   hooks: AutomationPluginBindingDraft[]
   periodic: PeriodicAutomationPluginBindingDraft[]
-}
-
-interface AutomationOverrideDraft<TBinding> {
-  mode: 'inherit' | 'replace' | 'disabled'
-  plugins: TBinding[]
-}
-
-export interface SubagentAutomationDraft {
-  hooks: AutomationOverrideDraft<AutomationPluginBindingDraft>
-  periodic: AutomationOverrideDraft<PeriodicAutomationPluginBindingDraft>
 }
 
 let bindingSequence = 0
@@ -82,27 +71,6 @@ export function normalizeAutomation(value: unknown): AutomationConfigurationDraf
   }
 }
 
-function overrideMode(value: unknown): 'inherit' | 'replace' | 'disabled' {
-  return value === 'replace' || value === 'disabled' ? value : 'inherit'
-}
-
-export function normalizeSubagentAutomation(value: unknown): SubagentAutomationDraft {
-  const source = record(value)
-  const hooks = record(source.hooks)
-  const periodic = record(source.periodic)
-  return {
-    hooks: {
-      mode: overrideMode(hooks.mode),
-      plugins: (Array.isArray(hooks.plugins) ? hooks.plugins : []).map(bindingDraft),
-    },
-    periodic: {
-      mode: overrideMode(periodic.mode),
-      plugins: (Array.isArray(periodic.plugins) ? periodic.plugins : [])
-        .map(periodicBindingDraft),
-    },
-  }
-}
-
 function pluginPayload(value: AutomationPluginBindingDraft): AutomationPluginBinding {
   return {
     plugin_id: value.plugin_id,
@@ -124,20 +92,5 @@ export function automationPayload(value: AutomationConfigurationDraft): PrimaryA
   return {
     hooks: value.hooks.map(pluginPayload),
     periodic: value.periodic.map(periodicPluginPayload),
-  }
-}
-
-export function subagentAutomationPayload(value: SubagentAutomationDraft): SubagentAutomation {
-  return {
-    hooks: {
-      mode: value.hooks.mode,
-      plugins: value.hooks.mode === 'replace' ? value.hooks.plugins.map(pluginPayload) : [],
-    },
-    periodic: {
-      mode: value.periodic.mode,
-      plugins: value.periodic.mode === 'replace'
-        ? value.periodic.plugins.map(periodicPluginPayload)
-        : [],
-    },
   }
 }

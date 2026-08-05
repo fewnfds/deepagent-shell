@@ -5,8 +5,6 @@ import {
   blankAutomationPluginBinding,
   blankPeriodicAutomationPluginBinding,
   normalizeAutomation,
-  normalizeSubagentAutomation,
-  subagentAutomationPayload,
 } from './automation'
 
 describe('automation binding adapters', () => {
@@ -55,29 +53,6 @@ describe('automation binding adapters', () => {
           interval_seconds: 30,
         },
       ],
-    })
-  })
-
-  it('keeps Hook and periodic Subagent overrides independent', () => {
-    const draft = normalizeSubagentAutomation({
-      hooks: {
-        mode: 'replace',
-        plugins: [{ plugin_id: 'context-plugin', config: {} }],
-      },
-      periodic: {
-        mode: 'disabled',
-        plugins: [],
-      },
-    })
-    draft.hooks.plugins[0]!.config = { transform_source: 'return messages' }
-    expect(subagentAutomationPayload(draft).hooks.plugins[0]?.config).toEqual({
-      transform_source: 'return messages',
-    })
-
-    draft.hooks.mode = 'inherit'
-    expect(subagentAutomationPayload(draft)).toEqual({
-      hooks: { mode: 'inherit', plugins: [] },
-      periodic: { mode: 'disabled', plugins: [] },
     })
   })
 })

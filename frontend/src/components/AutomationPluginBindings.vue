@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { LteButton } from '@adminlte/vue'
-import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { AutomationScriptResource } from '@/api'
@@ -11,49 +10,30 @@ import {
   type AutomationConfigurationDraft,
   type AutomationPluginBindingDraft,
   type PeriodicAutomationPluginBindingDraft,
-  type SubagentAutomationDraft,
 } from '@/domain/automation'
 import { automationConfigDefaults } from '@/domain/automationConfigSchema'
 
 type BindingKind = 'hooks' | 'periodic'
-type OverrideMode = 'inherit' | 'replace' | 'disabled'
 type BindingDraft = AutomationPluginBindingDraft | PeriodicAutomationPluginBindingDraft
 
 const bindingKinds: BindingKind[] = ['hooks', 'periodic']
 const props = defineProps<{
-  modelValue: AutomationConfigurationDraft | SubagentAutomationDraft
+  modelValue: AutomationConfigurationDraft
   plugins: AutomationScriptResource[]
   pathPrefix: string
 }>()
 
 const emit = defineEmits<{
-  'update:modelValue': [value: AutomationConfigurationDraft | SubagentAutomationDraft]
+  'update:modelValue': [value: AutomationConfigurationDraft]
 }>()
 
 const { t } = useI18n()
-const isSubagent = computed(() => !Array.isArray(props.modelValue.hooks))
-
-function selectionFor(kind: BindingKind) {
-  if (!isSubagent.value) return null
-  return (props.modelValue as SubagentAutomationDraft)[kind]
-}
-
 function pluginsFor(kind: BindingKind): BindingDraft[] {
-  if (isSubagent.value) return selectionFor(kind)?.plugins ?? []
-  return (props.modelValue as AutomationConfigurationDraft)[kind]
+  return props.modelValue[kind]
 }
 
 function updatePlugins(kind: BindingKind, plugins: BindingDraft[]): void {
-  if (isSubagent.value) {
-    const current = props.modelValue as SubagentAutomationDraft
-    emit('update:modelValue', {
-      ...current,
-      [kind]: { ...current[kind], plugins },
-    } as SubagentAutomationDraft)
-    return
-  }
-  const current = props.modelValue as AutomationConfigurationDraft
-  emit('update:modelValue', { ...current, [kind]: plugins } as AutomationConfigurationDraft)
+  emit('update:modelValue', { ...props.modelValue, [kind]: plugins } as AutomationConfigurationDraft)
 }
 
 function updateBinding(
@@ -84,22 +64,6 @@ function moveBinding(kind: BindingKind, index: number, offset: number): void {
   const next = [...plugins]
   ;[next[index], next[target]] = [next[target]!, next[index]!]
   updatePlugins(kind, next)
-}
-
-function updateMode(kind: BindingKind, mode: OverrideMode): void {
-  if (!isSubagent.value) return
-  const current = props.modelValue as SubagentAutomationDraft
-  emit('update:modelValue', {
-    ...current,
-    [kind]: {
-      mode,
-      plugins: mode === 'replace' ? current[kind].plugins : [],
-    },
-  } as SubagentAutomationDraft)
-}
-
-function isEditable(kind: BindingKind): boolean {
-  return !isSubagent.value || selectionFor(kind)?.mode === 'replace'
 }
 
 function availablePlugins(kind: BindingKind): AutomationScriptResource[] {
@@ -142,7 +106,6 @@ function changePlugin(kind: BindingKind, index: number, pluginId: string): void 
     <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
       <h2 class="card-title mb-0">{{ t(`automation.groups.${kind}`) }}</h2>
       <LteButton
-        v-if="isEditable(kind)"
         class="ms-auto"
         :aria-label="t('automation.bindings.add', { kind: t(`automation.groups.${kind}`) })"
         :title="t('automation.bindings.add', { kind: t(`automation.groups.${kind}`) })"
@@ -154,21 +117,7 @@ function changePlugin(kind: BindingKind, index: number, pluginId: string): void 
         <i class="bi bi-plus-lg" aria-hidden="true" />
       </LteButton>
     </header>
-    <div v-if="isSubagent" class="card-body">
-      <select
-        :id="`${pathPrefix}-${kind}-mode`"
-        class="form-select"
-        :aria-label="t('automation.bindings.mode', { kind: t(`automation.groups.${kind}`) })"
-        :value="selectionFor(kind)?.mode"
-        @change="updateMode(kind, ($event.target as HTMLSelectElement).value as OverrideMode)"
-      >
-        <option value="inherit">{{ t('agents.override.mode.inherit') }}</option>
-        <option value="replace">{{ t('agents.override.mode.replace') }}</option>
-        <option value="disabled">{{ t('agents.override.mode.disabled') }}</option>
-      </select>
-    </div>
-
-    <div v-if="isEditable(kind) && pluginsFor(kind).length" class="list-group list-group-flush">
+    <div v-if="pluginsFor(kind).length" class="list-group list-group-flush">
       <div
         v-for="(binding, index) in pluginsFor(kind)"
         :key="binding.key"
@@ -268,7 +217,7 @@ function changePlugin(kind: BindingKind, index: number, pluginId: string): void 
         </div>
       </div>
     </div>
-    <div v-else-if="isEditable(kind)" class="card-body text-body-secondary">
+    <div v-else class="card-body text-body-secondary">
       {{ t('automation.bindings.empty', { kind: t(`automation.groups.${kind}`) }) }}
     </div>
   </section>

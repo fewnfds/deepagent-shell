@@ -39,10 +39,7 @@ describe('agent profile adapters', () => {
     expect(subagentPayload(draft).settings).toEqual({
       capability_overrides: [],
       subagents: [],
-      automation: {
-        hooks: { mode: 'inherit', plugins: [] },
-        periodic: { mode: 'inherit', plugins: [] },
-      },
+      automation: { hooks: [], periodic: [] },
     })
   })
 
@@ -62,10 +59,7 @@ describe('agent profile adapters', () => {
       settings: {
         capability_overrides: [],
         subagents: [{ subagent_id: '00000000-0000-0000-0000-000000000020' }],
-        automation: {
-          hooks: { mode: 'inherit', plugins: [] },
-          periodic: { mode: 'inherit', plugins: [] },
-        },
+        automation: { hooks: [], periodic: [] },
       },
     })
   })

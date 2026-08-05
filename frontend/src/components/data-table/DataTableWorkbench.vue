@@ -286,11 +286,11 @@ defineExpose<{
           <legend class="collection-filter-legend">{{ t('common.dataTable.operations') }}</legend>
           <div class="collection-filter-options">
             <template v-if="!config.search && filters.length">
-              <LteButton :disabled="loading" size="sm" theme="primary" type="submit">
+              <LteButton :disabled="loading" theme="primary" type="submit">
                 <i class="bi bi-search" aria-hidden="true" />
                 {{ t('common.search') }}
               </LteButton>
-              <LteButton :disabled="loading" size="sm" theme="warning" type="button" @click="clearQuery">
+              <LteButton :disabled="loading" theme="warning" type="button" @click="clearQuery">
                 {{ t('common.reset') }}
               </LteButton>
             </template>
@@ -298,7 +298,6 @@ defineExpose<{
             <LteButton
               v-if="config.bulkAction"
               :disabled="loading || runningBulkAction || !bulkEnabled"
-              size="sm"
               theme="danger"
               type="button"
               @click="runBulkAction"

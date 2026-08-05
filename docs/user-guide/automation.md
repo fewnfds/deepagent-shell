@@ -219,15 +219,10 @@ Hook binding 只执行 `prepare`、`middleware` 和 `complete`；周期 binding 
 同一个插件可以分别挂在两类列表，也可以用不同 config 挂载多次；每个 binding 有独立模块实例，但共享本请求的
 `ctx.vars`。`enabled=false` 的 binding 不 import、不执行，也不因第三方依赖未准备而阻止请求。
 
-Subagent 对 `hooks` 和 `periodic` 分别使用一种模式：
-
-- `inherit`：使用当前 Primary 的同类 bindings；
-- `replace`：使用这个 Subagent 自己保存的同类 bindings；
-- `disabled`：不使用这类插件。
-
-因此可以继承 Hook 插件同时关闭周期插件，反之亦然。同一个 Subagent profile 无论从 diamond 还是显式递归
-到达，在一次请求中只有一个 Agent 身份上下文；每个周期 binding 最多有一个循环。每次 `task` invocation 的
-LangGraph state 仍然独立。
+Subagent 使用相同的直接列表结构，自行添加适用于该身份的 Hook 与周期 binding，不继承 Primary 的插件配置。
+Primary 与 Subagent 的 Hook、上下文和插件自定义参数可以不同。同一个 Subagent profile 无论从 diamond 还是
+显式递归到达，在一次请求中只有一个 Agent 身份上下文；每个周期 binding 最多有一个循环。每次 `task`
+invocation 的 LangGraph state 仍然独立。
 
 ## ctx 与不可变原始消息
 

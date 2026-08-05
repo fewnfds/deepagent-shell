@@ -119,17 +119,14 @@ def test_parallel_same_profile_invocations_have_isolated_plugin_workspaces(
                     ],
                     "subagents": [],
                     "automation": {
-                        "hooks": {
-                            "mode": "replace",
-                            "plugins": [
-                                {
-                                    "plugin_id": "invocation-workspace",
-                                    "enabled": True,
-                                    "config": {},
-                                }
-                            ],
-                        },
-                        "periodic": {"mode": "disabled", "plugins": []},
+                        "hooks": [
+                            {
+                                "plugin_id": "invocation-workspace",
+                                "enabled": True,
+                                "config": {},
+                            }
+                        ],
+                        "periodic": [],
                     },
                 },
             },

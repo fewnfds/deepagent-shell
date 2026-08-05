@@ -53,7 +53,6 @@ const table: DataTableConfig<GlossaryEntry> = {
   ],
   pageSize: 50,
   pageSizeOptions: [25, 50, 100],
-  scroll: 'vertical',
 }
 </script>
 

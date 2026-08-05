@@ -116,10 +116,7 @@ export function service(overrides: Partial<AgentAuthoringService> = {}): AgentAu
     settings: {
       capability_overrides: [],
       subagents: [],
-      automation: {
-        hooks: { mode: 'inherit', plugins: [] },
-        periodic: { mode: 'inherit', plugins: [] },
-      },
+      automation: { hooks: [], periodic: [] },
     },
   }
   return {

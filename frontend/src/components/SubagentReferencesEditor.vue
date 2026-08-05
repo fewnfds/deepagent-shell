@@ -88,6 +88,7 @@ function profileFor(reference: SubagentReference): SubagentProfile | undefined {
             data-action="remove-subagent-reference"
             :aria-label="t('common.remove')"
             :title="t('common.remove')"
+            size="sm"
             theme="danger"
             type="button"
             @click="removeReference(index)"

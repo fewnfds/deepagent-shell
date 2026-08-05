@@ -118,9 +118,12 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
         write_automation_script(
             tmp_path,
             "prepare-shared-prefix",
+            "from agent_shell.automation.messages import mutable_request_messages\n"
+            "\n"
             "async def prepare(ctx):\n"
             "    tag = str(ctx.config['tag'])\n"
             "    replacement = str(ctx.config['replacement'])\n"
+            "    ctx.messages.extend(mutable_request_messages(ctx.request.messages))\n"
             "    for message in ctx.messages:\n"
             "        if message.get('role') == 'user':\n"
             "            message['content'] = message['content'].replace(tag, replacement)\n"
@@ -177,11 +180,8 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
                 subagents=children,
             )
             payload["settings"]["automation"] = {
-                "hooks": {
-                    "mode": "replace",
-                    "plugins": worker_automation["hooks"],
-                },
-                "periodic": {"mode": "inherit", "plugins": []},
+                "hooks": worker_automation["hooks"],
+                "periodic": [],
             }
             return payload
 

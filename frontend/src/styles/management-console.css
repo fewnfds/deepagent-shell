@@ -324,13 +324,6 @@ pre code {
   min-width: 18rem;
 }
 
-.collection-table[data-table-id='terminology'] thead {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--bs-body-bg);
-}
-
 .collection-table[data-table-id='terminology'] th,
 .collection-table[data-table-id='terminology'] td {
   overflow-wrap: anywhere;

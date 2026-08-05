@@ -20,10 +20,7 @@ import type {
 import {
   automationPayload,
   normalizeAutomation,
-  normalizeSubagentAutomation,
-  subagentAutomationPayload,
   type AutomationConfigurationDraft,
-  type SubagentAutomationDraft,
 } from '@/domain/automation'
 
 export type CapabilityType = BlockType
@@ -52,7 +49,7 @@ interface OverrideSelection {
 
 export interface SubagentProfile extends Omit<Subagent, 'settings'> {
   settings: Omit<Subagent['settings'], 'automation'> & {
-    automation: SubagentAutomationDraft
+    automation: AutomationConfigurationDraft
   }
 }
 type SubagentPayload = ApiSubagentPayload
@@ -164,10 +161,7 @@ export function blankSubagent(): SubagentProfile {
     settings: {
       capability_overrides: [],
       subagents: [],
-      automation: {
-        hooks: { mode: 'inherit', plugins: [] },
-        periodic: { mode: 'inherit', plugins: [] },
-      },
+      automation: { hooks: [], periodic: [] },
     },
   }
 }
@@ -194,7 +188,7 @@ export function normalizeSubagent(value: unknown): SubagentProfile {
         }
       }),
       subagents: subagents.map(normalizeSubagentReference),
-      automation: normalizeSubagentAutomation(settings.automation),
+      automation: normalizeAutomation(settings.automation),
     },
   }
 }
@@ -232,7 +226,7 @@ export function subagentPayload(value: SubagentProfile): SubagentPayload {
       subagents: value.settings.subagents.map((reference) => ({
         subagent_id: reference.subagent_id,
       })),
-      automation: subagentAutomationPayload(value.settings.automation),
+      automation: automationPayload(value.settings.automation),
     },
   }
 }

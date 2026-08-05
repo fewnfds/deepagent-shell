@@ -155,10 +155,7 @@ describe('Subagent authoring page', () => {
           { type: 'system-prompt', mode: 'disabled', block_id: '' },
         ],
         subagents: [],
-        automation: {
-          hooks: { mode: 'inherit', plugins: [] },
-          periodic: { mode: 'inherit', plugins: [] },
-        },
+        automation: { hooks: [], periodic: [] },
       },
     })
     wrapper.unmount()

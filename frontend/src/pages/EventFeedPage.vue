@@ -537,7 +537,7 @@ onMounted(() => { void loadControls() })
       @query-applied="stale = false"
     >
       <template #filter-actions>
-        <LteButton :disabled="controlsLoading" size="sm" theme="primary" type="button" @click="refreshAll">
+        <LteButton :disabled="controlsLoading" theme="primary" type="button" @click="refreshAll">
           <span v-if="controlsLoading" class="spinner-border spinner-border-sm" aria-hidden="true" />
           {{ t('common.refresh') }}
         </LteButton>

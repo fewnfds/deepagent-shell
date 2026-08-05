@@ -895,19 +895,9 @@ class ConfigurationValidationService:
             subagent_name = str(profile["name"])
 
             automation_selection = settings.get("automation", {})
-
-            def resolve_automation_group(group: str) -> list[dict[str, Any]]:
-                selection = automation_selection.get(group, {})
-                mode = selection.get("mode", "inherit")
-                if mode == "inherit":
-                    return list(primary_automation.get(group, []))
-                if mode == "disabled":
-                    return []
-                return list(selection.get("plugins", []))
-
             child_automation = {
-                "hooks": resolve_automation_group("hooks"),
-                "periodic": resolve_automation_group("periodic"),
+                "hooks": list(automation_selection.get("hooks", [])),
+                "periodic": list(automation_selection.get("periodic", [])),
             }
 
             (

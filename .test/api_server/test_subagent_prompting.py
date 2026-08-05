@@ -220,17 +220,14 @@ def test_subagent_prompt_override_uses_only_plugin_messages_and_delegation(
             "    ])\n",
         )
         startup_automation = {
-            "hooks": {
-                "mode": "replace",
-                "plugins": [
-                    {
-                        "plugin_id": "append-subagent-startup",
-                        "enabled": True,
-                        "config": {},
-                    }
-                ],
-            },
-            "periodic": {"mode": "inherit", "plugins": []},
+            "hooks": [
+                {
+                    "plugin_id": "append-subagent-startup",
+                    "enabled": True,
+                    "config": {},
+                }
+            ],
+            "periodic": [],
         }
 
         def create_subagent(
