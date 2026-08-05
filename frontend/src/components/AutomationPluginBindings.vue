@@ -124,7 +124,7 @@ function changePlugin(kind: BindingKind, index: number, pluginId: string): void 
         class="list-group-item"
       >
         <div class="row g-3 align-items-end">
-          <div class="col-lg-6">
+          <div class="col">
             <label class="visually-hidden" :for="`${pathPrefix}-${kind}-plugin-${binding.key}`">
               {{ t('automation.bindings.plugin') }}
             </label>
