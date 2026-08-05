@@ -21,12 +21,14 @@ const dependencyRestartCount = computed(() => plugins.value.filter(
   (plugin) => plugin.dependency_status === 'restart_required',
 ).length)
 
-function statusLabel(plugin: AutomationScriptResource): string {
-  if (plugin.dependency_status === 'failed') return t('automation.scripts.status.failed')
-  if (plugin.dependency_status === 'restart_required') {
-    return t('automation.scripts.status.restartRequired')
+function dependencyLabel(plugin: AutomationScriptResource): string {
+  if (plugin.dependency_status === 'ready') {
+    return t('automation.dependencies.installed')
   }
-  return t('automation.scripts.status.ready')
+  if (plugin.dependency_status === 'failed') {
+    return t('automation.dependencies.notInstalledFailed')
+  }
+  return t('automation.dependencies.notInstalledRestartRequired')
 }
 
 async function load(): Promise<void> {
@@ -93,7 +95,6 @@ onMounted(() => {
               <th scope="col">{{ t('fields.name') }}</th>
               <th scope="col">{{ t('automation.plugins.entrypoints') }}</th>
               <th scope="col">{{ t('automation.plugins.requirements') }}</th>
-              <th scope="col">{{ t('automation.plugins.status') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -103,22 +104,43 @@ onMounted(() => {
                 <div class="small font-monospace text-body-secondary">{{ plugin.id }}</div>
                 <div v-if="plugin.description" class="small text-body-secondary">{{ plugin.description }}</div>
               </td>
-              <td>{{ plugin.entrypoints.map((item) => t(`automation.entrypoints.${item}`)).join(', ') }}</td>
-              <td class="small font-monospace">
-                {{ plugin.python_requirements.length ? plugin.python_requirements.join(', ') : t('common.none') }}
+              <td>
+                <div
+                  v-for="entrypoint in plugin.entrypoints"
+                  :key="entrypoint"
+                  class="mb-1"
+                >
+                  <span class="fw-semibold">{{ t(`automation.entrypoints.${entrypoint}.scope`) }}</span>
+                  <span class="text-body-secondary">
+                    {{ t('common.detailSeparator') }}{{ t(`automation.entrypoints.${entrypoint}.timing`) }}
+                  </span>
+                </div>
               </td>
               <td>
-                <span v-if="plugin.dependency_status === 'failed'" class="badge text-bg-danger">
-                  {{ statusLabel(plugin) }}
+                <span v-if="!plugin.python_requirements.length" class="text-body-secondary">
+                  {{ t('common.none') }}
                 </span>
-                <span v-else-if="plugin.dependency_status === 'restart_required'" class="badge text-bg-warning">
-                  {{ statusLabel(plugin) }}
-                </span>
-                <span v-else class="badge text-bg-success">{{ statusLabel(plugin) }}</span>
+                <div v-else>
+                  <div
+                    v-for="requirement in plugin.python_requirements"
+                    :key="requirement"
+                    class="mb-1"
+                  >
+                    <span
+                      v-if="plugin.dependency_status === 'ready'"
+                      class="badge font-monospace text-bg-success"
+                    >
+                      {{ requirement }} · {{ dependencyLabel(plugin) }}
+                    </span>
+                    <span v-else class="badge font-monospace text-bg-danger">
+                      {{ requirement }} · {{ dependencyLabel(plugin) }}
+                    </span>
+                  </div>
+                </div>
               </td>
             </tr>
             <tr v-if="!loading && !plugins.length">
-              <td class="text-center text-body-secondary" colspan="4">{{ t('automation.plugins.empty') }}</td>
+              <td class="text-center text-body-secondary" colspan="3">{{ t('automation.plugins.empty') }}</td>
             </tr>
           </tbody>
         </table>

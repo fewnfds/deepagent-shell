@@ -39,26 +39,34 @@ function profileFor(reference: SubagentReference): SubagentProfile | undefined {
 </script>
 
 <template>
-  <section class="mb-3" aria-labelledby="subagent-references-title">
-    <header class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-      <h2 id="subagent-references-title" class="h5 fw-semibold mb-0">
+  <section class="card mb-3" aria-labelledby="subagent-references-title">
+    <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+      <h2 id="subagent-references-title" class="card-title mb-0">
         {{ t('agents.primary.referencesTitle') }}
       </h2>
-      <LteButton theme="success" type="button" @click="addReference">
+      <LteButton
+        class="ms-auto"
+        data-action="add-subagent-reference"
+        :aria-label="t('agents.primary.addReference')"
+        :title="t('agents.primary.addReference')"
+        size="sm"
+        theme="success"
+        type="button"
+        @click="addReference"
+      >
         <i class="bi bi-plus-lg" aria-hidden="true" />
-        {{ t('agents.primary.addReference') }}
       </LteButton>
     </header>
-    <p v-if="references.length === 0" class="text-body-secondary">
+    <div v-if="references.length === 0" class="card-body text-body-secondary">
       {{ t('agents.primary.noReferences') }}
-    </p>
-    <article
-      v-for="(reference, index) in references"
-      :key="index"
-      class="card mb-3"
-      data-testid="subagent-reference-card"
-    >
-      <div class="card-body">
+    </div>
+    <div v-else class="list-group list-group-flush">
+      <div
+        v-for="(reference, index) in references"
+        :key="index"
+        class="list-group-item"
+        data-testid="subagent-reference-row"
+      >
         <div class="d-flex align-items-center gap-2">
           <label class="visually-hidden" :for="`subagent-reference-${index}`">
             {{ t('agents.primary.reference') }}
@@ -91,6 +99,6 @@ function profileFor(reference: SubagentReference): SubagentProfile | undefined {
           {{ profileFor(reference)?.description }}
         </p>
       </div>
-    </article>
+    </div>
   </section>
 </template>

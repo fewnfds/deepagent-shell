@@ -53,11 +53,12 @@ describe('AutomationPage', () => {
 
     expect(wrapper.text()).toContain('Market context')
     expect(wrapper.text()).toContain('market-context')
-    expect(wrapper.text()).toContain('automation.entrypoints.middleware')
-    expect(wrapper.text()).toContain('automation.entrypoints.prepare')
-    expect(wrapper.text()).toContain('automation.entrypoints.complete')
+    expect(wrapper.text()).toContain('automation.entrypoints.middleware.scope')
+    expect(wrapper.text()).toContain('automation.entrypoints.middleware.timing')
+    expect(wrapper.text()).toContain('automation.entrypoints.prepare.scope')
+    expect(wrapper.text()).toContain('automation.entrypoints.complete.scope')
     expect(wrapper.text()).toContain('example-market-sdk>=2')
-    expect(wrapper.text()).toContain('automation.scripts.status.ready')
+    expect(wrapper.text()).toContain('automation.dependencies.installed')
     wrapper.unmount()
   })
 
@@ -93,7 +94,38 @@ describe('AutomationPage', () => {
     const wrapper = await mountPage()
 
     expect(wrapper.text()).toContain('automation.scripts.invalid')
-    expect(wrapper.text()).toContain('automation.scripts.status.restartRequired')
+    expect(wrapper.text()).toContain('automation.dependencies.notInstalledRestartRequired')
+    expect(wrapper.get('.badge').classes()).toContain('text-bg-danger')
+    wrapper.unmount()
+  })
+
+  it('shows none when an installed plugin has no Python dependencies', async () => {
+    vi.spyOn(managementApi, 'listAutomationPlugins').mockResolvedValue({
+      catalog: [{
+        api_version: 3,
+        id: 'no-dependencies',
+        name: 'No dependencies',
+        description: '',
+        entrypoints: ['lifecycle'],
+        config_schema: {
+          type: 'object',
+          properties: {},
+          required: [],
+          additionalProperties: false,
+        },
+        folder: 'no-dependencies',
+        python_requirements: [],
+        requirements_fingerprint: 'empty-fingerprint',
+        dependency_status: 'ready',
+        dependency_error_code: '',
+      }],
+      errors: {},
+    })
+
+    const wrapper = await mountPage()
+
+    expect(wrapper.text()).toContain('common.none')
+    expect(wrapper.text()).toContain('automation.entrypoints.lifecycle.scope')
     wrapper.unmount()
   })
 })

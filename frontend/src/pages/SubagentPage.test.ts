@@ -22,19 +22,18 @@ describe('Subagent authoring page', () => {
     const api = service()
     const { wrapper } = await mountPrimaryPage(api)
 
-    const addButton = wrapper.findAll('button').find((button) => button.text() === 'agents.primary.addReference')
-    if (!addButton) throw new Error('add reference button not found')
+    const addButton = wrapper.get('[data-action="add-subagent-reference"]')
     await addButton.trigger('click')
     await addButton.trigger('click')
-    expect(wrapper.findAll('[data-testid="subagent-reference-card"]')).toHaveLength(2)
+    expect(wrapper.findAll('[data-testid="subagent-reference-row"]')).toHaveLength(2)
     expect(wrapper.findAll('[data-action="remove-subagent-reference"]').every((button) => (
       button.classes().includes('ms-auto')
     ))).toBe(true)
 
     await wrapper.findAll('[data-action="remove-subagent-reference"]')[0]?.trigger('click')
-    expect(wrapper.findAll('[data-testid="subagent-reference-card"]')).toHaveLength(1)
-    const card = wrapper.get('[data-testid="subagent-reference-card"]')
-    await card.get('[data-testid="subagent-reference"]').setValue(
+    expect(wrapper.findAll('[data-testid="subagent-reference-row"]')).toHaveLength(1)
+    const row = wrapper.get('[data-testid="subagent-reference-row"]')
+    await row.get('[data-testid="subagent-reference"]').setValue(
       '00000000-0000-0000-0000-000000000020',
     )
     await flushPromises()
@@ -191,8 +190,8 @@ describe('Subagent authoring page', () => {
     const id = '00000000-0000-0000-0000-000000000020'
     const { wrapper } = await mountSubagentPage(api, `/agents/subagents?id=${id}`)
 
-    await buttonByText(wrapper, 'agents.primary.addReference').trigger('click')
-    const reference = wrapper.get('[data-testid="subagent-reference-card"]')
+    await wrapper.get('[data-action="add-subagent-reference"]').trigger('click')
+    const reference = wrapper.get('[data-testid="subagent-reference-row"]')
     await reference.get('[data-testid="subagent-reference"]').setValue(id)
     await buttonByText(wrapper, 'common.save').trigger('click')
     await flushPromises()

@@ -1024,15 +1024,31 @@ export const en: MessageSchema = {
     plugins: {
       title: 'Installed automation plugins',
       entrypoints: 'Execution nodes',
-      requirements: 'Python requirements',
-      status: 'Dependency status',
+      requirements: 'Python dependencies and status',
       empty: 'No automation plugin is installed.',
     },
     entrypoints: {
-      middleware: 'Agent hooks',
-      prepare: 'Prepare',
-      lifecycle: 'Lifecycle',
-      complete: 'Complete',
+      middleware: {
+        scope: 'Agent hook plugin',
+        timing: 'scheduled through native LangChain hooks inside the Agent graph',
+      },
+      prepare: {
+        scope: 'Agent hook plugin',
+        timing: 'runs once before this Agent graph is constructed',
+      },
+      lifecycle: {
+        scope: 'Periodic plugin',
+        timing: 'runs at a fixed delay during the request',
+      },
+      complete: {
+        scope: 'Hook / periodic plugin',
+        timing: 'runs once after the request reaches any terminal state',
+      },
+    },
+    dependencies: {
+      installed: 'installed',
+      notInstalledFailed: 'not installed (installation failed)',
+      notInstalledRestartRequired: 'not installed (restart required)',
     },
     scripts: {
       invalid: '{count} automation plugins failed static validation.',
