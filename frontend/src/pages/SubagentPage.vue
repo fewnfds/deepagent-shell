@@ -395,9 +395,9 @@ watch(
                   <span class="badge text-bg-primary ms-auto">{{ t('agents.capability.required') }}</span>
                 </header>
                 <div class="card-body">
-                <select id="subagent-capability-filesystem" class="form-select" data-testid="subagent-capability-filesystem" disabled>
-                  <option :value="filesystemManifest?.subagent_policy === 'inherit' ? INHERIT_VALUE : INVALID_VALUE">{{ filesystemManifest?.subagent_policy === 'inherit' ? t('agents.override.mode.inherit') : t('agents.override.mode.invalid') }}</option>
-                </select>
+                  <select id="subagent-capability-filesystem" class="form-select" data-testid="subagent-capability-filesystem" disabled>
+                    <option :value="filesystemManifest?.subagent_policy === 'inherit' ? INHERIT_VALUE : INVALID_VALUE">{{ filesystemManifest?.subagent_policy === 'inherit' ? t('agents.override.mode.inherit') : t('agents.override.mode.invalid') }}</option>
+                  </select>
                 </div>
               </section>
             </div>
@@ -408,17 +408,17 @@ watch(
                   <span class="badge text-bg-info ms-auto">{{ t('agents.capability.optional') }}</span>
                 </header>
                 <div class="card-body">
-                <select
-                  id="subagent-capability-filesystem-permissions"
-                  class="form-select"
-                  data-testid="subagent-capability-filesystem-permissions"
-                  :value="selectionValue('filesystem-permissions')"
-                  @change="filesystemPermissionsManifest && updateSelection(filesystemPermissionsManifest, ($event.target as HTMLSelectElement).value)"
-                >
-                  <option :value="INHERIT_VALUE">{{ t('agents.override.mode.inherit') }}</option>
-                  <option :value="DISABLED_VALUE">{{ t('agents.override.mode.disabled') }}</option>
-                  <option v-for="block in capabilityBlocks('filesystem-permissions')" :key="block.id" :value="block.id">{{ block.name }}</option>
-                </select>
+                  <select
+                    id="subagent-capability-filesystem-permissions"
+                    class="form-select"
+                    data-testid="subagent-capability-filesystem-permissions"
+                    :value="selectionValue('filesystem-permissions')"
+                    @change="filesystemPermissionsManifest && updateSelection(filesystemPermissionsManifest, ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option :value="INHERIT_VALUE">{{ t('agents.override.mode.inherit') }}</option>
+                    <option :value="DISABLED_VALUE">{{ t('agents.override.mode.disabled') }}</option>
+                    <option v-for="block in capabilityBlocks('filesystem-permissions')" :key="block.id" :value="block.id">{{ block.name }}</option>
+                  </select>
                 </div>
               </section>
             </div>
@@ -435,12 +435,12 @@ watch(
             >
               <section class="card h-100">
                 <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-                <label
-                  class="card-title mb-0"
-                  :for="`subagent-capability-${capability.type}`"
-                >
-                  {{ t(`capabilities.${capability.type}.label`) }}
-                </label>
+                  <label
+                    class="card-title mb-0"
+                    :for="`subagent-capability-${capability.type}`"
+                  >
+                    {{ t(`capabilities.${capability.type}.label`) }}
+                  </label>
                   <span v-if="capability.subagent_overrideable && capability.required" class="badge text-bg-primary ms-auto">
                     {{ t('agents.capability.required') }}
                   </span>
@@ -449,32 +449,32 @@ watch(
                   </span>
                 </header>
                 <div class="card-body">
-                <select
-                  :id="`subagent-capability-${capability.type}`"
-                  class="form-select"
-                  :data-testid="`subagent-capability-${capability.type}`"
-                  :disabled="!capability.subagent_overrideable"
-                  :value="selectionValue(capability.type)"
-                  @change="updateSelection(capability, ($event.target as HTMLSelectElement).value)"
-                >
-                  <template v-if="!capability.subagent_overrideable">
-                    <option v-if="capability.subagent_policy === 'inherit'" :value="INHERIT_VALUE">
-                      {{ t('agents.override.mode.inherit') }}
-                    </option>
-                    <option v-else :value="INVALID_VALUE">
-                      {{ t('agents.override.mode.invalid') }}
-                    </option>
-                  </template>
-                  <template v-else>
-                    <option :value="INHERIT_VALUE">{{ t('agents.override.mode.inherit') }}</option>
-                    <option v-if="!capability.required" :value="DISABLED_VALUE">
-                      {{ t('agents.override.mode.disabled') }}
-                    </option>
-                    <option v-for="block in capabilityBlocks(capability.type)" :key="block.id" :value="block.id">
-                      {{ block.name }}
-                    </option>
-                  </template>
-                </select>
+                  <select
+                    :id="`subagent-capability-${capability.type}`"
+                    class="form-select"
+                    :data-testid="`subagent-capability-${capability.type}`"
+                    :disabled="!capability.subagent_overrideable"
+                    :value="selectionValue(capability.type)"
+                    @change="updateSelection(capability, ($event.target as HTMLSelectElement).value)"
+                  >
+                    <template v-if="!capability.subagent_overrideable">
+                      <option v-if="capability.subagent_policy === 'inherit'" :value="INHERIT_VALUE">
+                        {{ t('agents.override.mode.inherit') }}
+                      </option>
+                      <option v-else :value="INVALID_VALUE">
+                        {{ t('agents.override.mode.invalid') }}
+                      </option>
+                    </template>
+                    <template v-else>
+                      <option :value="INHERIT_VALUE">{{ t('agents.override.mode.inherit') }}</option>
+                      <option v-if="!capability.required" :value="DISABLED_VALUE">
+                        {{ t('agents.override.mode.disabled') }}
+                      </option>
+                      <option v-for="block in capabilityBlocks(capability.type)" :key="block.id" :value="block.id">
+                        {{ block.name }}
+                      </option>
+                    </template>
+                  </select>
                 </div>
               </section>
             </div>

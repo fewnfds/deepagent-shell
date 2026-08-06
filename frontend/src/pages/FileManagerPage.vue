@@ -576,81 +576,81 @@ onMounted(() => { void loadScopes() })
           <span>{{ t('common.loading') }}</span>
         </div>
         <div v-else class="table-responsive">
-        <table class="table table-hover align-middle">
-          <thead class="management-table-head">
-            <tr>
-              <th>
-                <input
-                  :checked="allSelected"
-                  class="form-check-input"
-                  data-testid="select-all-files"
-                  :disabled="selectableItems.length === 0"
-                  :aria-label="t('fileManager.selectAll')"
-                  type="checkbox"
-                  @change="toggleAll"
-                >
-              </th>
-              <th>{{ t('fileManager.columns.name') }}</th>
-              <th>{{ t('fileManager.columns.kind') }}</th>
-              <th>{{ t('fileManager.columns.size') }}</th>
-              <th>{{ t('fileManager.columns.modified') }}</th>
-              <th>{{ t('fileManager.columns.actions') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="directory.items.length === 0">
-              <td colspan="6" class="text-center text-body-secondary p-3">
-                {{ t('fileManager.empty') }}
-              </td>
-            </tr>
-            <tr v-for="row in directory.items" :key="row.path">
-              <td>
-                <input
-                  v-if="canSelect(row)"
-                  :checked="isSelected(row)"
-                  class="form-check-input"
-                  data-testid="select-file"
-                  :aria-label="t('fileManager.selectItem', { name: row.name })"
-                  type="checkbox"
-                  @change="toggleSelection(row, $event)"
-                >
-              </td>
-              <td>
-                <a
-                  v-if="row.kind === 'directory'"
-                  class="font-monospace text-break"
-                  data-testid="managed-entry-name"
-                  href="#"
-                  @click.prevent="load(row.path)"
-                >
-                  {{ row.name }}
-                </a>
-                <span v-else class="font-monospace text-break" data-testid="managed-entry-name">
-                  {{ row.name }}
-                </span>
-              </td>
-              <td>{{ t(`fileManager.kinds.${row.kind}`) }}</td>
-              <td>{{ formatSize(row.size) }}</td>
-              <td>{{ formatTime(row.modified_at) }}</td>
-              <td>
-                <div v-if="row.kind !== 'unsupported'" class="d-flex flex-wrap gap-1" data-testid="row-actions">
-                  <LteButton v-if="row.kind === 'file'" size="sm" theme="warning" type="button" @click="editText(row)">
-                    {{ t('common.edit') }}
-                  </LteButton>
-                  <LteButton size="sm" theme="info" type="button" @click="download(row)">
-                    {{ t('fileManager.download') }}
-                  </LteButton>
-                  <LteButton size="sm" theme="warning" type="button" @click="startRename(row)">
-                    {{ t('fileManager.rename') }}
-                  </LteButton>
-                  <LteButton size="sm" theme="danger" type="button" @click="removeItem(row)">
-                    {{ t('common.delete') }}
-                  </LteButton>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+          <table class="table table-hover align-middle">
+            <thead class="management-table-head">
+              <tr>
+                <th>
+                  <input
+                    :checked="allSelected"
+                    class="form-check-input"
+                    data-testid="select-all-files"
+                    :disabled="selectableItems.length === 0"
+                    :aria-label="t('fileManager.selectAll')"
+                    type="checkbox"
+                    @change="toggleAll"
+                  >
+                </th>
+                <th>{{ t('fileManager.columns.name') }}</th>
+                <th>{{ t('fileManager.columns.kind') }}</th>
+                <th>{{ t('fileManager.columns.size') }}</th>
+                <th>{{ t('fileManager.columns.modified') }}</th>
+                <th>{{ t('fileManager.columns.actions') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="directory.items.length === 0">
+                <td colspan="6" class="text-center text-body-secondary p-3">
+                  {{ t('fileManager.empty') }}
+                </td>
+              </tr>
+              <tr v-for="row in directory.items" :key="row.path">
+                <td>
+                  <input
+                    v-if="canSelect(row)"
+                    :checked="isSelected(row)"
+                    class="form-check-input"
+                    data-testid="select-file"
+                    :aria-label="t('fileManager.selectItem', { name: row.name })"
+                    type="checkbox"
+                    @change="toggleSelection(row, $event)"
+                  >
+                </td>
+                <td>
+                  <a
+                    v-if="row.kind === 'directory'"
+                    class="font-monospace text-break"
+                    data-testid="managed-entry-name"
+                    href="#"
+                    @click.prevent="load(row.path)"
+                  >
+                    {{ row.name }}
+                  </a>
+                  <span v-else class="font-monospace text-break" data-testid="managed-entry-name">
+                    {{ row.name }}
+                  </span>
+                </td>
+                <td>{{ t(`fileManager.kinds.${row.kind}`) }}</td>
+                <td>{{ formatSize(row.size) }}</td>
+                <td>{{ formatTime(row.modified_at) }}</td>
+                <td>
+                  <div v-if="row.kind !== 'unsupported'" class="d-flex flex-wrap gap-1" data-testid="row-actions">
+                    <LteButton v-if="row.kind === 'file'" size="sm" theme="warning" type="button" @click="editText(row)">
+                      {{ t('common.edit') }}
+                    </LteButton>
+                    <LteButton size="sm" theme="info" type="button" @click="download(row)">
+                      {{ t('fileManager.download') }}
+                    </LteButton>
+                    <LteButton size="sm" theme="warning" type="button" @click="startRename(row)">
+                      {{ t('fileManager.rename') }}
+                    </LteButton>
+                    <LteButton size="sm" theme="danger" type="button" @click="removeItem(row)">
+                      {{ t('common.delete') }}
+                    </LteButton>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </template>
     </LteCard>
@@ -663,27 +663,27 @@ onMounted(() => { void loadScopes() })
           </LteButton>
         </div>
         <div class="list-group list-group-flush">
-        <div v-for="item in uploads" :key="item.id" class="list-group-item" data-testid="upload-item">
-          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
-            <strong class="text-break">{{ item.path }}</strong>
-            <span v-if="item.status === 'completed'" class="badge text-bg-success">
-              {{ t('fileManager.upload.status.completed') }}
-            </span>
-            <span v-else-if="item.status === 'failed'" class="badge text-bg-danger">
-              {{ t('fileManager.upload.status.failed') }}
-            </span>
-            <span v-else-if="item.status === 'uploading'" class="badge text-bg-info">
-              {{ t('fileManager.upload.status.uploading') }}
-            </span>
-            <span v-else class="badge text-bg-secondary">
-              {{ t('fileManager.upload.status.pending') }}
-            </span>
+          <div v-for="item in uploads" :key="item.id" class="list-group-item" data-testid="upload-item">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+              <strong class="text-break">{{ item.path }}</strong>
+              <span v-if="item.status === 'completed'" class="badge text-bg-success">
+                {{ t('fileManager.upload.status.completed') }}
+              </span>
+              <span v-else-if="item.status === 'failed'" class="badge text-bg-danger">
+                {{ t('fileManager.upload.status.failed') }}
+              </span>
+              <span v-else-if="item.status === 'uploading'" class="badge text-bg-info">
+                {{ t('fileManager.upload.status.uploading') }}
+              </span>
+              <span v-else class="badge text-bg-secondary">
+                {{ t('fileManager.upload.status.pending') }}
+              </span>
+            </div>
+            <LteProgress v-if="item.status === 'completed'" :value="item.progress" show-label theme="success" />
+            <LteProgress v-else-if="item.status === 'failed'" :value="item.progress" show-label theme="danger" />
+            <LteProgress v-else :value="item.progress" show-label theme="primary" />
+            <small v-if="item.error" class="d-block text-body-secondary text-break mt-2">{{ item.error }}</small>
           </div>
-          <LteProgress v-if="item.status === 'completed'" :value="item.progress" show-label theme="success" />
-          <LteProgress v-else-if="item.status === 'failed'" :value="item.progress" show-label theme="danger" />
-          <LteProgress v-else :value="item.progress" show-label theme="primary" />
-          <small v-if="item.error" class="d-block text-body-secondary text-break mt-2">{{ item.error }}</small>
-        </div>
         </div>
       </LteCard>
     </section>

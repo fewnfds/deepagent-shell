@@ -107,16 +107,16 @@ function move(index: number, delta: number): void {
         </LteButton>
       </header>
       <div v-if="catalog.length" class="list-group list-group-flush">
-          <article v-for="template in catalog" :key="template.filename" class="list-group-item">
-            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-              <span>
-                <strong class="d-block">{{ template.name ?? template.filename }}</strong>
-                <span v-if="template.description" class="d-block text-body-secondary">{{ template.description }}</span>
-                <span class="font-monospace text-break">{{ template.filename }}</span>
-              </span>
-              <LteButton theme="success" @click="addTemplate(template)">{{ t('editors.customMiddleware.addTemplate') }}</LteButton>
-            </div>
-          </article>
+        <article v-for="template in catalog" :key="template.filename" class="list-group-item">
+          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <span>
+              <strong class="d-block">{{ template.name ?? template.filename }}</strong>
+              <span v-if="template.description" class="d-block text-body-secondary">{{ template.description }}</span>
+              <span class="font-monospace text-break">{{ template.filename }}</span>
+            </span>
+            <LteButton theme="success" @click="addTemplate(template)">{{ t('editors.customMiddleware.addTemplate') }}</LteButton>
+          </div>
+        </article>
       </div>
       <p v-else class="card-body text-body-secondary mb-0">{{ t('editors.customMiddleware.emptyCatalog') }}</p>
       <div v-if="Object.keys(errors).length" class="card-body">

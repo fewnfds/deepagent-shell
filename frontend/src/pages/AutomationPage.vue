@@ -132,10 +132,10 @@ onMounted(() => {
                       v-if="plugin.dependency_status === 'ready'"
                       class="badge font-monospace text-bg-success"
                     >
-                      {{ requirement }} · {{ dependencyLabel(plugin) }}
+                      {{ requirement }}{{ t('common.itemSeparator') }}{{ dependencyLabel(plugin) }}
                     </span>
                     <span v-else class="badge font-monospace text-bg-danger">
-                      {{ requirement }} · {{ dependencyLabel(plugin) }}
+                      {{ requirement }}{{ t('common.itemSeparator') }}{{ dependencyLabel(plugin) }}
                     </span>
                   </div>
                 </div>

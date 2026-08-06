@@ -89,15 +89,15 @@ function resourceError(error: LocalizedMessagePayload): string {
         </LteButton>
       </header>
       <div v-if="catalog.length" class="list-group list-group-flush">
-          <label v-for="skill in catalog" :key="skill.name" class="list-group-item" data-testid="skill-catalog-item">
-            <span class="d-flex align-items-start gap-2">
-              <input v-model="draft.skills" class="form-check-input" type="checkbox" :value="skill.name">
-              <span class="w-100">
-                <strong class="d-block">{{ skill.name }}</strong>
-                <span v-if="skill.description" class="text-body-secondary">{{ skill.description }}</span>
-              </span>
+        <label v-for="skill in catalog" :key="skill.name" class="list-group-item" data-testid="skill-catalog-item">
+          <span class="d-flex align-items-start gap-2">
+            <input v-model="draft.skills" class="form-check-input" type="checkbox" :value="skill.name">
+            <span class="w-100">
+              <strong class="d-block">{{ skill.name }}</strong>
+              <span v-if="skill.description" class="text-body-secondary">{{ skill.description }}</span>
             </span>
-          </label>
+          </span>
+        </label>
       </div>
       <p v-else class="card-body text-body-secondary mb-0">{{ t('editors.skill.emptyCatalog') }}</p>
       <div v-if="Object.keys(errors).length" class="card-body">

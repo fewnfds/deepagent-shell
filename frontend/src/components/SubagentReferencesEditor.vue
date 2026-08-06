@@ -80,7 +80,7 @@ function profileFor(reference: SubagentReference): SubagentProfile | undefined {
           >
             <option disabled value="">{{ t('common.chooseConfiguration') }}</option>
             <option v-for="profile in profiles" :key="profile.id" :value="profile.id">
-              {{ profile.component_name }} · {{ profile.name }}
+              {{ profile.component_name }}{{ t('common.itemSeparator') }}{{ profile.name }}
             </option>
           </select>
           <LteButton

@@ -477,32 +477,32 @@ onMounted(() => {
         data-testid="retention-form"
         @submit.prevent="saveRetention"
       >
-          <label class="form-label" for="session-retention">{{ t('agentSessions.retention.label') }}</label>
-          <div class="input-group">
-            <input
-              id="session-retention"
-              v-model.number="retentionLimit"
-              class="form-control"
-              max="10000"
-              min="1"
-              required
-              step="1"
-              type="number"
-            >
-            <LteButton :disabled="retentionSaving" theme="primary" type="submit">
-              <span v-if="retentionSaving" class="spinner-border spinner-border-sm" aria-hidden="true" />
-              {{ t('common.save') }}
-            </LteButton>
-          </div>
-          <LteAlert
-            v-if="retentionError"
-            class="mt-3"
-            data-testid="retention-error"
-            :title="t('agentSessions.retention.saveFailed')"
-            theme="danger"
+        <label class="form-label" for="session-retention">{{ t('agentSessions.retention.label') }}</label>
+        <div class="input-group">
+          <input
+            id="session-retention"
+            v-model.number="retentionLimit"
+            class="form-control"
+            max="10000"
+            min="1"
+            required
+            step="1"
+            type="number"
           >
-            {{ retentionError }}
-          </LteAlert>
+          <LteButton :disabled="retentionSaving" theme="primary" type="submit">
+            <span v-if="retentionSaving" class="spinner-border spinner-border-sm" aria-hidden="true" />
+            {{ t('common.save') }}
+          </LteButton>
+        </div>
+        <LteAlert
+          v-if="retentionError"
+          class="mt-3"
+          data-testid="retention-error"
+          :title="t('agentSessions.retention.saveFailed')"
+          theme="danger"
+        >
+          {{ retentionError }}
+        </LteAlert>
       </form>
     </LteCard>
 

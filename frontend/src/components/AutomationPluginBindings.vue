@@ -186,7 +186,9 @@ function changePlugin(kind: BindingKind, index: number, pluginId: string): void 
                 theme="secondary"
                 type="button"
                 @click="moveBinding(kind, index, -1)"
-              ><i class="bi bi-arrow-up" aria-hidden="true" /></LteButton>
+              >
+                <i class="bi bi-arrow-up" aria-hidden="true" />
+              </LteButton>
               <LteButton
                 :aria-label="t('automation.bindings.moveDown')"
                 :disabled="index === pluginsFor(kind).length - 1"
@@ -195,7 +197,9 @@ function changePlugin(kind: BindingKind, index: number, pluginId: string): void 
                 theme="secondary"
                 type="button"
                 @click="moveBinding(kind, index, 1)"
-              ><i class="bi bi-arrow-down" aria-hidden="true" /></LteButton>
+              >
+                <i class="bi bi-arrow-down" aria-hidden="true" />
+              </LteButton>
               <LteButton
                 :aria-label="t('automation.bindings.remove')"
                 :title="t('automation.bindings.remove')"
@@ -203,7 +207,9 @@ function changePlugin(kind: BindingKind, index: number, pluginId: string): void 
                 theme="danger"
                 type="button"
                 @click="removeBinding(kind, index)"
-              ><i class="bi bi-trash" aria-hidden="true" /></LteButton>
+              >
+                <i class="bi bi-trash" aria-hidden="true" />
+              </LteButton>
             </div>
           </div>
           <div v-if="selectedPlugin(binding)" class="col-12">

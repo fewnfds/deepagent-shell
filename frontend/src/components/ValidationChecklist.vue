@@ -53,55 +53,55 @@ const hasWarnings = computed(() => warningCount.value > 0)
     <LteAccordion v-else always-open flush>
       <LteAccordionItem
         v-for="(issue, index) in validation.report?.issues ?? []"
-        :key="`${issue.scope}:${issue.owner_id}:${issue.path}:${issue.code}:${index}`"
         :id="`validation-issue-${index}`"
+        :key="`${issue.scope}:${issue.owner_id}:${issue.path}:${issue.code}:${index}`"
         :title="issuePresentation.message(issue)"
         data-testid="validation-issue"
       >
         <dl class="row g-3 mb-0">
-            <div class="col-md-6">
-              <dt class="small text-uppercase text-body-secondary mb-1">
-                {{ t('validation.location.owner') }}
-              </dt>
-              <dd class="mb-0 fw-semibold" data-testid="validation-owner">
-                {{ issuePresentation.ownerLabel(issue) }}
-              </dd>
-            </div>
-            <div class="col-md-6">
-              <dt class="small text-uppercase text-body-secondary mb-1">
-                {{ t('validation.location.problemLocation') }}
-              </dt>
-              <dd class="mb-0 fw-semibold" data-testid="validation-location">
-                {{ issuePresentation.location(issue) }}
-              </dd>
-            </div>
-            <div v-if="issue.path" class="col-md-6">
-              <dt class="small text-uppercase text-body-secondary mb-1">
-                {{ t('validation.location.technicalPath') }}
-              </dt>
-              <dd class="mb-0 font-monospace text-break" data-testid="validation-technical-path">
-                {{ issue.path }}
-              </dd>
-            </div>
-            <div class="col-12">
-              <dt class="small text-uppercase text-body-secondary mb-1">
-                {{ t('validation.location.reason') }}
-              </dt>
-              <dd class="mb-0" data-testid="validation-reason">
-                {{ issuePresentation.message(issue) }}
-              </dd>
-            </div>
-            <div class="col-12">
-              <dt class="small text-uppercase text-body-secondary mb-1">
-                {{ t('validation.location.resolution') }}
-              </dt>
-              <dd class="mb-0" data-testid="validation-resolution">
-                {{ issuePresentation.resolution(issue) }}
-              </dd>
-            </div>
-            <div v-if="$slots['issue-actions']" class="col-12 d-flex flex-wrap gap-2">
-              <slot name="issue-actions" :issue="issue" />
-            </div>
+          <div class="col-md-6">
+            <dt class="small text-uppercase text-body-secondary mb-1">
+              {{ t('validation.location.owner') }}
+            </dt>
+            <dd class="mb-0 fw-semibold" data-testid="validation-owner">
+              {{ issuePresentation.ownerLabel(issue) }}
+            </dd>
+          </div>
+          <div class="col-md-6">
+            <dt class="small text-uppercase text-body-secondary mb-1">
+              {{ t('validation.location.problemLocation') }}
+            </dt>
+            <dd class="mb-0 fw-semibold" data-testid="validation-location">
+              {{ issuePresentation.location(issue) }}
+            </dd>
+          </div>
+          <div v-if="issue.path" class="col-md-6">
+            <dt class="small text-uppercase text-body-secondary mb-1">
+              {{ t('validation.location.technicalPath') }}
+            </dt>
+            <dd class="mb-0 font-monospace text-break" data-testid="validation-technical-path">
+              {{ issue.path }}
+            </dd>
+          </div>
+          <div class="col-12">
+            <dt class="small text-uppercase text-body-secondary mb-1">
+              {{ t('validation.location.reason') }}
+            </dt>
+            <dd class="mb-0" data-testid="validation-reason">
+              {{ issuePresentation.message(issue) }}
+            </dd>
+          </div>
+          <div class="col-12">
+            <dt class="small text-uppercase text-body-secondary mb-1">
+              {{ t('validation.location.resolution') }}
+            </dt>
+            <dd class="mb-0" data-testid="validation-resolution">
+              {{ issuePresentation.resolution(issue) }}
+            </dd>
+          </div>
+          <div v-if="$slots['issue-actions']" class="col-12 d-flex flex-wrap gap-2">
+            <slot name="issue-actions" :issue="issue" />
+          </div>
         </dl>
       </LteAccordionItem>
     </LteAccordion>

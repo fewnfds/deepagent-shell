@@ -483,49 +483,49 @@ onMounted(() => { void loadControls() })
           </label>
         </div>
         <div class="row g-3">
-        <form
-          v-for="source in (['api_call', 'interception', 'runtime'] as const)"
-          :key="source"
-          class="col-lg-3"
-          :data-testid="`retention-${source}`"
-          @submit.prevent="saveRetention(source)"
-        >
-          <label class="form-label" :for="`retention-${source}`">{{ t(`eventFeed.sources.${source}`) }}</label>
-          <div class="input-group">
-            <input
-              :id="`retention-${source}`"
-              v-model.number="retentionDrafts[source]"
-              class="form-control"
-              :max="maxRetention"
-              min="1"
-              required
-              step="1"
-              type="number"
-            >
-            <LteButton :disabled="savingControl === `${source}-retention`" theme="primary" type="submit">
-              {{ t('common.save') }}
-            </LteButton>
-          </div>
-        </form>
-        <form class="col-lg-3" data-testid="system-log-settings" @submit.prevent="saveSystemLogSettings">
-          <label class="form-label" for="system-log-max-size">{{ t('eventFeed.retention.systemMaxSize') }}</label>
-          <div class="input-group">
-            <input
-              id="system-log-max-size"
-              v-model.number="systemLogSizeDraft"
-              class="form-control"
-              :max="systemLogSizeMax"
-              :min="systemLogSizeMin"
-              required
-              step="1"
-              type="number"
-            >
-            <span class="input-group-text">{{ 'MiB' }}</span>
-            <LteButton :disabled="savingControl === 'system-log-settings'" theme="primary" type="submit">
-              {{ t('common.save') }}
-            </LteButton>
-          </div>
-        </form>
+          <form
+            v-for="source in (['api_call', 'interception', 'runtime'] as const)"
+            :key="source"
+            class="col-lg-3"
+            :data-testid="`retention-${source}`"
+            @submit.prevent="saveRetention(source)"
+          >
+            <label class="form-label" :for="`retention-${source}`">{{ t(`eventFeed.sources.${source}`) }}</label>
+            <div class="input-group">
+              <input
+                :id="`retention-${source}`"
+                v-model.number="retentionDrafts[source]"
+                class="form-control"
+                :max="maxRetention"
+                min="1"
+                required
+                step="1"
+                type="number"
+              >
+              <LteButton :disabled="savingControl === `${source}-retention`" theme="primary" type="submit">
+                {{ t('common.save') }}
+              </LteButton>
+            </div>
+          </form>
+          <form class="col-lg-3" data-testid="system-log-settings" @submit.prevent="saveSystemLogSettings">
+            <label class="form-label" for="system-log-max-size">{{ t('eventFeed.retention.systemMaxSize') }}</label>
+            <div class="input-group">
+              <input
+                id="system-log-max-size"
+                v-model.number="systemLogSizeDraft"
+                class="form-control"
+                :max="systemLogSizeMax"
+                :min="systemLogSizeMin"
+                required
+                step="1"
+                type="number"
+              >
+              <span class="input-group-text">{{ 'MiB' }}</span>
+              <LteButton :disabled="savingControl === 'system-log-settings'" theme="primary" type="submit">
+                {{ t('common.save') }}
+              </LteButton>
+            </div>
+          </form>
         </div>
       </div>
     </LteCard>

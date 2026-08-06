@@ -314,7 +314,6 @@ defineExpose<{
       <p v-if="queryValidationError" class="text-danger mb-0" role="alert">
         {{ queryValidationError }}
       </p>
-
     </form>
   </LteCard>
 

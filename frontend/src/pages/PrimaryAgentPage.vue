@@ -336,16 +336,16 @@ watch(
                   </span>
                 </header>
                 <div class="card-body">
-                <select
-                  :id="`primary-capability-${type}`"
-                  class="form-select"
-                  :data-testid="`primary-capability-${type}`"
-                  :value="referenceId(form, type)"
-                  @change="updateReference(type, ($event.target as HTMLSelectElement).value)"
-                >
-                  <option value="">{{ type === 'filesystem' ? t('agents.capability.minimal') : t('agents.capability.notAttached') }}</option>
-                  <option v-for="block in capabilityBlocks(type)" :key="block.id" :value="block.id">{{ block.name }}</option>
-                </select>
+                  <select
+                    :id="`primary-capability-${type}`"
+                    class="form-select"
+                    :data-testid="`primary-capability-${type}`"
+                    :value="referenceId(form, type)"
+                    @change="updateReference(type, ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option value="">{{ type === 'filesystem' ? t('agents.capability.minimal') : t('agents.capability.notAttached') }}</option>
+                    <option v-for="block in capabilityBlocks(type)" :key="block.id" :value="block.id">{{ block.name }}</option>
+                  </select>
                 </div>
               </section>
             </div>
@@ -362,30 +362,30 @@ watch(
             >
               <section class="card h-100">
                 <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-                <label
-                  class="card-title mb-0"
-                  :for="`primary-capability-${capability.type}`"
-                >
-                  {{ t(`capabilities.${capability.type}.label`) }}
-                </label>
+                  <label
+                    class="card-title mb-0"
+                    :for="`primary-capability-${capability.type}`"
+                  >
+                    {{ t(`capabilities.${capability.type}.label`) }}
+                  </label>
                   <span v-if="capability.required" class="badge text-bg-primary ms-auto">
                     {{ t('agents.capability.required') }}
                   </span>
                   <span v-else class="badge text-bg-info ms-auto">{{ t('agents.capability.optional') }}</span>
                 </header>
                 <div class="card-body">
-                <select
-                  :id="`primary-capability-${capability.type}`"
-                  class="form-select"
-                  :value="referenceId(form, capability.type)"
-                  @change="updateReference(capability.type, ($event.target as HTMLSelectElement).value)"
-                >
-                  <option v-if="capability.required" disabled value="">{{ t('common.chooseConfiguration') }}</option>
-                  <option v-else value="">{{ t('agents.capability.notAttached') }}</option>
-                  <option v-for="block in capabilityBlocks(capability.type)" :key="block.id" :value="block.id">
-                    {{ block.name }}
-                  </option>
-                </select>
+                  <select
+                    :id="`primary-capability-${capability.type}`"
+                    class="form-select"
+                    :value="referenceId(form, capability.type)"
+                    @change="updateReference(capability.type, ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option v-if="capability.required" disabled value="">{{ t('common.chooseConfiguration') }}</option>
+                    <option v-else value="">{{ t('agents.capability.notAttached') }}</option>
+                    <option v-for="block in capabilityBlocks(capability.type)" :key="block.id" :value="block.id">
+                      {{ block.name }}
+                    </option>
+                  </select>
                 </div>
               </section>
             </div>
@@ -402,7 +402,6 @@ watch(
           v-model:references="form.subagents"
           :profiles="subagentProfiles"
         />
-
       </section>
 
       <aside class="col-lg-4 validation-sidebar">

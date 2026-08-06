@@ -51,20 +51,20 @@ function identifiers(tool: CustomToolCatalogItem): Array<{ label: string, value:
         </LteButton>
       </header>
       <div v-if="catalog.length" class="list-group list-group-flush">
-          <label v-for="tool in catalog" :key="tool.name" class="list-group-item" data-testid="custom-tool-item">
-            <span class="d-flex align-items-start gap-2">
-              <input v-model="draft.tools" class="form-check-input" type="checkbox" :value="tool.name">
-              <span class="w-100">
-                <dl data-testid="tool-identifiers">
-                  <div v-for="identifier in identifiers(tool)" :key="identifier.label">
-                    <dt>{{ identifier.label }}</dt>
-                    <dd class="text-break">{{ identifier.value }}</dd>
-                  </div>
-                </dl>
-                <span v-if="tool.description" class="text-body-secondary">{{ tool.description }}</span>
-              </span>
+        <label v-for="tool in catalog" :key="tool.name" class="list-group-item" data-testid="custom-tool-item">
+          <span class="d-flex align-items-start gap-2">
+            <input v-model="draft.tools" class="form-check-input" type="checkbox" :value="tool.name">
+            <span class="w-100">
+              <dl data-testid="tool-identifiers">
+                <div v-for="identifier in identifiers(tool)" :key="identifier.label">
+                  <dt>{{ identifier.label }}</dt>
+                  <dd class="text-break">{{ identifier.value }}</dd>
+                </div>
+              </dl>
+              <span v-if="tool.description" class="text-body-secondary">{{ tool.description }}</span>
             </span>
-          </label>
+          </span>
+        </label>
       </div>
       <p v-else class="card-body text-body-secondary mb-0">{{ t('editors.customTool.emptyCatalog') }}</p>
       <div v-if="Object.keys(errors).length" class="card-body">

@@ -236,7 +236,7 @@ export interface FilesystemPermissionEntryDraft {
   permission: FilesystemPermissionValue
 }
 
-interface FilesystemPermissionEntryApi extends FilesystemPermissionEntryDraft {}
+type FilesystemPermissionEntryApi = FilesystemPermissionEntryDraft
 
 interface FilesystemPermissionToolOverrideDraft extends FilesystemToolDraft {
   override: boolean
