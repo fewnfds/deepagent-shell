@@ -70,13 +70,14 @@ Content-Type: application/json
 客户端每次请求提交完整 `messages[]`。`X-Agent-Session-ID` 用于把多次请求归入同一历史会话，
 不承担聊天记忆；服务端响应也会返回该 header。
 
-## 发行与部署
+## 运行与版本
 
+当前运行方式是 Windows 源码 Clone 的一键启动。
 稳定源码位于 `main`，滚动源码位于 `dev`。
 
 - Windows：Clone 需要的分支，运行 `.\start_server.bat`；首次启动自动准备固定 Python runtime。
 
-详情见[开发与发布](docs/development-and-release.md)。
+详情见[开发与版本](docs/development-and-release.md)。
 
 ## 数据目录
 
@@ -90,7 +91,7 @@ data/
 runtime/        可重建的 Python runtime、缓存与临时文件
 frontend/       Vue 3 前端源码
 server/src/     FastAPI、配置与 Agent runtime 源码
-packaging/      启动、构建与发布脚本
+packaging/      启动与开发辅助脚本
 .test/          稳定行为测试
 docs/           当前版本公开说明
 ```
@@ -102,7 +103,7 @@ docs/           当前版本公开说明
 - [Agent 说明](docs/agent-pages/README.md)
 - [自动化插件](docs/user-guide/automation.md)
 - [安全与部署](docs/security-and-deployment.md)
-- [开发与发布](docs/development-and-release.md)
+- [开发与版本](docs/development-and-release.md)
 - [全部文档](docs/README.md)
 
 ## 开发
@@ -125,4 +126,4 @@ npm run typecheck
 npm test
 ```
 
-开发、Debug、分支与发布规则统一见[开发与发布](docs/development-and-release.md)。
+开发、Debug、分支与版本规则统一见[开发与版本](docs/development-and-release.md)。

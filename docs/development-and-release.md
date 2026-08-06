@@ -1,4 +1,4 @@
-# 开发与发布
+# 开发与版本
 
 ## 运行通道
 
@@ -46,7 +46,7 @@ git pull --ff-only
 
 ## 当前运行时与依赖基线
 
-当前发布基线由两个锁共同决定：`packaging/windows/runtime-lock.json` 锁定 Windows portable runtime，
+当前运行基线由两个锁共同决定：`packaging/windows/runtime-lock.json` 锁定 Windows portable runtime，
 `server/uv.lock` 锁定 Python wheel。当前稳定基线为：
 
 | 层 | 当前版本 |
@@ -111,29 +111,22 @@ cd server
 uv run pytest ..\.test -q
 ```
 
-`.test/smoke_http.py` 是显式进程/发行 smoke，不在默认 pytest 收集范围；真实 Provider 与 Agent eval 也不进入
+`.test/smoke_http.py` 是显式进程 smoke，不在默认 pytest 收集范围；真实 Provider 与 Agent eval 也不进入
 日常门禁。普通局部修改仍只运行最接近的相关测试，完整门禁是分支集成入口，不是每次小改的固定本地流程。
 
-## 发布
+## 源码版本
 
 版本权威字段是 `server/pyproject.toml` 的 `project.version`。tag 必须为 `v<project.version>`。
 
-发布前：
+创建版本 tag 前：
 
 ```powershell
 git status --short
 git diff --check
-uv run --project server python packaging/release/check_release_surface.py
 ```
 
-Python runtime 或前端生产依赖变化时，使用源码 runtime 重新生成并复核 `THIRD_PARTY_NOTICES.md`：
-
-```powershell
-uv run --project server python packaging/release/generate_third_party_notices.py `
-  --runtime-root runtime/app --frontend-root frontend --output THIRD_PARTY_NOTICES.md
-```
-
-修改 Windows runtime bootstrap、依赖锁或启动入口时验证源码 Clone 启动。
+当前阶段的维护与复核以 Windows 源码 Clone 启动方式为准。修改 Windows runtime bootstrap、依赖锁或启动入口时，
+按本页的源码 Clone 启动方式复核。
 
 确认 `main` 后创建 annotated tag：
 

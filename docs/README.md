@@ -1,6 +1,6 @@
 # Agent Shell 文档
 
-这里保存当前版本的公开说明。程序用户从“用户指南”开始，维护者从“开发与发布”开始。
+这里保存当前版本的公开说明。程序用户从“用户指南”开始，维护者从“开发与版本”开始。
 
 ## 程序用户
 
@@ -18,5 +18,5 @@
 
 ## 安装与维护
 
-- [源码运行、Debug 与发布](development-and-release.md)
+- [源码运行、Debug 与版本](development-and-release.md)
 - [Deep Agents runtime 基线](deep-agents-migration.md)

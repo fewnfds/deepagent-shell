@@ -16,14 +16,12 @@ __pycache__/
 /data/
 /runtime/
 
-# ── Build / packaging output ────────────────────────────
+# ── Build output ─────────────────────────────────────────
 node_modules/
 dist/
 build/
 release/
 server/src/agent_shell/frontend_dist/
-!packaging/release/
-!packaging/release/*.py
 packaging/**/dist/
 
 # ── Logs ────────────────────────────────────────────────
