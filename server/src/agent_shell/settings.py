@@ -12,6 +12,11 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 ENV_PREFIX = "AGENT_SHELL_"
+_LANGSMITH_TRACING_ENVIRONMENT = (
+    "LANGSMITH_TRACING",
+    "LANGCHAIN_TRACING_V2",
+    "LANGCHAIN_TRACING",
+)
 
 
 def bearer_token_is_valid(value: str) -> bool:
@@ -75,6 +80,7 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = Field(default=19100, ge=1, le=65535)
     allow_remote: bool = False
+    langsmith_tracing_enabled: bool = False
     management_token: SecretStr | None = None
     cors_origins: Annotated[tuple[str, ...], NoDecode] = ()
     trusted_proxy_cidrs: Annotated[tuple[str, ...], NoDecode] = ()
@@ -243,6 +249,18 @@ class Settings(BaseSettings):
         )
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
+
+
+def configure_project_langsmith_tracing(enabled: bool) -> None:
+    """Apply the project-local LangSmith tracing boundary to this process.
+
+    LangChain reads these variables directly from the process environment. Setting
+    them here affects Agent Shell and its children only; it does not change the
+    host user's or any other process's environment.
+    """
+    value = "true" if enabled else "false"
+    for name in _LANGSMITH_TRACING_ENVIRONMENT:
+        os.environ[name] = value
 
 
 def _known_environment_keys() -> set[str]:

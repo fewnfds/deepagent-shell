@@ -8,8 +8,6 @@ from fastapi.testclient import TestClient
 
 from agent_shell.app import create_app
 from agent_shell.settings import SettingsError, get_settings
-from agent_shell.storage.api_server import ApiServerStore
-from agent_shell.storage.database import SQLiteDatabase
 from agent_shell.storage import permissions as storage_permissions
 from agent_shell.storage.permissions import PermissionStatus
 
@@ -126,54 +124,6 @@ def test_local_settings_writer_fails_when_permissions_cannot_be_secured(
     assert environment_path.exists()
 
 
-def test_docker_initializer_writes_each_credential_to_its_domain_store(
-    tmp_path: Path,
-) -> None:
-    from agent_shell import __main__ as launcher
-
-    answers = iter(("m", "m", "m", "m"))
-
-    result = launcher.initialize_docker_settings(
-        application_home=tmp_path,
-        data_root=tmp_path / "data",
-        password_reader=lambda _prompt: next(answers),
-    )
-
-    assert result == 0
-    environment = (tmp_path / "data" / "config" / "agent-shell.env").read_text(
-        encoding="utf-8"
-    )
-    assert "AGENT_SHELL_MANAGEMENT_TOKEN=m" in environment
-    assert "API_KEY" not in environment
-    assert "INFERENCE" not in environment
-    database = SQLiteDatabase(tmp_path / "data" / "state" / "agent-shell.sqlite3")
-    assert ApiServerStore(database).api_key() == "m"
-
-
-def test_docker_initializer_prompts_for_missing_persisted_api_key(
-    tmp_path: Path,
-) -> None:
-    from agent_shell import __main__ as launcher
-
-    _write_environment_file(
-        tmp_path,
-        "AGENT_SHELL_HOST=0.0.0.0\n"
-        "AGENT_SHELL_ALLOW_REMOTE=true\n"
-        "AGENT_SHELL_MANAGEMENT_TOKEN=m\n",
-    )
-    answers = iter(("k", "k"))
-
-    result = launcher.initialize_docker_settings(
-        application_home=tmp_path,
-        data_root=tmp_path / "data",
-        password_reader=lambda _prompt: next(answers),
-    )
-
-    assert result == 0
-    database = SQLiteDatabase(tmp_path / "data" / "state" / "agent-shell.sqlite3")
-    assert ApiServerStore(database).api_key() == "k"
-
-
 def test_local_management_password_does_not_require_an_api_key_at_startup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -182,6 +132,7 @@ def test_local_management_password_does_not_require_an_api_key_at_startup(
 
     assert settings.host == "127.0.0.1"
     assert settings.port == 19100
+    assert settings.langsmith_tracing_enabled is False
     assert settings.is_loopback is True
     assert settings.deployment_mode == "authenticated_local"
     assert settings.cors_origins == ()
@@ -323,6 +274,23 @@ def test_local_mode_keeps_a_user_chosen_management_password(
     settings = get_settings()
 
     assert settings.deployment_mode == "authenticated_local"
+
+
+def test_project_langsmith_tracing_setting_is_explicit_and_portable(
+    tmp_path: Path,
+) -> None:
+    _write_environment_file(
+        tmp_path,
+        "AGENT_SHELL_LANGSMITH_TRACING_ENABLED=true\n"
+        "AGENT_SHELL_MANAGEMENT_TOKEN=portable-management-secret\n",
+    )
+
+    settings = get_settings(
+        application_home=tmp_path,
+        include_process_environment=False,
+    )
+
+    assert settings.langsmith_tracing_enabled is True
 
 
 def test_management_password_has_no_application_length_policy(

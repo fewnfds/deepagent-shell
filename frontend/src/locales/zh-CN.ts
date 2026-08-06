@@ -35,6 +35,8 @@ export const zhCN = {
     managementPassword: '管理密码',
     runtimeControls: 'API 与运行',
     validationDebounceMs: '配置报警间隔（毫秒）',
+    langsmithTracing: '启用本项目 LangSmith 追踪',
+    langsmithTracingHint: '仅影响本项目进程；关闭时强制禁用 LangSmith/LangChain 追踪，不修改宿主机环境。开启后仍需自行配置 LangSmith 的 API Key 和服务地址，重启后生效。',
     proxyAndDiagnostics: '代理设置',
     corsOrigins: 'CORS 来源（每行一个）',
     trustedProxies: '可信代理 CIDR（每行一个）',

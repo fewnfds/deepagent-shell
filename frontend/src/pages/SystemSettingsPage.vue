@@ -47,6 +47,7 @@ const pageError = ref('')
 const host = ref('127.0.0.1')
 const port = ref(19100)
 const allowRemote = ref(false)
+const langsmithTracingEnabled = ref(false)
 const managementPassword = ref('')
 const showManagementPassword = ref(false)
 const apiKey = ref('')
@@ -92,6 +93,7 @@ function applySystemSettings(value: SystemSettings): void {
   host.value = value.host
   port.value = value.port
   allowRemote.value = value.allow_remote
+  langsmithTracingEnabled.value = value.langsmith_tracing_enabled
   corsOrigins.value = value.cors_origins.join('\n')
   trustedProxies.value = value.trusted_proxy_cidrs.join('\n')
   managementPassword.value = ''
@@ -166,6 +168,7 @@ async function save(): Promise<void> {
         host: host.value.trim(),
         port: Number(port.value),
         allow_remote: allowRemote.value,
+        langsmith_tracing_enabled: langsmithTracingEnabled.value,
         management_token: managementPassword.value
           ? { operation: 'replace', value: managementPassword.value }
           : { operation: 'preserve' },
@@ -401,6 +404,23 @@ onMounted(() => { void load() })
                   <label class="form-check-label" for="interception-test">
                     {{ fieldLabel('eventFeed.controls.interception', 'enabled') }}
                   </label>
+                </div>
+              </div>
+              <div class="col-12">
+                <div class="form-check form-switch">
+                  <input
+                    id="langsmith-tracing"
+                    v-model="langsmithTracingEnabled"
+                    class="form-check-input"
+                    role="switch"
+                    type="checkbox"
+                  >
+                  <label class="form-check-label" for="langsmith-tracing">
+                    {{ fieldLabel('systemSettings.langsmithTracing', 'langsmith_tracing_enabled') }}
+                  </label>
+                </div>
+                <div class="form-text">
+                  {{ t('systemSettings.langsmithTracingHint') }}
                 </div>
               </div>
             </div>

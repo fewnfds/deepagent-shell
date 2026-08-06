@@ -28,6 +28,9 @@ Content-Type: application/json
 没有 automation prepare 的情况下自动交给 Primary 或 Subagent。模型组件中的 `tool_choice`、`response_format` 和
 `model_settings` 决定 Provider-bound ModelRequest，请求体中的临时生成参数不会覆盖模型组件。
 
+如果当前 Agent 确实需要把客户端消息交给模型，必须显式配置 automation `prepare`，从只读的
+`ctx.request.messages` 派生并写入 `ctx.messages`；这一步是产品配置行为，不由 API Server 隐式补回历史或会话记忆。
+
 `content` 可以是字符串，或由下列受控 content parts 组成的数组：
 
 - OpenAI Chat 形状：`text`、`image_url`、`input_audio`、`file`；

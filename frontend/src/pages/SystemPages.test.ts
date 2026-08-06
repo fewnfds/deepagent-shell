@@ -21,6 +21,7 @@ const currentSettings: SystemSettings = {
   host: '127.0.0.1',
   port: 19100,
   allow_remote: false,
+  langsmith_tracing_enabled: false,
   management_token: { configured: true },
   cors_origins: [],
   trusted_proxy_cidrs: [],
@@ -87,6 +88,7 @@ describe('SystemSettingsPage', () => {
       host: '127.0.0.1',
       port: 19100,
       allow_remote: false,
+      langsmith_tracing_enabled: false,
       management_token: { operation: 'preserve' },
       cors_origins: [],
       trusted_proxy_cidrs: [],
@@ -125,11 +127,12 @@ describe('SystemSettingsPage', () => {
 
     await wrapper.get('input[type="text"]').setValue('0.0.0.0')
     await wrapper.get('#system-port').setValue('21000')
-    await wrapper.get('input[type="checkbox"]').setValue(true)
+    await wrapper.get('#allow-remote').setValue(true)
     await wrapper.get('#management-password').setValue('new-management-password')
     await wrapper.get('#api-server-key').setValue('new-api-key')
     await wrapper.get('#max-initial-messages').setValue('2500')
     await wrapper.get('#interception-test').setValue(true)
+    await wrapper.get('#langsmith-tracing').setValue(true)
     const textareas = wrapper.findAll('textarea')
     await textareas[0]!.setValue('http://localhost:3000\nhttp://127.0.0.1:3000')
     await textareas[1]!.setValue('127.0.0.1/32')
@@ -141,6 +144,7 @@ describe('SystemSettingsPage', () => {
       host: '0.0.0.0',
       port: 21000,
       allow_remote: true,
+      langsmith_tracing_enabled: true,
       management_token: { operation: 'replace', value: 'new-management-password' },
       cors_origins: ['http://localhost:3000', 'http://127.0.0.1:3000'],
       trusted_proxy_cidrs: ['127.0.0.1/32'],

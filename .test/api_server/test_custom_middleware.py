@@ -70,12 +70,6 @@ def test_selected_custom_middleware_executes_enabled_recipe_only(
     assert response.status_code == 200, response.text
     assert construction_count.read_text(encoding="utf-8") == "1"
     assert response.json()["choices"][0]["message"]["content"] == "middleware completed"
-    human_message = next(
-        message
-        for message in ToolCallingFakeModel.seen_messages[0]
-        if message.type == "human"
-    )
-    assert "user@example.com" not in human_message.text
 
 def test_custom_middleware_construction_failure_is_safe_and_pre_provider(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

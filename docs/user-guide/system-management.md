@@ -20,7 +20,7 @@ data/
 声明生成的共享 Python 依赖层位于 `runtime/automation_plugins/`，不属于备份。恢复或迁移 data 后，在
 Windows 上重新运行 `start_server.bat` 即可准备依赖。
 
-迁移时先完全停止服务或容器，再复制完整 `data/`，包括 SQLite 的 WAL/SHM。外部 filesystem 映射不在
+迁移时先完全停止服务，再复制完整 `data/`，包括 SQLite 的 WAL/SHM。外部 filesystem 映射不在
 `data/` 内，需要单独迁移并更新路径。
 
 ## 文件管理
@@ -37,9 +37,11 @@ Windows 上重新运行 `start_server.bat` 即可准备依赖。
 ## 系统设置
 
 【系统 / 系统配置】管理监听地址、端口、远程访问、管理密码、API Key、初始消息条数上限、拦截测试、
-CORS origins 和可信代理 CIDR。secret 只显示是否配置，不回显明文。
+本项目 LangSmith 追踪、CORS origins 和可信代理 CIDR。secret 只显示是否配置，不回显明文。
 
 API Key、消息上限和拦截测试保存后立即生效。host、端口、远程访问、管理密码、CORS 和可信代理写入
-`data/config/agent-shell.env`，重启后生效。详细诊断和各类日志保存上限在【日志中心】管理。
+`data/config/agent-shell.env`，重启后生效。LangSmith 开关关闭时只在 Agent Shell 自己的进程边界内强制
+禁用 LangSmith/LangChain tracing，不修改宿主机环境；开启后仍需用户自行提供 LangSmith 的 API Key、
+Endpoint 等配置。详细诊断和各类日志保存上限在【日志中心】管理。
 
 远程部署要求见[安全与部署](../security-and-deployment.md)。

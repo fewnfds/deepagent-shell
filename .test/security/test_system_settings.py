@@ -30,6 +30,7 @@ def _payload(**overrides) -> dict:
         "host": "127.0.0.1",
         "port": 19100,
         "allow_remote": False,
+        "langsmith_tracing_enabled": False,
         "management_token": {"operation": "preserve"},
         "cors_origins": [],
         "trusted_proxy_cidrs": [],
@@ -51,6 +52,7 @@ def test_system_settings_get_reports_secret_status_without_secret_values(
         "host": "127.0.0.1",
         "port": 19100,
         "allow_remote": False,
+        "langsmith_tracing_enabled": False,
         "cors_origins": [],
         "trusted_proxy_cidrs": [],
         "management_token": {"configured": True},
@@ -71,6 +73,7 @@ def test_valid_system_settings_are_atomic_and_take_effect_after_restart(
         "/api/system/settings",
         json=_payload(
             port=9123,
+            langsmith_tracing_enabled=True,
             cors_origins=["https://CONSOLE.example:8443"],
         ),
     )
@@ -78,16 +81,19 @@ def test_valid_system_settings_are_atomic_and_take_effect_after_restart(
     assert response.status_code == 200, response.text
     assert response.json()["restart_required"] is True
     assert response.json()["port"] == 9123
+    assert response.json()["langsmith_tracing_enabled"] is True
     assert response.json()["cors_origins"] == ["https://console.example:8443"]
     assert app.state.settings.port == 19100
     text = settings_path.read_text(encoding="utf-8")
     assert "# launcher comment" in text
     assert "AGENT_SHELL_PORT=9123" in text
+    assert "AGENT_SHELL_LANGSMITH_TRACING_ENABLED=true" in text
     restarted = get_settings(
         application_home=tmp_path,
         include_process_environment=False,
     )
     assert restarted.port == 9123
+    assert restarted.langsmith_tracing_enabled is True
     assert restarted.cors_origins == ("https://console.example:8443",)
 
 

@@ -59,6 +59,8 @@ def serialize_settings_file(settings: Settings, existing: str) -> str:
         f"AGENT_SHELL_HOST={settings.host}",
         f"AGENT_SHELL_PORT={settings.port}",
         f"AGENT_SHELL_ALLOW_REMOTE={'true' if settings.allow_remote else 'false'}",
+        "AGENT_SHELL_LANGSMITH_TRACING_ENABLED="
+        f"{'true' if settings.langsmith_tracing_enabled else 'false'}",
         (
             "AGENT_SHELL_CORS_ORIGINS="
             + json.dumps(list(settings.cors_origins), separators=(",", ":"))
@@ -113,6 +115,7 @@ class SystemSettingsService:
             "host": settings.host,
             "port": settings.port,
             "allow_remote": settings.allow_remote,
+            "langsmith_tracing_enabled": settings.langsmith_tracing_enabled,
             "cors_origins": list(settings.cors_origins),
             "trusted_proxy_cidrs": list(settings.trusted_proxy_cidrs),
             "management_token": {
@@ -159,6 +162,7 @@ class SystemSettingsService:
             "host": payload["host"],
             "port": payload["port"],
             "allow_remote": payload["allow_remote"],
+            "langsmith_tracing_enabled": payload["langsmith_tracing_enabled"],
             "management_token": self._apply_management_password(
                 self._saved.management_token,
                 payload["management_token"],

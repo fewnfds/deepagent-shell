@@ -179,7 +179,7 @@ def test_selected_custom_tool_can_run_in_two_consecutive_model_steps(
     for seen in ToolCallingFakeModel.seen_messages:
         system_messages = [item.text for item in seen if item.type == "system"]
         assert system_messages[0] == "AGENT LOOP"
-        assert system_messages[1] == "CLIENT HEAD"
+        assert len(system_messages) == 1
         assert "Filesystem Tools" not in system_messages[0]
         assert sum(item.text == "AGENT LOOP" for item in seen) == 1
     first_result = next(

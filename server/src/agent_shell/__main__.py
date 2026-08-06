@@ -14,18 +14,13 @@ import uvicorn
 
 from agent_shell.automation.dependencies import activate_plugin_site
 from agent_shell.app import create_app
-from agent_shell.security import ApiKeyPolicyError, validate_api_key_policy
 from agent_shell.settings import (
-    Settings,
     SettingsError,
     bearer_token_is_valid,
     get_settings,
     load_settings,
 )
-from agent_shell.storage.api_server import ApiServerStore
-from agent_shell.storage.database import SQLiteDatabase
 from agent_shell.storage.permissions import secure_file
-from agent_shell.system_settings import serialize_settings_file, write_settings_file
 
 
 _MISSING_LOCAL_MANAGEMENT_TOKEN_ACTION = "Configure the management Bearer token."
@@ -192,105 +187,6 @@ def initialize_local_settings(
     return 0
 
 
-def initialize_docker_settings(
-    *,
-    application_home: Path | None = None,
-    data_root: Path | None = None,
-    password_reader: Callable[[str], str] | None = None,
-) -> int:
-    home = (application_home or Path.cwd()).resolve()
-    root = data_root or (home / "data")
-    root = root.resolve() if root.is_absolute() else (home / root).resolve()
-    env_path = root / "config" / "agent-shell.env"
-    read_password = password_reader or getpass.getpass
-    new_api_key: str | None = None
-    if env_path.exists():
-        try:
-            settings = get_settings(
-                application_home=home,
-                data_root=root,
-                include_process_environment=False,
-            )
-        except SettingsError as exc:
-            print(f"Startup configuration error: {exc}", file=sys.stderr)
-            return 2
-    else:
-        print("首次启动 Docker：请分别设置管理密码和 /v1 API Key。")
-        print("请输入不含空格的可打印 ASCII 字符；长度由你自行决定。")
-        management_password = _read_confirmed_credential(
-            read_password,
-            prompt="管理密码（输入时不会显示）：",
-            confirmation_prompt="请再输入一次管理密码：",
-            invalid_message="管理密码格式不对，请输入不含空格的可打印 ASCII 字符。",
-        )
-        if management_password is None:
-            print("\n已取消，没有创建或修改配置。", file=sys.stderr)
-            return 1
-        new_api_key = _read_confirmed_credential(
-            read_password,
-            prompt="API Key（输入时不会显示）：",
-            confirmation_prompt="请再输入一次 API Key：",
-            invalid_message="API Key 格式不对，请输入不含空格的可打印 ASCII 字符。",
-        )
-        if new_api_key is None:
-            print("\n已取消，没有创建或修改配置。", file=sys.stderr)
-            return 1
-        settings = Settings(
-            host="0.0.0.0",
-            port=19100,
-            allow_remote=True,
-            management_token=management_password,
-        )
-        settings.bind_paths(home, root)
-        settings.validate_deployment()
-        try:
-            validate_api_key_policy(settings, new_api_key)
-            example_path = home / ".env.example"
-            existing = (
-                example_path.read_text(encoding="utf-8-sig")
-                if example_path.exists()
-                else ""
-            )
-            write_settings_file(
-                env_path,
-                serialize_settings_file(settings, existing),
-            )
-        except (ApiKeyPolicyError, OSError):
-            print("无法保存配置，请检查凭据和 data 目录权限。", file=sys.stderr)
-            return 1
-
-    database = SQLiteDatabase(settings.resolved_database_path())
-    store = ApiServerStore(database)
-    current_api_key = store.api_key()
-    if current_api_key is None:
-        if new_api_key is None:
-            print("当前实例尚未设置 API Key。")
-            print("API Key 使用不含空格的可打印 ASCII 字符；长度由你自行决定。")
-            new_api_key = _read_confirmed_credential(
-                read_password,
-                prompt="API Key（输入时不会显示）：",
-                confirmation_prompt="请再输入一次 API Key：",
-                invalid_message="API Key 格式不对，请输入不含空格的可打印 ASCII 字符。",
-            )
-            if new_api_key is None:
-                print("\n已取消，没有修改 API Key。", file=sys.stderr)
-                return 1
-        try:
-            validate_api_key_policy(settings, new_api_key)
-        except ApiKeyPolicyError as exc:
-            print(f"Startup configuration error: {exc.safe_message}", file=sys.stderr)
-            return 2
-        store.update_settings(api_key_operation="replace", api_key=new_api_key)
-    else:
-        try:
-            validate_api_key_policy(settings, current_api_key)
-        except ApiKeyPolicyError as exc:
-            print(f"Startup configuration error: {exc.safe_message}", file=sys.stderr)
-            return 2
-    print("Docker 配置已准备完成。")
-    return 0
-
-
 def main(
     *,
     application_home: Path | None = None,
@@ -374,7 +270,6 @@ def run_cli(arguments: list[str] | None = None) -> int:
     parser.add_argument("--port", type=int, choices=range(1, 65536))
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--initialize-local-settings", action="store_true")
-    action.add_argument("--initialize-docker-settings", action="store_true")
     action.add_argument("--print-launch-settings", action="store_true")
     action.add_argument("--probe-listen-settings", action="store_true")
     parser.add_argument(
@@ -400,11 +295,6 @@ def run_cli(arguments: list[str] | None = None) -> int:
             application_home=home,
             data_root=data_root,
             include_process_environment=include_process_environment,
-        )
-    if parsed.initialize_docker_settings:
-        return initialize_docker_settings(
-            application_home=home,
-            data_root=data_root,
         )
     return main(
         application_home=home,

@@ -25,7 +25,12 @@ from agent_shell.api.validation import build_validation_router
 from agent_shell.provider_http import ProviderHttpClients
 from agent_shell.provider_secrets import ProviderSecretResolver
 from agent_shell.runtime.request_snapshot import RequestSnapshotRuntime
-from agent_shell.settings import Settings, SettingsError, get_settings
+from agent_shell.settings import (
+    Settings,
+    SettingsError,
+    configure_project_langsmith_tracing,
+    get_settings,
+)
 from agent_shell.runtime.interception import InterceptionTestController
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.event_feed import EventFeedService
@@ -67,6 +72,7 @@ def create_app(
     )
     if settings is None:
         settings = get_settings(application_home=application_home)
+    configure_project_langsmith_tracing(settings.langsmith_tracing_enabled)
     settings.ensure_directories()
 
     environment_permissions = ()

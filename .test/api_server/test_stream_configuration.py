@@ -36,67 +36,6 @@ def test_selected_output_mode_wraps_the_same_timeline_for_both_transports(
     ]
     assert streamed.text.rstrip().endswith("data: [DONE]")
 
-def test_saved_system_prompt_and_complete_text_history_reach_deep_agent(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    RecordingFakeListChatModel.seen_messages = []
-    with make_client(tmp_path, monkeypatch) as client:
-        monkeypatch.setattr(
-            "agent_shell.runtime.agent_builder._build_chat_model",
-            lambda _block, _credential, _http_clients: RecordingFakeListChatModel(
-                responses=["recorded"]
-            ),
-        )
-        primary = create_primary(client)
-        prompt = client.post(
-            "/api/blocks/system-prompt",
-            json={"name": "Runtime prompt", "system_prompt": "configured system"},
-        ).json()
-        updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
-            json={
-                "name": primary["name"],
-                "capability_refs": [
-                    *primary["capability_refs"],
-                    {"type": "system-prompt", "block_id": prompt["id"]},
-                ],
-                "subagents": [],
-            },
-        )
-        assert updated.status_code == 200, updated.text
-        response = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": primary["name"],
-                "messages": [
-                    {"role": "system", "content": "upstream system"},
-                    {"role": "user", "content": "first user"},
-                    {"role": "assistant", "content": "prior answer"},
-                    {"role": "user", "content": "latest user"},
-                ],
-            },
-        )
-
-    assert response.status_code == 200, response.text
-    assert response.json()["choices"][0]["message"]["content"] == "recorded"
-    assert len(RecordingFakeListChatModel.seen_messages) == 1
-    seen = RecordingFakeListChatModel.seen_messages[0]
-    assert [message.type for message in seen] == [
-        "system",
-        "system",
-        "human",
-        "ai",
-        "human",
-    ]
-    assert seen[0].text == "configured system"
-    assert "Filesystem Tools" not in seen[0].text
-    assert [message.text for message in seen[1:]] == [
-        "upstream system",
-        "first user",
-        "prior answer",
-        "latest user",
-    ]
-
 def test_provider_failure_uses_stable_safe_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -184,7 +123,7 @@ def test_model_request_settings_reach_the_final_langchain_request(
     assert captured["model_settings"] == {"parallel_tool_calls": False}
     assert captured["response_format"]["value"]["schema"] == response_schema
 
-def test_global_interception_captures_final_moved_prompt_tools_and_raw_request(
+def test_global_interception_captures_final_prompt_tools_and_raw_request(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     RecordingFakeListChatModel.seen_messages = []
@@ -324,12 +263,10 @@ def test_global_interception_captures_final_moved_prompt_tools_and_raw_request(
     assert {"request_body", "response_body"}.isdisjoint(history["items"][0])
     assert detail["request_raw_json"] == raw_json
     captured = json.loads(detail["model_request_raw_json"])
-    assert [message["role"] for message in captured["messages"]] == ["system", "system", "user"]
+    assert [message["role"] for message in captured["messages"]] == ["system"]
     prompt_blocks = captured["messages"][0]["content"]
     prompt_text = "".join(block["text"] for block in prompt_blocks)
     assert prompt_text == "PRIMARY\n\nTODO\n\nCUSTOM"
-    assert captured["messages"][1]["content"] == "CLIENT HEAD"
-    assert captured["messages"][2]["content"] == "beforePRESETafter"
     tool_names = [item["function"]["name"] for item in captured["tools"]]
     assert "write_todos" in tool_names
     assert captured["model"]["type"].endswith("RecordingFakeListChatModel")

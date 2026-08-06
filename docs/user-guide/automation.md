@@ -374,8 +374,6 @@ requirements 变化后停止并重新启动 Agent Shell。安装只发生在受�
 当前只接受公开 PyPI 的普通 PEP 508 requirement、当前 Windows/Python 可用的二进制 wheel；不接受 URL、VCS、
 本地路径、editable、额外索引或源码构建。该层是实例共享环境，不是每插件独立 venv，互斥依赖无法同时使用。
 
-Docker 当前不准备动态插件依赖；带非空 requirements 的插件会保持依赖未就绪。
-
 ## 权限、失败与一致性
 
 自动化插件是实例维护者信任并安装的任意 Python 代码，以 Agent Shell 服务进程完整权限运行，没有 sandbox。

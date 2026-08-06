@@ -99,6 +99,30 @@ def test_official_launcher_uses_only_validated_settings_and_disables_proxy_heade
     }
 
 
+@pytest.mark.parametrize(
+    ("enabled", "expected"),
+    [(False, "false"), (True, "true")],
+)
+def test_project_langsmith_tracing_boundary_is_explicit(
+    monkeypatch: pytest.MonkeyPatch,
+    enabled: bool,
+    expected: str,
+) -> None:
+    from agent_shell import __main__ as launcher
+
+    monkeypatch.setenv("AGENT_SHELL_LANGSMITH_TRACING_ENABLED", str(enabled).lower())
+    monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "management-secret")
+    monkeypatch.setenv("LANGSMITH_TRACING", "true" if not enabled else "false")
+    monkeypatch.setenv("LANGCHAIN_TRACING_V2", "true" if not enabled else "false")
+    monkeypatch.setenv("LANGCHAIN_TRACING", "true" if not enabled else "false")
+    monkeypatch.setattr(launcher.uvicorn, "run", lambda *_args, **_kwargs: None)
+
+    assert launcher.main(serve_frontend=False) == 0
+    assert os.environ["LANGSMITH_TRACING"] == expected
+    assert os.environ["LANGCHAIN_TRACING_V2"] == expected
+    assert os.environ["LANGCHAIN_TRACING"] == expected
+
+
 def test_official_launcher_prints_effective_settings_for_windows_script(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -304,61 +328,3 @@ def test_windows_launcher_does_not_initialize_remote_deployment(
     assert env_path.read_text(encoding="utf-8") == original
     captured = capsys.readouterr()
     assert "AGENT_SHELL_MANAGEMENT_TOKEN" in captured.err
-
-
-def test_docker_initializer_creates_one_valid_remote_configuration(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    from agent_shell import __main__ as launcher
-
-    password = "admin"
-    api_key = "api"
-    answers = iter((password, password, api_key, api_key))
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(launcher.getpass, "getpass", lambda _prompt: next(answers))
-
-    result = launcher.run_cli(
-        ["--home", str(tmp_path), "--initialize-docker-settings"]
-    )
-
-    assert result == 0
-    settings = get_settings(
-        application_home=tmp_path,
-        include_process_environment=False,
-    )
-    assert settings.host == "0.0.0.0"
-    assert settings.port == 19100
-    assert settings.allow_remote is True
-    assert settings.management_token is not None
-    assert settings.management_token.get_secret_value() == password
-    store = ApiServerStore(
-        SQLiteDatabase(tmp_path / "data" / "state" / "agent-shell.sqlite3")
-    )
-    assert store.api_key() == api_key
-    assert api_key not in (
-        tmp_path / "data" / "config" / "agent-shell.env"
-    ).read_text(encoding="utf-8")
-
-
-def test_docker_initializer_does_not_overwrite_invalid_existing_file(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    from agent_shell import __main__ as launcher
-
-    original = "AGENT_SHELL_PORT=invalid\n"
-    env_path = _write_environment_file(tmp_path, original)
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(
-        launcher.getpass,
-        "getpass",
-        lambda _prompt: pytest.fail("invalid existing settings must not be replaced"),
-    )
-
-    result = launcher.run_cli(
-        ["--home", str(tmp_path), "--initialize-docker-settings"]
-    )
-
-    assert result == 2
-    assert env_path.read_text(encoding="utf-8") == original

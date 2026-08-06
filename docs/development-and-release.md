@@ -6,7 +6,6 @@
 | --- | --- | --- | --- |
 | 滚动源码 Clone | 当前 `server/src/` | 输入变化时自动 build | `start_server.bat` |
 | 前端 Debug | 当前 `server/src/` | Vite HMR | `packaging/development/start_dev.ps1` |
-| Docker | image 中的 wheel | 已构建产物 | 容器 HTTP 端口 |
 
 `frontend/` 是唯一前端源码。`server/src/agent_shell/frontend_dist/` 是 Git 忽略的 production 产物。
 
@@ -14,15 +13,16 @@
 
 - `dev`：滚动源码与日常集成；每次推送保持可启动；
 - `main`：经实际使用确认的稳定源码；由 `dev` merge/fast-forward 晋升；
-- `v<project.version>` tag：从 `main` 创建，触发正式 Docker 发布；
+- `v<project.version>` tag：从 `main` 创建，标记正式源码版本；
 - `hotfix/*`：从 `main` 修复，合并回 `main` 后同步进 `dev`。
 
 源码维护目录不作为用户实例运行。滚动用户使用独立 Clone，并保留该 Clone 自己的 `data/`。
 
 ## 源码运行
 
-Windows 10/11 x64 需要 Node.js 22。启动脚本在 `runtime/app` 准备固定 CPython 和锁定依赖，后端直接读取
-当前源码；前端输入变化时执行锁定的 npm build。
+Windows 10/11 x64 需要 Node.js 22，不需要预装 Python。启动脚本按
+`packaging/windows/runtime-lock.json` 在 `runtime/app` 准备固定的内置 CPython 3.12 和锁定依赖，后端直接
+读取当前源码；前端输入变化时执行锁定的 npm build。项目只维护这套内置解释器，不声明兼容宿主 Python。
 
 ```powershell
 .\start_server.bat
@@ -43,6 +43,26 @@ git pull --ff-only
 自动化插件的 `requirements.txt` 不进入项目 `pyproject.toml`。Windows 启动器在核心 runtime 准备完成后，
 单独按当前实例的插件需求指纹生成 `runtime/automation_plugins/site-packages`；输入未变化时复用。插件层只能
 增加与核心锁兼容的二进制 wheel，不能修改 `runtime/app`。
+
+## 当前运行时与依赖基线
+
+当前发布基线由两个锁共同决定：`packaging/windows/runtime-lock.json` 锁定 Windows portable runtime，
+`server/uv.lock` 锁定 Python wheel。当前稳定基线为：
+
+| 层 | 当前版本 |
+| --- | --- |
+| 内置 CPython | `3.12.13` |
+| runtime/CI uv | `0.12.2` |
+| Deep Agents | `0.7.5` |
+| FastAPI / Uvicorn | `0.141.1` / `0.52.1` |
+| LangChain adapters | Anthropic `1.5.4`；DeepSeek `1.1.0`；Google GenAI `4.3.2`；Google Vertex AI `3.2.4`；OpenAI `1.4.1`；xAI `1.3.0` |
+| LangChain core/graph | `langchain 1.3.14`；`langchain-core 1.5.3`；`langgraph 1.2.10` |
+| 其他边界 | `packaging 26.3`；`websockets 15.0.1`；dev-only `httpx2/httpcore2 2.9.1` |
+
+截至本基线，`uv lock --dry-run --upgrade` 不再产生可解析的锁变化。`uv tree --outdated` 仍可能显示
+`websockets 17`、`protobuf 7`、`pydantic-core 2.48` 或 `pyarrow 25`，但它们分别受 LangGraph/Google
+依赖范围或当前 Provider 组合约束；不得为了消除提示而放宽上游边界、删除 Provider 或改业务源码。新的
+依赖升级应从重新运行上述 dry-run 开始，并按单一影响面批量推进。
 
 ## 前端 Debug
 
@@ -113,8 +133,7 @@ uv run --project server python packaging/release/generate_third_party_notices.py
   --runtime-root runtime/app --frontend-root frontend --output THIRD_PARTY_NOTICES.md
 ```
 
-修改 Windows runtime bootstrap、依赖锁或启动入口时验证源码 Clone 启动；只有修改 Dockerfile、Compose
-或容器边界时才本地构建和运行 Docker。
+修改 Windows runtime bootstrap、依赖锁或启动入口时验证源码 Clone 启动。
 
 确认 `main` 后创建 annotated tag：
 
@@ -124,5 +143,4 @@ git tag -a v<version> -m "release: v<version>"
 git push origin v<version>
 ```
 
-tag workflow 构建并发布 Linux amd64 GHCR image。失败时修复后使用新版本，不移动已公开 tag。发布后
-使用独立 Docker data 验证镜像启动、health 与持久化。
+已公开 tag 不移动；修复后更新项目版本并创建新 tag。

@@ -37,6 +37,8 @@ export const en: MessageSchema = {
     managementPassword: 'Management password',
     runtimeControls: 'API and runtime',
     validationDebounceMs: 'Configuration alert interval (ms)',
+    langsmithTracing: 'Enable LangSmith tracing for this project',
+    langsmithTracingHint: 'Affects this project process only. When disabled, LangSmith/LangChain tracing is forced off without changing the host environment. When enabled, configure the LangSmith API key and endpoint yourself; restart to apply.',
     proxyAndDiagnostics: 'Proxy settings',
     corsOrigins: 'CORS origins (one per line)',
     trustedProxies: 'Trusted proxy CIDRs (one per line)',

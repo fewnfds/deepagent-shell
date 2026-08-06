@@ -15,7 +15,7 @@ Primary Agent 与同步 Subagent。
 - 使用 SQLite 保存配置、凭据状态、API 调用记录、拦截记录、运行日志和历史会话；
 - 在日志中心统一查询事件，在历史会话中按请求查看模型、工具与 Subagent 时间线；
 - 提供文件管理、系统设置、管理认证、推理 API Key、CORS、可信代理与远程部署闸门；
-- 提供可移动的 Windows 源码 Clone 和 Linux amd64 Docker 部署方式。
+- 提供可移动的 Windows 源码 Clone 运行方式。
 
 Deep Agents 的 filesystem、subagent、summarization、tool-call repair 等 harness 能力由上游负责。
 Agent Shell 负责读取当前配置、准备 backend/skills/subagents/tools/middleware，并把运行事件投影为公开输出。
@@ -75,9 +75,8 @@ Content-Type: application/json
 稳定源码位于 `main`，滚动源码位于 `dev`。
 
 - Windows：Clone 需要的分支，运行 `.\start_server.bat`；首次启动自动准备固定 Python runtime。
-- Docker：使用 `ghcr.io/fewnfds/deepagent-shell:<version>`，把宿主 `data/` 映射到 `/app/data`。
 
-详情见 [Docker 部署](docs/docker.md)和[开发与发布](docs/development-and-release.md)。
+详情见[开发与发布](docs/development-and-release.md)。
 
 ## 数据目录
 
@@ -108,7 +107,8 @@ docs/           当前版本公开说明
 
 ## 开发
 
-后端使用 Python 3.11+、FastAPI、SQLite、LangChain 与 Deep Agents；依赖由 `server/uv.lock` 锁定。
+后端使用项目内置的 CPython 3.12、FastAPI、SQLite、LangChain 与 Deep Agents；用户运行实例不需要安装
+宿主 Python，精确解释器版本由 `packaging/windows/runtime-lock.json` 锁定，Python 依赖由 `server/uv.lock` 锁定。
 前端使用 Vue 3、strict TypeScript、AdminLTE 4.1 与 Bootstrap 5.3。
 
 ```powershell

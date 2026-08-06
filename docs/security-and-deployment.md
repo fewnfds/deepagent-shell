@@ -66,10 +66,15 @@ Windows 自动化插件可以声明公开 PyPI 的二进制 wheel 依赖。第�
 AGENT_SHELL_HOST=127.0.0.1
 AGENT_SHELL_PORT=19100
 AGENT_SHELL_ALLOW_REMOTE=false
+AGENT_SHELL_LANGSMITH_TRACING_ENABLED=false
 AGENT_SHELL_CORS_ORIGINS=[]
 AGENT_SHELL_TRUSTED_PROXY_CIDRS=[]
 AGENT_SHELL_MANAGEMENT_TOKEN=<management password>
 ```
 
-未知 `AGENT_SHELL_*` 键会使启动失败。Windows 源码启动器读取当前 Clone 的 data 配置；源码和容器的
-具体入口见根 README 与 [Docker 部署](docker.md)。
+`AGENT_SHELL_LANGSMITH_TRACING_ENABLED` 默认关闭。关闭时，正式进程会在本项目自己的进程环境中覆盖
+LangSmith/LangChain tracing 开关为 `false`；不会修改宿主机或其他进程的环境变量。开启后，LangSmith
+凭据、Endpoint、项目名和其他 tracing 选项仍由部署者自行配置，并应按敏感数据策略控制上传内容。
+
+未知 `AGENT_SHELL_*` 键会使启动失败。Windows 源码启动器读取当前 Clone 的 data 配置；具体入口见根
+README。
