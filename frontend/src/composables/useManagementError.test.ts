@@ -6,6 +6,7 @@ import { useManagementError } from './useManagementError'
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
+    locale: { value: 'en' },
     t: (key: string, args?: Record<string, unknown>) => {
       if (key === 'common.itemSeparator') return '、'
       if (key === 'common.detailSeparator') return '：'
