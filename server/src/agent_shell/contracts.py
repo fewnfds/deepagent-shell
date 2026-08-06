@@ -646,6 +646,9 @@ class FilesystemBlock(StrictBlock):
     virtual_files: list[VirtualFileSource] = Field(default_factory=list, max_length=100)
     system_prompt_override: PromptOverrideText | None = None
     tool_token_limit_before_evict: Annotated[int, Field(ge=1)] | None = 20_000
+    human_message_token_limit_before_evict: Annotated[int, Field(ge=1)] | None = 50_000
+    grep_max_count: Annotated[int, Field(ge=1)] = 1_000
+    max_execute_timeout: Annotated[int, Field(ge=1)] = 3_600
     tool_configs: FilesystemToolConfigs = Field(default_factory=FilesystemToolConfigs)
 
     @model_validator(mode="after")
@@ -829,6 +832,65 @@ class SubagentBlock(StrictBlock):
         return self
 
 
+SummarizationThresholdType = Literal["auto", "fraction", "tokens", "messages"]
+
+
+class SummarizationThreshold(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: SummarizationThresholdType = "auto"
+    value: Annotated[int | float, Field(gt=0)] | None = None
+
+    @model_validator(mode="after")
+    def validate_value(self) -> "SummarizationThreshold":
+        if self.type == "auto":
+            if self.value is not None:
+                raise ValueError("auto summarization thresholds must not have a value")
+            return self
+        if self.value is None:
+            raise ValueError("summarization thresholds require a value")
+        if self.type == "fraction" and self.value > 1:
+            raise ValueError("fraction thresholds must be between 0 and 1")
+        if self.type in {"tokens", "messages"} and (
+            isinstance(self.value, bool) or not isinstance(self.value, int)
+        ):
+            raise ValueError(f"{self.type} thresholds require an integer value")
+        return self
+
+
+class SummarizationConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
+
+    enabled: bool = True
+    trigger: SummarizationThreshold = Field(default_factory=SummarizationThreshold)
+    keep: SummarizationThreshold = Field(default_factory=SummarizationThreshold)
+    truncate_args_enabled: bool = True
+    truncate_args_trigger: SummarizationThreshold = Field(
+        default_factory=SummarizationThreshold
+    )
+    truncate_args_keep: SummarizationThreshold = Field(
+        default_factory=SummarizationThreshold
+    )
+    truncate_args_max_length: Annotated[int, Field(ge=1)] = 2_000
+    truncate_args_text: PromptOverrideText = "...(argument truncated)"
+    trim_tokens_to_summarize: Annotated[int, Field(ge=1)] | None = 4_000
+    summary_prompt_override: PromptOverrideText | None = None
+
+
+class PromptCachingConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    type: Literal["ephemeral"] = "ephemeral"
+    ttl: Literal["5m", "1h"] = "5m"
+    min_messages_to_cache: Annotated[int, Field(ge=0)] = 0
+
+
+class OtherBlock(StrictBlock):
+    summarization: SummarizationConfig = Field(default_factory=SummarizationConfig)
+    prompt_caching: PromptCachingConfig = Field(default_factory=PromptCachingConfig)
+
+
 class TodoListBlock(StrictBlock):
     system_prompt_override: PromptOverrideText | None = None
     tool_description_override: PromptOverrideText | None = None
@@ -942,6 +1004,7 @@ BLOCK_MODELS: dict[str, type[StrictBlock]] = {
     "output-mode": OutputModeBlock,
     "exception-retry": ExceptionRetryBlock,
     "subagent": SubagentBlock,
+    "other": OtherBlock,
 }
 
 validate_capability_manifests(CAPABILITY_MANIFESTS, BLOCK_MODELS)

@@ -12,6 +12,7 @@ export type BlockType =
   | 'output-mode'
   | 'exception-retry'
   | 'subagent'
+  | 'other'
 
 export interface CapabilityManifest {
   type: BlockType

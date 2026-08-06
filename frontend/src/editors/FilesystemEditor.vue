@@ -135,9 +135,28 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
 
     <section class="mb-3">
       <h3 class="h5 fw-semibold mb-3">{{ t('editors.filesystem.toolsTitle') }}</h3>
-      <FormField field-path="tool_token_limit_before_evict">
-        <input v-model.number="draft.tool_token_limit_before_evict" class="form-control" min="1" step="1" type="number">
-      </FormField>
+      <div class="row g-3 mb-3">
+        <div class="col-lg-3">
+          <FormField field-path="tool_token_limit_before_evict">
+            <input v-model.number="draft.tool_token_limit_before_evict" class="form-control" min="1" step="1" type="number">
+          </FormField>
+        </div>
+        <div class="col-lg-3">
+          <FormField field-path="human_message_token_limit_before_evict">
+            <input v-model.number="draft.human_message_token_limit_before_evict" class="form-control" min="1" step="1" type="number">
+          </FormField>
+        </div>
+        <div class="col-lg-3">
+          <FormField field-path="grep_max_count">
+            <input v-model.number="draft.grep_max_count" class="form-control" min="1" step="1" type="number">
+          </FormField>
+        </div>
+        <div class="col-lg-3">
+          <FormField field-path="max_execute_timeout">
+            <input v-model.number="draft.max_execute_timeout" class="form-control" min="1" step="1" type="number">
+          </FormField>
+        </div>
+      </div>
       <div class="row g-3">
         <div v-for="row in toolRows" :key="row.tool.name" class="col-md-6">
           <article class="card h-100" data-testid="filesystem-tool-card">

@@ -111,6 +111,11 @@ CAPABILITY_MANIFESTS = (
         "users", "subagent",
         subagent_overrideable=True, required=False, subagent_policy="inherit",
     ),
+    CapabilityManifest(
+        "other", "other", "其他配置", 12,
+        "sliders", "other",
+        subagent_overrideable=True, required=False, subagent_policy="inherit",
+    ),
 )
 
 

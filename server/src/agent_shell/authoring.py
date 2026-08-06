@@ -10,6 +10,7 @@ from agent_shell.contracts import (
     ExceptionRetryBlock,
     FilesystemBlock,
     FilesystemToolConfigs,
+    OtherBlock,
     OUTPUT_COMMON_TEMPLATE_VARIABLES,
     OUTPUT_EVENT_NAMES,
     OUTPUT_EVENT_TEMPLATE_VARIABLES,
@@ -382,6 +383,13 @@ _EDITOR_DEFAULTS = {
         "tool_token_limit_before_evict": FilesystemBlock.model_fields[
             "tool_token_limit_before_evict"
         ].default,
+        "human_message_token_limit_before_evict": FilesystemBlock.model_fields[
+            "human_message_token_limit_before_evict"
+        ].default,
+        "grep_max_count": FilesystemBlock.model_fields["grep_max_count"].default,
+        "max_execute_timeout": FilesystemBlock.model_fields[
+            "max_execute_timeout"
+        ].default,
         "tools": _filesystem_tools(),
     },
     "filesystem_permissions": {
@@ -417,6 +425,10 @@ _EDITOR_DEFAULTS = {
             "retry_on": list(DEFAULT_EXCEPTION_RETRY_CONDITIONS),
         },
     },
+    "other": OtherBlock(name="Other").model_dump(
+        mode="json",
+        exclude={"name"},
+    ),
 }
 
 

@@ -387,6 +387,7 @@
           "src/editors/FilesystemEditor.vue",
           "src/editors/FilesystemPermissionsEditor.vue",
           "src/editors/ModelEditor.vue",
+          "src/editors/OtherEditor.vue",
           "src/editors/OutputModeEditor.vue",
           "src/pages/ConfigLibraryPage.vue"
         ]

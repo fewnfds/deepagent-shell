@@ -44,6 +44,7 @@ import {
   FilesystemEditor,
   FilesystemPermissionsEditor,
   ModelEditor,
+  OtherEditor,
   OutputModeEditor,
   SkillEditor,
   SubagentCapabilityEditor,
@@ -69,6 +70,7 @@ const editorComponents: Record<BlockType, Component> = {
   'output-mode': OutputModeEditor,
   'exception-retry': ExceptionRetryEditor,
   subagent: SubagentCapabilityEditor,
+  other: OtherEditor,
 }
 
 const { t } = useI18n()
@@ -170,6 +172,7 @@ const editorProps = computed<Record<string, unknown>>(() => {
     case 'output-mode':
     case 'exception-retry':
     case 'subagent':
+    case 'other':
       return {
         defaults: activeDefaults.value,
         ...(activeType.value === 'filesystem-permissions'

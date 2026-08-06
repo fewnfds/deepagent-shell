@@ -1,6 +1,6 @@
 # 创建组件
 
-【组件】提供十一类可复用配置。保存组件后，还要在 Primary 或 Subagent 实体 settings 中引用才会参与运行。
+【组件】提供十二类可复用配置。保存组件后，还要在 Primary 或 Subagent 实体 settings 中引用才会参与运行。
 
 | 组件 | 用途 | Primary 要求 | Subagent 策略 |
 | --- | --- | --- | --- |
@@ -15,6 +15,7 @@
 | 输出模式 | 把 v3 事件投影为响应文本 | 必选 | 只用于顶层 Primary |
 | 异常重试 | Provider 或 ModelRetryMiddleware 重试 | 可选 | 继承、替换或关闭 |
 | 委派能力 | 同步 Subagent 的提示与 `task` 说明 | 可选 | 继承、替换或关闭 |
+| 其他配置 | SummarizationMiddleware 与 Anthropic Prompt caching | 可选 | 继承、替换或关闭 |
 
 组件编辑页从服务端 catalog 取得字段、默认值和资源发现结果。草稿校验与保存校验都以后端 contract
 为准；记录使用 UUID 引用，重命名不会断开引用。

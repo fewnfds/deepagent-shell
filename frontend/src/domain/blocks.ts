@@ -10,6 +10,7 @@ export const blockTypes = [
   'system-prompt',
   'subagent',
   'todo-list',
+  'other',
 ] as const
 
 export interface BlockDraftBase {
@@ -194,6 +195,9 @@ export interface FilesystemDraft extends BlockDraftBase {
   virtual_files: VirtualSource[]
   system_prompt_override: string
   tool_token_limit_before_evict: number | string | null
+  human_message_token_limit_before_evict: number | string | null
+  grep_max_count: number | string
+  max_execute_timeout: number | string
   tool_configs: Record<string, FilesystemToolDraft>
 }
 
@@ -203,6 +207,9 @@ interface FilesystemApiRecord extends BlockDraftBase {
   virtual_files: VirtualSource[]
   system_prompt_override: string | null
   tool_token_limit_before_evict: number | null
+  human_message_token_limit_before_evict?: number | null
+  grep_max_count?: number
+  max_execute_timeout?: number
   tool_configs: Record<string, FilesystemToolApiValue>
 }
 
@@ -212,6 +219,9 @@ interface FilesystemPayload extends BlockPayloadBase {
   virtual_files: VirtualSource[]
   system_prompt_override: string | null
   tool_token_limit_before_evict: number | string | null
+  human_message_token_limit_before_evict: number | string | null
+  grep_max_count: number | string
+  max_execute_timeout: number | string
   tool_configs: Record<string, FilesystemToolApiValue>
 }
 
@@ -226,7 +236,49 @@ export interface FilesystemToolDefault {
 export interface FilesystemDefaults {
   system_prompt: string
   tool_token_limit_before_evict: number | null
+  human_message_token_limit_before_evict?: number | null
+  grep_max_count?: number
+  max_execute_timeout?: number
   tools: FilesystemToolDefault[]
+}
+
+export type SummarizationThresholdType = 'auto' | 'fraction' | 'tokens' | 'messages'
+export interface SummarizationThresholdDraft {
+  type: SummarizationThresholdType
+  value: number | string | null
+}
+export interface SummarizationDraft {
+  enabled: boolean
+  trigger: SummarizationThresholdDraft
+  keep: SummarizationThresholdDraft
+  truncate_args_enabled: boolean
+  truncate_args_trigger: SummarizationThresholdDraft
+  truncate_args_keep: SummarizationThresholdDraft
+  truncate_args_max_length: number | string
+  truncate_args_text: string
+  trim_tokens_to_summarize: number | string | null
+  summary_prompt_override: string
+}
+export interface PromptCachingDraft {
+  enabled: boolean
+  type: 'ephemeral'
+  ttl: '5m' | '1h'
+  min_messages_to_cache: number | string
+}
+export interface OtherDraft extends BlockDraftBase {
+  summarization: SummarizationDraft
+  prompt_caching: PromptCachingDraft
+}
+export type OtherDefaults = Omit<OtherDraft, 'id' | 'name'>
+interface OtherApiRecord extends BlockDraftBase {
+  summarization?: unknown
+  prompt_caching?: unknown
+}
+interface OtherPayload extends BlockPayloadBase {
+  summarization: Omit<SummarizationDraft, 'summary_prompt_override'> & {
+    summary_prompt_override: string | null
+  }
+  prompt_caching: PromptCachingDraft
 }
 
 export type FilesystemPermissionValue = 'read-write' | 'read-only' | 'no-access'
@@ -624,6 +676,115 @@ export const exceptionRetryAdapter = {
   },
 }
 
+function summarizationThresholdDraft(
+  value: unknown,
+  fallback: SummarizationThresholdDraft,
+): SummarizationThresholdDraft {
+  const source = isRecord(value) ? value : {}
+  const type = ['auto', 'fraction', 'tokens', 'messages'].includes(String(source.type))
+    ? source.type as SummarizationThresholdType
+    : fallback.type
+  return {
+    type,
+    value: type === 'auto' ? null : normalizeTokenLimit(source.value, fallback.value as number | null),
+  }
+}
+
+export const otherAdapter = {
+  blank(defaults: OtherDefaults): OtherDraft {
+    return { id: '', name: '', ...clone(defaults) }
+  },
+  fromApi(value: OtherApiRecord, defaults: OtherDefaults): OtherDraft {
+    const summarization = isRecord(value.summarization) ? value.summarization : {}
+    const promptCaching = isRecord(value.prompt_caching) ? value.prompt_caching : {}
+    return {
+      ...identity(value),
+      summarization: {
+        enabled: typeof summarization.enabled === 'boolean'
+          ? summarization.enabled
+          : defaults.summarization.enabled,
+        trigger: summarizationThresholdDraft(
+          summarization.trigger,
+          defaults.summarization.trigger,
+        ),
+        keep: summarizationThresholdDraft(
+          summarization.keep,
+          defaults.summarization.keep,
+        ),
+        truncate_args_enabled: typeof summarization.truncate_args_enabled === 'boolean'
+          ? summarization.truncate_args_enabled
+          : defaults.summarization.truncate_args_enabled,
+        truncate_args_trigger: summarizationThresholdDraft(
+          summarization.truncate_args_trigger,
+          defaults.summarization.truncate_args_trigger,
+        ),
+        truncate_args_keep: summarizationThresholdDraft(
+          summarization.truncate_args_keep,
+          defaults.summarization.truncate_args_keep,
+        ),
+        truncate_args_max_length: normalizeTokenLimit(
+          summarization.truncate_args_max_length,
+          Number(defaults.summarization.truncate_args_max_length),
+        ) ?? defaults.summarization.truncate_args_max_length,
+        truncate_args_text: stringValue(
+          summarization.truncate_args_text,
+          defaults.summarization.truncate_args_text,
+        ),
+        trim_tokens_to_summarize: normalizeTokenLimit(
+          summarization.trim_tokens_to_summarize,
+          defaults.summarization.trim_tokens_to_summarize as number | null,
+        ),
+        summary_prompt_override: stringValue(summarization.summary_prompt_override),
+      },
+      prompt_caching: {
+        enabled: typeof promptCaching.enabled === 'boolean'
+          ? promptCaching.enabled
+          : defaults.prompt_caching.enabled,
+        type: 'ephemeral',
+        ttl: promptCaching.ttl === '1h' || promptCaching.ttl === '5m'
+          ? promptCaching.ttl
+          : defaults.prompt_caching.ttl,
+        min_messages_to_cache: normalizeTokenLimit(
+          promptCaching.min_messages_to_cache,
+          Number(defaults.prompt_caching.min_messages_to_cache),
+        ) ?? defaults.prompt_caching.min_messages_to_cache,
+      },
+    }
+  },
+  toPayload(value: OtherDraft): OtherPayload {
+    const threshold = (item: SummarizationThresholdDraft): SummarizationThresholdDraft => ({
+      type: item.type,
+      value: item.type === 'auto' ? null : normalizeTokenLimit(item.value, null),
+    })
+    return {
+      name: cleanName(value.name),
+      summarization: {
+        ...value.summarization,
+        trigger: threshold(value.summarization.trigger),
+        keep: threshold(value.summarization.keep),
+        truncate_args_trigger: threshold(value.summarization.truncate_args_trigger),
+        truncate_args_keep: threshold(value.summarization.truncate_args_keep),
+        truncate_args_max_length: normalizeTokenLimit(
+          value.summarization.truncate_args_max_length,
+          null,
+        ) ?? value.summarization.truncate_args_max_length,
+        trim_tokens_to_summarize: normalizeTokenLimit(
+          value.summarization.trim_tokens_to_summarize,
+          null,
+        ),
+        summary_prompt_override: value.summarization.summary_prompt_override || null,
+      },
+      prompt_caching: {
+        ...value.prompt_caching,
+        min_messages_to_cache: normalizeTokenLimit(
+          value.prompt_caching.min_messages_to_cache,
+          null,
+        ) ?? value.prompt_caching.min_messages_to_cache,
+      },
+    }
+  },
+}
+
 function filesystemToolDraft(
   source: unknown,
   fallback: FilesystemToolDefault,
@@ -687,6 +848,9 @@ export const filesystemAdapter = {
       id: '', name: '', mapped_directories: [], virtual_directories: [], virtual_files: [],
       system_prompt_override: defaults.system_prompt,
       tool_token_limit_before_evict: defaults.tool_token_limit_before_evict,
+      human_message_token_limit_before_evict: defaults.human_message_token_limit_before_evict ?? 50_000,
+      grep_max_count: defaults.grep_max_count ?? 1_000,
+      max_execute_timeout: defaults.max_execute_timeout ?? 3_600,
       tool_configs: filesystemToolConfigs(undefined, defaults),
     }
   },
@@ -710,6 +874,12 @@ export const filesystemAdapter = {
         value.tool_token_limit_before_evict,
         defaults.tool_token_limit_before_evict,
       ),
+      human_message_token_limit_before_evict: normalizeTokenLimit(
+        value.human_message_token_limit_before_evict,
+        defaults.human_message_token_limit_before_evict ?? 50_000,
+      ),
+      grep_max_count: normalizeTokenLimit(value.grep_max_count, defaults.grep_max_count ?? 1_000) ?? 1_000,
+      max_execute_timeout: normalizeTokenLimit(value.max_execute_timeout, defaults.max_execute_timeout ?? 3_600) ?? 3_600,
       tool_configs: filesystemToolConfigs(value.tool_configs, defaults),
     }
   },
@@ -739,6 +909,12 @@ export const filesystemAdapter = {
         value.tool_token_limit_before_evict,
         defaults.tool_token_limit_before_evict,
       ),
+      human_message_token_limit_before_evict: normalizeTokenLimit(
+        value.human_message_token_limit_before_evict,
+        defaults.human_message_token_limit_before_evict ?? 50_000,
+      ),
+      grep_max_count: normalizeTokenLimit(value.grep_max_count, defaults.grep_max_count ?? 1_000) ?? 1_000,
+      max_execute_timeout: normalizeTokenLimit(value.max_execute_timeout, defaults.max_execute_timeout ?? 3_600) ?? 3_600,
       tool_configs,
     }
   },
@@ -939,4 +1115,5 @@ export const blockAdapters = {
   'system-prompt': systemPromptAdapter,
   subagent: subagentAdapter,
   'todo-list': todoListAdapter,
+  other: otherAdapter,
 } as const

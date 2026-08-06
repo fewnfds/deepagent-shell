@@ -13,6 +13,7 @@ from agent_shell.capability_manifest import FILESYSTEM_TOOL_NAMES
 from agent_shell.contracts import (
     FilesystemBlock,
     FilesystemPermissionsBlock,
+    OtherBlock,
     OutputModeBlock,
     SkillBlock,
 )
@@ -32,6 +33,7 @@ from agent_shell.runtime.capabilities.exception_retry import (
     materialize_exception_retry,
     model_block_with_retry_overrides,
 )
+from agent_shell.runtime.capabilities.other import materialize_other_middlewares
 from agent_shell.runtime.agent_compilation import (
     MaterializedAgentProfile,
     configuration_error,
@@ -364,6 +366,29 @@ class AgentBuilder:
         skill_sources = deepagents.skill_sources
 
         custom_middleware: list[Any] = []
+        other = selected_blocks.get("other")
+        if other is not None:
+            try:
+                other_block = OtherBlock.model_validate(
+                    {key: value for key, value in other.items() if key != "id"}
+                )
+                custom_middleware.extend(
+                    materialize_other_middlewares(
+                        other_block,
+                        model=model,
+                        backend=backend,
+                    )
+                )
+            except Exception as exc:
+                raise configuration_error(
+                    "middleware_materialization_failed",
+                    "The selected other configuration could not be constructed.",
+                    status_code=422,
+                    scope=scope,
+                    owner_id=owner_id,
+                    owner_name=owner_name,
+                    path="capability_refs.other",
+                ) from exc
         custom = selected_blocks.get("custom-middleware")
         if custom is not None:
             try:

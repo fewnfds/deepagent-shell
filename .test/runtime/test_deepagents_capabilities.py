@@ -47,6 +47,9 @@ def test_filesystem_runtime_options_and_tool_switches_are_compiled(tmp_path: Pat
             ],
             "system_prompt_override": "Use the configured workspace only.",
             "tool_token_limit_before_evict": 4096,
+            "human_message_token_limit_before_evict": 8192,
+            "grep_max_count": 321,
+            "max_execute_timeout": 45,
             "tool_configs": {
                 "ls": {"visible": False},
                 "read_file": {
@@ -87,6 +90,9 @@ def test_filesystem_runtime_options_and_tool_switches_are_compiled(tmp_path: Pat
         "delete": "Delete a configured workspace path.",
     }
     assert middleware._tool_token_limit_before_evict == 4096
+    assert middleware._human_message_token_limit_before_evict == 8192
+    assert middleware._grep_max_count == 321
+    assert middleware._max_execute_timeout == 45
 
 def test_filesystem_permissions_atomically_override_tools_prompt_and_paths(
     tmp_path: Path,

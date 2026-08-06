@@ -111,6 +111,7 @@ def block_payload(capability_type: str, name: str) -> dict:
                 "server_error",
             ],
         },
+        "other": {"name": name},
     }
     return payloads[capability_type]
 

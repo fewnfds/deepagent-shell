@@ -531,6 +531,15 @@ def build_deepagents_capabilities(
             if filesystem is not None
             else None
         ),
+        "human_message_token_limit_before_evict": (
+            filesystem.human_message_token_limit_before_evict
+            if filesystem is not None
+            else None
+        ),
+        "grep_max_count": filesystem.grep_max_count if filesystem is not None else 1_000,
+        "max_execute_timeout": (
+            filesystem.max_execute_timeout if filesystem is not None else 3_600
+        ),
     }
     filesystem_kwargs["tools"] = [
         name for name, config in tool_configs.items() if config["visible"]

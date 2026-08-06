@@ -16,6 +16,9 @@
   ],
   "system_prompt_override": null,
   "tool_token_limit_before_evict": 20000,
+  "human_message_token_limit_before_evict": 50000,
+  "grep_max_count": 1000,
+  "max_execute_timeout": 3600,
   "tool_configs": {
     "ls": {"visible": true, "description_override": null},
     "read_file": {"visible": true, "description_override": null},
@@ -53,7 +56,9 @@ workspace 使用不同路径权限、文件工具或文件系统提示词时，�
 `/large_tool_results/`、`/conversation_history/`、`/skills/`、`/memory/`、`/memories/`。
 
 `system_prompt_override=null` 使用当前 Deep Agents 默认行为；工具 `description_override=null` 保留默认说明。
-`tool_token_limit_before_evict` 为正整数或 `null`，`null` 关闭大工具结果卸载。
+`tool_token_limit_before_evict` 为正整数或 `null`，`null` 关闭大工具结果卸载；
+`human_message_token_limit_before_evict` 控制用户消息卸载阈值，`grep_max_count` 控制 grep 默认结果上限，
+`max_execute_timeout` 是 execute 单次命令的最大秒数（execute 当前默认不可见，但仍可提前配置）。
 没有装配文件系统权限时，路径默认可读写，文件系统组件中的提示词和工具配置直接生效。
 
 虚拟来源会在每个新请求中重新完整读取，当前没有单文件、展开文件数或总字节配额。不要选择依赖缓存、

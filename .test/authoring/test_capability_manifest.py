@@ -36,6 +36,7 @@ def test_manifest_matches_current_blocks_and_form_order() -> None:
         "output-mode",
         "exception-retry",
         "subagent",
+        "other",
     ]
     assert {manifest.type for manifest in CAPABILITY_MANIFESTS} == set(BLOCK_MODELS)
     assert CAPABILITY_MANIFESTS[0].required is True
@@ -56,6 +57,8 @@ def test_manifest_matches_current_blocks_and_form_order() -> None:
     assert manifests["exception-retry"].tool_names == ()
     assert manifests["subagent"].subagent_overrideable is True
     assert manifests["subagent"].subagent_policy == "inherit"
+    assert manifests["other"].subagent_overrideable is True
+    assert manifests["other"].subagent_policy == "inherit"
     assert manifests["todo-list"].subagent_overrideable is True
     assert manifests["todo-list"].tool_names == ("write_todos",)
 
@@ -94,6 +97,19 @@ def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
     assert filesystem["tool_token_limit_before_evict"] == (
         FilesystemBlock.model_fields["tool_token_limit_before_evict"].default
     )
+    assert filesystem["human_message_token_limit_before_evict"] == 50_000
+    assert filesystem["grep_max_count"] == 1_000
+    assert filesystem["max_execute_timeout"] == 3_600
+    assert defaults["other"]["summarization"]["trigger"] == {
+        "type": "auto",
+        "value": None,
+    }
+    assert defaults["other"]["prompt_caching"] == {
+        "enabled": True,
+        "type": "ephemeral",
+        "ttl": "5m",
+        "min_messages_to_cache": 0,
+    }
     assert [event["key"] for event in output["events"]] == list(OUTPUT_EVENT_NAMES)
     assert output["events"][0]["variables"] == [
         *OUTPUT_COMMON_TEMPLATE_VARIABLES,
