@@ -34,20 +34,37 @@ CREATE TABLE IF NOT EXISTS subagents (
 
 CREATE TABLE IF NOT EXISTS workflows (
     id TEXT PRIMARY KEY,
-    public_id TEXT NOT NULL UNIQUE,
     payload TEXT NOT NULL,
     revision INTEGER NOT NULL CHECK (revision >= 1),
     enabled INTEGER NOT NULL CHECK (enabled IN (0, 1))
 );
 
-CREATE INDEX IF NOT EXISTS idx_workflows_enabled_public_id
-    ON workflows(enabled, public_id COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_workflows_enabled
+    ON workflows(enabled);
 
-CREATE TABLE IF NOT EXISTS auto_roots (
+CREATE TABLE IF NOT EXISTS entry_scripts (
     id TEXT PRIMARY KEY,
     payload TEXT NOT NULL,
     revision INTEGER NOT NULL CHECK (revision >= 1)
 );
+
+CREATE INDEX IF NOT EXISTS idx_entry_scripts_name
+    ON entry_scripts(json_extract(payload, '$.name') COLLATE NOCASE);
+
+CREATE TABLE IF NOT EXISTS graph_runs (
+    id TEXT PRIMARY KEY,
+    graph_id TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+    entry_script_id TEXT REFERENCES entry_scripts(id) ON DELETE SET NULL,
+    thread_id TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'paused', 'cancelled', 'completed', 'failed')),
+    input_json TEXT NOT NULL,
+    state_json TEXT NOT NULL,
+    error_code TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_graph_runs_graph ON graph_runs(graph_id, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS api_server_settings (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),

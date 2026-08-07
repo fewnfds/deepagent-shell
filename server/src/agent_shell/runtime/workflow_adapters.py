@@ -61,7 +61,7 @@ def as_compiled_subagent(
 ) -> dict[str, Any]:
     """Adapt one compiled Workflow to the official Deep Agents contract."""
     return {
-        "name": compiled.public_id,
+        "name": compiled.name,
         "description": description or compiled.name,
         "runnable": _CompiledWorkflowSubagentRunnable(compiled),
     }

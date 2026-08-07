@@ -228,7 +228,6 @@ export interface SubagentReference {
 
 export interface MainAgentPayload {
   name: string
-  public_id: string
   capability_refs: CapabilityReference[]
   subagents: SubagentReference[]
   automation: MainAgentAutomation
@@ -288,7 +287,9 @@ export interface ValidationReport {
 
 export interface WorkflowPort {
   name: string
-  data_type: string
+  value_type: string
+  required: boolean
+  cardinality: 'one' | 'many'
 }
 
 export interface WorkflowNodeCatalogItem {
@@ -298,6 +299,7 @@ export interface WorkflowNodeCatalogItem {
   input_ports: WorkflowPort[]
   output_ports: WorkflowPort[]
   config_schema: Record<string, unknown>
+  execution_kind: string
 }
 
 export interface WorkflowNodeCatalogResponse {
@@ -310,6 +312,8 @@ export interface WorkflowNode {
   type: string
   version: string
   config: Record<string, unknown>
+  timeout_seconds?: number | null
+  max_attempts?: number | null
 }
 
 export interface WorkflowPortRef {
@@ -319,8 +323,10 @@ export interface WorkflowPortRef {
 
 export interface WorkflowEdge {
   id: string
+  kind: 'control' | 'data'
   source: WorkflowPortRef
   target: WorkflowPortRef
+    condition?: string | null
 }
 
 export interface WorkflowPosition {
@@ -329,29 +335,45 @@ export interface WorkflowPosition {
 }
 
 export interface WorkflowDefinition {
-  public_id: string
   name: string
   description: string
-  schema_version: 1
+  schema_version: 3
   enabled: boolean
-  root_interface: { kind: 'chat'; input: 'messages'; output: 'message' }
-  agent_base: { source: { kind: 'main-agent-profile'; id: string }; inherit: string[] } | null
-  preparation: AutomationPluginBinding[]
+  interface: {
+    inputs: Array<{ name: string; value_type: string; required: boolean; cardinality: 'one' | 'many'; target: WorkflowPortRef }>
+    outputs: Array<{ name: string; value_type: string; required: boolean; source: WorkflowPortRef }>
+  }
+  setup: AutomationPluginBinding[]
   nodes: WorkflowNode[]
+  entry_nodes: string[]
   edges: WorkflowEdge[]
   layout: Record<string, WorkflowPosition>
+  recursion_limit: number
 }
 
 export type Workflow = WorkflowDefinition & { id: string; revision: number }
 
-export interface AutoRootDefinition {
-  public_id: string
+export interface EntryScriptDefinition {
   name: string
+  graph_id: string
   source: string
   enabled: boolean
 }
 
-export type AutoRoot = AutoRootDefinition & { id: string; revision: number }
+export type EntryScript = EntryScriptDefinition & { id: string; revision: number }
+
+export interface GraphRun {
+  id: string
+  graph_id: string
+  entry_script_id: string | null
+  thread_id: string
+  status: 'queued' | 'running' | 'paused' | 'cancelled' | 'completed' | 'failed'
+  input: Record<string, unknown>
+  state: Record<string, unknown>
+  error_code: string | null
+  created_at: string
+  updated_at: string
+}
 
 export interface HealthResponse {
   status: string

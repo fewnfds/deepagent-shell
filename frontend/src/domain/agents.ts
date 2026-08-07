@@ -109,21 +109,10 @@ export function blankMainAgent(): MainAgentProfile {
   return {
     id: '',
     name: '',
-    public_id: '',
     capability_refs: [],
     subagents: [],
     automation: { hooks: [], periodic: [] },
   }
-}
-
-export function defaultMainAgentPublicId(name: string): string {
-  const slug = name
-    .normalize('NFKD')
-    .replace(/[^\u0000-\u007F]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return `agent-${slug || 'config'}`
 }
 
 export function normalizeMainAgent(value: unknown): MainAgentProfile {
@@ -133,7 +122,6 @@ export function normalizeMainAgent(value: unknown): MainAgentProfile {
   return {
     id: text(source.id),
     name: text(source.name),
-    public_id: text(source.public_id),
     capability_refs: references.map((item) => {
       const reference = record(item)
       return { type: text(reference.type), block_id: text(reference.block_id) }
@@ -146,7 +134,6 @@ export function normalizeMainAgent(value: unknown): MainAgentProfile {
 export function mainAgentPayload(value: MainAgentProfile): MainAgentPayload {
   return {
     name: value.name.trim(),
-    public_id: value.public_id.trim(),
     capability_refs: value.capability_refs
       .map((reference) => ({ type: reference.type, block_id: reference.block_id })),
     subagents: value.subagents.map((reference) => ({

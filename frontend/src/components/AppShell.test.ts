@@ -141,7 +141,7 @@ describe('AppShell', () => {
     expect(shell.find('a[href="/agents/main"]').exists()).toBe(false)
     expect(shell.find('a[href^="/components/"]').exists()).toBe(false)
     expect(shell.get('a[href="/style-lab"] .nav-icon').classes()).toContain('bi-sliders')
-    expect(shell.findAll('.app-sidebar .nav-link')).toHaveLength(7)
+    expect(shell.findAll('.app-sidebar .nav-link')).toHaveLength(8)
   })
 
   it('renders the localized route title beside the navigation toggle', async () => {

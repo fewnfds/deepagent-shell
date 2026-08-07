@@ -4,9 +4,9 @@ import ast
 import json
 import stat
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from agent_shell.automation.dependencies import (
     dependency_metadata,
@@ -25,6 +25,29 @@ _ENTRYPOINT_FUNCTIONS: dict[str, tuple[str, bool]] = {
 }
 
 
+class WorkflowNodePortManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=120, pattern=r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+    value_type: str = Field(default="json", min_length=1, max_length=64)
+    required: bool = True
+    cardinality: Literal["one", "many"] = "one"
+
+
+class WorkflowNodeManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    type: str = Field(min_length=3, max_length=200, pattern=r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)+$")
+    version: str = Field(default="1.0.0", min_length=1, max_length=32)
+    title: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=1024)
+    input_ports: list[WorkflowNodePortManifest] = Field(default_factory=list, max_length=32)
+    output_ports: list[WorkflowNodePortManifest] = Field(default_factory=list, max_length=32)
+    config_schema: dict[str, Any] = Field(default_factory=lambda: {"type": "object"})
+    entrypoint: str = Field(default="run", min_length=1, max_length=120, pattern=r"^[A-Za-z_][A-Za-z0-9_]*$")
+    control_mode: Literal["signal", "command"] = "signal"
+
+
 class AutomationScriptManifest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -32,19 +55,28 @@ class AutomationScriptManifest(BaseModel):
     id: str = Field(min_length=1, max_length=64, pattern=r"^[a-z0-9][a-z0-9-]*$")
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=1024)
-    entrypoints: list[PluginEntrypoint] = Field(min_length=1, max_length=4)
-    config_schema: AutomationConfigSchema
+    entrypoints: list[PluginEntrypoint] = Field(default_factory=list, max_length=4)
+    config_schema: AutomationConfigSchema = Field(
+        default_factory=lambda: AutomationConfigSchema(type="object")
+    )
+    workflow_nodes: list[WorkflowNodeManifest] = Field(default_factory=list, max_length=100)
 
     @field_validator("entrypoints")
     @classmethod
     def unique_entrypoints(cls, value: list[str]) -> list[str]:
         if len(value) != len(set(value)):
             raise ValueError("plugin entrypoints must be unique")
-        if not {"middleware", "prepare", "lifecycle"}.intersection(value):
-            raise ValueError(
-                "plugin must provide middleware, prepare, or lifecycle"
-            )
+        if value and not {"middleware", "prepare", "lifecycle"}.intersection(value):
+            raise ValueError("plugin must provide middleware, prepare, or lifecycle when automation entrypoints are declared")
         return value
+
+    @model_validator(mode="after")
+    def has_contribution(self) -> "AutomationScriptManifest":
+        if not self.entrypoints and not self.workflow_nodes:
+            raise ValueError(
+                "plugin must provide an automation entrypoint or workflow node"
+            )
+        return self
 
 
 def _is_link(path: Path) -> bool:
@@ -102,6 +134,31 @@ def _validate_entrypoint(tree: ast.Module, entrypoint: str) -> None:
         )
 
 
+def _validate_workflow_node_entrypoint(tree: ast.Module, name: str) -> None:
+    functions = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == name
+    ]
+    if len(functions) != 1:
+        raise ResourceScanError(
+            "resource.error.automationScript.workflowNodeEntrypointRequired",
+            f"main.py must define exactly one module-level async def {name}(ctx).",
+        )
+    function = functions[0]
+    positional = [*function.args.posonlyargs, *function.args.args]
+    if (
+        len(positional) != 1
+        or function.args.vararg is not None
+        or function.args.kwarg is not None
+        or function.args.kwonlyargs
+    ):
+        raise ResourceScanError(
+            "resource.error.automationScript.workflowNodeEntrypointSignatureInvalid",
+            f"The workflow node entrypoint {name} must accept exactly one positional ctx argument.",
+        )
+
+
 def scan_automation_script_folder(
     folder: Path,
     *,
@@ -155,6 +212,20 @@ def scan_automation_script_folder(
         ) from exc
     for entrypoint in manifest.entrypoints:
         _validate_entrypoint(tree, entrypoint)
+    node_types: set[str] = set()
+    for node in manifest.workflow_nodes:
+        if not node.type.startswith(f"plugin.{manifest.id}."):
+            raise ResourceScanError(
+                "resource.error.automationScript.workflowNodeTypeInvalid",
+                "Workflow node types must be namespaced by the plugin id.",
+            )
+        if node.type in node_types:
+            raise ResourceScanError(
+                "resource.error.automationScript.workflowNodeTypeDuplicate",
+                "Workflow node types must be unique within a plugin.",
+            )
+        node_types.add(node.type)
+        _validate_workflow_node_entrypoint(tree, node.entrypoint)
     requirements = read_plugin_requirements(folder)
     return {
         **manifest.model_dump(

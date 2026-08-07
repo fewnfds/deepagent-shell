@@ -6,45 +6,37 @@ import type {
   WorkflowNodeCatalogItem,
 } from '@/api'
 
-export function defaultWorkflowPublicId(name: string): string {
-  const slug = name.normalize('NFKD').replace(/[^\u0000-\u007F]/g, '').toLowerCase()
-    .replace(/[^a-z]+/g, '-').replace(/^-+|-+$/g, '')
-  return `workflow-${slug || 'config'}`
-}
-
 export function blankWorkflow(): WorkflowDefinition {
-  const input: WorkflowNode = { id: 'input', type: 'builtin.input.messages', version: '1.0.0', config: {} }
-  const output: WorkflowNode = { id: 'output', type: 'builtin.output.message', version: '1.0.0', config: {} }
-  const edge: WorkflowEdge = {
-    id: 'input-output',
-    source: { node: 'input', port: 'messages' },
-    target: { node: 'output', port: 'messages' },
-  }
   return {
-    public_id: '',
     name: '',
     description: '',
-    schema_version: 1,
+    schema_version: 3,
     enabled: true,
-    root_interface: { kind: 'chat', input: 'messages', output: 'message' },
-    agent_base: null,
-    preparation: [],
-    nodes: [input, output],
-    edges: [edge],
-    layout: {},
+    interface: { inputs: [], outputs: [] },
+    setup: [],
+    nodes: [{ id: 'agent-1', type: 'builtin.agent', version: '1.0.0', config: { profile_id: '' } }],
+    entry_nodes: ['agent-1'],
+    edges: [],
+    layout: { 'agent-1': { x: 240, y: 160 } },
+    recursion_limit: 100,
   }
 }
 
 export function normalizeWorkflow(value: unknown): Workflow {
   const source = value && typeof value === 'object' ? value as Record<string, any> : {}
+  const blank = blankWorkflow()
   return {
-    ...blankWorkflow(),
+    ...blank,
     ...source,
     id: typeof source.id === 'string' ? source.id : '',
     revision: typeof source.revision === 'number' ? source.revision : 0,
-    nodes: Array.isArray(source.nodes) ? source.nodes : blankWorkflow().nodes,
-    edges: Array.isArray(source.edges) ? source.edges : blankWorkflow().edges,
+    interface: source.interface && typeof source.interface === 'object' ? source.interface : blank.interface,
+    setup: Array.isArray(source.setup) ? source.setup : [],
+    nodes: Array.isArray(source.nodes) ? source.nodes : blank.nodes,
+    entry_nodes: Array.isArray(source.entry_nodes) ? source.entry_nodes : blank.entry_nodes,
+    edges: Array.isArray(source.edges) ? source.edges : [],
     layout: source.layout && typeof source.layout === 'object' ? source.layout : {},
+    recursion_limit: typeof source.recursion_limit === 'number' ? source.recursion_limit : blank.recursion_limit,
   }
 }
 
@@ -57,9 +49,14 @@ export function nodeCatalogItem(catalog: WorkflowNodeCatalogItem[], type: string
 }
 
 export function nextNodeId(nodes: WorkflowNode[], type: string): string {
-  const prefix = type.split('.').at(-1)?.replace(/[^a-z]+/g, '-') || 'node'
+  const prefix = type.split('.').at(-1)?.replace(/[^a-z0-9]+/g, '-') || 'node'
   let index = 1
   while (nodes.some((node) => node.id === `${prefix}-${index}`)) index += 1
   return `${prefix}-${index}`
 }
 
+export function edgeId(edges: WorkflowEdge[]): string {
+  let index = edges.length + 1
+  while (edges.some((edge) => edge.id === `edge-${index}`)) index += 1
+  return `edge-${index}`
+}

@@ -1,0 +1,23 @@
+{
+  "api_version": 3,
+  "id": "workflow-node-text-normalizer",
+  "name": "Workflow node: text normalizer",
+  "description": "A deterministic workflow-node contribution example.",
+  "entrypoints": [],
+  "workflow_nodes": [
+    {
+      "type": "plugin.workflow-node-text-normalizer.normalize",
+      "version": "1.0.0",
+      "title": "Normalize text",
+      "description": "Trim and collapse whitespace in one text input.",
+      "input_ports": [
+        {"name": "text", "value_type": "text", "required": true, "cardinality": "one"}
+      ],
+      "output_ports": [
+        {"name": "result", "value_type": "text", "required": true, "cardinality": "one"}
+      ],
+      "config_schema": {"type": "object", "additionalProperties": false},
+      "entrypoint": "run"
+    }
+  ]
+}

@@ -7,7 +7,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any
 
-from agent_shell.runtime.agent_builder import AgentBuilder
+from agent_shell.runtime.agent_builder import AgentBuilder, BuiltAgent
 from agent_shell.automation.runtime import AutomationRuntime
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.errors import AgentRuntimeError
@@ -307,6 +307,19 @@ class AgentRuntime:
             event_observers=tuple(observers),
             artifact_events=artifact_events if artifact_events is not None else [],
         )
+
+    async def build_graph(
+        self,
+        main_agent_id: str,
+        raw_messages: object,
+        **kwargs: Any,
+    ) -> BuiltAgent:
+        """Build one official Deep Agents graph for embedding as a subgraph."""
+        try:
+            return await self._builder.build(main_agent_id, raw_messages, **kwargs)
+        except Exception:
+            await self._builder.finish_failed_build()
+            raise
 
     def prepare_workspace(self, main_agent_id: str) -> DeepAgentsWorkspace:
         return self._builder.prepare_workspace(main_agent_id)

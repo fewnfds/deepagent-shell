@@ -36,7 +36,7 @@ from agent_shell.storage.agent_sessions import AgentRunStatus, AgentSessionStore
 from agent_shell.storage.api_server import ApiServerStore
 from agent_shell.storage.media_outputs import MediaOutputStore
 from agent_shell.storage.workflows import WorkflowStore
-from agent_shell.storage.autos import AutoStore
+from agent_shell.storage.entry_scripts import EntryScriptStore
 from agent_shell.workflow.artifacts import ArtifactCommitter
 from agent_shell.validation.models import validation_failure_detail
 from agent_shell.validation.service import ConfigurationValidationService
@@ -174,7 +174,14 @@ def _internal_error_payload(request_id: str) -> dict[str, object]:
 
 
 def _json_wire(payload: dict[str, object]) -> str:
-    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=_json_default)
+
+
+def _json_default(value: object) -> object:
+    content = getattr(value, "content", None)
+    if content is not None:
+        return {"content": content, "type": value.__class__.__name__}
+    return str(value)
 
 
 def _model_object(model_id: str) -> dict[str, object]:
@@ -239,7 +246,7 @@ def build_api_server_router(
     validation: ConfigurationValidationService,
     media_outputs: MediaOutputStore,
     workflows: WorkflowStore,
-    autos: AutoStore,
+    entry_scripts: EntryScriptStore,
 ) -> APIRouter:
     router = APIRouter()
     history = MessageHistoryRecorder(store, events, diagnostics)
@@ -273,7 +280,7 @@ def build_api_server_router(
 
         def encode(payload: dict[str, object]) -> str:
             item = "data: " + json.dumps(
-                payload, ensure_ascii=False, separators=(",", ":")
+                payload, ensure_ascii=False, separators=(",", ":"), default=_json_default
             ) + "\n\n"
             wire.append(item)
             return item
@@ -294,24 +301,58 @@ def build_api_server_router(
             }
             yield encode(role)
             try:
-                async for text in execution.stream_text():
-                    if not text:
-                        continue
-                    response_parts.append(text)
-                    chunk = {
-                        "id": completion_id,
-                        "object": "chat.completion.chunk",
-                        "created": created,
-                        "model": model,
-                        "choices": [
-                            {
-                                "index": 0,
-                                "delta": {"content": text},
-                                "finish_reason": None,
-                            }
-                        ],
-                    }
-                    yield encode(chunk)
+                if hasattr(execution, "stream_events"):
+                    async for event in execution.stream_events():
+                        if not isinstance(event, dict):
+                            continue
+                        # Stream V3 projection: preserve LangGraph namespace,
+                        # event type and node identity for graph-aware clients.
+                        yield encode({
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model,
+                            "choices": [],
+                            "agent_shell": {"event": "graph_stream", "version": "v3", "data": event},
+                        })
+                        if event.get("type") != "updates":
+                            continue
+                        data = event.get("data")
+                        if not isinstance(data, dict):
+                            continue
+                        for update in data.values():
+                            if not isinstance(update, dict):
+                                continue
+                            messages = update.get("messages") or []
+                            if not messages:
+                                continue
+                            text = getattr(messages[-1], "content", None)
+                            if not isinstance(text, str) or not text:
+                                continue
+                            response_parts.append(text)
+                            yield encode({
+                                "id": completion_id, "object": "chat.completion.chunk", "created": created, "model": model,
+                                "choices": [{"index": 0, "delta": {"content": text}, "finish_reason": None}],
+                            })
+                else:
+                    async for text in execution.stream_text():
+                        if not text:
+                            continue
+                        response_parts.append(text)
+                        chunk = {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model,
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {"content": text},
+                                    "finish_reason": None,
+                                }
+                            ],
+                        }
+                        yield encode(chunk)
                 for artifact in getattr(execution, "artifact_events", []):
                     yield encode(
                         {
@@ -523,18 +564,10 @@ def build_api_server_router(
         if not store.is_enabled():
             return _openai_error(503, "api_server_stopped", "The API server is stopped.")
         models: list[dict[str, object]] = []
-        for item in agent_configs.list_items("main_agents"):
-            public_id = item.get("public_id")
-            if isinstance(public_id, str) and public_id:
-                models.append(_model_object(public_id))
-        for item in workflows.list_items():
-            public_id = item.get("public_id")
-            if item.get("enabled", True) and isinstance(public_id, str):
-                models.append(_model_object(public_id))
-        for item in autos.list_items():
-            public_id = item.get("public_id")
-            if item.get("enabled", True) and isinstance(public_id, str):
-                models.append(_model_object(public_id))
+        for item in entry_scripts.list_items():
+            name = item.get("name")
+            if item.get("enabled", True) and isinstance(name, str):
+                models.append(_model_object(name))
         return JSONResponse(content={"object": "list", "data": models})
 
     @router.post("/v1/chat/completions", response_model=None)
@@ -587,7 +620,7 @@ def build_api_server_router(
                 exc.status_code,
                 exc.code,
                 exc.safe_message,
-                param="model" if exc.code.startswith("auto.") else None,
+                param="model",
             )
         if target is None:
             request_snapshot.close()
@@ -747,6 +780,7 @@ def build_api_server_router(
                         public_model=model,
                         artifact_committer=artifact_committer,
                         artifact_events=artifact_events,
+                        entry_script=target.get("entry"),
                     )
                 else:
                     execution = await request_snapshot.start_workflow(
@@ -756,6 +790,7 @@ def build_api_server_router(
                         invocation_id=request_id,
                         artifact_committer=artifact_committer,
                         artifact_events=artifact_events,
+                        entry_script=target.get("entry"),
                     )
             except AgentRuntimeError as exc:
                 request_snapshot.close()

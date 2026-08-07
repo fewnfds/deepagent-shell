@@ -23,10 +23,21 @@ def current_subagent_cause() -> SubagentCause | None:
     return _SUBAGENT_CAUSE.get()
 
 
-def _invocation_from_runtime(runtime: object) -> InvocationData:
+def _context_from_runtime(runtime: object, context_key: str | None = None) -> Mapping[str, Any]:
     context = getattr(runtime, "context", None)
     if not isinstance(context, Mapping):
         raise RuntimeError("The Agent invocation context is unavailable")
+    contexts = context.get("agent_contexts")
+    if context_key is not None and isinstance(contexts, Mapping):
+        selected = contexts.get(context_key)
+        if not isinstance(selected, Mapping):
+            raise RuntimeError("The Graph Agent context is unavailable")
+        return selected
+    return context
+
+
+def _invocation_from_runtime(runtime: object, context_key: str | None = None) -> InvocationData:
+    context = _context_from_runtime(runtime, context_key)
     invocation = context.get("agent_shell_invocation")
     if not isinstance(invocation, Mapping):
         raise RuntimeError("The Agent invocation identity is unavailable")
@@ -42,16 +53,18 @@ class AgentInvocationMiddleware(AgentMiddleware):
         agent_type: str,
         agent_name: str,
         observer: Callable[[dict[str, object]], Any] | None = None,
+        context_key: str | None = None,
     ) -> None:
         super().__init__()
         self._agent_type = agent_type
         self._agent_name = agent_name
         self._observer = observer
+        self._context_key = context_key
 
     def _observe(self, state: dict[str, Any], runtime: object) -> None:
         if self._observer is None:
             return
-        invocation = _invocation_from_runtime(runtime)
+        invocation = _invocation_from_runtime(runtime, self._context_key)
         messages = state.get("messages", [])
         self._observer(
             {
@@ -90,7 +103,7 @@ class AgentInvocationMiddleware(AgentMiddleware):
     ) -> ToolMessage | Command[Any]:
         if not self._is_task(request):
             return handler(request)
-        invocation = _invocation_from_runtime(request.runtime)
+        invocation = _invocation_from_runtime(request.runtime, self._context_key)
         tool_call_id = str(request.runtime.tool_call_id or "")
         if not tool_call_id:
             raise RuntimeError("The Subagent tool call identity is unavailable")
@@ -109,7 +122,7 @@ class AgentInvocationMiddleware(AgentMiddleware):
     ) -> ToolMessage | Command[Any]:
         if not self._is_task(request):
             return await handler(request)
-        invocation = _invocation_from_runtime(request.runtime)
+        invocation = _invocation_from_runtime(request.runtime, self._context_key)
         tool_call_id = str(request.runtime.tool_call_id or "")
         if not tool_call_id:
             raise RuntimeError("The Subagent tool call identity is unavailable")

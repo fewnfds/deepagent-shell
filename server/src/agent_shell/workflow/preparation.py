@@ -106,11 +106,11 @@ class WorkflowPreparationRuntime:
             runtime_root=self._runtime_root,
         )
         try:
-            for index, binding in enumerate(definition.preparation):
+            for index, binding in enumerate(definition.setup):
                 if not binding.enabled:
                     continue
                 function, plugin_dir = loader.entrypoint(
-                    str(definition.public_id),
+                    str(definition.name),
                     "workflow",
                     index,
                     binding.plugin_id,
@@ -121,7 +121,7 @@ class WorkflowPreparationRuntime:
                 context = WorkflowPreparationContext(
                     runtime=services,
                     request=immutable_request(request_id, prepared_messages),
-                    owner_id=str(definition.public_id),
+                    owner_id=str(definition.name),
                     owner_type="workflow",
                     owner_name=definition.name,
                     binding_kind="workflow",

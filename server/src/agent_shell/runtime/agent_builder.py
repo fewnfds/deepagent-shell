@@ -492,6 +492,8 @@ class AgentBuilder:
         artifact_committer: ArtifactCommitter | None = None,
         workspace: DeepAgentsWorkspace | None = None,
         request_id: str = "",
+        state_schema: type | None = None,
+        context_key: str | None = None,
     ) -> BuiltAgent:
         # Validate the immutable request snapshot before any selected user module
         # can be imported or any optional capability can be materialized.
@@ -573,6 +575,8 @@ class AgentBuilder:
             "name": str(main_agent["name"]),
             "context_schema": AgentRequestContext,
         }
+        if state_schema is not None:
+            constructor["state_schema"] = state_schema
         if materialized.system_prompt is not None:
             constructor["system_prompt"] = materialized.system_prompt
         if runtime_tools:
@@ -592,6 +596,7 @@ class AgentBuilder:
                 agent_type="main_agent",
                 agent_name=main_agent_name,
                 observer=agent_input_observer,
+                context_key=context_key,
             ),
             *materialized.middleware,
             *materialized.automation_middleware,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import asyncio
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
@@ -23,7 +24,8 @@ from agent_shell.api.provider_integrations import build_provider_integrations_ro
 from agent_shell.api.system_settings import build_system_settings_router
 from agent_shell.api.validation import build_validation_router
 from agent_shell.api.workflows import build_workflow_router
-from agent_shell.api.autos import build_auto_router
+from agent_shell.api.entry_scripts import build_entry_script_router
+from agent_shell.api.graph_runs import build_graph_run_router
 from agent_shell.provider_http import ProviderHttpClients
 from agent_shell.provider_secrets import ProviderSecretResolver
 from agent_shell.runtime.request_snapshot import RequestSnapshotRuntime
@@ -57,7 +59,11 @@ from agent_shell.storage.runtime_diagnostics import RuntimeDiagnosticStore
 from agent_shell.storage.system_log_settings import MIB_BYTES, SystemLogSettingsStore
 from agent_shell.storage.validation_settings import ConfigurationValidationSettingsStore
 from agent_shell.storage.workflows import WorkflowStore
-from agent_shell.storage.autos import AutoStore
+from agent_shell.storage.entry_scripts import EntryScriptStore
+from agent_shell.storage.graph_runs import GraphRunStore
+from agent_shell.runtime.graph_run_service import GraphRunService
+from agent_shell.workflow.catalog import scan_workflow_node_registry
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from agent_shell.storage.event_feed import EventFeedStore
 from agent_shell.validation.service import ConfigurationValidationService
 from agent_shell.automation.validation import AutomationValidationService
@@ -119,7 +125,7 @@ def create_app(
     block_store = BlockStore(database, event_logger)
     config_store = AgentConfigStore(database, event_logger)
     workflow_store = WorkflowStore(database, event_logger)
-    auto_store = AutoStore(database, event_logger)
+    entry_script_store = EntryScriptStore(database, event_logger)
     automation_validation = AutomationValidationService(
         scripts_dir=automation_scripts_dir,
         runtime_root=runtime_dir,
@@ -183,6 +189,7 @@ def create_app(
         settings.resolved_runtime_dir() / "tmp",
     )
     system_settings = SystemSettingsService(settings, api_server_store.api_key)
+    checkpointer_holder: dict[str, object] = {}
     agent_runtime = RequestSnapshotRuntime(
         database,
         custom_tools_dir=custom_tools_dir,
@@ -192,6 +199,40 @@ def create_app(
         diagnostics=runtime_diagnostics,
         provider_http_clients=provider_http_clients,
         media_outputs=media_outputs,
+        checkpointer_provider=lambda: checkpointer_holder.get("value"),
+    )
+    graph_run_store = GraphRunStore(database)
+    files_root = settings.resolved_files_dir().resolve()
+
+    def graph_artifact_committer(run_id: str, sink):
+        async def read_artifact(path: str) -> bytes:
+            candidate = (files_root / path.lstrip("/")).resolve()
+            if files_root not in candidate.parents:
+                raise ValueError("artifact path is outside the files root")
+            return await asyncio.to_thread(candidate.read_bytes)
+
+        async def emit_artifact(event: dict[str, object]) -> None:
+            sink({"event": "artifact_commit", "data": event})
+
+        from agent_shell.workflow.artifacts import ArtifactCommitter
+
+        return ArtifactCommitter(reader=read_artifact, emit=emit_artifact)
+
+    async def compile_graph_run(graph_id, sink, messages, request_id, artifact_committer):
+        return await agent_runtime.capture().compile_workflow(
+            graph_id,
+            event_sink=sink,
+            checkpointer=checkpointer_holder.get("value"),
+            raw_messages=messages,
+            request_id=request_id,
+            artifact_committer=artifact_committer,
+        )
+
+    graph_runs = GraphRunService(
+        graph_run_store,
+        compile_graph_run,
+        entry_script_lookup=entry_script_store.get_item,
+        artifact_committer_factory=graph_artifact_committer,
     )
 
     frontend_dir = Path(__file__).parent / "frontend_dist"
@@ -238,8 +279,11 @@ def create_app(
             "service_started", {"deployment_mode": settings.deployment_mode}
         )
         try:
-            yield
+            async with AsyncSqliteSaver.from_conn_string(str(settings.resolved_database_path())) as checkpointer:
+                checkpointer_holder["value"] = checkpointer
+                yield
         finally:
+            checkpointer_holder.clear()
             try:
                 await provider_http_clients.aclose()
             finally:
@@ -397,6 +441,7 @@ def create_app(
     app.state.startup_storage_permissions = startup_permission_statuses
     app.state.security_events = event_logger
     app.state.agent_runtime = agent_runtime
+    app.state.graph_runs = graph_runs
     app.state.interception_tests = interception_tests
     app.state.runtime_diagnostics = runtime_diagnostics
     app.state.runtime_diagnostic_store = runtime_diagnostic_store
@@ -451,8 +496,18 @@ def create_app(
             configuration_validation,
         )
     )
-    app.include_router(build_workflow_router(workflow_store, config_store))
-    app.include_router(build_auto_router(auto_store))
+    app.include_router(
+        build_workflow_router(
+            workflow_store,
+            config_store,
+            node_registry_provider=lambda: scan_workflow_node_registry(
+                automation_scripts_dir,
+                runtime_root=settings.resolved_runtime_dir(),
+            ),
+        )
+    )
+    app.include_router(build_entry_script_router(entry_script_store, workflow_store))
+    app.include_router(build_graph_run_router(graph_runs, workflow_store))
     app.include_router(
         build_validation_router(
             configuration_validation,
@@ -491,7 +546,7 @@ def create_app(
             configuration_validation,
             media_outputs,
             workflow_store,
-            auto_store,
+            entry_script_store,
         )
     )
 

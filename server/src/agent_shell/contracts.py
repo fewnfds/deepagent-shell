@@ -26,7 +26,6 @@ from agent_shell.capability_manifest import (
     PUBLIC_CAPABILITY_MANIFESTS,
     validate_capability_manifests,
 )
-from agent_shell.public_ids import default_public_id
 from agent_shell.model_provider_contracts import validate_provider_settings
 from agent_shell.provider_integrations import bundled_provider_ids
 from agent_shell.registries.custom_middlewares import (
@@ -919,25 +918,9 @@ class CapabilityReference(BaseModel):
 
 
 class MainAgentProfile(StrictBlock):
-    public_id: Annotated[
-        str,
-        Field(
-            min_length=7,
-            max_length=120,
-            pattern=r"^agent-[a-z]+(?:-[a-z]+)*$",
-        ),
-    ]
     capability_refs: list[CapabilityReference] = Field(default_factory=list, max_length=100)
     subagents: list[SubagentReference] = Field(default_factory=list, max_length=100)
     automation: MainAgentAutomation = Field(default_factory=MainAgentAutomation)
-
-    @model_validator(mode="before")
-    @classmethod
-    def default_public_id_from_name(cls, value: Any) -> Any:
-        if isinstance(value, dict) and not value.get("public_id"):
-            value = dict(value)
-            value["public_id"] = default_public_id("agent", str(value.get("name", "")))
-        return value
 
     @model_validator(mode="after")
     def validate_profile(self) -> "MainAgentProfile":

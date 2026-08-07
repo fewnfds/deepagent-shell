@@ -17,7 +17,6 @@ import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
 import {
   agentAuthoringServiceKey,
   blankMainAgent,
-  defaultMainAgentPublicId,
   managementAgentAuthoringService,
   normalizeMainAgent,
   mainAgentPayload,
@@ -53,7 +52,6 @@ const subagentProfiles = ref<SubagentProfile[]>([])
 const automationPlugins = ref<AutomationScriptResource[]>([])
 const selectedProfileId = ref('')
 const form = ref(blankMainAgent())
-const publicIdEdited = ref(false)
 let profileLoadSequence = 0
 
 const obsoleteReferences = computed(() => {
@@ -105,12 +103,6 @@ function capabilityBlocks(type: CapabilityType): StoredBlock[] {
 
 function updateName(value: string): void {
   form.value.name = value
-  if (!publicIdEdited.value) form.value.public_id = defaultMainAgentPublicId(value)
-}
-
-function updatePublicId(value: string): void {
-  publicIdEdited.value = true
-  form.value.public_id = value
 }
 
 function updateReference(type: CapabilityType, value: string): void {
@@ -126,7 +118,6 @@ async function startNew(): Promise<void> {
     profileLoadSequence += 1
     selectedProfileId.value = ''
     form.value = blankMainAgent()
-    publicIdEdited.value = false
     feedbackKey.value = ''
     feedbackDetail.value = ''
     notify({ tone: 'info', title: t('agents.feedback.newDraft') })
@@ -139,7 +130,6 @@ async function loadProfile(id: string): Promise<void> {
   if (!id) {
     selectedProfileId.value = ''
     form.value = blankMainAgent()
-    publicIdEdited.value = false
     feedbackKey.value = ''
     feedbackDetail.value = ''
     notify({ tone: 'info', title: t('agents.feedback.newDraft') })
@@ -154,7 +144,6 @@ async function loadProfile(id: string): Promise<void> {
     const loaded = normalizeMainAgent(await service.value.getMainAgent(id))
     if (sequence !== profileLoadSequence) return
     form.value = loaded
-    publicIdEdited.value = true
     selectedProfileId.value = loaded.id
     markClean()
   } catch (error) {
@@ -295,27 +284,6 @@ watch(
             @select="loadSelected"
             @update:name="updateName"
           />
-        </div>
-
-        <div class="mb-3">
-          <label class="form-label" for="main-agent-public-id">
-            {{ t('agents.mainAgent.publicId') }}
-          </label>
-          <input
-            id="main-agent-public-id"
-            :value="form.public_id"
-            class="form-control font-monospace"
-            :aria-describedby="'main-agent-public-id-help'"
-            autocomplete="off"
-            maxlength="120"
-            pattern="agent-[a-z]+(?:-[a-z]+)*"
-            required
-            type="text"
-            @input="updatePublicId(($event.target as HTMLInputElement).value)"
-          >
-          <div id="main-agent-public-id-help" class="form-text">
-            {{ t('agents.mainAgent.publicIdHint') }}
-          </div>
         </div>
 
         <section

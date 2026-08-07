@@ -51,8 +51,9 @@ import type {
   Workflow,
   WorkflowDefinition,
   WorkflowNodeCatalogResponse,
-  AutoRoot,
-  AutoRootDefinition,
+  EntryScript,
+  EntryScriptDefinition,
+  GraphRun,
 } from './types'
 
 export * from './transport'
@@ -301,28 +302,46 @@ export const managementApi = {
     return managementRequest('/api/workflows/validate-draft', jsonBody(data))
   },
 
-  listAutoRoots(): Promise<AutoRoot[]> {
-    return managementRequest('/api/auto-roots')
+  listEntryScripts(): Promise<EntryScript[]> {
+    return managementRequest('/api/entry-scripts')
   },
 
-  getAutoRoot(id: string): Promise<AutoRoot> {
-    return managementRequest(recordPath('/api/auto-roots', id))
-  },
-
-  saveAutoRoot(data: AutoRootDefinition | AutoRoot): Promise<AutoRoot> {
+  saveEntryScript(data: EntryScriptDefinition | EntryScript): Promise<EntryScript> {
     const id = 'id' in data ? data.id : ''
-    return managementRequest(id ? recordPath('/api/auto-roots', id) : '/api/auto-roots', {
-      method: id ? 'PUT' : 'POST',
-      body: JSON.stringify(withoutId(data)),
+    return managementRequest(id ? recordPath('/api/entry-scripts', id) : '/api/entry-scripts', {
+      method: id ? 'PUT' : 'POST', body: JSON.stringify(withoutId(data)),
     })
   },
 
-  deleteAutoRoot(id: string): Promise<{ ok: boolean }> {
-    return managementRequest(recordPath('/api/auto-roots', id), { method: 'DELETE' })
+  deleteEntryScript(id: string): Promise<{ ok: boolean }> {
+    return managementRequest(recordPath('/api/entry-scripts', id), { method: 'DELETE' })
   },
 
-  resolveAutoRoot(id: string, messages: unknown[]): Promise<{ kind: 'agent' | 'workflow'; public_id: string }> {
-    return managementRequest(`${recordPath('/api/auto-roots', id)}/resolve`, jsonBody({ messages }))
+  listGraphRuns(graphId?: string): Promise<GraphRun[]> {
+    return managementRequest(`/api/graph-runs${buildQuery({ graph_id: graphId })}`)
+  },
+
+  getGraphRun(runId: string): Promise<GraphRun> {
+    return managementRequest(recordPath('/api/graph-runs', runId))
+  },
+
+  startGraphRun(graphId: string, messages: unknown[], entryScriptId?: string): Promise<GraphRun> {
+    return managementRequest(`${recordPath('/api/workflows', graphId)}/runs`, jsonBody({
+      messages,
+      ...(entryScriptId ? { entry_script_id: entryScriptId } : {}),
+    }))
+  },
+
+  pauseGraphRun(runId: string): Promise<GraphRun> {
+    return managementRequest(`${recordPath('/api/graph-runs', runId)}/pause`, jsonBody({}))
+  },
+
+  resumeGraphRun(runId: string): Promise<GraphRun> {
+    return managementRequest(`${recordPath('/api/graph-runs', runId)}/resume`, jsonBody({}))
+  },
+
+  cancelGraphRun(runId: string): Promise<GraphRun> {
+    return managementRequest(`${recordPath('/api/graph-runs', runId)}/cancel`, jsonBody({}))
   },
 
   getValidationSettings(): Promise<ConfigurationValidationSettings> {

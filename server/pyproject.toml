@@ -25,6 +25,7 @@ dependencies = [
   "pyyaml>=6.0.2",
   "uvicorn>=0.52.1",
   "websockets>=15.0.1,<16.0",
+  "langgraph-checkpoint-sqlite>=3.1.1",
 ]
 
 [project.optional-dependencies]

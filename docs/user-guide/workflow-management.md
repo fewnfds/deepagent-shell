@@ -1,10 +1,9 @@
-# Workflow 与 Auto 管理
+# Workflow 管理
 
-管理台现在提供两个独立入口：
+Workflow（工作流）是管理台保存的固定 Graph（图）定义：节点、控制连线、可选数据绑定和画布布局。Graph Definition（图定义）与 Graph Run（运行实例）分离；保存新 revision（修订版）不会改变已经运行的实例。
 
-- `Workflow`：用后端节点目录编辑节点、端口连线和节点 JSON 配置。保存后可用聊天消息测试运行；远程模式需临时输入 API Key，密钥只保留在页面内存。运行响应中的普通结果与 artifact 事件保留在原始 JSON 中。
-- `Auto`：编辑用户负责的 `route(messages)` Python 脚本。脚本返回 `{'kind': 'agent'|'workflow', 'public_id': 'agent-...'|'workflow-...'}`，管理台可调用 resolve 接口验证目标。
+入口脚本（Entry Script）是 OpenAI-compatible API（兼容 OpenAI 的接口）的唯一模型选择键。用户自行填写名称，名称只能使用大写字母、小写字母和横杠，例如 `research-graph` 或 `Research-Graph`；平台不会自动添加 `agent-`、`workflow-`、`auto-` 前缀，也不再提供 Auto 路由对象。
 
-公开模型 ID 使用固定命名空间：Workflow 为 `workflow-<小写字母和横杠>`，Auto 为 `auto-<小写字母和横杠>`。名称为空或无法生成 ASCII slug 时，默认使用 `*-config`；用户手动修改后不会被名称变化覆盖。
+入口脚本的可选 `prepare(messages)` 函数只负责把标准 Chat Completions 消息转换为本次 Graph 的初始 State（状态），例如写入 `shared` 或 `inputs`。节点如何读取、组装提示词和写回结果由节点自身决定。
 
-当前编辑器是列表形式，不是拖拽画布。`layout` 字段仍按后端 Workflow DSL 保存，为后续画布提供稳定数据基础。节点插件、任意 Python 节点、CodeMirror 和 Vue Flow 不属于当前版本。
+管理台提供固定画布、节点目录、节点检查器和运行面板。运行面板通过管理 SSE（Server-Sent Events，服务器推送事件）显示节点状态，并提供暂停、继续和停止按钮；OpenAI 客户端仍然只是被动接收流。

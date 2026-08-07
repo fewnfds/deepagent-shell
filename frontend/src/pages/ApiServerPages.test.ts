@@ -156,6 +156,7 @@ describe('ApiServerSettingsPage', () => {
       '/',
       '/system',
       '/agents',
+      '/workflows',
       '/components',
       '/library',
       '/terminology',

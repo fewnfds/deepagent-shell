@@ -9,7 +9,6 @@ from agent_shell.api.errors import management_error
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.validation.models import ValidationReport, validation_failure_detail
 from agent_shell.validation.service import ConfigurationValidationService
-from agent_shell.public_ids import default_public_id
 
 
 MAIN_AGENT_TABLE = "main_agents"
@@ -65,26 +64,16 @@ def _copy_name(payload: dict) -> str:
     return name
 
 
-def _copy_main_agent_request(payload: dict) -> tuple[str, str]:
-    if set(payload) not in ({"name"}, {"name", "public_id"}):
+def _copy_main_agent_request(payload: dict) -> str:
+    if set(payload) != {"name"}:
         raise management_error(
             422,
             code="invalid_copy_request",
             message_key="errors.copyRequestInvalid",
-            message="The copy request must contain a name and optional public_id.",
+            message="The copy request must contain only a configuration name.",
         )
     name = _copy_name({"name": payload["name"]})
-    public_id = payload.get("public_id")
-    if public_id is None or public_id == "":
-        public_id = default_public_id("agent", name)
-    if not isinstance(public_id, str):
-        raise management_error(
-            422,
-            code="invalid_copy_request",
-            message_key="errors.copyRequestInvalid",
-            message="public_id must be a string when provided.",
-        )
-    return name, public_id
+    return name
 
 
 def _copy_component_name(payload: dict) -> str:
@@ -183,10 +172,9 @@ def build_agent_config_router(
                 message_key="errors.mainAgentNotFound",
                 message="The Main Agent configuration does not exist.",
             )
-        name, public_id = _copy_main_agent_request(payload)
+        name = _copy_main_agent_request(payload)
         candidate = dict(source)
         candidate["name"] = name
-        candidate["public_id"] = public_id
         report, validated, _ = validation.validate_main_agent(
             candidate,
             stage="main_agent_copy",

@@ -6,13 +6,14 @@
 
 1. [启动并认识管理台](user-guide/getting-started.md)
 2. [创建组件](user-guide/capabilities.md)
-3. [装配 Main Agent 与 Subagent](user-guide/configuration-workflow.md)
-4. [使用自动化插件](user-guide/automation.md)
-5. [管理配置仓库](user-guide/configuration-library.md)
-6. [调用 API Server](user-guide/api-server.md)
-7. [查看日志与历史会话](user-guide/runtime-observability.md)
-8. [管理数据、文件与系统设置](user-guide/system-management.md)
-9. [安全与部署](security-and-deployment.md)
+3. [创建 Graph 工作流](user-guide/graph-workflows.md)
+4. [装配 Main Agent 与 Subagent](user-guide/configuration-workflow.md)
+5. [使用自动化插件](user-guide/automation.md)
+6. [管理配置仓库](user-guide/configuration-library.md)
+7. [调用 API Server](user-guide/api-server.md)
+8. [查看日志与历史会话](user-guide/runtime-observability.md)
+9. [管理数据、文件与系统设置](user-guide/system-management.md)
+10. [安全与部署](security-and-deployment.md)
 
 页面字段索引见[组件说明](wizard-pages/README.md)与 [Agent 说明](agent-pages/README.md)。
 
