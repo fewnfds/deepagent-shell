@@ -319,7 +319,7 @@ class RequestRuntimeSnapshot:
                         list(raw_messages or []),
                         artifact_committer=artifact_committer,
                         workspace=workspace,
-                        request_id=f"{request_id}:{node.get('id', profile_id)}" if request_id else str(node.get("id", profile_id)),
+                        request_id=f"{request_id}-{node.get('id', profile_id)}" if request_id else str(node.get("id", profile_id)),
                         state_schema=WorkflowState,
                         context_key=str(node.get("id", profile_id)),
                     )

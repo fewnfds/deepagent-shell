@@ -233,6 +233,13 @@ def create_app(
         compile_graph_run,
         entry_script_lookup=entry_script_store.get_item,
         artifact_committer_factory=graph_artifact_committer,
+        error_reporter=lambda exc, run_id: runtime_diagnostics.runtime_error(
+            exc,
+            request_id=run_id,
+            model="",
+            agent_name="",
+            code="graph_run_failed",
+        ),
     )
 
     frontend_dir = Path(__file__).parent / "frontend_dist"

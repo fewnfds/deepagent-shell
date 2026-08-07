@@ -18,6 +18,7 @@ GraphFactory = Callable[
     Awaitable[CompiledWorkflow],
 ]
 ArtifactCommitterFactory = Callable[[str, Callable[[dict[str, Any]], None]], ArtifactCommitter | None]
+GraphRunErrorReporter = Callable[[BaseException, str], None]
 
 
 @dataclass(slots=True)
@@ -36,12 +37,13 @@ class GraphRunService:
     run identity, control intent, event projection and the UI's subscription.
     """
 
-    def __init__(self, store: GraphRunStore, graph_factory: GraphFactory, checkpointer: Any = None, entry_script_lookup: Callable[[str], dict[str, Any] | None] | None = None, artifact_committer_factory: ArtifactCommitterFactory | None = None) -> None:
+    def __init__(self, store: GraphRunStore, graph_factory: GraphFactory, checkpointer: Any = None, entry_script_lookup: Callable[[str], dict[str, Any] | None] | None = None, artifact_committer_factory: ArtifactCommitterFactory | None = None, error_reporter: GraphRunErrorReporter | None = None) -> None:
         self._store = store
         self._factory = graph_factory
         self._checkpointer = checkpointer
         self._entry_script_lookup = entry_script_lookup
         self._artifact_committer_factory = artifact_committer_factory
+        self._error_reporter = error_reporter
         self._active: dict[str, _ActiveRun] = {}
         self._lock = asyncio.Lock()
 
@@ -172,7 +174,9 @@ class GraphRunService:
             self._store.update(active.run_id, status="failed", error_code=exc.code)
             emit({"event": "failed", "error_code": exc.code, "message": exc.safe_message})
             terminal = {"status": "failed", "error_code": exc.code}
-        except Exception:
+        except Exception as exc:
+            if self._error_reporter is not None:
+                self._error_reporter(exc, active.run_id)
             self._store.update(active.run_id, status="failed", error_code="graph_run_failed")
             emit({"event": "failed", "error_code": "graph_run_failed"})
         finally:
