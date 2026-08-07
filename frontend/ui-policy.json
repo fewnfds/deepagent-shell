@@ -11,6 +11,9 @@
   "dependencies": {
     "requiredExact": {
       "@vue-flow/core": "1.48.2",
+      "@vue-flow/background": "1.3.2",
+      "@vue-flow/controls": "1.1.3",
+      "@vue-flow/minimap": "1.5.4",
       "@adminlte/vue": "0.3.0",
       "bootstrap": "5.3.8",
       "bootstrap-icons": "1.13.1",
@@ -20,6 +23,9 @@
     },
     "approvedRuntime": [
       "@vue-flow/core",
+      "@vue-flow/background",
+      "@vue-flow/controls",
+      "@vue-flow/minimap",
       "@adminlte/vue",
       "bootstrap",
       "bootstrap-icons",
@@ -186,9 +192,27 @@
         "name": "forms-and-actions",
         "paths": ["src/components/*.vue", "src/components/workflow/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
         "classes": [
-          "btn", "btn-check", "btn-danger", "btn-info", "btn-lg", "btn-outline-primary", "btn-primary", "btn-secondary", "btn-sm", "btn-success", "btn-warning", "form-check",
+          "btn", "btn-check", "btn-danger", "btn-info", "btn-lg", "btn-outline-primary", "btn-outline-secondary", "btn-outline-danger", "btn-primary", "btn-secondary", "btn-sm", "btn-success", "btn-warning", "form-check",
           "form-check-input", "form-check-label", "form-control", "form-control-sm", "form-label", "form-select",
           "form-select-sm", "form-switch", "input-group", "input-group-text", "is-invalid", "invalid-feedback"
+        ]
+      },
+      {
+        "name": "canvas-workspace",
+        "paths": [
+          "src/components/workflow/*.vue",
+          "src/pages/GraphWorkspacePage.vue",
+          "src/pages/WorkflowHomePage.vue"
+        ],
+        "classes": [
+          "canvas-workspace", "canvas-workspace-host", "canvas-workspace-loading", "canvas-workspace__body", "canvas-workspace__canvas",
+          "workspace-toolbar", "workspace-toolbar__leading", "workspace-toolbar__actions", "workspace-toolbar__identity", "workspace-toolbar__divider", "workspace-toolbar__eyebrow", "workspace-toolbar__name", "workspace-toolbar__status",
+          "workspace-panel", "workspace-panel--palette", "workspace-panel--inspector", "workspace-panel__header", "workspace-panel__body", "workspace-panel__body--scroll", "workspace-panel__eyebrow", "workspace-panel__title",
+          "workspace-palette__categories", "workspace-palette__list", "workspace-palette__item", "workspace-palette__item-icon", "workspace-palette__item-copy",
+          "workspace-inspector__identity", "workspace-inspector__api", "workspace-error",
+          "graph-canvas--workspace", "graph-node__header", "graph-node__ports", "graph-node__port-row", "graph-node__port-row--input", "graph-node__port-row--output", "graph-node__port-name",
+          "graph-boundary-node", "graph-boundary-node__eyebrow", "graph-boundary-node__title", "graph-boundary-node__type", "graph-boundary-node__port", "graph-boundary-node__port--input", "graph-boundary-node__port--output", "graph-boundary-node__handle",
+          "graph-edge", "graph-edge--control", "graph-edge--data", "run-dock", "run-dock__summary", "run-dock__identity", "run-dock__actions", "run-dock__eyebrow", "run-dock__body", "run-dock__input", "run-dock__state", "run-dock__meta"
         ]
       },
       {
@@ -208,9 +232,9 @@
         "name": "approved-utilities",
         "paths": ["src/components/*.vue", "src/components/workflow/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
         "classes": [
-          "align-items-center", "align-items-end", "align-items-start", "bg-body-tertiary", "col", "col-12", "col-lg-3", "col-lg-4", "col-lg-5", "col-lg-6", "col-lg-7", "col-lg-8", "col-lg-9", "col-md-2", "col-md-3", "col-md-4", "col-md-5", "col-md-6", "col-xl-5", "col-xl-7", "col-xxl-4", "d-block", "d-flex", "d-none", "d-sm-inline", "flex-wrap", "font-monospace", "form-text", "fw-semibold", "g-2", "g-3", "gap-1", "gap-2", "gap-3", "h-100", "h4", "h5",
+          "align-items-center", "align-items-end", "align-items-start", "bg-body-tertiary", "col", "col-6", "col-12", "col-lg-3", "col-lg-4", "col-lg-5", "col-lg-6", "col-lg-7", "col-lg-8", "col-lg-9", "col-md-2", "col-md-3", "col-md-4", "col-md-5", "col-md-6", "col-xl-5", "col-xl-7", "col-xxl-4", "d-block", "d-flex", "d-none", "d-sm-inline", "flex-wrap", "font-monospace", "form-text", "fw-semibold", "g-2", "g-3", "gap-1", "gap-2", "gap-3", "h-100", "h4", "h5",
           "fs-6", "justify-content-between", "justify-content-end", "lh-sm", "mb-0", "mb-1", "mb-2", "mb-3", "me-2", "ms-auto", "mt-1", "mt-2", "mt-3", "overflow-auto", "p-2", "p-3", "small",
-          "text-body-secondary", "text-break", "text-center", "text-danger", "text-end", "text-start", "text-success", "text-uppercase", "visually-hidden", "w-100"
+          "text-body-secondary", "text-break", "text-center", "text-danger", "text-end", "text-start", "text-success", "text-uppercase", "visually-hidden", "w-100", "input-group-sm"
         ]
       },
       {
@@ -297,7 +321,7 @@
   "icons": {
     "cssImportPaths": ["src/main.ts"],
     "allowed": [
-      "archive", "arrow-clockwise", "arrow-down", "arrow-up", "book", "boxes", "check-circle", "check-lg", "chevron-left", "circle",
+      "archive", "arrow-clockwise", "arrow-counterclockwise", "arrow-down", "arrow-up", "book", "boxes", "check-circle", "check-lg", "chevron-left", "circle",
       "chevron-right", "circle-half", "copy", "download", "exclamation-triangle", "eye", "eye-slash",
       "file-earmark", "folder", "gear", "hdd-network", "house", "info-circle", "key", "list", "moon-fill", "pencil",
       "play-fill", "plus-lg", "robot", "search", "sliders", "stop-fill", "sun-fill", "three-dots",
@@ -360,13 +384,14 @@
           "src/pages/ComponentsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/EventFeedPage.vue",
+          "src/pages/EntryScriptPage.vue",
           "src/pages/FileManagerPage.vue",
           "src/pages/MainAgentPage.vue",
           "src/pages/StyleLabPage.vue",
           "src/pages/SubagentPage.vue",
           "src/pages/SystemSettingsPage.vue",
           "src/pages/TerminologyPage.vue",
-          "src/pages/WorkflowPage.vue"
+          "src/pages/WorkflowHomePage.vue"
         ]
       },
       {
@@ -491,7 +516,7 @@
         "path": "src/components/workflow/WorkflowCanvas.vue",
         "kind": "domain-composition",
         "reason": "Owns the fixed Graph canvas projection and connection events.",
-        "callers": ["src/pages/WorkflowPage.vue"]
+        "callers": ["src/components/workflow/CanvasWorkspaceShell.vue"]
       },
       {
         "name": "GraphNodeView",
@@ -501,11 +526,60 @@
         "callers": ["src/components/workflow/WorkflowCanvas.vue"]
       },
       {
-        "name": "GraphRunPanel",
-        "path": "src/components/workflow/GraphRunPanel.vue",
+        "name": "BoundaryNodeView",
+        "path": "src/components/workflow/BoundaryNodeView.vue",
+        "kind": "domain-composition",
+        "reason": "Projects OpenAI and Entry Script boundaries without pretending they are executable Graph nodes.",
+        "callers": ["src/components/workflow/WorkflowCanvas.vue"]
+      },
+      {
+        "name": "ControlEdgeView",
+        "path": "src/components/workflow/ControlEdgeView.vue",
+        "kind": "domain-composition",
+        "reason": "Projects control edges using Vue Flow's custom edge API.",
+        "callers": ["src/components/workflow/WorkflowCanvas.vue"]
+      },
+      {
+        "name": "DataEdgeView",
+        "path": "src/components/workflow/DataEdgeView.vue",
+        "kind": "domain-composition",
+        "reason": "Projects data edges using Vue Flow's custom edge API.",
+        "callers": ["src/components/workflow/WorkflowCanvas.vue"]
+      },
+      {
+        "name": "NodePalette",
+        "path": "src/components/workflow/NodePalette.vue",
+        "kind": "domain-composition",
+        "reason": "Lists existing catalog resources as draggable graph components; it is not the configuration repository.",
+        "callers": ["src/components/workflow/CanvasWorkspaceShell.vue"]
+      },
+      {
+        "name": "WorkspaceToolbar",
+        "path": "src/components/workflow/WorkspaceToolbar.vue",
         "kind": "product-behavior",
-        "reason": "Owns Graph Run stream subscription and pause/resume/cancel controls.",
-        "callers": ["src/pages/WorkflowPage.vue"]
+        "reason": "Owns graph workspace actions and dirty/validation status projection.",
+        "callers": ["src/components/workflow/CanvasWorkspaceShell.vue"]
+      },
+      {
+        "name": "GraphInspector",
+        "path": "src/components/workflow/GraphInspector.vue",
+        "kind": "domain-composition",
+        "reason": "Edits graph references and node/edge settings without becoming the resource repository.",
+        "callers": ["src/components/workflow/CanvasWorkspaceShell.vue"]
+      },
+      {
+        "name": "GraphRunDock",
+        "path": "src/components/workflow/GraphRunDock.vue",
+        "kind": "product-behavior",
+        "reason": "Owns Graph Run controls and Stream Events v3 projection inside the canvas workspace.",
+        "callers": ["src/components/workflow/CanvasWorkspaceShell.vue"]
+      },
+      {
+        "name": "CanvasWorkspaceShell",
+        "path": "src/components/workflow/CanvasWorkspaceShell.vue",
+        "kind": "product-shell",
+        "reason": "Owns full-screen graph workspace composition while regular pages remain AdminLTE.",
+        "callers": ["src/pages/GraphWorkspacePage.vue"]
       }
     ]
   },

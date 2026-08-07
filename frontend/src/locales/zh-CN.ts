@@ -13,6 +13,7 @@ export const zhCN = {
     workflows: 'Workflow',
     automation: '自动化',
     components: '组件',
+    agentComponents: 'Agent 组件',
     library: '配置仓库',
     terminology: '词库',
     styleLab: '样式实验室',
@@ -789,7 +790,7 @@ export const zhCN = {
     title: '配置仓库',
     validationTitle: '仓库配置校验',
     groups: {
-      components: '组件',
+      components: 'Agent 组件',
       agents: '代理',
       plugins: '插件',
     },

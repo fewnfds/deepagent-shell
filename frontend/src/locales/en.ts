@@ -15,6 +15,7 @@ export const en: MessageSchema = {
     workflows: 'Workflows',
     automation: 'Automation',
     components: 'Components',
+    agentComponents: 'Agent components',
     library: 'Configuration Library',
     terminology: 'Terminology',
     styleLab: 'Style lab',
@@ -791,7 +792,7 @@ export const en: MessageSchema = {
     title: 'Configuration library',
     validationTitle: 'Repository validation',
     groups: {
-      components: 'Components',
+      components: 'Agent components',
       agents: 'Agents',
       plugins: 'Plugins',
     },

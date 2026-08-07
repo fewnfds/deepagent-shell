@@ -49,6 +49,7 @@ const pageTitle = computed(() => {
   const titleKey = route.meta.titleKey
   return typeof titleKey === 'string' ? t(titleKey) : ''
 })
+const isCanvasRoute = computed(() => route.meta.layout === 'canvas')
 
 const themeOrder: ColorMode[] = ['light', 'dark', 'auto']
 const nextColorMode = computed<ColorMode>(() => {
@@ -146,6 +147,7 @@ function closeNarrowSidebar(): void {
 
 watch(() => route.fullPath, async () => {
   closeNarrowSidebar()
+  document.body.classList.toggle('canvas-route-active', isCanvasRoute.value)
   await nextTick()
   mainContent.value?.focus({ preventScroll: true })
 })
@@ -157,17 +159,20 @@ useManagementEvents(onManagementEvent, api, () => {
 
 onMounted(() => {
   document.body.classList.add('layout-fixed', 'sidebar-expand-lg', 'sidebar-mini', 'bg-body-tertiary')
+  document.body.classList.toggle('canvas-route-active', isCanvasRoute.value)
   void loadApiServer()
   void validationSettings.load()
 })
 
 onBeforeUnmount(() => {
-  document.body.classList.remove('sidebar-open', 'sidebar-collapse')
+  document.body.classList.remove('sidebar-open', 'sidebar-collapse', 'canvas-route-active')
 })
 </script>
 
 <template>
-  <div class="app-wrapper">
+  <RouterView v-if="isCanvasRoute" />
+
+  <div v-else class="app-wrapper">
     <a class="visually-hidden-focusable" href="#main-content">
       {{ t('navigation.skipToContent') }}
     </a>

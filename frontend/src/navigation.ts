@@ -9,7 +9,7 @@ export const navigationItems: NavigationItem[] = [
   { path: '/system', labelKey: 'navigation.system', icon: 'bi-gear' },
   { path: '/agents', labelKey: 'navigation.agents', icon: 'bi-robot' },
   { path: '/workflows', labelKey: 'navigation.workflows', icon: 'bi-boxes' },
-  { path: '/components', labelKey: 'navigation.components', icon: 'bi-boxes' },
+  { path: '/components', labelKey: 'navigation.agentComponents', icon: 'bi-boxes' },
   { path: '/library', labelKey: 'navigation.library', icon: 'bi-archive' },
   { path: '/terminology', labelKey: 'navigation.terminology', icon: 'bi-book' },
   { path: '/style-lab', labelKey: 'navigation.styleLab', icon: 'bi-sliders' },
