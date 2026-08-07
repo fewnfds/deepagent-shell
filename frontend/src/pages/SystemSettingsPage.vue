@@ -9,6 +9,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import {
+  managementAuth,
   managementApi,
   type ApiServerSettings,
   type ApiServerSettingsUpdate,
@@ -186,6 +187,9 @@ async function save(): Promise<void> {
       api.updateValidationSettings(Number(validationDebounceMs.value)),
     ])
     applySystemSettings(savedSystemSettings)
+    if (!savedSystemSettings.management_auth_enabled) {
+      managementAuth.cancel()
+    }
     applyApiServerSettings(savedApiServerSettings)
     applyInterceptionSetting(savedInterception)
     applyValidationSettings(savedValidationSettings)
