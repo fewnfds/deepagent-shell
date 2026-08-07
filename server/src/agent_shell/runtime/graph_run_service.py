@@ -83,7 +83,6 @@ class GraphRunService:
     async def _execute(self, active: _ActiveRun, graph_id: str, messages: list[dict[str, Any]], resume: bool, entry_script_id: str | None) -> None:
         def emit(event: dict[str, Any]) -> None:
             payload = {"type": "graph_run", "run_id": active.run_id, **event}
-            self._store.update(active.run_id, state=payload.get("state") if isinstance(payload.get("state"), dict) else None)
             for queue in tuple(active.queues):
                 queue.put_nowait(payload)
 
@@ -91,6 +90,7 @@ class GraphRunService:
         terminal: dict[str, Any] = {"status": "failed", "error_code": "graph_run_failed"}
         agents_started = False
         prepared_state: dict[str, Any] = {}
+        latest_state: dict[str, Any] = {}
         try:
             shared: dict[str, Any] = {}
             if not resume and entry_script_id and self._entry_script_lookup is not None:
@@ -156,28 +156,28 @@ class GraphRunService:
                 if event.get("type") == "values":
                     state = event.get("data")
                     if isinstance(state, dict):
-                        self._store.update(active.run_id, state=state)
+                        latest_state = state
                         emit({"event": "state", "state": state})
                 elif event.get("type") == "updates":
                     data = event.get("data")
                     if isinstance(data, dict):
                         for node_id, update in data.items():
                             emit({"event": "node_update", "node_id": node_id, "update": update, "namespace": event.get("ns", ())})
-            self._store.update(active.run_id, status="completed")
+            self._store.update(active.run_id, status="completed", state=latest_state)
             emit({"event": "completed"})
             terminal = {"status": "completed"}
         except asyncio.CancelledError:
-            self._store.update(active.run_id, status="cancelled")
+            self._store.update(active.run_id, status="cancelled", state=latest_state)
             emit({"event": "cancelled"})
             terminal = {"status": "cancelled", "error_code": "request_cancelled"}
         except AgentRuntimeError as exc:
-            self._store.update(active.run_id, status="failed", error_code=exc.code)
+            self._store.update(active.run_id, status="failed", state=latest_state, error_code=exc.code)
             emit({"event": "failed", "error_code": exc.code, "message": exc.safe_message})
             terminal = {"status": "failed", "error_code": exc.code}
         except Exception as exc:
             if self._error_reporter is not None:
                 self._error_reporter(exc, active.run_id)
-            self._store.update(active.run_id, status="failed", error_code="graph_run_failed")
+            self._store.update(active.run_id, status="failed", state=latest_state, error_code="graph_run_failed")
             emit({"event": "failed", "error_code": "graph_run_failed"})
         finally:
             try:
