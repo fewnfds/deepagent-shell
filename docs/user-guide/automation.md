@@ -1,6 +1,6 @@
 # 使用自动化插件
 
-【自动化】是按 Agent 身份挂载的 Python 插件系统。每个 Primary 配置或 Subagent 配置都可以拥有一组有序
+【自动化】是按 Agent 身份挂载的 Python 插件系统。每个 Main Agent 配置或 Subagent 配置都可以拥有一组有序
 插件 binding；binding 保存插件 ID、启用状态和一份由插件 Schema 定义的 config。管理台根据 Schema 显示固定
 字段表单，用户不再手写整段 config JSON；草稿校验和保存仍由后端执行权威 Schema 校验。
 
@@ -125,7 +125,7 @@ binding 顺序就是最终 Middleware 顺序。before、after 和 wrap 的正序
 
 ### prepare
 
-`prepare` 在配置快照解析完成后、任何 Primary/Subagent `create_deep_agent()` 之前按 Agent 和 Hook binding 顺序执行：
+`prepare` 在配置快照解析完成后、任何 Main Agent/Subagent `create_deep_agent()` 之前按 Agent 和 Hook binding 顺序执行：
 
 ```python
 async def prepare(ctx):
@@ -149,7 +149,7 @@ system prompt 单独由 `create_deep_agent(system_prompt=...)` 装配。
 
 源码仓库 `examples/automation-plugins/` 提供三个可直接复制到实例自动化脚本目录的示例：
 
-- `primary-message-injection`：使用 `prepare`，每个 Primary API 请求转换并注入一次；
+- `main-agent-message-injection`：使用 `prepare`，每个 Main Agent API 请求转换并注入一次；
 - `subagent-message-injection`：使用原生 `AgentMiddleware.abefore_agent`，每次真实 Subagent invocation 都编辑
   当前 `state["messages"]` 的深复制。它不使用 `wrap_model_call`，工具/模型循环不会重复注入；
 - `subagent-filesystem-prompt-injection`：读取当前 Subagent filesystem 中的分组文件，将生成的消息插到 delegated
@@ -163,11 +163,11 @@ async def transform_messages(messages, ctx, state, runtime):
     return messages
 ```
 
-默认函数是身份变换，完整 `messages[]` 直接进入目标 Agent。Primary 返回 `[]` 表示本次不注入；Subagent 返回
-`[]` 表示有意清空本次 invocation 输入。Primary 的 `state/runtime` 为 `None`；Subagent 得到当前 LangGraph 原生
+默认函数是身份变换，完整 `messages[]` 直接进入目标 Agent。Main Agent 返回 `[]` 表示本次不注入；Subagent 返回
+`[]` 表示有意清空本次 invocation 输入。Main Agent 的 `state/runtime` 为 `None`；Subagent 得到当前 LangGraph 原生
 对象，同一 profile 被调用四次会执行四次函数，并得到四个 invocation ID。
 
-Subagent 变换函数拿到的最后一条消息通常是 Primary delegated task。标准的 Task 前插入写法是：
+Subagent 变换函数拿到的最后一条消息通常是 Main Agent delegated task。标准的 Task 前插入写法是：
 
 ```python
 async def transform_messages(messages, ctx, state, runtime):
@@ -179,9 +179,9 @@ async def transform_messages(messages, ctx, state, runtime):
 `[A, B, C, delegated task]`，task 只有一条。实现通过 `REMOVE_ALL_MESSAGES` 重建本次内存列表顺序，因为默认
 `add_messages` reducer 只支持末尾追加和按消息 ID 原位替换，不提供任意下标插入；它不删除持久化历史。
 
-Primary 变换函数返回后，开头连续的 system 消息保持 system；首个非 system 之后的 system 原位改为 user。
+Main Agent 变换函数返回后，开头连续的 system 消息保持 system；首个非 system 之后的 system 原位改为 user。
 Subagent 变换直接返回当前 LangGraph 消息对象或可转换的消息 dict，不额外改写 role、楼层或 content。无插件时
-core 仍不会把客户端消息交给 Primary 或 Subagent。
+core 仍不会把客户端消息交给 Main Agent 或 Subagent。
 
 Filesystem 提示词插件使用以下严格文本格式：
 
@@ -238,7 +238,7 @@ async def complete(ctx):
 
 ## Agent 配置
 
-Primary 的 `automation` 直接保存：
+Main Agent 的 `automation` 直接保存：
 
 ```json
 {
@@ -266,8 +266,8 @@ Hook binding 只执行 `prepare`、`middleware` 和 `complete`；周期 binding 
 运行后缀，不要求不同插件使用不同 Python 类名；第一个原名仍保留 Deep Agents 的同名替换语义。
 `enabled=false` 的 binding 不 import、不执行，也不因第三方依赖未准备而阻止请求。
 
-Subagent 使用相同的直接列表结构，自行添加适用于该身份的 Hook 与周期 binding，不继承 Primary 的插件配置。
-Primary 与 Subagent 的 Hook、上下文和插件自定义参数可以不同。同一个 Subagent profile 无论从 diamond 还是
+Subagent 使用相同的直接列表结构，自行添加适用于该身份的 Hook 与周期 binding，不继承 Main Agent 的插件配置。
+Main Agent 与 Subagent 的 Hook、上下文和插件自定义参数可以不同。同一个 Subagent profile 无论从 diamond 还是
 显式递归到达，在一次请求中只有一个 Agent 身份上下文；每个周期 binding 最多有一个循环。每次 `task`
 invocation 的 LangGraph state 仍然独立。
 
@@ -281,7 +281,7 @@ invocation 的 LangGraph state 仍然独立。
 - LangChain state 更新不会改变它；
 - 下一次 API 请求根据客户端新提交的完整 messages 重新建立。
 
-插件要稳定切分 Primary 用户信息时，应始终从 `ctx.request.messages` 开始计算，并为当前 Agent 建立可写深复制后
+插件要稳定切分 Main Agent 用户信息时，应始终从 `ctx.request.messages` 开始计算，并为当前 Agent 建立可写深复制后
 写入 `ctx.messages`；也可以使用 `agent_shell.automation.messages.mutable_request_messages()` 递归解冻容器。不要
 原地修改只读 block，也不要把前序插件已经修改的工作列表当作原始事实。
 
@@ -315,7 +315,7 @@ dict 提供锁、CAS 或事务，并行 Hook 对共享可变对象的协调由�
 
 ## Invocation 身份与 scratch
 
-Primary 每次请求有一个 root invocation；每次实际 `task` 委派，包括同 profile 的并行、嵌套和递归调用，都会建立
+Main Agent 每次请求有一个 root invocation；每次实际 `task` 委派，包括同 profile 的并行、嵌套和递归调用，都会建立
 新的 Shell UUID。插件 Middleware 在 Agent Hook 的 LangGraph runtime 中读取只读身份：
 
 ```python

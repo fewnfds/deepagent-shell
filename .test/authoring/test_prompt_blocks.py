@@ -124,7 +124,7 @@ def test_prompt_templates_accept_escaped_literal_braces(
     )
     assert (
         client.post(
-            "/api/primary-agents",
+            "/api/main-agents",
             json={
                 "id": "client-id",
                 "name": "bad id",

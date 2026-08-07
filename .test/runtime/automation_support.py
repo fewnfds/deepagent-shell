@@ -50,8 +50,8 @@ def owner(
     }
     return AutomationOwner(
         id="owner",
-        type="primary",
-        name="Primary",
+        type="main_agent",
+        name="Main Agent",
         automation={
             "hooks": [binding] if interval is None else [],
             "periodic": (

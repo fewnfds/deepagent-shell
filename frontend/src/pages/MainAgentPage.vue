@@ -16,16 +16,16 @@ import { useToasts } from '@/composables/useToasts'
 import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
 import {
   agentAuthoringServiceKey,
-  blankPrimaryAgent,
+  blankMainAgent,
   managementAgentAuthoringService,
-  normalizePrimaryAgent,
-  primaryAgentPayload,
+  normalizeMainAgent,
+  mainAgentPayload,
   referenceId,
   setReference,
   type AgentAuthoringService,
   type CapabilityManifest,
   type CapabilityType,
-  type PrimaryAgentProfile,
+  type MainAgentProfile,
   type StoredBlock,
   type SubagentProfile,
 } from '@/domain/agents'
@@ -47,11 +47,11 @@ const feedbackKey = ref('')
 const feedbackDetail = ref('')
 const manifests = ref<CapabilityManifest[]>([])
 const blocks = ref<Record<string, StoredBlock[]>>({})
-const profiles = ref<PrimaryAgentProfile[]>([])
+const profiles = ref<MainAgentProfile[]>([])
 const subagentProfiles = ref<SubagentProfile[]>([])
 const automationPlugins = ref<AutomationScriptResource[]>([])
 const selectedProfileId = ref('')
-const form = ref(blankPrimaryAgent())
+const form = ref(blankMainAgent())
 let profileLoadSequence = 0
 
 const obsoleteReferences = computed(() => {
@@ -82,10 +82,10 @@ const { validation, validateNow } = useConfigurationValidation({
   source: form,
   buildRequest: () => ({
     target: {
-      kind: 'primary',
+      kind: 'main_agent',
       id: form.value.id,
     },
-    payload: primaryAgentPayload(form.value),
+    payload: mainAgentPayload(form.value),
   }),
   validate: async (request) => {
     if (!service.value) throw new Error(t('agents.serviceUnavailable'))
@@ -113,7 +113,7 @@ async function startNew(): Promise<void> {
   await runAfterDiscard(() => {
     profileLoadSequence += 1
     selectedProfileId.value = ''
-    form.value = blankPrimaryAgent()
+    form.value = blankMainAgent()
     feedbackKey.value = ''
     feedbackDetail.value = ''
     notify({ tone: 'info', title: t('agents.feedback.newDraft') })
@@ -125,7 +125,7 @@ async function loadProfile(id: string): Promise<void> {
   const sequence = ++profileLoadSequence
   if (!id) {
     selectedProfileId.value = ''
-    form.value = blankPrimaryAgent()
+    form.value = blankMainAgent()
     feedbackKey.value = ''
     feedbackDetail.value = ''
     notify({ tone: 'info', title: t('agents.feedback.newDraft') })
@@ -137,7 +137,7 @@ async function loadProfile(id: string): Promise<void> {
   feedbackKey.value = ''
   feedbackDetail.value = ''
   try {
-    const loaded = normalizePrimaryAgent(await service.value.getPrimaryAgent(id))
+    const loaded = normalizeMainAgent(await service.value.getMainAgent(id))
     if (sequence !== profileLoadSequence) return
     form.value = loaded
     selectedProfileId.value = loaded.id
@@ -157,7 +157,7 @@ async function loadSelected(value?: string): Promise<void> {
   await runAfterDiscard(() => loadProfile(id))
 }
 
-function upsertProfile(saved: PrimaryAgentProfile): void {
+function upsertProfile(saved: MainAgentProfile): void {
   const index = profiles.value.findIndex((profile) => profile.id === saved.id)
   if (index === -1) profiles.value.push(saved)
   else profiles.value[index] = saved
@@ -175,11 +175,11 @@ async function save(): Promise<void> {
   try {
     const state = await validateNow()
     if (state.status !== 'valid') return
-    const payload = primaryAgentPayload(form.value)
+    const payload = mainAgentPayload(form.value)
     const saved = form.value.id
-      ? await service.value.updatePrimaryAgent(form.value.id, payload)
-      : await service.value.createPrimaryAgent(payload)
-    const normalized = normalizePrimaryAgent(saved)
+      ? await service.value.updateMainAgent(form.value.id, payload)
+      : await service.value.createMainAgent(payload)
+    const normalized = normalizeMainAgent(saved)
     form.value = normalized
     selectedProfileId.value = normalized.id
     upsertProfile(normalized)
@@ -201,14 +201,14 @@ async function loadWorkspace(): Promise<void> {
   }
   loading.value = true
   try {
-    const [catalog, primaryItems, subagentItems, pluginCatalog] = await Promise.all([
+    const [catalog, mainAgentItems, subagentItems, pluginCatalog] = await Promise.all([
       service.value.getCatalog(),
-      service.value.listPrimaryAgents(),
+      service.value.listMainAgents(),
       service.value.listSubagents(),
       service.value.listAutomationPlugins?.() ?? Promise.resolve({ catalog: [], errors: {} }),
     ])
     manifests.value = [...catalog.block_types].sort((left, right) => left.order - right.order)
-    profiles.value = primaryItems.map(normalizePrimaryAgent)
+    profiles.value = mainAgentItems.map(normalizeMainAgent)
     subagentProfiles.value = subagentItems
     automationPlugins.value = pluginCatalog.catalog
     const entries = await Promise.all(manifests.value.map(async (manifest) => [
@@ -323,9 +323,9 @@ watch(
         <section class="mb-3" :aria-label="t('agents.workspace.title')">
           <div class="row g-3">
             <div v-for="type in ['filesystem', 'filesystem-permissions'] as CapabilityType[]" :key="type" class="col-md-6">
-              <section class="card h-100" :data-testid="`primary-${type}-card`">
+              <section class="card h-100" :data-testid="`main-agent-${type}-card`">
                 <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-                  <label class="card-title mb-0" :for="`primary-capability-${type}`">
+                  <label class="card-title mb-0" :for="`main-agent-capability-${type}`">
                     {{ t(`capabilities.${type}.label`) }}
                   </label>
                   <span v-if="type === 'filesystem'" class="badge text-bg-primary ms-auto">
@@ -337,9 +337,9 @@ watch(
                 </header>
                 <div class="card-body">
                   <select
-                    :id="`primary-capability-${type}`"
+                    :id="`main-agent-capability-${type}`"
                     class="form-select"
-                    :data-testid="`primary-capability-${type}`"
+                    :data-testid="`main-agent-capability-${type}`"
                     :value="referenceId(form, type)"
                     @change="updateReference(type, ($event.target as HTMLSelectElement).value)"
                   >
@@ -352,7 +352,7 @@ watch(
           </div>
         </section>
 
-        <section class="mb-3" :aria-label="t('agents.primary.capabilitiesTitle')">
+        <section class="mb-3" :aria-label="t('agents.mainAgent.capabilitiesTitle')">
           <div class="row g-3">
             <div
               v-for="capability in generalManifests"
@@ -364,7 +364,7 @@ watch(
                 <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
                   <label
                     class="card-title mb-0"
-                    :for="`primary-capability-${capability.type}`"
+                    :for="`main-agent-capability-${capability.type}`"
                   >
                     {{ t(`capabilities.${capability.type}.label`) }}
                   </label>
@@ -375,7 +375,7 @@ watch(
                 </header>
                 <div class="card-body">
                   <select
-                    :id="`primary-capability-${capability.type}`"
+                    :id="`main-agent-capability-${capability.type}`"
                     class="form-select"
                     :value="referenceId(form, capability.type)"
                     @change="updateReference(capability.type, ($event.target as HTMLSelectElement).value)"
@@ -406,7 +406,7 @@ watch(
 
       <aside class="col-lg-4 validation-sidebar">
         <ValidationChecklist
-          :title="t('agents.primary.validationTitle')"
+          :title="t('agents.mainAgent.validationTitle')"
           :validation="validation"
         />
       </aside>

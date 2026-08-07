@@ -14,7 +14,7 @@ def test_selected_custom_middleware_executes_enabled_recipe_only(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         middleware = client.post(
             "/api/blocks/custom-middleware",
             json={
@@ -46,11 +46,11 @@ def test_selected_custom_middleware_executes_enabled_recipe_only(
             },
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {"type": "custom-middleware", "block_id": middleware["id"]},
                 ],
                 "subagents": [],
@@ -60,7 +60,7 @@ def test_selected_custom_middleware_executes_enabled_recipe_only(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [
                     {"role": "user", "content": "Contact me at user@example.com"}
                 ],
@@ -82,7 +82,7 @@ def test_custom_middleware_construction_failure_is_safe_and_pre_provider(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         middleware = client.post(
             "/api/blocks/custom-middleware",
             json={
@@ -100,11 +100,11 @@ def test_custom_middleware_construction_failure_is_safe_and_pre_provider(
             },
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {"type": "custom-middleware", "block_id": middleware["id"]},
                 ],
                 "subagents": [],
@@ -114,7 +114,7 @@ def test_custom_middleware_construction_failure_is_safe_and_pre_provider(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Do not run."}],
             },
         )
@@ -124,7 +124,7 @@ def test_custom_middleware_construction_failure_is_safe_and_pre_provider(
     assert "private construction details" not in response.text
     assert ToolCallingFakeModel.seen_messages == []
 
-def test_primary_duplicate_runtime_middleware_name_is_reported_pre_provider(
+def test_main_agent_duplicate_runtime_middleware_name_is_reported_pre_provider(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     ToolCallingFakeModel.seen_messages = []
@@ -135,11 +135,11 @@ def test_primary_duplicate_runtime_middleware_name_is_reported_pre_provider(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         custom = client.post(
             "/api/blocks/custom-middleware",
             json={
-                "name": "Conflicting Primary middleware",
+                "name": "Conflicting Main Agent middleware",
                 "middlewares": [
                     {
                         "name": "Two runtime names",
@@ -150,11 +150,11 @@ def test_primary_duplicate_runtime_middleware_name_is_reported_pre_provider(
             },
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {"type": "custom-middleware", "block_id": custom["id"]},
                 ],
                 "subagents": [],
@@ -164,7 +164,7 @@ def test_primary_duplicate_runtime_middleware_name_is_reported_pre_provider(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Do not run."}],
             },
         )
@@ -172,7 +172,7 @@ def test_primary_duplicate_runtime_middleware_name_is_reported_pre_provider(
     assert response.status_code == 422
     error = response.json()["error"]
     assert error["code"] == "agent_middleware_name_conflict"
-    assert "Primary Agent" in error["message"]
+    assert "Main Agent" in error["message"]
     assert "shared_runtime_name" in error["message"]
     assert ToolCallingFakeModel.seen_messages == []
 
@@ -192,7 +192,7 @@ def test_subagent_duplicate_runtime_middleware_name_identifies_owner(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: next(models),
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         custom = client.post(
             "/api/blocks/custom-middleware",
             json={
@@ -219,11 +219,11 @@ def test_subagent_duplicate_runtime_middleware_name_identifies_owner(
             ),
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {"type": "custom-middleware", "block_id": custom["id"]},
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
@@ -234,7 +234,7 @@ def test_subagent_duplicate_runtime_middleware_name_identifies_owner(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Do not run."}],
             },
         )

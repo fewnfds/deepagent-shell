@@ -160,7 +160,7 @@ def test_shared_filesystem_merges_parallel_children_and_scopes_skill_prompts(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda block, _credential, *_args: models.get(block["name"], parent_model),
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         filesystem_response = client.post(
             "/api/blocks/filesystem",
             json={
@@ -251,12 +251,12 @@ def test_shared_filesystem_merges_parallel_children_and_scopes_skill_prompts(
         assert delegation_response.status_code == 200, delegation_response.text
         delegation = delegation_response.json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
                     *replace_capability_reference(
-                        primary, "filesystem", filesystem["id"]
+                        main_agent, "filesystem", filesystem["id"]
                     ),
                     {"type": "skill", "block_id": skill_blocks["alpha"]["id"]},
                     {"type": "subagent", "block_id": delegation["id"]},
@@ -271,7 +271,7 @@ def test_shared_filesystem_merges_parallel_children_and_scopes_skill_prompts(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Check shared files and Skills."}],
             },
         )

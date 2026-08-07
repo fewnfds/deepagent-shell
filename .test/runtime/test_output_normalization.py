@@ -15,7 +15,7 @@ def _normalized(
 
 
 def test_text_stream_keeps_v3_start_delta_finish_boundaries_without_rewriting() -> None:
-    normalizer = V3EventNormalizer("Primary")
+    normalizer = V3EventNormalizer("Main Agent")
     envelopes = [
         {
             "method": "values",
@@ -91,11 +91,11 @@ def test_text_stream_keeps_v3_start_delta_finish_boundaries_without_rewriting() 
         "total_tokens": 10,
         "reasoning_tokens": 2,
     }
-    assert normalizer.primary_message_active is False
+    assert normalizer.main_agent_message_active is False
 
 
 def test_complete_blocks_and_atomic_events_keep_v3_arrival_order() -> None:
-    normalizer = V3EventNormalizer("Primary")
+    normalizer = V3EventNormalizer("Main Agent")
     envelopes = [
         message_envelope(
             {"event": "message-start", "role": "ai", "id": "message-1"}
@@ -196,7 +196,7 @@ def test_projector_uses_one_template_and_exact_optional_event_scope() -> None:
         phase="end",
         sequence=1,
         timestamp="2026-01-01T00:00:00Z",
-        agent_name="Primary",
+        agent_name="Main Agent",
         node="tools",
         message="<unsafe>",
         values={"tool_name": "commit", "status": "completed"},
@@ -206,7 +206,7 @@ def test_projector_uses_one_template_and_exact_optional_event_scope() -> None:
         phase="end",
         sequence=2,
         timestamp="2026-01-01T00:00:01Z",
-        agent_name="Primary",
+        agent_name="Main Agent",
         node="tools",
         message="call",
         values={"tool_name": "commit"},

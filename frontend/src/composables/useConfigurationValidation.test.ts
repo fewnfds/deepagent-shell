@@ -8,7 +8,7 @@ import { useConfigurationValidation } from './useConfigurationValidation'
 function report(valid: boolean): ValidationReport {
   return { valid, stage: 'draft_validation', issues: valid ? [] : [{
     code: 'invalid',
-    scope: 'primary',
+    scope: 'main_agent',
     owner_id: '',
     owner_name: '',
     path: 'name',
@@ -28,7 +28,7 @@ describe('useConfigurationValidation', () => {
     const scope = effectScope()
     const hook = scope.run(() => useConfigurationValidation({
       source: draft,
-      buildRequest: () => ({ target: { kind: 'primary' }, payload: draft.value }),
+      buildRequest: () => ({ target: { kind: 'main_agent' }, payload: draft.value }),
       validate,
       immediate: false,
     }))
@@ -51,7 +51,7 @@ describe('useConfigurationValidation', () => {
     const scope = effectScope()
     const hook = scope.run(() => useConfigurationValidation({
       source: draft,
-      buildRequest: () => ({ target: { kind: 'primary' }, payload: { ...draft.value } }),
+      buildRequest: () => ({ target: { kind: 'main_agent' }, payload: { ...draft.value } }),
       validate,
       debounceMs: 500,
       immediate: false,

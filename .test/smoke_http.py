@@ -357,13 +357,13 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
         ).json()
         assert cleared_model["provider_settings"] == {}
 
-        primary = _request(
+        main_agent = _request(
             client,
             "POST",
-            "/api/primary-agents",
+            "/api/main-agents",
             headers=management,
             json_body={
-                "name": f"{mode}-primary",
+                "name": f"{mode}-main-agent",
                 "capability_refs": [
                     {"type": "model", "block_id": blocks["model"]["id"]},
                     {
@@ -394,7 +394,7 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
             },
         ).json()
         for path, item in (
-            ("primary-agents", primary),
+            ("main-agents", main_agent),
             ("subagents", subagent),
         ):
             UUID(item["id"])
@@ -403,15 +403,15 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
                 client, "GET", f"/api/{path}/{item['id']}", headers=management
             ).json()
             assert fetched["id"] == item["id"]
-        updated_primary = dict(primary)
-        updated_primary.pop("id")
-        updated_primary["name"] += "-updated"
+        updated_main_agent = dict(main_agent)
+        updated_main_agent.pop("id")
+        updated_main_agent["name"] += "-updated"
         _request(
             client,
             "PUT",
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             headers=management,
-            json_body=updated_primary,
+            json_body=updated_main_agent,
         )
         updated_subagent = dict(subagent)
         updated_subagent.pop("id")
@@ -441,7 +441,7 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
         _request(
             client,
             "DELETE",
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             headers=management,
         )
         _request(

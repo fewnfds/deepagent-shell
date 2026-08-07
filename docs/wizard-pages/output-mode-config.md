@@ -1,7 +1,7 @@
 # 输出模式
 
 输出模式把 LangChain `astream_events(version="v3")` 事件转换为调用方收到的文本。它不修改 Agent
-state、提示词或工具。每个 Primary 必须选择一套。
+state、提示词或工具。每个 Main Agent 必须选择一套。
 
 ## 事件
 

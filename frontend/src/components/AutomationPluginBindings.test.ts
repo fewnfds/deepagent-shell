@@ -45,7 +45,7 @@ describe('AutomationPluginBindings', () => {
           periodic: [],
         }),
         plugins: [plugin],
-        pathPrefix: 'primary-automation',
+        pathPrefix: 'main-agent-automation',
       },
     })
 

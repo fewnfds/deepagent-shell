@@ -206,7 +206,7 @@ class AutomationRuntime:
         assembly: StaticAssembly,
         client_messages: list[dict[str, Any]],
         *,
-        primary_id: str,
+        main_agent_id: str,
         request_id: str,
         plugins_dir: Path,
         skills_dir: Path,
@@ -224,9 +224,9 @@ class AutomationRuntime:
 
         owners.append(
             AutomationOwner(
-                id=primary_id,
-                type="primary",
-                name=str(assembly.primary.get("name", "")),
+                id=main_agent_id,
+                type="main_agent",
+                name=str(assembly.main_agent.get("name", "")),
                 automation=assembly.automation,
                 mapped_paths=mapped_paths(assembly.blocks),
             )

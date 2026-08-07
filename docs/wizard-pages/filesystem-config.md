@@ -41,7 +41,7 @@
   `write_file`、`edit_file`、`delete`、`glob`、`grep`。`read_file` 固定可见；`execute` 固定不可见；
   `delete` 默认关闭。
 
-同一次请求中的 Primary 与同步 Subagent 共享普通 StateBackend、初始文件和 mapped routes；Subagent settings
+同一次请求中的 Main Agent 与同步 Subagent 共享普通 StateBackend、初始文件和 mapped routes；Subagent settings
 不能单独替换文件系统。每个 Agent 的 `/skills/` 仍按最终 Skill 选择建立只读视图。需要让不同 Agent 对共享
 workspace 使用不同路径权限、文件工具或文件系统提示词时，另行选择[文件系统权限](filesystem-permissions-config.md)。
 

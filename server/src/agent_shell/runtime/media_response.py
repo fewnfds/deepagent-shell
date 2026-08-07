@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from agent_shell.runtime.model_response import ModelResponse
-from agent_shell.runtime.output_stream import PrimaryMediaBlock
+from agent_shell.runtime.output_stream import MainAgentMediaBlock
 from agent_shell.storage.media_outputs import MediaOutputStore, MediaProjection
 
 
@@ -20,7 +20,7 @@ class _HandledMedia:
     projection: MediaProjection
 
 
-class PrimaryMediaResponse:
+class MainAgentMediaResponse:
     """Request-local response media projection and structured metadata."""
 
     def __init__(self, store: MediaOutputStore, request_id: str) -> None:
@@ -29,7 +29,7 @@ class PrimaryMediaResponse:
         self._by_event_key: dict[str, _HandledMedia] = {}
         self._ordered: list[_HandledMedia] = []
 
-    async def project(self, event: PrimaryMediaBlock) -> str | None:
+    async def project(self, event: MainAgentMediaBlock) -> str | None:
         event_key = event.stream_id or (
             f"{event.message_id}:{event.block_index}:{len(self._ordered)}"
         )

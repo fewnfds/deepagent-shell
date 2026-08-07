@@ -19,7 +19,7 @@ def _event(
         phase=phase,
         sequence=sequence,
         timestamp="2026-08-01T00:00:00Z",
-        agent_name="Primary",
+        agent_name="Main Agent",
         node="model",
         message=message,
         values=values,
@@ -381,7 +381,7 @@ def test_non_streaming_model_messages_use_the_same_tool_pairing_cycle() -> None:
             graph=EventGraph(events),
             input_state={"messages": []},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
-            normalizer=V3EventNormalizer("Primary"),
+            normalizer=V3EventNormalizer("Main Agent"),
             automation=noop_automation(),
             media_response=noop_media_response(),
         )
@@ -518,7 +518,7 @@ def test_next_model_start_drains_compat_bridge_order_before_the_new_call() -> No
             graph=EventGraph(events),
             input_state={"messages": []},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
-            normalizer=V3EventNormalizer("Primary"),
+            normalizer=V3EventNormalizer("Main Agent"),
             automation=noop_automation(),
             media_response=noop_media_response(),
         )

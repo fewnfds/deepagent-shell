@@ -44,7 +44,7 @@ SKILL_PROMPT_FIELDS = (
     "skills_load_warnings",
     "skills_list",
 )
-from agent_shell.automation.contracts import PrimaryAutomation, SubagentAutomation
+from agent_shell.automation.contracts import MainAgentAutomation, SubagentAutomation
 TASK_DESCRIPTION_FIELDS = ("available_agents",)
 
 
@@ -913,20 +913,20 @@ class CapabilityReference(BaseModel):
     def validate_type(cls, value: str) -> str:
         manifest = CAPABILITY_BY_TYPE.get(value)
         if manifest is None:
-            raise ValueError(f"unknown Primary capability: {value}")
+            raise ValueError(f"unknown Main Agent capability: {value}")
         return value
 
 
-class PrimaryAgentProfile(StrictBlock):
+class MainAgentProfile(StrictBlock):
     capability_refs: list[CapabilityReference] = Field(default_factory=list, max_length=100)
     subagents: list[SubagentReference] = Field(default_factory=list, max_length=100)
-    automation: PrimaryAutomation = Field(default_factory=PrimaryAutomation)
+    automation: MainAgentAutomation = Field(default_factory=MainAgentAutomation)
 
     @model_validator(mode="after")
-    def validate_profile(self) -> "PrimaryAgentProfile":
+    def validate_profile(self) -> "MainAgentProfile":
         capability_types = [item.type for item in self.capability_refs]
         if len(capability_types) != len(set(capability_types)):
-            raise ValueError("Primary capability_refs must contain at most one item per type")
+            raise ValueError("Main Agent capability_refs must contain at most one item per type")
         return self
 
 
@@ -1020,8 +1020,8 @@ def validate_provider_credential(payload: object) -> str | None:
     return _reject_masked_credential(value)
 
 
-def validate_primary_agent_payload(payload: dict) -> dict:
-    model = PrimaryAgentProfile.model_validate(payload)
+def validate_main_agent_payload(payload: dict) -> dict:
+    model = MainAgentProfile.model_validate(payload)
     return model.model_dump(mode="json")
 
 

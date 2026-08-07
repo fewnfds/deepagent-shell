@@ -87,7 +87,7 @@ def test_unconfigured_filesystem_keeps_skill_reads_agent_scoped(
                 child_model if block["name"] == "Fallback child model" else parent_model
             ),
         )
-        primary = create_primary(client, include_filesystem=False)
+        main_agent = create_main_agent(client, include_filesystem=False)
         child_model_response = client.post(
             "/api/blocks/model",
             json={
@@ -145,11 +145,11 @@ def test_unconfigured_filesystem_keeps_skill_reads_agent_scoped(
         assert delegation_response.status_code == 200, delegation_response.text
         delegation = delegation_response.json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {"type": "skill", "block_id": alpha["id"]},
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
@@ -160,7 +160,7 @@ def test_unconfigured_filesystem_keeps_skill_reads_agent_scoped(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Check Skill isolation."}],
             },
         )

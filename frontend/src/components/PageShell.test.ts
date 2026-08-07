@@ -16,7 +16,7 @@ const messages = {
       eventFeed: 'Log center',
       agentSessions: 'Session history',
       styleLab: 'Style lab',
-      primary: 'Primary Agent',
+      mainAgent: 'Main Agent',
       subagents: 'Subagent',
     },
   },

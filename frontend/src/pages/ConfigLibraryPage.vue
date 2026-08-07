@@ -112,7 +112,7 @@ async function loadCatalog(): Promise<void> {
 }
 
 async function listCategory(category: LibraryCategoryId): Promise<LibraryItem[]> {
-  if (category === 'primary-agent') return api.value.listPrimaryAgents()
+  if (category === 'main-agent') return api.value.listMainAgents()
   if (category === 'subagent-profile') return api.value.listSubagents()
   return api.value.listBlocks(category)
 }
@@ -167,8 +167,8 @@ async function copyCurrentItem(): Promise<void> {
   copying.value = true
   copyError.value = ''
   try {
-    if (category === 'primary-agent') {
-      await api.value.copyPrimaryAgent(source.id, copyName.value)
+    if (category === 'main-agent') {
+      await api.value.copyMainAgent(source.id, copyName.value)
     } else if (category === 'subagent-profile') {
       await api.value.copySubagent(source.id, copyName.value)
     } else {
@@ -280,7 +280,7 @@ const libraryTableConfig: DataTableConfig<LibraryItem> = {
       run: async (item) => {
         const category = currentCategory.value
         if (!category) return
-        if (category === 'primary-agent') await api.value.deletePrimaryAgent(item.id)
+        if (category === 'main-agent') await api.value.deleteMainAgent(item.id)
         else if (category === 'subagent-profile') await api.value.deleteSubagent(item.id)
         else await api.value.deleteBlock(category, item.id)
         if (detailItem.value?.id === item.id) closeDetail()
@@ -306,8 +306,8 @@ const libraryTableConfig: DataTableConfig<LibraryItem> = {
       const category = currentCategory.value
       if (!category) return { deleted: 0 }
       const ids = context.matchingRows.map((item) => item.id)
-      const result = category === 'primary-agent'
-        ? await api.value.deletePrimaryAgents(ids)
+      const result = category === 'main-agent'
+        ? await api.value.deleteMainAgents(ids)
         : category === 'subagent-profile'
           ? await api.value.deleteSubagents(ids)
           : await api.value.deleteBlocks(category, ids)

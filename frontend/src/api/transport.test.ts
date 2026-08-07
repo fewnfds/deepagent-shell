@@ -102,10 +102,10 @@ describe('management transport', () => {
         message: 'Configuration failed.',
         validation: {
           valid: false,
-          stage: 'primary_save',
+          stage: 'mainAgent_save',
           issues: [{
             code: 'contract.field_required',
-            scope: 'primary',
+            scope: 'main_agent',
             owner_id: '',
             owner_name: '',
             path: 'name',
@@ -118,7 +118,7 @@ describe('management transport', () => {
       headers: { 'X-Request-ID': 'req-test' },
     })))
 
-    const request = managementRequest('/api/primary-agents', {
+    const request = managementRequest('/api/main-agents', {
       method: 'POST',
       body: JSON.stringify({}),
     })
@@ -130,7 +130,7 @@ describe('management transport', () => {
       requestId: 'req-test',
       validation: {
         valid: false,
-        stage: 'primary_save',
+        stage: 'mainAgent_save',
         issues: [expect.objectContaining({ path: 'name' })],
       },
     })

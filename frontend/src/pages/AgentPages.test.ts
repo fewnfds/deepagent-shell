@@ -2,13 +2,13 @@ import { flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ManagementApiError } from '@/api'
-import type { PrimaryAgentProfile, SubagentProfile } from '@/domain/agents'
+import type { MainAgentProfile, SubagentProfile } from '@/domain/agents'
 
 import {
   buttonByText,
   deferred,
   getToastNotify,
-  mountPrimaryPage,
+  mountMainAgentPage,
   mountSubagentPage,
   resetAgentPageTestState,
   service,
@@ -17,93 +17,93 @@ import {
 beforeEach(resetAgentPageTestState)
 
 describe('agent authoring pages', () => {
-  it('updates a Primary only after loading its explicit UUID', async () => {
+  it('updates a MainAgent only after loading its explicit UUID', async () => {
     const api = service()
     const id = '00000000-0000-0000-0000-000000000010'
-    const { wrapper } = await mountPrimaryPage(
+    const { wrapper } = await mountMainAgentPage(
       api,
-      `/agents/primary?id=${id}`,
+      `/agents/main?id=${id}`,
     )
     expect(wrapper.text()).not.toContain(id)
     await buttonByText(wrapper, 'common.save').trigger('click')
     await flushPromises()
 
-    expect(api.getPrimaryAgent).toHaveBeenCalledWith(id)
-    expect(api.updatePrimaryAgent).toHaveBeenCalledWith(
+    expect(api.getMainAgent).toHaveBeenCalledWith(id)
+    expect(api.updateMainAgent).toHaveBeenCalledWith(
       id,
       expect.objectContaining({ name: 'Shared name' }),
     )
-    expect(api.createPrimaryAgent).not.toHaveBeenCalled()
+    expect(api.createMainAgent).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('loads a new Primary when only the route query UUID changes', async () => {
+  it('loads a new MainAgent when only the route query UUID changes', async () => {
     const id = '00000000-0000-0000-0000-000000000011'
     const api = service({
-      getPrimaryAgent: vi.fn(async (requestedId) => ({
+      getMainAgent: vi.fn(async (requestedId) => ({
         id: requestedId,
-        name: 'Routed Primary',
+        name: 'Routed MainAgent',
         capability_refs: [],
         subagents: [],
       })),
     })
-    const { router, wrapper } = await mountPrimaryPage(api)
+    const { router, wrapper } = await mountMainAgentPage(api)
 
-    await router.push({ path: '/agents/primary', query: { id } })
+    await router.push({ path: '/agents/main', query: { id } })
     await flushPromises()
 
-    expect(api.getPrimaryAgent).toHaveBeenCalledWith(id)
+    expect(api.getMainAgent).toHaveBeenCalledWith(id)
     await buttonByText(wrapper, 'common.save').trigger('click')
     await flushPromises()
-    expect(api.updatePrimaryAgent).toHaveBeenCalledWith(
+    expect(api.updateMainAgent).toHaveBeenCalledWith(
       id,
-      expect.objectContaining({ name: 'Routed Primary' }),
+      expect.objectContaining({ name: 'Routed MainAgent' }),
     )
     wrapper.unmount()
   })
 
   it('keeps the latest Agent route when an earlier query load finishes late', async () => {
-    const firstPrimaryId = '00000000-0000-0000-0000-000000000031'
-    const secondPrimaryId = '00000000-0000-0000-0000-000000000032'
-    const firstPrimary = deferred<PrimaryAgentProfile>()
-    const secondPrimary = deferred<PrimaryAgentProfile>()
-    const getPrimaryAgent = vi.fn((id: string) => (
-      id === firstPrimaryId ? firstPrimary.promise : secondPrimary.promise
+    const firstMainAgentId = '00000000-0000-0000-0000-000000000031'
+    const secondMainAgentId = '00000000-0000-0000-0000-000000000032'
+    const firstMainAgent = deferred<MainAgentProfile>()
+    const secondMainAgent = deferred<MainAgentProfile>()
+    const getMainAgent = vi.fn((id: string) => (
+      id === firstMainAgentId ? firstMainAgent.promise : secondMainAgent.promise
     ))
-    const primaryApi = service({ getPrimaryAgent })
-    const primaryPage = await mountPrimaryPage(primaryApi)
+    const mainAgentApi = service({ getMainAgent })
+    const mainAgentPage = await mountMainAgentPage(mainAgentApi)
 
-    await primaryPage.router.push({ path: '/agents/primary', query: { id: firstPrimaryId } })
-    await primaryPage.router.push({ path: '/agents/primary', query: { id: secondPrimaryId } })
+    await mainAgentPage.router.push({ path: '/agents/main', query: { id: firstMainAgentId } })
+    await mainAgentPage.router.push({ path: '/agents/main', query: { id: secondMainAgentId } })
     await flushPromises()
-    const primarySurface = primaryPage.wrapper.get('.configuration-loading-surface')
-    expect(primarySurface.attributes('data-loading')).toBe('true')
-    expect(primarySurface.attributes('inert')).toBeDefined()
-    expect(primaryPage.wrapper.text()).not.toContain('common.loading')
-    secondPrimary.resolve({
-      id: secondPrimaryId,
-      name: 'Latest Primary',
+    const mainAgentSurface = mainAgentPage.wrapper.get('.configuration-loading-surface')
+    expect(mainAgentSurface.attributes('data-loading')).toBe('true')
+    expect(mainAgentSurface.attributes('inert')).toBeDefined()
+    expect(mainAgentPage.wrapper.text()).not.toContain('common.loading')
+    secondMainAgent.resolve({
+      id: secondMainAgentId,
+      name: 'Latest MainAgent',
       capability_refs: [],
       subagents: [],
     })
     await flushPromises()
-    expect(primarySurface.attributes('data-loading')).toBe('false')
-    expect(primarySurface.attributes('inert')).toBeUndefined()
-    firstPrimary.resolve({
-      id: firstPrimaryId,
-      name: 'Late Primary',
+    expect(mainAgentSurface.attributes('data-loading')).toBe('false')
+    expect(mainAgentSurface.attributes('inert')).toBeUndefined()
+    firstMainAgent.resolve({
+      id: firstMainAgentId,
+      name: 'Late MainAgent',
       capability_refs: [],
       subagents: [],
     })
     await flushPromises()
-    await buttonByText(primaryPage.wrapper, 'common.save').trigger('click')
+    await buttonByText(mainAgentPage.wrapper, 'common.save').trigger('click')
     await flushPromises()
 
-    expect(primaryApi.updatePrimaryAgent).toHaveBeenCalledWith(
-      secondPrimaryId,
-      expect.objectContaining({ name: 'Latest Primary' }),
+    expect(mainAgentApi.updateMainAgent).toHaveBeenCalledWith(
+      secondMainAgentId,
+      expect.objectContaining({ name: 'Latest MainAgent' }),
     )
-    primaryPage.wrapper.unmount()
+    mainAgentPage.wrapper.unmount()
 
     const firstSubagentId = '00000000-0000-0000-0000-000000000041'
     const secondSubagentId = '00000000-0000-0000-0000-000000000042'
@@ -150,37 +150,37 @@ describe('agent authoring pages', () => {
     subagentPage.wrapper.unmount()
   })
 
-  it('keeps the loaded Primary identity when selecting another record fails', async () => {
+  it('keeps the loaded MainAgent identity when selecting another record fails', async () => {
     const currentId = '00000000-0000-0000-0000-000000000010'
     const failedId = '00000000-0000-0000-0000-000000000099'
     const api = service({
-      listPrimaryAgents: vi.fn(async () => [
+      listMainAgents: vi.fn(async () => [
         {
           id: currentId,
-          name: 'Current Primary',
+          name: 'Current MainAgent',
           capability_refs: [],
           subagents: [],
         },
         {
           id: failedId,
-          name: 'Unavailable Primary',
+          name: 'Unavailable MainAgent',
           capability_refs: [],
           subagents: [],
         },
       ]),
-      getPrimaryAgent: vi.fn(async (id) => {
+      getMainAgent: vi.fn(async (id) => {
         if (id === failedId) throw new Error('load failed')
         return {
           id: currentId,
-          name: 'Current Primary',
+          name: 'Current MainAgent',
           capability_refs: [],
           subagents: [],
         }
       }),
     })
-    const { wrapper } = await mountPrimaryPage(
+    const { wrapper } = await mountMainAgentPage(
       api,
-      `/agents/primary?id=${currentId}`,
+      `/agents/main?id=${currentId}`,
     )
 
     await wrapper.get('[data-testid="record-picker-select"]').setValue(failedId)
@@ -188,32 +188,32 @@ describe('agent authoring pages', () => {
     await buttonByText(wrapper, 'common.save').trigger('click')
     await flushPromises()
 
-    expect(api.updatePrimaryAgent).toHaveBeenCalledWith(
+    expect(api.updateMainAgent).toHaveBeenCalledWith(
       currentId,
-      expect.objectContaining({ name: 'Current Primary' }),
+      expect.objectContaining({ name: 'Current MainAgent' }),
     )
-    expect(api.updatePrimaryAgent).not.toHaveBeenCalledWith(
+    expect(api.updateMainAgent).not.toHaveBeenCalledWith(
       failedId,
       expect.anything(),
     )
     wrapper.unmount()
   })
 
-  it('clears an old save error after the next Primary save succeeds', async () => {
-    const createPrimaryAgent = vi.fn()
+  it('clears an old save error after the next MainAgent save succeeds', async () => {
+    const createMainAgent = vi.fn()
       .mockRejectedValueOnce(new ManagementApiError({
         status: 500,
         code: 'old_save_failure',
         message: 'The first save failed.',
       }))
       .mockResolvedValueOnce({
-        id: 'created-primary',
+        id: 'created-mainAgent',
         name: '',
         capability_refs: [],
         subagents: [],
       })
-    const api = service({ createPrimaryAgent })
-    const { wrapper } = await mountPrimaryPage(api)
+    const api = service({ createMainAgent })
+    const { wrapper } = await mountMainAgentPage(api)
 
     await buttonByText(wrapper, 'common.save').trigger('click')
     await flushPromises()

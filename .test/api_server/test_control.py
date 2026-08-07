@@ -36,18 +36,18 @@ def test_api_key_is_write_only_and_takes_effect_immediately(
     assert persisted.status_code == 200
     assert secret not in status.text
 
-def test_start_stop_and_streaming_primary_reply(
+def test_start_stop_and_streaming_main_agent_reply(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         stopped = client.post("/api/api-server/stop")
         unavailable = client.get("/v1/models")
         started = client.post("/api/api-server/start")
         streamed = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "stream"}],
                 "stream": True,
             },
@@ -67,12 +67,12 @@ def test_start_stop_and_streaming_primary_reply(
     assert streamed_session["runs"][0]["status"] == "completed"
     assert streamed_session["runs"][0]["response_text"] == "runtime reply"
 
-def test_api_server_start_gate_rejects_invalid_primary_without_dynamic_build(
+def test_api_server_start_gate_rejects_invalid_main_agent_without_dynamic_build(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         client.post("/api/api-server/stop")
 
         def fail_dynamic_start(*_args, **_kwargs):
@@ -88,15 +88,15 @@ def test_api_server_start_gate_rejects_invalid_primary_without_dynamic_build(
 
         with closing(sqlite3.connect(database_path)) as connection, connection:
             row = connection.execute(
-                "SELECT payload FROM primary_agents WHERE id = ?", (primary["id"],)
+                "SELECT payload FROM main_agents WHERE id = ?", (main_agent["id"],)
             ).fetchone()
             payload = json.loads(row[0])
             payload["capability_refs"][0]["block_id"] = (
                 "00000000-0000-0000-0000-000000000000"
             )
             connection.execute(
-                "UPDATE primary_agents SET payload = ? WHERE id = ?",
-                (json.dumps(payload, ensure_ascii=False), primary["id"]),
+                "UPDATE main_agents SET payload = ? WHERE id = ?",
+                (json.dumps(payload, ensure_ascii=False), main_agent["id"]),
             )
 
         rejected = client.post("/api/api-server/start")
@@ -127,14 +127,14 @@ def test_api_server_start_gate_rejects_invalid_primary_without_dynamic_build(
         assert restarted.get("/api/api-server").json()["enabled"] is False
         assert restarted.get("/admin").status_code == 200
 
-def test_missing_model_request_fields_block_repository_primary_and_api_start(
+def test_missing_model_request_fields_block_repository_main_agent_and_api_start(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         client.post("/api/api-server/stop")
-        model_id = capability_reference_id(primary, "model")
+        model_id = capability_reference_id(main_agent, "model")
 
         with closing(sqlite3.connect(database_path)) as connection, connection:
             row = connection.execute(
@@ -149,12 +149,12 @@ def test_missing_model_request_fields_block_repository_primary_and_api_start(
             )
 
         repository = client.get("/api/validation/repository").json()
-        primary_draft = client.post(
+        main_agent_draft = client.post(
             "/api/validation/draft",
             json={
-                "target": {"kind": "primary"},
+                "target": {"kind": "main_agent"},
                 "payload": {
-                    key: value for key, value in primary.items() if key != "id"
+                    key: value for key, value in main_agent.items() if key != "id"
                 },
             },
         ).json()
@@ -169,11 +169,11 @@ def test_missing_model_request_fields_block_repository_primary_and_api_start(
         and issue["code"] == "contract.field_required"
     } == {"tool_choice", "response_format", "model_settings"}
 
-    assert primary_draft["valid"] is False
+    assert main_agent_draft["valid"] is False
     assert any(
         issue["code"] == "assembly.referenced_block_invalid"
         and issue["path"] == "capability_refs.model"
-        for issue in primary_draft["issues"]
+        for issue in main_agent_draft["issues"]
     )
 
     assert rejected.status_code == 422
@@ -209,33 +209,33 @@ def test_restart_does_not_rewrite_running_state_when_start_validation_crashes(
         ).fetchone()[0]
     assert enabled == 1
 
-def test_api_start_reports_primary_contract_and_referenced_block_issues(
+def test_api_start_reports_main_agent_contract_and_referenced_block_issues(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         client.post("/api/api-server/stop")
 
         output_id = next(
             item["block_id"]
-            for item in primary["capability_refs"]
+            for item in main_agent["capability_refs"]
             if item["type"] == "output-mode"
         )
         with closing(sqlite3.connect(database_path)) as connection, connection:
-            primary_payload = json.loads(
+            main_agent_payload = json.loads(
                 connection.execute(
-                    "SELECT payload FROM primary_agents WHERE id = ?", (primary["id"],)
+                    "SELECT payload FROM main_agents WHERE id = ?", (main_agent["id"],)
                 ).fetchone()[0]
             )
-            primary_payload["subagents"] = [
+            main_agent_payload["subagents"] = [
                 {
                     "enabled": True,
                     "name": "worker",
                     "description": "Handle delegated work.",
                     "subagent_override_id": "",
-                    "use_current_primary": True,
-                    "primary_agent_id": "",
+                    "use_current_main_agent": True,
+                    "main_agent_id": "",
                     "inherit_all": True,
                 }
             ]
@@ -249,8 +249,8 @@ def test_api_start_reports_primary_contract_and_referenced_block_issues(
                 "template": "{{message}}",
             }
             connection.execute(
-                "UPDATE primary_agents SET payload = ? WHERE id = ?",
-                (json.dumps(primary_payload, ensure_ascii=False), primary["id"]),
+                "UPDATE main_agents SET payload = ? WHERE id = ?",
+                (json.dumps(main_agent_payload, ensure_ascii=False), main_agent["id"]),
             )
             connection.execute(
                 "UPDATE blocks SET payload = ? WHERE id = ?",
@@ -267,8 +267,8 @@ def test_api_start_reports_primary_contract_and_referenced_block_issues(
         "subagents[0].name",
         "subagents[0].description",
         "subagents[0].subagent_override_id",
-        "subagents[0].use_current_primary",
-        "subagents[0].primary_agent_id",
+        "subagents[0].use_current_main_agent",
+        "subagents[0].main_agent_id",
         "subagents[0].inherit_all",
         "capability_refs.output-mode",
         "event_templates.other.[key]",
@@ -302,7 +302,7 @@ def test_api_start_uses_safe_ast_tool_names_without_importing_user_module(
 
     write_tool("safe_runtime_name")
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         todo = client.post(
             "/api/blocks/todo-list", json={"name": "AST gate Todo"}
         ).json()
@@ -311,11 +311,11 @@ def test_api_start_uses_safe_ast_tool_names_without_importing_user_module(
             json={"name": "AST gate tool", "tools": ["changing_tool"]},
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {"type": "todo-list", "block_id": todo["id"]},
                     {"type": "custom-tool", "block_id": custom["id"]},
                 ],

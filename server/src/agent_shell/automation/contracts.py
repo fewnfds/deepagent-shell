@@ -23,7 +23,7 @@ class PeriodicAutomationPluginBinding(AutomationPluginBinding):
     interval_seconds: float = Field(ge=0.1, le=86_400)
 
 
-class PrimaryAutomation(BaseModel):
+class MainAgentAutomation(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     hooks: list[AutomationPluginBinding] = Field(default_factory=list, max_length=100)
@@ -33,5 +33,5 @@ class PrimaryAutomation(BaseModel):
     )
 
 
-class SubagentAutomation(PrimaryAutomation):
+class SubagentAutomation(MainAgentAutomation):
     pass

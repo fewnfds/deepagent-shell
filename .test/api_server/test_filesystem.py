@@ -38,7 +38,7 @@ def test_selected_filesystem_reads_request_initial_file(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         filesystem = client.post(
             "/api/blocks/filesystem",
             json={
@@ -52,11 +52,11 @@ def test_selected_filesystem_reads_request_initial_file(
             },
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": replace_capability_reference(
-                    primary, "filesystem", filesystem["id"]
+                    main_agent, "filesystem", filesystem["id"]
                 ),
                 "subagents": [],
             },
@@ -65,7 +65,7 @@ def test_selected_filesystem_reads_request_initial_file(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Read the file."}],
             },
         )
@@ -165,17 +165,17 @@ def test_empty_and_truncated_search_results_remain_opaque_tool_messages(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         filesystem = client.post(
             "/api/blocks/filesystem",
             json={"name": "Searchable files"},
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": replace_capability_reference(
-                    primary, "filesystem", filesystem["id"]
+                    main_agent, "filesystem", filesystem["id"]
                 ),
                 "subagents": [],
             },
@@ -184,7 +184,7 @@ def test_empty_and_truncated_search_results_remain_opaque_tool_messages(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Search files."}],
             },
         )

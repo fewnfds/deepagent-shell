@@ -9,12 +9,12 @@ def test_runtime_diagnostics_exposes_safe_errors_and_optional_lifecycle(
 ) -> None:
     sensitive_detail = "diagnostic-sensitive-detail"
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         enabled = client.put("/api/runtime-diagnostics", json={"verbose": True})
         completed = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "private user body"}],
             },
         )
@@ -29,7 +29,7 @@ def test_runtime_diagnostics_exposes_safe_errors_and_optional_lifecycle(
         failed = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "another private body"}],
             },
         )
@@ -60,7 +60,7 @@ def test_runtime_diagnostics_preserves_safe_provider_stream_code(
 ) -> None:
     sensitive_detail = "provider-private disconnect detail"
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
 
         def fail_start(*_args, **_kwargs):
             stream_error = ProviderStreamError(curl_code=56)
@@ -74,7 +74,7 @@ def test_runtime_diagnostics_preserves_safe_provider_stream_code(
         failed = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "private user body"}],
             },
         )
@@ -94,7 +94,7 @@ def test_unexpected_runtime_start_error_is_redacted_and_recorded(
 ) -> None:
     sensitive_detail = "unexpected-sensitive-runtime-detail"
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
 
         def fail_start(*_args, **_kwargs):
             raise RuntimeError(sensitive_detail)
@@ -106,7 +106,7 @@ def test_unexpected_runtime_start_error_is_redacted_and_recorded(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "record internal failure"}],
             },
         )

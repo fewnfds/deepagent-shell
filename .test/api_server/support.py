@@ -50,7 +50,7 @@ def add_api_event(
     item = client.app.state.api_server_store.add_message_history(
         request_id=f"request-{offset}",
         model="published-model",
-        agent_name="Published Primary",
+        agent_name="Published Main Agent",
         started_at=started.isoformat(timespec="milliseconds"),
         finished_at=(started + timedelta(milliseconds=10)).isoformat(
             timespec="milliseconds"
@@ -173,7 +173,7 @@ def automation_config_schema(
     }
 
 
-def create_primary(
+def create_main_agent(
     client: TestClient,
     *,
     provider_settings: dict[str, object] | None = None,
@@ -226,9 +226,9 @@ def create_primary(
         {"type": "output-mode", "block_id": output_mode["id"]}
     )
     response = client.post(
-        "/api/primary-agents",
+        "/api/main-agents",
         json={
-            "name": "Published Primary",
+            "name": "Published Main Agent",
             "capability_refs": capability_refs,
             "subagents": [],
         },
@@ -295,7 +295,7 @@ def output_mode_payload(
 
 def attach_output_mode(
     client: TestClient,
-    primary: dict,
+    main_agent: dict,
     *,
     filter_mappings: list[dict[str, str]] | None = None,
 ) -> dict:
@@ -305,18 +305,18 @@ def attach_output_mode(
         "/api/blocks/output-mode", json=output_payload
     ).json()
     payload = {
-        "name": primary["name"],
+        "name": main_agent["name"],
         "capability_refs": [
             *[
                 item
-                for item in primary["capability_refs"]
+                for item in main_agent["capability_refs"]
                 if item["type"] != "output-mode"
             ],
             {"type": "output-mode", "block_id": output_mode["id"]},
         ],
-        "subagents": primary["subagents"],
+        "subagents": main_agent["subagents"],
     }
-    response = client.put(f"/api/primary-agents/{primary['id']}", json=payload)
+    response = client.put(f"/api/main-agents/{main_agent['id']}", json=payload)
     assert response.status_code == 200, response.text
     return response.json()
 
@@ -337,21 +337,21 @@ def streamed_content(response) -> str:
     return "".join(streamed_content_parts(response))
 
 
-def capability_reference_id(primary: dict, capability_type: str) -> str:
+def capability_reference_id(main_agent: dict, capability_type: str) -> str:
     return next(
         item["block_id"]
-        for item in primary["capability_refs"]
+        for item in main_agent["capability_refs"]
         if item["type"] == capability_type
     )
 
 
 def replace_capability_reference(
-    primary: dict, capability_type: str, block_id: str
+    main_agent: dict, capability_type: str, block_id: str
 ) -> list[dict]:
     return [
         *[
             item
-            for item in primary["capability_refs"]
+            for item in main_agent["capability_refs"]
             if item["type"] != capability_type
         ],
         {"type": capability_type, "block_id": block_id},

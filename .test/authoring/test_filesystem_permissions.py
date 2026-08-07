@@ -32,10 +32,10 @@ def test_filesystem_path_change_reports_warning_without_rejecting_update(
         },
     ).json()
     permissions = _permission_block(client, "Source policy", "/source/**")
-    primary = client.post(
-        "/api/primary-agents",
+    main_agent = client.post(
+        "/api/main-agents",
         json={
-            "name": "Permission warning Primary",
+            "name": "Permission warning Main Agent",
             "capability_refs": [
                 *references(blocks, ("model", "output-mode")),
                 {"type": "filesystem", "block_id": filesystem["id"]},
@@ -46,7 +46,7 @@ def test_filesystem_path_change_reports_warning_without_rejecting_update(
             ],
         },
     )
-    assert primary.status_code == 200, primary.text
+    assert main_agent.status_code == 200, main_agent.text
     assert client.get("/api/validation/repository").json()["issues"] == []
 
     updated = client.put(
@@ -65,9 +65,9 @@ def test_filesystem_path_change_reports_warning_without_rejecting_update(
     assert report["issues"] == [
         {
             "code": "assembly.filesystem_permission_path_unmatched",
-            "scope": "primary",
-            "owner_id": primary.json()["id"],
-            "owner_name": "Permission warning Primary",
+            "scope": "main_agent",
+            "owner_id": main_agent.json()["id"],
+            "owner_name": "Permission warning Main Agent",
             "path": (
                 "capability_refs.filesystem-permissions.permissions[0].path"
             ),
@@ -132,10 +132,10 @@ def test_subagents_inherit_replace_or_disable_filesystem_permissions(
         ),
     ).json()
 
-    primary = client.post(
-        "/api/primary-agents",
+    main_agent = client.post(
+        "/api/main-agents",
         json={
-            "name": "Permission matrix Primary",
+            "name": "Permission matrix Main Agent",
             "capability_refs": [
                 *references(
                     blocks,
@@ -153,7 +153,7 @@ def test_subagents_inherit_replace_or_disable_filesystem_permissions(
             ],
         },
     )
-    assert primary.status_code == 200, primary.text
+    assert main_agent.status_code == 200, main_agent.text
 
     report = client.get("/api/validation/repository").json()
     assert report["valid"] is True
@@ -166,7 +166,7 @@ def test_subagents_inherit_replace_or_disable_filesystem_permissions(
         (issue["owner_id"], issue["message_args"]["path"])
         for issue in warnings
     } == {
-        (primary.json()["id"], "/parent-only/**"),
+        (main_agent.json()["id"], "/parent-only/**"),
         (inherit_child["id"], "/parent-only/**"),
         (replace_child["id"], "/child-only/**"),
     }

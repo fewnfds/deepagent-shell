@@ -17,7 +17,7 @@ def _normalized(
 def test_message_finish_records_the_call_without_fabricating_a_public_block_end() -> None:
     responses = []
     normalizer = V3EventNormalizer(
-        "Primary", model_response_observers=(responses.append,)
+        "Main Agent", model_response_observers=(responses.append,)
     )
     normalizer.feed(
         message_envelope(
@@ -55,11 +55,11 @@ def test_message_finish_records_the_call_without_fabricating_a_public_block_end(
 
     assert events == []
     assert responses[0].stream_diagnostics["incomplete_block_count"] == 1
-    assert normalizer.primary_message_active is False
+    assert normalizer.main_agent_message_active is False
 
 
 def test_graph_end_discards_open_normalizer_state_without_fabricating_finish() -> None:
-    normalizer = V3EventNormalizer("Primary")
+    normalizer = V3EventNormalizer("Main Agent")
     normalizer.feed(
         message_envelope(
             {"event": "message-start", "role": "ai", "id": "message-1"}
@@ -84,13 +84,13 @@ def test_graph_end_discards_open_normalizer_state_without_fabricating_finish() -
         )
     )
 
-    normalizer.close_primary_messages()
+    normalizer.close_main_agent_messages()
     assert normalizer.finish_reason == "unknown"
-    assert normalizer.primary_message_active is False
+    assert normalizer.main_agent_message_active is False
 
 
 def test_message_error_fails_immediately_without_exposing_upstream_payload() -> None:
-    normalizer = V3EventNormalizer("Primary")
+    normalizer = V3EventNormalizer("Main Agent")
     normalizer.feed(
         message_envelope(
             {"event": "message-start", "role": "ai", "id": "message-1"}
@@ -106,11 +106,11 @@ def test_message_error_fails_immediately_without_exposing_upstream_payload() -> 
 
     assert captured.value.code == "agent_execution_failed"
     assert "private" not in str(captured.value)
-    assert normalizer.primary_message_active is False
+    assert normalizer.main_agent_message_active is False
 
 
 def test_tool_finish_and_failure_are_complete_and_tool_delta_is_ignored() -> None:
-    normalizer = V3EventNormalizer("Primary")
+    normalizer = V3EventNormalizer("Main Agent")
     normalizer.feed(
         message_envelope(
             {
@@ -181,7 +181,7 @@ def test_tool_finish_and_failure_are_complete_and_tool_delta_is_ignored() -> Non
 
 
 def test_command_tool_result_uses_only_the_matching_tool_message() -> None:
-    normalizer = V3EventNormalizer("Primary")
+    normalizer = V3EventNormalizer("Main Agent")
     command = Command(
         update={
             "messages": [
@@ -217,7 +217,7 @@ def test_command_tool_result_uses_only_the_matching_tool_message() -> None:
 
 
 def test_subagent_model_content_stays_private_but_lifecycle_is_available() -> None:
-    normalizer = V3EventNormalizer("Primary")
+    normalizer = V3EventNormalizer("Main Agent")
     internal_messages = [
         message_envelope(
             {"event": "message-start", "role": "ai", "id": "sub-message"},
@@ -312,7 +312,7 @@ def test_subagent_model_content_stays_private_but_lifecycle_is_available() -> No
 
 
 def test_unknown_internal_and_unsupported_media_events_are_not_public() -> None:
-    normalizer = V3EventNormalizer("Primary")
+    normalizer = V3EventNormalizer("Main Agent")
     internal = normalizer.feed(
         {
             "method": "updates",

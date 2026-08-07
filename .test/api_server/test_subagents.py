@@ -44,7 +44,7 @@ def test_selected_subagent_applies_effective_overrides_and_returns_result(
                 child_model if block["name"] == "Child model" else parent_model
             ),
         )
-        parent = create_primary(client)
+        parent = create_main_agent(client)
         child_model_block = client.post(
             "/api/blocks/model",
             json={
@@ -95,7 +95,7 @@ def test_selected_subagent_applies_effective_overrides_and_returns_result(
             json={"name": "Runtime delegation"},
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{parent['id']}",
+            f"/api/main-agents/{parent['id']}",
             json={
                 "name": parent["name"],
                 "capability_refs": [
@@ -174,7 +174,7 @@ def test_selected_subagent_applies_effective_overrides_and_returns_result(
         if item["kind"] == "agent_input"
     ]
     assert [item["agent_type"] for item in agent_inputs] == [
-        "primary",
+        "main_agent",
         "subagent",
     ]
     root_invocation, child_invocation = agent_inputs
@@ -189,7 +189,7 @@ def test_selected_subagent_applies_effective_overrides_and_returns_result(
     assert child_invocation["tool_call_id"] == "call-subagent"
 
 
-def test_subagent_entity_can_inherit_current_primary_capabilities(
+def test_subagent_entity_can_inherit_current_main_agent_capabilities(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class ParentModel(ToolCallingFakeModel):
@@ -210,7 +210,7 @@ def test_subagent_entity_can_inherit_current_primary_capabilities(
                     {
                         "name": "task",
                         "args": {
-                            "description": "Run with the current Primary profile.",
+                            "description": "Run with the current Main Agent profile.",
                             "subagent_type": "self_worker",
                         },
                         "id": "call-self-subagent",
@@ -229,7 +229,7 @@ def test_subagent_entity_can_inherit_current_primary_capabilities(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: next(models),
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         prompt = client.post(
             "/api/blocks/system-prompt",
             json={
@@ -246,16 +246,16 @@ def test_subagent_entity_can_inherit_current_primary_capabilities(
             json={
                 "component_name": "Inherited worker",
                 "name": "self_worker",
-                "description": "Uses the current Primary capabilities.",
+                "description": "Uses the current Main Agent capabilities.",
                 "settings": {"capability_overrides": [], "subagents": []},
             },
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {"type": "system-prompt", "block_id": prompt["id"]},
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
@@ -268,7 +268,7 @@ def test_subagent_entity_can_inherit_current_primary_capabilities(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Delegate to self."}],
             },
         )
@@ -291,7 +291,7 @@ def test_unknown_subagent_capability_returns_stable_error_and_history(
 ) -> None:
     database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
     with make_client(tmp_path, monkeypatch) as client:
-        parent = create_primary(client)
+        parent = create_main_agent(client)
         subagent = client.post(
             "/api/subagents",
             json={
@@ -306,7 +306,7 @@ def test_unknown_subagent_capability_returns_stable_error_and_history(
             json={"name": "Stale delegation"},
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{parent['id']}",
+            f"/api/main-agents/{parent['id']}",
             json={
                 "name": parent["name"],
                 "capability_refs": [

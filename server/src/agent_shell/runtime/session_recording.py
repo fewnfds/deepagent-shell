@@ -67,7 +67,7 @@ class AgentRunCapture:
                 "node": response.node,
                 "run_id": response.run_id,
                 "message_id": response.message_id,
-                "is_primary": response.is_primary,
+                "is_main_agent": response.is_main_agent,
                 "provider_finish_reason": response.provider_finish_reason,
                 "finish_reason_source": response.finish_reason_source,
                 "finish_reason_category": response.timeline_data()[

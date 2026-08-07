@@ -23,37 +23,37 @@ def test_snapshot_keeps_model_resolution_and_assembly_on_one_committed_view(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         snapshot = client.app.state.agent_runtime.capture()
         renamed = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
                 "name": "Renamed after capture",
-                "capability_refs": primary["capability_refs"],
-                "subagents": primary["subagents"],
+                "capability_refs": main_agent["capability_refs"],
+                "subagents": main_agent["subagents"],
             },
         )
         assert renamed.status_code == 200, renamed.text
 
-        assert snapshot.primary_by_name(primary["name"])["id"] == primary["id"]
-        assert snapshot.primary_by_name("Renamed after capture") is None
+        assert snapshot.main_agent_by_name(main_agent["name"])["id"] == main_agent["id"]
+        assert snapshot.main_agent_by_name("Renamed after capture") is None
 
         next_snapshot = client.app.state.agent_runtime.capture()
-        assert next_snapshot.primary_by_name(primary["name"]) is None
-        assert next_snapshot.primary_by_name("Renamed after capture")["id"] == primary["id"]
+        assert next_snapshot.main_agent_by_name(main_agent["name"]) is None
+        assert next_snapshot.main_agent_by_name("Renamed after capture")["id"] == main_agent["id"]
 
 
-def test_running_models_and_later_requests_use_the_latest_primary_name(
+def test_running_models_and_later_requests_use_the_latest_main_agent_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         renamed = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": "Live renamed Primary",
-                "capability_refs": primary["capability_refs"],
-                "subagents": primary["subagents"],
+                "name": "Live renamed Main Agent",
+                "capability_refs": main_agent["capability_refs"],
+                "subagents": main_agent["subagents"],
             },
         )
         assert renamed.status_code == 200, renamed.text
@@ -61,20 +61,20 @@ def test_running_models_and_later_requests_use_the_latest_primary_name(
         old = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "old name"}],
             },
         )
         current = client.post(
             "/v1/chat/completions",
             json={
-                "model": "Live renamed Primary",
+                "model": "Live renamed Main Agent",
                 "messages": [{"role": "user", "content": "new name"}],
             },
         )
 
     assert [item["id"] for item in models.json()["data"]] == [
-        "Live renamed Primary"
+        "Live renamed Main Agent"
     ]
     assert old.status_code == 404
     assert old.json()["error"]["code"] == "model_not_found"
@@ -86,17 +86,17 @@ def test_captured_agent_build_never_falls_back_to_live_configuration_database(
 ) -> None:
     database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         snapshot = client.app.state.agent_runtime.capture()
         with closing(sqlite3.connect(database_path)) as connection, connection:
-            connection.execute("DELETE FROM primary_agents")
+            connection.execute("DELETE FROM main_agents")
             connection.execute("DELETE FROM subagents")
             connection.execute("DELETE FROM blocks")
             connection.execute("DELETE FROM provider_secrets")
 
         async def run_captured_agent() -> tuple[str, dict[str, int]]:
             execution = await snapshot.start_agent(
-                primary["id"],
+                main_agent["id"],
                 [
                     {
                         "role": "user",
@@ -136,9 +136,9 @@ def test_running_crud_changes_only_later_agent_constructions(
         monkeypatch.setattr(
             "agent_shell.runtime.agent_builder._build_chat_model", model_factory
         )
-        primary = create_primary(client)
-        model_id = capability_reference_id(primary, "model")
-        thread = threading.Thread(target=invoke_old, args=(client, primary["name"]))
+        main_agent = create_main_agent(client)
+        model_id = capability_reference_id(main_agent, "model")
+        thread = threading.Thread(target=invoke_old, args=(client, main_agent["name"]))
         thread.start()
         try:
             assert started.wait(5), "the first Agent did not begin provider execution"
@@ -160,7 +160,7 @@ def test_running_crud_changes_only_later_agent_constructions(
             current = client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": primary["name"],
+                    "model": main_agent["name"],
                     "messages": [{"role": "user", "content": "new request"}],
                 },
             )
@@ -203,8 +203,8 @@ def test_stop_rejects_new_work_without_interrupting_an_existing_snapshot(
         monkeypatch.setattr(
             "agent_shell.runtime.agent_builder._build_chat_model", model_factory
         )
-        primary = create_primary(client)
-        thread = threading.Thread(target=invoke, args=(client, primary["name"]))
+        main_agent = create_main_agent(client)
+        thread = threading.Thread(target=invoke, args=(client, main_agent["name"]))
         thread.start()
         try:
             assert started.wait(5), "the accepted request did not begin"
@@ -212,7 +212,7 @@ def test_stop_rejects_new_work_without_interrupting_an_existing_snapshot(
             rejected = client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": primary["name"],
+                    "model": main_agent["name"],
                     "messages": [{"role": "user", "content": "must not start"}],
                 },
             )
@@ -239,7 +239,7 @@ def test_snapshot_capture_failure_is_safe_without_persisting_the_request_body(
 ) -> None:
     private_detail = "private snapshot failure detail"
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
 
         def fail_capture():
             raise OSError(private_detail)
@@ -248,7 +248,7 @@ def test_snapshot_capture_failure_is_safe_without_persisting_the_request_body(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "capture safely"}],
             },
         )
@@ -268,7 +268,7 @@ def test_api_start_globally_validates_even_unreferenced_saved_configuration(
 ) -> None:
     database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
     with make_client(tmp_path, monkeypatch) as client:
-        create_primary(client)
+        create_main_agent(client)
         unused = client.post(
             "/api/blocks/system-prompt",
             json={"name": "Unused invalid draft", "system_prompt": "draft"},

@@ -28,7 +28,7 @@ class _SnapshotDatabase:
     _TABLES: tuple[tuple[str, tuple[str, ...]], ...] = (
         ("provider_secrets", ("id", "secret_value")),
         ("blocks", ("id", "block_type", "name", "payload")),
-        ("primary_agents", ("id", "name", "payload")),
+        ("main_agents", ("id", "name", "payload")),
         ("subagents", ("id", "component_name", "payload")),
     )
 
@@ -85,17 +85,17 @@ class RequestRuntimeSnapshot:
     _runtime: AgentRuntime
     _database: _SnapshotDatabase
 
-    def primary_by_name(self, name: str) -> dict[str, Any] | None:
-        return self._configs.get_item_by_name("primary_agents", name)
+    def main_agent_by_name(self, name: str) -> dict[str, Any] | None:
+        return self._configs.get_item_by_name("main_agents", name)
 
     async def start_agent(
         self,
-        primary_id: str,
+        main_agent_id: str,
         raw_messages: object,
         **kwargs: Any,
     ) -> AgentExecution:
         try:
-            return await self._runtime.start(primary_id, raw_messages, **kwargs)
+            return await self._runtime.start(main_agent_id, raw_messages, **kwargs)
         finally:
             # Agent construction has materialized every database-backed dependency.
             # Closing here makes any accidental lazy configuration read fail.

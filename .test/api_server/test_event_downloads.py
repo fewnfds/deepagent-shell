@@ -167,7 +167,7 @@ def test_api_event_debug_download_merges_stream_chunks_without_changing_raw(
         item = client.app.state.api_server_store.add_message_history(
             request_id="request-debug-stream",
             model="published-model",
-            agent_name="Published Primary",
+            agent_name="Published Main Agent",
             started_at=started.isoformat(timespec="milliseconds"),
             finished_at=(started + timedelta(seconds=1)).isoformat(timespec="milliseconds"),
             status="completed",
@@ -185,7 +185,7 @@ def test_api_event_debug_download_merges_stream_chunks_without_changing_raw(
             level="error",
             request_id="request-debug-stream",
             model="published-model",
-            agent_name="Published Primary",
+            agent_name="Published Main Agent",
             code="provider_request_failed",
             exception_type="AgentRuntimeError",
             message="request failed\n\nSanitized traceback:\n  safe/module.py:1 in call",
@@ -260,7 +260,7 @@ def test_other_event_sources_download_long_public_records(
         interception = client.app.state.api_server_store.add_interception_record(
             request_id="long-interception",
             model="published-model",
-            agent_name="Published Primary",
+            agent_name="Published Main Agent",
             request_raw_json='{"message":"' + "拦" * 5000 + '"}',
             model_request_raw_json='{"messages":[]}',
         )
@@ -276,7 +276,7 @@ def test_other_event_sources_download_long_public_records(
             "info",
             request_id="long-runtime",
             model="published-model",
-            agent_name="Published Primary",
+            agent_name="Published Main Agent",
             message="运" * 5000 + runtime_marker,
         )
 

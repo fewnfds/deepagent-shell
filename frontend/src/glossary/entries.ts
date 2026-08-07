@@ -168,7 +168,6 @@ function technologyTerm(
   term('agents', 'subtask', 'Subtask', '子任务', '由较大任务分解出的较小工作单元。', 'A smaller unit of work decomposed from a larger task.');
   term('agents', 'task-decomposition', 'Task Decomposition', '任务分解', '将复杂任务拆成更小且可管理子任务的过程。', 'The process of dividing a complex task into smaller manageable subtasks.');
   term('agents', 'delegation', 'Delegation', '委派', '把任务或决策责任交给另一个智能体或执行单元。', 'The transfer of a task or decision responsibility to another agent or execution unit.');
-  term('agents', 'primary-agent', 'Primary Agent', '主智能体', '在多智能体结构中接收初始任务并协调主要执行流程的智能体。', 'In a multi-agent architecture, the agent that receives the initial task and coordinates the main execution flow.');
   term('multiAgent', 'main-agent', 'Main Agent', '主要智能体', '在多智能体结构中承担主要任务流程并可委派子任务的智能体。', 'The agent that carries the main task flow and may delegate subtasks in a multi-agent architecture.');
   term('deepSubagents', 'subagent', 'Subagent', '子智能体', '受另一个智能体委派、负责处理子任务的智能体。', 'An agent delegated by another agent to handle a subtask.', ['sub-agent']);
   term('subagentExecution', 'synchronous-subagent', 'Synchronous Subagent', '同步子智能体', '主智能体等待其执行完成并取得结果后再继续的子智能体。', 'A subagent whose main agent waits for completion and receives the result before continuing.');

@@ -39,16 +39,16 @@ def _install_media_model(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def test_primary_media_output_is_private_structured_and_reference_retained(
+def test_main_agent_media_output_is_private_structured_and_reference_retained(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         _install_media_model(monkeypatch)
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "make an image"}],
             },
         )
@@ -113,16 +113,16 @@ def test_primary_media_output_is_private_structured_and_reference_retained(
         assert not asset_path.exists()
 
 
-def test_streaming_primary_media_emits_one_notification_after_persistence(
+def test_streaming_main_agent_media_emits_one_notification_after_persistence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         _install_media_model(monkeypatch)
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "stream an image"}],
                 "stream": True,
             },
@@ -141,11 +141,11 @@ def test_streaming_primary_media_emits_one_notification_after_persistence(
         assert (tmp_path / asset["relative_path"]).read_bytes() == _MEDIA_BYTES
 
 
-def test_remote_primary_media_reports_unsaved_without_persisting_source(
+def test_remote_main_agent_media_reports_unsaved_without_persisting_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         monkeypatch.setattr(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: ToolCallingFakeModel(
@@ -165,7 +165,7 @@ def test_remote_primary_media_reports_unsaved_without_persisting_source(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "return remote image"}],
             },
         )
@@ -187,7 +187,7 @@ def test_remote_primary_media_reports_unsaved_without_persisting_source(
     assert "private.example" not in json.dumps(run, ensure_ascii=False)
 
 
-def test_primary_output_materializes_image_audio_video_and_file_in_order(
+def test_main_agent_output_materializes_image_audio_video_and_file_in_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     blocks: list[dict[str, str]] = []
@@ -203,7 +203,7 @@ def test_primary_output_materializes_image_audio_video_and_file_in_order(
             )
         )
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         monkeypatch.setattr(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: ToolCallingFakeModel(
@@ -213,7 +213,7 @@ def test_primary_output_materializes_image_audio_video_and_file_in_order(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "all media"}],
             },
         )

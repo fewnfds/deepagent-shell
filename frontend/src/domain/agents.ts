@@ -8,8 +8,8 @@ import type {
   CatalogResponse,
   DraftValidationRequest as ApiDraftValidationRequest,
   AutomationScriptResource,
-  PrimaryAgent,
-  PrimaryAgentPayload as ApiPrimaryAgentPayload,
+  MainAgent,
+  MainAgentPayload as ApiMainAgentPayload,
   ResourceCatalog,
   SavedBlock,
   Subagent,
@@ -32,13 +32,13 @@ type AgentCatalog = CatalogResponse
 export type StoredBlock = SavedBlock
 export type SubagentReference = ApiSubagentReference
 
-export interface PrimaryAgentProfile extends Omit<PrimaryAgent, 'subagents' | 'automation'> {
+export interface MainAgentProfile extends Omit<MainAgent, 'subagents' | 'automation'> {
   id: string
   subagents: SubagentReference[]
   automation: AutomationConfigurationDraft
 }
 
-type PrimaryAgentPayload = ApiPrimaryAgentPayload
+type MainAgentPayload = ApiMainAgentPayload
 type CapabilityOverride = ApiCapabilityOverride
 
 interface OverrideSelection {
@@ -60,10 +60,10 @@ export interface AgentAuthoringService {
   getCatalog(): Promise<AgentCatalog>
   listBlocks(type: CapabilityType): Promise<StoredBlock[]>
   listAutomationPlugins?(): Promise<ResourceCatalog<AutomationScriptResource>>
-  listPrimaryAgents(): Promise<PrimaryAgent[]>
-  getPrimaryAgent(id: string): Promise<PrimaryAgent>
-  createPrimaryAgent(payload: PrimaryAgentPayload): Promise<PrimaryAgent>
-  updatePrimaryAgent(id: string, payload: PrimaryAgentPayload): Promise<PrimaryAgent>
+  listMainAgents(): Promise<MainAgent[]>
+  getMainAgent(id: string): Promise<MainAgent>
+  createMainAgent(payload: MainAgentPayload): Promise<MainAgent>
+  updateMainAgent(id: string, payload: MainAgentPayload): Promise<MainAgent>
   listSubagents(): Promise<SubagentProfile[]>
   getSubagent(id: string): Promise<SubagentProfile>
   createSubagent(payload: SubagentPayload): Promise<SubagentProfile>
@@ -77,10 +77,10 @@ export const managementAgentAuthoringService: AgentAuthoringService = {
   getCatalog: () => managementApi.getCatalog(),
   listBlocks: (type) => managementApi.listBlocks(type),
   listAutomationPlugins: () => managementApi.listAutomationPlugins(),
-  listPrimaryAgents: () => managementApi.listPrimaryAgents(),
-  getPrimaryAgent: (id) => managementApi.getPrimaryAgent(id),
-  createPrimaryAgent: (payload) => managementApi.savePrimaryAgent(payload),
-  updatePrimaryAgent: (id, payload) => managementApi.savePrimaryAgent({ id, ...payload }),
+  listMainAgents: () => managementApi.listMainAgents(),
+  getMainAgent: (id) => managementApi.getMainAgent(id),
+  createMainAgent: (payload) => managementApi.saveMainAgent(payload),
+  updateMainAgent: (id, payload) => managementApi.saveMainAgent({ id, ...payload }),
   listSubagents: () => managementApi.listSubagents(),
   getSubagent: (id) => managementApi.getSubagent(id),
   createSubagent: (payload) => managementApi.saveSubagent(payload),
@@ -105,7 +105,7 @@ export function normalizeSubagentReference(value: unknown): SubagentReference {
   return { subagent_id: text(source.subagent_id) }
 }
 
-export function blankPrimaryAgent(): PrimaryAgentProfile {
+export function blankMainAgent(): MainAgentProfile {
   return {
     id: '',
     name: '',
@@ -115,7 +115,7 @@ export function blankPrimaryAgent(): PrimaryAgentProfile {
   }
 }
 
-export function normalizePrimaryAgent(value: unknown): PrimaryAgentProfile {
+export function normalizeMainAgent(value: unknown): MainAgentProfile {
   const source = record(value)
   const references = Array.isArray(source.capability_refs) ? source.capability_refs : []
   const subagents = Array.isArray(source.subagents) ? source.subagents : []
@@ -131,7 +131,7 @@ export function normalizePrimaryAgent(value: unknown): PrimaryAgentProfile {
   }
 }
 
-export function primaryAgentPayload(value: PrimaryAgentProfile): PrimaryAgentPayload {
+export function mainAgentPayload(value: MainAgentProfile): MainAgentPayload {
   return {
     name: value.name.trim(),
     capability_refs: value.capability_refs
@@ -143,11 +143,11 @@ export function primaryAgentPayload(value: PrimaryAgentProfile): PrimaryAgentPay
   }
 }
 
-export function referenceId(value: PrimaryAgentProfile, type: CapabilityType): string {
+export function referenceId(value: MainAgentProfile, type: CapabilityType): string {
   return value.capability_refs.find((item) => item.type === type)?.block_id ?? ''
 }
 
-export function setReference(value: PrimaryAgentProfile, type: CapabilityType, blockId: string): void {
+export function setReference(value: MainAgentProfile, type: CapabilityType, blockId: string): void {
   value.capability_refs = value.capability_refs.filter((item) => item.type !== type)
   if (blockId) value.capability_refs.push({ type, block_id: blockId })
 }

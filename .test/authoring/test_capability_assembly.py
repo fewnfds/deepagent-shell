@@ -30,7 +30,7 @@ def test_effective_capability_subject_reports_required_and_filesystem_mode() -> 
 def test_filesystem_mode_uses_final_effective_selection() -> None:
     configured = CapabilityAssemblySubject(
         references={"filesystem": "filesystem-id", "skill": "skill-id"},
-        scope="primary",
+        scope="main_agent",
     )
     skill_only = CapabilityAssemblySubject(
         references={"skill": "skill-id"},

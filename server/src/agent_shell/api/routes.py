@@ -18,7 +18,7 @@ from agent_shell.contracts import (
 )
 from agent_shell.api.agent_configs import (
     ConfigurationBulkDelete,
-    primary_block_reference_owner,
+    main_agent_block_reference_owner,
 )
 from agent_shell.capability_manifest import CAPABILITY_BY_TYPE
 from agent_shell.registries.custom_middlewares import scan_custom_middlewares
@@ -269,7 +269,7 @@ def build_router(
                     message="A component configuration does not exist.",
                 )
             if CAPABILITY_BY_TYPE[block_type].required:
-                owner = primary_block_reference_owner(
+                owner = main_agent_block_reference_owner(
                     config_store,
                     block_type,
                     block_id,
@@ -280,7 +280,7 @@ def build_router(
                 raise management_error(
                     409,
                     code="configuration_referenced",
-                    message_key="errors.configurationReferencedByPrimary",
+                    message_key="errors.configurationReferencedByMainAgent",
                     message="The configuration is still referenced.",
                     message_args={"owner": owner_name},
                 )
@@ -400,13 +400,13 @@ def build_router(
     async def delete_block(block_type: str, block_id: str) -> dict[str, bool]:
         check_type(block_type)
         if CAPABILITY_BY_TYPE[block_type].required:
-            owner = primary_block_reference_owner(config_store, block_type, block_id)
+            owner = main_agent_block_reference_owner(config_store, block_type, block_id)
             if owner is not None:
                 _, owner_name = owner
                 raise management_error(
                     409,
                     code="configuration_referenced",
-                    message_key="errors.configurationReferencedByPrimary",
+                    message_key="errors.configurationReferencedByMainAgent",
                     message="The configuration is still referenced.",
                     message_args={"owner": owner_name},
                 )

@@ -1,7 +1,7 @@
 import type {
   AutomationPluginBinding,
   PeriodicAutomationPluginBinding,
-  PrimaryAutomation,
+  MainAgentAutomation,
 } from '@/api'
 
 export interface AutomationPluginBindingDraft {
@@ -88,7 +88,7 @@ function periodicPluginPayload(
   }
 }
 
-export function automationPayload(value: AutomationConfigurationDraft): PrimaryAutomation {
+export function automationPayload(value: AutomationConfigurationDraft): MainAgentAutomation {
   return {
     hooks: value.hooks.map(pluginPayload),
     periodic: value.periodic.map(periodicPluginPayload),

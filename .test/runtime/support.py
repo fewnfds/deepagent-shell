@@ -77,8 +77,8 @@ def config(
 def message_envelope(
     payload: dict,
     *,
-    run_id: str = "run-primary",
-    agent_name: str = "Primary",
+    run_id: str = "run-main_agent",
+    agent_name: str = "Main Agent",
     namespace: list[str] | None = None,
     timestamp: int = 1,
 ) -> dict:

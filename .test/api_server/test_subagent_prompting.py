@@ -64,7 +64,7 @@ def test_named_subagent_can_reference_itself_with_matching_task_schema(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: next(models),
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         subagent = client.post(
             "/api/subagents",
             json=subagent_payload(
@@ -112,11 +112,11 @@ def test_named_subagent_can_reference_itself_with_matching_task_schema(
         )
         assert recursive_profile.status_code == 200, recursive_profile.text
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
                 "subagents": [{"subagent_id": subagent["id"]}],
@@ -126,7 +126,7 @@ def test_named_subagent_can_reference_itself_with_matching_task_schema(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Run recursion."}],
             },
         )
@@ -189,7 +189,7 @@ def test_subagent_prompt_override_uses_only_plugin_messages_and_delegation(
                 child_model if block["name"] == "Override child model" else parent_model
             ),
         )
-        primary = create_primary(client, include_filesystem=False)
+        main_agent = create_main_agent(client, include_filesystem=False)
 
         def create_model(name: str) -> dict:
             response = client.post(
@@ -276,11 +276,11 @@ def test_subagent_prompt_override_uses_only_plugin_messages_and_delegation(
         )
         assert delegation_response.status_code == 200, delegation_response.text
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {
                         "type": "subagent",
                         "block_id": delegation_response.json()["id"],
@@ -293,7 +293,7 @@ def test_subagent_prompt_override_uses_only_plugin_messages_and_delegation(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [
                     {"role": "system", "content": "CLIENT SYSTEM"},
                     {"role": "user", "content": "Earlier request"},

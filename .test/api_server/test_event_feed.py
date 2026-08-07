@@ -14,7 +14,7 @@ def test_event_feed_normalizes_four_sources_and_uses_numbered_pages(
         client.app.state.api_server_store.add_interception_record(
             request_id="request-interception",
             model="published-model",
-            agent_name="Published Primary",
+            agent_name="Published Main Agent",
             request_raw_json='{"message":"interception"}',
             model_request_raw_json='{"messages":[]}',
         )
@@ -25,7 +25,7 @@ def test_event_feed_normalizes_four_sources_and_uses_numbered_pages(
         client.app.state.runtime_diagnostics.request_started(
             request_id="request-runtime",
             model="published-model",
-            agent_name="Published Primary",
+            agent_name="Published Main Agent",
         )
 
         all_items = client.get("/api/event-feed", params=event_feed_params(page_size=100)).json()[
@@ -66,13 +66,13 @@ def test_event_feed_normalizes_four_sources_and_uses_numbered_pages(
         if item["inline_content"] is not None
     )
     api_item = next(item for item in all_items if item["source"] == "api_call")
-    assert api_item["summary"] == "Published Primary · completed · 200"
+    assert api_item["summary"] == "Published Main Agent · completed · 200"
     interception_item = next(
         item for item in all_items if item["source"] == "interception"
     )
-    assert interception_item["summary"] == "Published Primary · published-model"
+    assert interception_item["summary"] == "Published Main Agent · published-model"
     runtime_item = next(item for item in all_items if item["source"] == "runtime")
-    assert runtime_item["summary"] == "Published Primary · request started"
+    assert runtime_item["summary"] == "Published Main Agent · request started"
     items = [*first["items"], *second["items"]]
     assert len({(item["source"], item["id"]) for item in items}) == len(items)
     assert first["page"] == 1
@@ -112,7 +112,7 @@ def test_filtered_delete_covers_unloaded_matches_across_all_sources(
         client.app.state.api_server_store.add_interception_record(
             request_id="delete-interception",
             model="published-model",
-            agent_name="Published Primary",
+            agent_name="Published Main Agent",
             request_raw_json=json.dumps({"message": marker}),
             model_request_raw_json='{"messages":[]}',
         )
@@ -128,7 +128,7 @@ def test_filtered_delete_covers_unloaded_matches_across_all_sources(
             "info",
             request_id="delete-runtime",
             model="published-model",
-            agent_name="Published Primary",
+            agent_name="Published Main Agent",
             message=marker,
         )
 
@@ -222,7 +222,7 @@ def test_numbered_pages_keep_cross_source_items_with_the_same_timestamp(
         interception = client.app.state.api_server_store.add_interception_record(
             request_id="same-time-interception",
             model="published-model",
-            agent_name="Published Primary",
+            agent_name="Published Main Agent",
             request_raw_json='{"message":"interception"}',
             model_request_raw_json='{"messages":[]}',
         )
@@ -297,7 +297,7 @@ def test_numbered_runtime_pages_keep_every_item_in_a_same_timestamp_group(
                 level="info",
                 request_id=f"same-time-{sequence}",
                 model="published-model",
-                agent_name="Published Primary",
+                agent_name="Published Main Agent",
                 code="",
                 exception_type="",
                 message=f"event {sequence}",

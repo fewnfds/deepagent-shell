@@ -10,7 +10,7 @@ function run(id: string, timeline: AgentSessionTimelineRun['timeline']): AgentSe
     session_id: 'session-1',
     request_id: `request-${id}`,
     model: 'public-model',
-    agent_name: 'Primary',
+    agent_name: 'Main Agent',
     started_at: '2026-01-02T03:04:00Z',
     finished_at: '2026-01-02T03:04:05Z',
     status: 'completed',
@@ -33,7 +33,7 @@ describe('session Timeline projection', () => {
       runs: [
         run('one', [
           { step_id: 'event-0', sequence: 1, kind: 'lifecycle', timestamp: null, data: { status: 'running' } },
-          { step_id: 'event-1', sequence: 2, kind: 'agent_input', timestamp: null, data: { agent_type: 'primary' } },
+          { step_id: 'event-1', sequence: 2, kind: 'agent_input', timestamp: null, data: { agent_type: 'main_agent' } },
           { step_id: 'event-2', sequence: 3, kind: 'model_request', timestamp: null, data: { message_count: 0 } },
           { step_id: 'event-3', sequence: 4, kind: 'model_response', timestamp: null, data: { provider_finish_reason: 'tool_calls' } },
           { step_id: 'event-4', sequence: 5, kind: 'tool_call', timestamp: null, data: { tool_name: 'read_file' } },

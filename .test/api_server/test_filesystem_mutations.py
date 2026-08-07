@@ -63,7 +63,7 @@ def test_state_files_can_be_created_overwritten_and_deleted(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         filesystem = client.post(
             "/api/blocks/filesystem",
             json={
@@ -72,11 +72,11 @@ def test_state_files_can_be_created_overwritten_and_deleted(
             },
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": replace_capability_reference(
-                    primary, "filesystem", filesystem["id"]
+                    main_agent, "filesystem", filesystem["id"]
                 ),
                 "subagents": [],
             },
@@ -85,7 +85,7 @@ def test_state_files_can_be_created_overwritten_and_deleted(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Update the draft."}],
             },
         )
@@ -147,7 +147,7 @@ def test_mapped_directory_overwrite_and_recursive_delete_use_isolated_root(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         filesystem = client.post(
             "/api/blocks/filesystem",
             json={
@@ -160,11 +160,11 @@ def test_mapped_directory_overwrite_and_recursive_delete_use_isolated_root(
             },
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": replace_capability_reference(
-                    primary, "filesystem", filesystem["id"]
+                    main_agent, "filesystem", filesystem["id"]
                 ),
                 "subagents": [],
             },
@@ -173,7 +173,7 @@ def test_mapped_directory_overwrite_and_recursive_delete_use_isolated_root(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Clean the workspace."}],
             },
         )

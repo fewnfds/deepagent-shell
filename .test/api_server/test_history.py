@@ -11,11 +11,11 @@ def test_agent_session_header_groups_multiple_requests_and_deletes_as_one_sessio
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         first = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "first turn"}],
             },
         )
@@ -24,7 +24,7 @@ def test_agent_session_header_groups_multiple_requests_and_deletes_as_one_sessio
             "/v1/chat/completions",
             headers={"X-Agent-Session-ID": session_id},
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [
                     {"role": "user", "content": "first turn"},
                     {"role": "assistant", "content": "runtime reply"},
@@ -61,7 +61,7 @@ def test_agent_session_header_groups_multiple_requests_and_deletes_as_one_sessio
             for item in detail["runs"][0]["timeline"]
             if item["kind"] == "model_response"
         )
-        assert response_event["data"]["is_primary"] is True
+        assert response_event["data"]["is_main_agent"] is True
         assert "response_metadata" not in response_event["data"]
         assert isinstance(response_event["data"]["usage"], dict)
         assert deleted.json() == {"deleted": True}
@@ -74,7 +74,7 @@ def test_agent_session_bulk_delete_uses_the_listing_filters_and_whole_sessions(
         store = client.app.state.agent_sessions
         for index, (session_id, request_id, agent_name, status) in enumerate(
             (
-                ("session-alpha", "request-alpha", "Primary Agent", "completed"),
+                ("session-alpha", "request-alpha", "Main Agent", "completed"),
                 ("session-beta", "request-beta", "Worker", "failed"),
             )
         ):
@@ -94,11 +94,11 @@ def test_agent_session_bulk_delete_uses_the_listing_filters_and_whole_sessions(
 
         matching = client.get(
             "/api/agent-sessions",
-            params={"query": "ＡＬＰＨＡ", "agent": "primary", "status": "completed"},
+            params={"query": "ＡＬＰＨＡ", "agent": "Main Agent", "status": "completed"},
         ).json()
         deleted = client.post(
             "/api/agent-sessions/delete",
-            json={"query": "ＡＬＰＨＡ", "agent": "primary", "status": "completed"},
+            json={"query": "ＡＬＰＨＡ", "agent": "Main Agent", "status": "completed"},
         )
 
         assert matching["total"] == 1
@@ -117,7 +117,7 @@ def test_agent_session_timeline_loads_large_step_json_only_from_step_endpoint(
             session_id="lazy-session",
             request_id="lazy-request",
             model="model-1",
-            agent_name="Primary",
+            agent_name="Main Agent",
             started_at="2026-01-02T03:04:00Z",
             finished_at="2026-01-02T03:04:05Z",
             status="completed",
@@ -128,8 +128,8 @@ def test_agent_session_timeline_loads_large_step_json_only_from_step_endpoint(
                     "kind": "model_request",
                     "timestamp": "2026-01-02T03:04:01Z",
                     "data": {
-                        "agent_type": "primary",
-                        "agent_name": "Primary",
+                        "agent_type": "main_agent",
+                        "agent_name": "Main Agent",
                         "tool_call_id": "",
                         "model_name": "provider-model",
                         "message_count": 1,
@@ -165,8 +165,8 @@ def test_agent_session_timeline_loads_large_step_json_only_from_step_endpoint(
     assert timeline.status_code == 200
     assert run["input_message_count"] == 1
     assert run["timeline"][0]["data"] == {
-        "agent_type": "primary",
-        "agent_name": "Primary",
+        "agent_type": "main_agent",
+        "agent_name": "Main Agent",
         "tool_call_id": "",
         "model_name": "provider-model",
         "message_count": 1,
@@ -212,7 +212,7 @@ def test_agent_session_history_aggregates_complete_token_usage_without_schema_ch
             session_id="usage-session",
             request_id="usage-request",
             model="model-1",
-            agent_name="Primary",
+            agent_name="Main Agent",
             started_at="2026-01-02T03:04:00Z",
             finished_at="2026-01-02T03:04:05Z",
             status="completed",
@@ -232,7 +232,7 @@ def test_agent_session_history_aggregates_complete_token_usage_without_schema_ch
             session_id="usage-unreported",
             request_id="usage-unreported-request",
             model="model-1",
-            agent_name="Primary",
+            agent_name="Main Agent",
             started_at="2026-01-02T03:05:00Z",
             finished_at="2026-01-02T03:05:05Z",
             status="completed",
@@ -270,7 +270,7 @@ def test_non_test_history_is_filterable_downloadable_and_batch_deletable(
 ) -> None:
     secret = "history-inference-key"
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         saved = client.put(
             "/api/api-server",
             json={"api_key": {"operation": "replace", "value": secret}},
@@ -281,7 +281,7 @@ def test_non_test_history_is_filterable_downloadable_and_batch_deletable(
             "/v1/chat/completions",
             headers=headers,
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "alpha-history"}],
             },
         )
@@ -289,7 +289,7 @@ def test_non_test_history_is_filterable_downloadable_and_batch_deletable(
             "/v1/chat/completions",
             headers=headers,
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "beta-history"}],
                 "stream": "yes",
             },
@@ -302,7 +302,7 @@ def test_non_test_history_is_filterable_downloadable_and_batch_deletable(
                 "X-Agent-Session-ID": "invalid session id",
             },
             json={
-                "model": "missing-primary",
+                "model": "missing-main-agent",
                 "messages": [{"role": "user", "content": "gamma-history"}],
                 "stream": "yes",
             },
@@ -351,7 +351,7 @@ def test_non_test_history_is_filterable_downloadable_and_batch_deletable(
     assert len(completed_runtime["items"]) == 1
     assert missing_history["items"] == []
     assert missing_sessions["total"] == 0
-    assert detail["agent_name"] == "Published Primary"
+    assert detail["agent_name"] == "Published Main Agent"
     assert detail["status"] == "completed"
     assert detail["finished_at"]
     assert "alpha-history" in detail["request_body"]

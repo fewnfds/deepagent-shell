@@ -8,7 +8,7 @@ def test_subagent_references_report_duplicate_entity_name_and_missing_target(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         first = client.post(
             "/api/subagents",
             json=subagent_payload("First worker", name="worker"),
@@ -18,8 +18,8 @@ def test_subagent_references_report_duplicate_entity_name_and_missing_target(
             json=subagent_payload("Second worker", name="worker"),
         ).json()
         payload = {
-            "name": primary["name"],
-            "capability_refs": primary["capability_refs"],
+            "name": main_agent["name"],
+            "capability_refs": main_agent["capability_refs"],
             "subagents": [
                 {"subagent_id": first["id"]},
                 {"subagent_id": first["id"]},
@@ -30,9 +30,9 @@ def test_subagent_references_report_duplicate_entity_name_and_missing_target(
 
         draft = client.post(
             "/api/validation/draft",
-            json={"target": {"kind": "primary"}, "payload": payload},
+            json={"target": {"kind": "main_agent"}, "payload": payload},
         )
-        saved = client.put(f"/api/primary-agents/{primary['id']}", json=payload)
+        saved = client.put(f"/api/main-agents/{main_agent['id']}", json=payload)
 
     expected = {
         ("contract.subagent_reference_duplicate", "subagents[1].subagent_id"),

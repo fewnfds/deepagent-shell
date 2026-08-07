@@ -36,7 +36,7 @@ def test_selected_skill_is_mounted_on_shared_filesystem(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         filesystem = client.post(
             "/api/blocks/filesystem", json={"name": "Skill filesystem"}
         ).json()
@@ -45,12 +45,12 @@ def test_selected_skill_is_mounted_on_shared_filesystem(
             json={"name": "Runtime skill", "skills": ["outline"]},
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
                     *replace_capability_reference(
-                        primary, "filesystem", filesystem["id"]
+                        main_agent, "filesystem", filesystem["id"]
                     ),
                     {"type": "skill", "block_id": skill["id"]},
                 ],
@@ -61,7 +61,7 @@ def test_selected_skill_is_mounted_on_shared_filesystem(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Use the outline skill."}],
             },
         )
@@ -100,7 +100,7 @@ def test_missing_selected_skill_fails_before_provider(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         filesystem = client.post(
             "/api/blocks/filesystem", json={"name": "Missing Skill filesystem"}
         ).json()
@@ -109,12 +109,12 @@ def test_missing_selected_skill_fails_before_provider(
             json={"name": "Missing runtime Skill", "skills": ["disappearing"]},
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
                     *replace_capability_reference(
-                        primary, "filesystem", filesystem["id"]
+                        main_agent, "filesystem", filesystem["id"]
                     ),
                     {"type": "skill", "block_id": skill["id"]},
                 ],
@@ -126,7 +126,7 @@ def test_missing_selected_skill_fails_before_provider(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Do not call provider."}],
             },
         )

@@ -7,40 +7,40 @@ from agent_shell.api import api_server
 from .support import *
 
 
-def test_models_publish_only_primary_agents_and_each_runs_the_minimal_runtime(
+def test_models_publish_only_main_agents_and_each_runs_the_minimal_runtime(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
 
         models = client.get("/v1/models")
         test_reply = client.post(
             "/v1/chat/completions",
             json={"model": "test", "messages": [{"role": "user", "content": "hello"}]},
         )
-        primary_reply = client.post(
+        main_agent_reply = client.post(
             "/v1/chat/completions",
-            json={"model": primary["name"], "messages": [{"role": "user", "content": "run"}]},
+            json={"model": main_agent["name"], "messages": [{"role": "user", "content": "run"}]},
         )
         internal_uuid_reply = client.post(
             "/v1/chat/completions",
-            json={"model": primary["id"], "messages": [{"role": "user", "content": "run"}]},
+            json={"model": main_agent["id"], "messages": [{"role": "user", "content": "run"}]},
         )
 
     assert models.status_code == 200
-    assert [item["id"] for item in models.json()["data"]] == [primary["name"]]
+    assert [item["id"] for item in models.json()["data"]] == [main_agent["name"]]
     assert test_reply.status_code == 404
     assert test_reply.json()["error"]["code"] == "model_not_found"
     assert internal_uuid_reply.status_code == 404
     assert internal_uuid_reply.json()["error"]["code"] == "model_not_found"
-    assert primary_reply.status_code == 200, primary_reply.text
-    assert primary_reply.json()["choices"][0]["message"] == {
+    assert main_agent_reply.status_code == 200, main_agent_reply.text
+    assert main_agent_reply.json()["choices"][0]["message"] == {
         "role": "assistant",
         "content": "runtime reply",
     }
 
 
-def test_primary_without_plugins_does_not_receive_client_messages(
+def test_main_agent_without_plugins_does_not_receive_client_messages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     model = RecordingFakeListChatModel(responses=["no relay"])
@@ -50,11 +50,11 @@ def test_primary_without_plugins_does_not_receive_client_messages(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client, include_filesystem=False)
+        main_agent = create_main_agent(client, include_filesystem=False)
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [
                     {"role": "system", "content": "CLIENT SYSTEM"},
                     {"role": "user", "content": "CLIENT USER"},
@@ -73,7 +73,7 @@ def test_primary_without_plugins_does_not_receive_client_messages(
     )
 
 
-def test_primary_runtime_returns_stable_input_message_errors(
+def test_main_agent_runtime_returns_stable_input_message_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cases = (
@@ -90,11 +90,11 @@ def test_primary_runtime_returns_stable_input_message_errors(
     )
 
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         responses = [
             client.post(
                 "/v1/chat/completions",
-                json={"model": primary["name"], "messages": messages},
+                json={"model": main_agent["name"], "messages": messages},
             )
             for messages, _expected in cases
         ]
@@ -109,12 +109,12 @@ def test_chat_completion_body_limit_rejects_before_agent_start(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         monkeypatch.setattr(api_server, "MAX_CHAT_COMPLETION_BODY_BYTES", 128)
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "x" * 256}],
             },
         )
@@ -164,7 +164,7 @@ def test_initial_message_limit_is_configurable_and_rejects_before_agent_start(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         initial = client.get("/api/api-server")
         saved = client.put(
             "/api/api-server",
@@ -190,7 +190,7 @@ def test_initial_message_limit_is_configurable_and_rejects_before_agent_start(
         accepted = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [
                     {"role": "user", "content": "accepted first"},
                     {"role": "user", "content": "accepted second"},
@@ -208,7 +208,7 @@ def test_initial_message_limit_is_configurable_and_rejects_before_agent_start(
         rejected = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [
                     {"role": "user", "content": "oversized first"},
                     {"role": "assistant", "content": "oversized second"},
@@ -259,7 +259,7 @@ def test_unused_openai_fields_are_ignored_without_overriding_model_configuration
             "agent_shell.runtime.agent_builder._build_chat_model",
             configured_model,
         )
-        primary = create_primary(
+        main_agent = create_main_agent(
             client,
             provider_settings={
                 "temperature": 0.25,
@@ -270,7 +270,7 @@ def test_unused_openai_fields_are_ignored_without_overriding_model_configuration
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Use saved settings."}],
                 "stream": False,
                 "temperature": 1.5,
@@ -310,14 +310,14 @@ def test_missing_required_output_block_fails_before_provider_without_fallback(
             "agent_shell.runtime.agent_builder._build_chat_model",
             provider_model,
         )
-        primary = create_primary(client)
-        output_id = capability_reference_id(primary, "output-mode")
+        main_agent = create_main_agent(client)
+        output_id = capability_reference_id(main_agent, "output-mode")
         with closing(sqlite3.connect(database_path)) as connection, connection:
             connection.execute("DELETE FROM blocks WHERE id = ?", (output_id,))
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Do not fall back."}],
             },
         )
@@ -344,7 +344,7 @@ def test_invalid_stored_output_mode_is_preserved_and_rejected_before_user_code(
             "agent_shell.runtime.agent_builder._build_chat_model",
             provider_model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         tools_dir = tmp_path / "data" / "resources" / "custom_tools"
         tools_dir.mkdir(exist_ok=True)
         (tools_dir / "side_effect_tool.py").write_text(
@@ -362,11 +362,11 @@ def test_invalid_stored_output_mode_is_preserved_and_rejected_before_user_code(
             json={"name": "Selected side effect", "tools": ["side_effect_tool"]},
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {"type": "custom-tool", "block_id": custom["id"]},
                 ],
                 "subagents": [],
@@ -374,7 +374,7 @@ def test_invalid_stored_output_mode_is_preserved_and_rejected_before_user_code(
         )
         assert updated.status_code == 200, updated.text
 
-        output_id = capability_reference_id(primary, "output-mode")
+        output_id = capability_reference_id(main_agent, "output-mode")
         with closing(sqlite3.connect(database_path)) as connection, connection:
             row = connection.execute(
                 "SELECT payload FROM blocks WHERE id = ?", (output_id,)
@@ -396,7 +396,7 @@ def test_invalid_stored_output_mode_is_preserved_and_rejected_before_user_code(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Do not run."}],
             },
         )

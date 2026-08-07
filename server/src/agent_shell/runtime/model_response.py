@@ -81,7 +81,7 @@ class ModelResponse:
     node: str
     run_id: str
     message_id: str
-    is_primary: bool
+    is_main_agent: bool
     usage: dict[str, Any] = field(default_factory=dict)
     start_metadata: dict[str, Any] = field(default_factory=dict)
     response_metadata: dict[str, Any] = field(default_factory=dict)
@@ -98,7 +98,7 @@ class ModelResponse:
             "node": self.node,
             "run_id": self.run_id,
             "message_id": self.message_id,
-            "is_primary": self.is_primary,
+            "is_main_agent": self.is_main_agent,
             "provider_finish_reason": self.provider_finish_reason,
             "finish_reason_source": self.finish_reason_source,
             "finish_reason_category": finish_reason_category(
@@ -123,9 +123,9 @@ class ModelResponseTracker:
         self._start_metadata: dict[str, dict[str, object]] = {}
         self._stream_diagnostics: dict[str, dict[str, int]] = {}
         self._content_blocks: dict[str, dict[int, dict[str, object]]] = {}
-        self.last_primary_finish_reason: str | None = None
-        self.last_primary_finish_reason_source: str | None = None
-        self.last_primary_response: ModelResponse | None = None
+        self.last_main_agent_finish_reason: str | None = None
+        self.last_main_agent_finish_reason_source: str | None = None
+        self.last_main_agent_response: ModelResponse | None = None
 
     def begin(self, run_key: str, metadata: object) -> None:
         self._start_metadata[run_key] = (
@@ -163,16 +163,16 @@ class ModelResponseTracker:
         run_id: str,
         run_key: str,
         message_id: str,
-        is_primary: bool,
+        is_main_agent: bool,
         usage: dict[str, object],
         response_metadata: dict[str, object],
         additional_kwargs: dict[str, object],
         content_blocks: list[dict[str, object]] | None = None,
     ) -> None:
         reason, source = extract_provider_finish_reason(response_metadata)
-        if is_primary:
-            self.last_primary_finish_reason = reason
-            self.last_primary_finish_reason_source = source
+        if is_main_agent:
+            self.last_main_agent_finish_reason = reason
+            self.last_main_agent_finish_reason_source = source
         response = ModelResponse(
             timestamp=timestamp,
             namespace=namespace,
@@ -180,7 +180,7 @@ class ModelResponseTracker:
             node=node,
             run_id=run_id,
             message_id=message_id,
-            is_primary=is_primary,
+            is_main_agent=is_main_agent,
             usage=dict(usage),
             start_metadata=dict(self._start_metadata.get(run_key, {})),
             response_metadata=dict(response_metadata),
@@ -199,7 +199,7 @@ class ModelResponseTracker:
             provider_finish_reason=reason,
             finish_reason_source=source,
         )
-        if is_primary:
-            self.last_primary_response = deepcopy(response)
+        if is_main_agent:
+            self.last_main_agent_response = deepcopy(response)
         for observer in self._observers:
             observer(response)

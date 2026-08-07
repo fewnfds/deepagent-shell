@@ -447,7 +447,7 @@ class AgentBuilder:
 
     async def build(
         self,
-        primary_id: str,
+        main_agent_id: str,
         raw_messages: object,
         *,
         model_request_interceptor: Callable[[dict[str, Any]], Any] | None = None,
@@ -459,10 +459,10 @@ class AgentBuilder:
         # Validate the immutable request snapshot before any selected user module
         # can be imported or any optional capability can be materialized.
         messages = validate_client_messages(raw_messages)
-        report, assembly = self._validation.resolve_primary(primary_id)
+        report, assembly = self._validation.resolve_main_agent(main_agent_id)
         if not report.valid:
             issue = report.issues[0]
-            if issue.code == "assembly.primary_not_found":
+            if issue.code == "assembly.main_agent_not_found":
                 status_code = 404
             elif issue.code in {
                 "assembly.referenced_block_invalid",
@@ -478,7 +478,7 @@ class AgentBuilder:
                 validation_report=report,
             )
         assert assembly is not None
-        primary = assembly.primary
+        main_agent = assembly.main_agent
         references = assembly.references
         selected_blocks = assembly.blocks
         output_config = OutputModeBlock.model_validate(
@@ -490,12 +490,12 @@ class AgentBuilder:
         ).model_dump(mode="json")
         resolved_subagents = assembly.subagents
 
-        primary_id = str(primary.get("id", primary_id))
-        primary_name = str(primary["name"])
+        main_agent_id = str(main_agent.get("id", main_agent_id))
+        main_agent_name = str(main_agent["name"])
         automation = AutomationRuntime.from_assembly(
             assembly,
             messages,
-            primary_id=primary_id,
+            main_agent_id=main_agent_id,
             request_id=request_id,
             plugins_dir=self._automation_scripts_dir,
             skills_dir=self._skills_dir,
@@ -503,18 +503,18 @@ class AgentBuilder:
         )
         self._automation_runtime = automation
         await automation.prepare()
-        prepared_messages = automation.messages_for(primary_id)
+        prepared_messages = automation.messages_for(main_agent_id)
         materialized = self._materialize_profile(
             references,
             selected_blocks,
             filesystem_mode=assembly.filesystem_mode,
-            scope="primary",
-            owner_id=primary_id,
-            owner_name=primary_name,
+            scope="main_agent",
+            owner_id=main_agent_id,
+            owner_name=main_agent_name,
         )
         constructor: dict[str, object] = {
             "model": materialized.model,
-            "name": str(primary["name"]),
+            "name": str(main_agent["name"]),
             "context_schema": AgentRequestContext,
         }
         if materialized.system_prompt is not None:
@@ -533,8 +533,8 @@ class AgentBuilder:
         middleware = [
             ToolErrorBoundaryMiddleware(),
             AgentInvocationMiddleware(
-                agent_type="primary",
-                agent_name=primary_name,
+                agent_type="main_agent",
+                agent_name=main_agent_name,
                 observer=agent_input_observer,
             ),
             *materialized.middleware,
@@ -550,7 +550,7 @@ class AgentBuilder:
         input_state: dict[str, Any] = {"messages": prepared_messages}
         request_context = cast(
             AgentRequestContext,
-            automation.root_context(primary_id),
+            automation.root_context(main_agent_id),
         )
 
         compiled_subagents: list[dict[str, Any]] = []
@@ -588,8 +588,8 @@ class AgentBuilder:
                 make_model_request_observer_middleware(
                     model_request_observer,
                     context={
-                        "agent_type": "primary",
-                        "agent_name": primary_name,
+                        "agent_type": "main_agent",
+                        "agent_name": main_agent_name,
                         "tool_call_id": "",
                     },
                 )
@@ -622,32 +622,32 @@ class AgentBuilder:
                 )
                 if replacement is not None:
                     middleware.append(replacement)
-            validate_middleware_names(middleware, owner="Primary Agent")
-            primary_middleware_names = {
+            validate_middleware_names(middleware, owner="Main Agent")
+            main_agent_middleware_names = {
                 getattr(item, "name", None) for item in middleware
             }
             validate_model_visible_tool_names(
                 tools=materialized.tools,
                 middleware=middleware,
-                owner="Primary Agent",
+                owner="Main Agent",
                 default_tool_names=(
                     ()
-                    if "FilesystemMiddleware" in primary_middleware_names
+                    if "FilesystemMiddleware" in main_agent_middleware_names
                     else FILESYSTEM_TOOL_NAMES
                 )
                 + (
                     ("task",)
                     if resolved_subagents
-                    and "SubAgentMiddleware" not in primary_middleware_names
+                    and "SubAgentMiddleware" not in main_agent_middleware_names
                     else ()
                 ),
             )
         except AgentRuntimeError as exc:
             raise reported_error(
                 exc,
-                scope="primary",
-                owner_id=primary_id,
-                owner_name=primary_name,
+                scope="main_agent",
+                owner_id=main_agent_id,
+                owner_name=main_agent_name,
                 path="capability_refs",
             ) from exc
 
@@ -658,10 +658,10 @@ class AgentBuilder:
             constructor,
             model_provider=materialized.model_provider,
             model_name=materialized.model_name,
-            scope="primary",
-            owner_id=primary_id,
-            owner_name=primary_name,
-            subject="Primary Agent",
+            scope="main_agent",
+            owner_id=main_agent_id,
+            owner_name=main_agent_name,
+            subject="Main Agent",
             path="capability_refs",
         )
 
@@ -669,7 +669,7 @@ class AgentBuilder:
             graph=graph,
             input_state=input_state,
             output_config=output_config,
-            agent_name=str(primary["name"]),
+            agent_name=str(main_agent["name"]),
             context=request_context,
             automation=automation,
         )

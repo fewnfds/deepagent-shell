@@ -243,7 +243,7 @@ def create_app(
 
     app = FastAPI(
         title=settings.app_name,
-        description="Agent configuration shell with OpenAI-compatible Primary execution.",
+        description="Agent configuration shell with OpenAI-compatible Main Agent execution.",
         lifespan=lifespan,
         openapi_url=None,
         docs_url=None,

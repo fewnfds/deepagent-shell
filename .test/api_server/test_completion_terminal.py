@@ -52,7 +52,7 @@ def test_completion_finalizer_projects_terminal_once() -> None:
             request_id="request-1",
             session_id="session-1",
             model="model-1",
-            agent_name="Primary",
+            agent_name="Main Agent",
             started_at="2026-08-03T00:00:00.000Z",
             request_body='{"model":"model-1"}',
             input_messages=[],

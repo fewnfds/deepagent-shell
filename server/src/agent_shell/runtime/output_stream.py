@@ -127,7 +127,7 @@ class ModelCallBoundary:
 
 
 @dataclass(frozen=True, slots=True)
-class PrimaryMediaBlock:
+class MainAgentMediaBlock:
     timestamp: str
     namespace: str
     agent_name: str
@@ -154,35 +154,35 @@ class V3EventNormalizer:
 
     def __init__(
         self,
-        primary_name: str,
+        main_agent_name: str,
         model_response_observers: tuple[Callable[[ModelResponse], None], ...] = (),
     ) -> None:
-        self._primary_name = primary_name
+        self._main_agent_name = main_agent_name
         self._sequence = 0
         self._blocks: dict[tuple[str, int], _MessageBlock] = {}
         self._message_ids: dict[str, str] = {}
-        self._primary_message_runs: set[str] = set()
-        self._primary_ai_runs: dict[str, bool] = {}
+        self._main_agent_message_runs: set[str] = set()
+        self._main_agent_ai_runs: dict[str, bool] = {}
         self._responses = ModelResponseTracker(model_response_observers)
         self._tool_names: dict[str, str] = {}
         self._subagent_runs: dict[str, tuple[str, str]] = {}
         self.usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
     @property
-    def primary_message_active(self) -> bool:
-        return bool(self._primary_message_runs)
+    def main_agent_message_active(self) -> bool:
+        return bool(self._main_agent_message_runs)
 
     @property
     def finish_reason(self) -> str:
-        return public_finish_reason(self._responses.last_primary_finish_reason)
+        return public_finish_reason(self._responses.last_main_agent_finish_reason)
 
     @property
     def finish_reason_source(self) -> str | None:
-        return self._responses.last_primary_finish_reason_source
+        return self._responses.last_main_agent_finish_reason_source
 
     @property
-    def last_primary_response(self) -> ModelResponse | None:
-        return self._responses.last_primary_response
+    def last_main_agent_response(self) -> ModelResponse | None:
+        return self._responses.last_main_agent_response
 
     def lifecycle(
         self,
@@ -204,7 +204,7 @@ class V3EventNormalizer:
 
     def feed(
         self, envelope: object
-    ) -> list[OutputEvent | ModelCallBoundary | PrimaryMediaBlock]:
+    ) -> list[OutputEvent | ModelCallBoundary | MainAgentMediaBlock]:
         if not isinstance(envelope, dict):
             return []
         method = str(envelope.get("method") or "")
@@ -295,13 +295,13 @@ class V3EventNormalizer:
         payload, raw_metadata = data
         metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
         node = str(metadata.get("langgraph_node") or "")
-        agent_name = str(metadata.get("lc_agent_name") or self._primary_name)
+        agent_name = str(metadata.get("lc_agent_name") or self._main_agent_name)
         run_id = str(metadata.get("run_id") or "")
         run_key = run_id or f"{namespace}:{agent_name}"
-        is_primary = agent_name == self._primary_name and namespace == "root"
+        is_main_agent = agent_name == self._main_agent_name and namespace == "root"
 
         if not isinstance(payload, dict):
-            if not is_primary:
+            if not is_main_agent:
                 return []
             usage = getattr(payload, "usage_metadata", None)
             response_metadata = getattr(payload, "response_metadata", None)
@@ -323,7 +323,7 @@ class V3EventNormalizer:
                 run_id=run_id,
                 run_key=run_key,
                 message_id=str(getattr(payload, "id", "") or ""),
-                is_primary=True,
+                is_main_agent=True,
                 usage=usage_data,
                 response_metadata=metadata_data,
                 additional_kwargs=additional_data,
@@ -350,11 +350,11 @@ class V3EventNormalizer:
             message_id = str(payload.get("id") or payload.get("message_id") or "")
             self._message_ids[run_key] = message_id
             self._responses.begin(run_key, payload.get("metadata"))
-            is_primary_ai = is_primary and str(payload.get("role") or "ai") == "ai"
-            self._primary_ai_runs[run_key] = is_primary_ai
-            if is_primary_ai:
-                self._primary_message_runs.add(run_key)
-            return [ModelCallBoundary(run_key)] if is_primary_ai else []
+            is_main_agent_ai = is_main_agent and str(payload.get("role") or "ai") == "ai"
+            self._main_agent_ai_runs[run_key] = is_main_agent_ai
+            if is_main_agent_ai:
+                self._main_agent_message_runs.add(run_key)
+            return [ModelCallBoundary(run_key)] if is_main_agent_ai else []
         if event_name == "message-finish":
             usage = payload.get("usage")
             usage_data = usage if isinstance(usage, dict) else {}
@@ -376,7 +376,7 @@ class V3EventNormalizer:
                     + incomplete_block_count
                 )
             self._merge_usage(usage_data)
-            is_primary_message = self._primary_ai_runs.get(run_key, is_primary)
+            is_main_agent_message = self._main_agent_ai_runs.get(run_key, is_main_agent)
             self._responses.record(
                 timestamp=timestamp,
                 namespace=namespace,
@@ -385,7 +385,7 @@ class V3EventNormalizer:
                 run_id=run_id,
                 run_key=run_key,
                 message_id=self._message_ids.get(run_key, ""),
-                is_primary=is_primary_message,
+                is_main_agent=is_main_agent_message,
                 usage=usage_data,
                 response_metadata=metadata_data,
                 additional_kwargs=additional_data,
@@ -393,9 +393,9 @@ class V3EventNormalizer:
             self._discard_message(run_key)
             return []
         if event_name == "error":
-            is_primary_message = self._primary_ai_runs.get(run_key, is_primary)
+            is_main_agent_message = self._main_agent_ai_runs.get(run_key, is_main_agent)
             self._discard_message(run_key)
-            if is_primary_message:
+            if is_main_agent_message:
                 raise AgentRuntimeError(
                     "agent_execution_failed",
                     "The model response stream failed.",
@@ -403,7 +403,7 @@ class V3EventNormalizer:
                 )
             return []
 
-        if not self._primary_ai_runs.get(run_key, is_primary):
+        if not self._main_agent_ai_runs.get(run_key, is_main_agent):
             return []
 
         index = payload.get("index")
@@ -556,13 +556,13 @@ class V3EventNormalizer:
         namespace: str,
         agent_name: str,
         node: str,
-    ) -> list[OutputEvent | PrimaryMediaBlock]:
+    ) -> list[OutputEvent | MainAgentMediaBlock]:
         message_id = str(getattr(message, "id", "") or "")
         blocks = getattr(message, "content_blocks", None)
         if not isinstance(blocks, list):
             text = _message_text(message)
             blocks = [{"type": "text", "text": text}] if text else []
-        events: list[OutputEvent | PrimaryMediaBlock] = []
+        events: list[OutputEvent | MainAgentMediaBlock] = []
         for index, content in enumerate(blocks):
             if not isinstance(content, dict):
                 continue
@@ -590,7 +590,7 @@ class V3EventNormalizer:
         *,
         block_index: int = 0,
         stream_id: str = "",
-    ) -> list[OutputEvent | PrimaryMediaBlock]:
+    ) -> list[OutputEvent | MainAgentMediaBlock]:
         block_type = str(content.get("type") or "")
         if block_type in {"text", "reasoning"}:
             return [
@@ -607,7 +607,7 @@ class V3EventNormalizer:
             ]
         if block_type in {"image", "audio", "video", "file"}:
             return [
-                PrimaryMediaBlock(
+                MainAgentMediaBlock(
                     timestamp=block.timestamp,
                     namespace=block.namespace,
                     agent_name=block.agent_name,
@@ -706,7 +706,7 @@ class V3EventNormalizer:
         return []
 
     def media_notification(
-        self, block: PrimaryMediaBlock, message: str
+        self, block: MainAgentMediaBlock, message: str
     ) -> OutputEvent:
         return self._event(
             "assistant_text",
@@ -818,18 +818,18 @@ class V3EventNormalizer:
             self._blocks.pop(key, None)
         self._message_ids.pop(run_key, None)
         self._responses.discard(run_key)
-        self._primary_ai_runs.pop(run_key, None)
-        self._primary_message_runs.discard(run_key)
+        self._main_agent_ai_runs.pop(run_key, None)
+        self._main_agent_message_runs.discard(run_key)
 
-    def close_primary_messages(self) -> None:
+    def close_main_agent_messages(self) -> None:
         """Discard normalization state after the graph stream is exhausted."""
 
-        run_keys = self._primary_message_runs | {key[0] for key in self._blocks}
+        run_keys = self._main_agent_message_runs | {key[0] for key in self._blocks}
         for run_key in sorted(run_keys):
             self._discard_message(run_key)
 
-    def abort_primary_messages(self) -> None:
-        run_keys = self._primary_message_runs | {key[0] for key in self._blocks}
+    def abort_main_agent_messages(self) -> None:
+        run_keys = self._main_agent_message_runs | {key[0] for key in self._blocks}
         for run_key in list(run_keys):
             self._discard_message(run_key)
 
@@ -868,7 +868,7 @@ class V3EventNormalizer:
             sequence=self._sequence,
             timestamp=timestamp,
             namespace=namespace,
-            agent_name=agent_name or self._primary_name,
+            agent_name=agent_name or self._main_agent_name,
             node=node,
             message=message,
             values={key: str(value or "") for key, value in values.items()},
@@ -879,6 +879,6 @@ class V3EventNormalizer:
 __all__ = [
     "ModelCallBoundary",
     "OutputEvent",
-    "PrimaryMediaBlock",
+    "MainAgentMediaBlock",
     "V3EventNormalizer",
 ]

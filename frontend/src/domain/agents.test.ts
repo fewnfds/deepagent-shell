@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  blankPrimaryAgent,
+  blankMainAgent,
   blankSubagent,
   normalizeSubagentReference,
   overrideSelection,
-  primaryAgentPayload,
+  mainAgentPayload,
   setOverrideSelection,
   setReference,
   subagentPayload,
@@ -13,12 +13,12 @@ import {
 
 describe('agent profile adapters', () => {
   it('keeps explicit UUID references and never derives them from names', () => {
-    const draft = blankPrimaryAgent()
+    const draft = blankMainAgent()
     draft.name = 'Repeated display name'
     setReference(draft, 'model', '00000000-0000-0000-0000-000000000001')
     draft.subagents.push({ subagent_id: '00000000-0000-0000-0000-000000000020' })
 
-    expect(primaryAgentPayload(draft)).toEqual({
+    expect(mainAgentPayload(draft)).toEqual({
       name: 'Repeated display name',
       capability_refs: [{
         type: 'model',

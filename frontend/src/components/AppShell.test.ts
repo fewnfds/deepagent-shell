@@ -82,7 +82,7 @@ async function mountShell(path = '/', api = createShellApi()) {
       '/system/events',
       '/system/agent-sessions',
       '/style-lab',
-      '/agents/primary',
+      '/agents/main',
       '/agents/subagents',
       '/components/model',
       '/components/skill',
@@ -138,7 +138,7 @@ describe('AppShell', () => {
     expect(shell.get('a[href="/"] .nav-icon').classes()).toContain('bi-house')
     expect(shell.find('.app-sidebar .nav-treeview').exists()).toBe(false)
     expect(shell.find('a[href="/system/files"]').exists()).toBe(false)
-    expect(shell.find('a[href="/agents/primary"]').exists()).toBe(false)
+    expect(shell.find('a[href="/agents/main"]').exists()).toBe(false)
     expect(shell.find('a[href^="/components/"]').exists()).toBe(false)
     expect(shell.get('a[href="/style-lab"] .nav-icon').classes()).toContain('bi-sliders')
     expect(shell.findAll('.app-sidebar .nav-link')).toHaveLength(7)

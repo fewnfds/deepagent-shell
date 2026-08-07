@@ -18,7 +18,7 @@ Windows 源码 Clone 从项目根运行：
 
 - 【首页】：API Server 地址、API Key、消息上限、启动/停止与配置告警；
 - 【系统】：系统配置、文件管理、日志中心和历史会话；
-- 【Agent】：Primary Agent 与可复用 Subagent 实体；
+- 【Agent】：Main Agent 与可复用 Subagent 实体；
 - 【组件】：十二类可复用能力；
 - 【自动化】：查看已安装 Python 自动化插件、入口和第三方依赖状态；
 - 【配置仓库】：查看、复制、编辑和删除全部配置；
@@ -32,11 +32,11 @@ Windows 源码 Clone 从项目根运行：
 
 1. 在【组件 / 模型】保存一个可用模型。
 2. 在【组件 / 输出模式】保存一套输出模板。
-3. 在【Agent / Primary Agent】填写名称并选择这两个必选组件。
+3. 在【Agent / Main Agent】填写名称并选择这两个必选组件。
 4. 需要提示词、文件、工具或其他能力时再选择相应可选组件。
-5. 保存 Primary；名称会出现在 `/v1/models`。
+5. 保存 Main Agent；名称会出现在 `/v1/models`。
 6. 在首页设置 API Key 并启动 API Server。
 
 页面草稿会提交给服务端校验，保存时服务端再次验证完整引用。删除操作集中在【配置仓库】；删除可选组件或
-Subagent 时会同步摘除 Agent 引用，仍被 Primary 使用的必选模型和输出模式需要先替换。自动化插件 binding
-直接在 Primary/Subagent 页面配置，插件文件在【系统 / 文件管理】维护。
+Subagent 时会同步摘除 Agent 引用，仍被 Main Agent 使用的必选模型和输出模式需要先替换。自动化插件 binding
+直接在 Main Agent/Subagent 页面配置，插件文件在【系统 / 文件管理】维护。

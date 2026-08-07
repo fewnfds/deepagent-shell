@@ -6,15 +6,15 @@ def test_selected_output_mode_wraps_the_same_timeline_for_both_transports(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
-        primary = attach_output_mode(
+        main_agent = attach_output_mode(
             client,
-            create_primary(client),
+            create_main_agent(client),
             filter_mappings=[
                 {"field": "lifecycle.phase", "value": "start"}
             ],
         )
         request = {
-            "model": primary["name"],
+            "model": main_agent["name"],
             "messages": [{"role": "user", "content": "show the timeline"}],
         }
         plain = client.post("/v1/chat/completions", json=request)
@@ -49,11 +49,11 @@ def test_provider_failure_uses_stable_safe_error(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "fail safely"}],
             },
         )
@@ -63,7 +63,7 @@ def test_provider_failure_uses_stable_safe_error(
         streamed = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "fail stream safely"}],
                 "stream": True,
             },
@@ -93,7 +93,7 @@ def test_model_request_settings_reach_the_final_langchain_request(
         "required": ["answer"],
     }
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(
+        main_agent = create_main_agent(
             client,
             model_request_settings={
                 "tool_choice": "required",
@@ -105,7 +105,7 @@ def test_model_request_settings_reach_the_final_langchain_request(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Capture settings."}],
             },
         )
@@ -149,7 +149,7 @@ def test_global_interception_captures_final_prompt_tools_and_raw_request(
                 responses=["provider must not run"]
             ),
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         write_automation_script(
             tmp_path,
             "capture-message-rewrite",
@@ -179,7 +179,7 @@ def test_global_interception_captures_final_prompt_tools_and_raw_request(
         }
         prompt = client.post(
             "/api/blocks/system-prompt",
-            json={"name": "Captured prompt", "system_prompt": "PRIMARY"},
+            json={"name": "Captured prompt", "system_prompt": "MAIN AGENT"},
         ).json()
         todo = client.post(
             "/api/blocks/todo-list",
@@ -199,13 +199,13 @@ def test_global_interception_captures_final_prompt_tools_and_raw_request(
             json=output_mode_payload("Interception timeline"),
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
                     *[
                         item
-                        for item in primary["capability_refs"]
+                        for item in main_agent["capability_refs"]
                         if item["type"] != "output-mode"
                     ],
                     {"type": "system-prompt", "block_id": prompt["id"]},
@@ -221,7 +221,7 @@ def test_global_interception_captures_final_prompt_tools_and_raw_request(
         armed = client.put("/api/interception-test", json={"enabled": True})
         assert armed.status_code == 200, armed.text
         request_payload = {
-            "model": primary["name"],
+            "model": main_agent["name"],
             "messages": [
                 {"role": "system", "content": "CLIENT HEAD"},
                 {"role": "user", "content": "before|||agent_prompt|||after"},
@@ -266,7 +266,7 @@ def test_global_interception_captures_final_prompt_tools_and_raw_request(
     assert [message["role"] for message in captured["messages"]] == ["system"]
     prompt_blocks = captured["messages"][0]["content"]
     prompt_text = "".join(block["text"] for block in prompt_blocks)
-    assert prompt_text == "PRIMARY\n\nTODO\n\nCUSTOM"
+    assert prompt_text == "MAIN AGENT\n\nTODO\n\nCUSTOM"
     tool_names = [item["function"]["name"] for item in captured["tools"]]
     assert "write_todos" in tool_names
     assert captured["model"]["type"].endswith("RecordingFakeListChatModel")

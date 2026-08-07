@@ -72,7 +72,7 @@ def test_execution_yields_each_completed_semantic_event_once() -> None:
             graph=EventGraph(events),
             input_state={"messages": []},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
-            normalizer=V3EventNormalizer("Primary"),
+            normalizer=V3EventNormalizer("Main Agent"),
             automation=noop_automation(),
             media_response=noop_media_response(),
         )
@@ -94,7 +94,7 @@ def test_execution_yields_each_completed_semantic_event_once() -> None:
 def test_model_response_observer_keeps_full_safe_source_data_per_call() -> None:
     responses = []
     normalizer = V3EventNormalizer(
-        "Primary", model_response_observers=(responses.append,)
+        "Main Agent", model_response_observers=(responses.append,)
     )
     normalizer.feed(
         message_envelope(
@@ -149,8 +149,8 @@ def test_model_response_observer_keeps_full_safe_source_data_per_call() -> None:
     assert normalizer.finish_reason == "length"
 
 
-def test_last_primary_model_call_owns_external_finish_reason() -> None:
-    normalizer = V3EventNormalizer("Primary")
+def test_last_main_agent_model_call_owns_external_finish_reason() -> None:
+    normalizer = V3EventNormalizer("Main Agent")
     for run_id, reason in (("run-tools", "tool_calls"), ("run-final", "stop")):
         normalizer.feed(
             message_envelope(

@@ -10,7 +10,7 @@ GET /v1/models
 Authorization: Bearer <API Key>
 ```
 
-返回当前可运行的 Primary 名称。
+返回当前可运行的 Main Agent 名称。
 
 ```http
 POST /v1/chat/completions
@@ -25,7 +25,7 @@ Content-Type: application/json
 ```
 
 支持流式和非流式响应。客户端必须在每次请求中提交完整 `messages[]`；core 只保存和校验这份请求事实，不会在
-没有 automation prepare 的情况下自动交给 Primary 或 Subagent。模型组件中的 `tool_choice`、`response_format` 和
+没有 automation prepare 的情况下自动交给 Main Agent 或 Subagent。模型组件中的 `tool_choice`、`response_format` 和
 `model_settings` 决定 Provider-bound ModelRequest，请求体中的临时生成参数不会覆盖模型组件。
 
 如果当前 Agent 确实需要把客户端消息交给模型，必须显式配置 automation `prepare`，从只读的
@@ -48,7 +48,7 @@ Provider 都支持相同 modality、来源或 assistant 历史；合法的 Provi
 
 ## 多模态输出
 
-最终 Primary 响应中的 `image/audio/video/file` block 不会作为 Chat content-parts 或 Web 链接返回。Shell 只在能从
+最终 Main Agent 响应中的 `image/audio/video/file` block 不会作为 Chat content-parts 或 Web 链接返回。Shell 只在能从
 base64 或 data URI 取得有效字节时，将媒体保存到实例私有的
 `data/media/outputs/<年月>/<request-id>/`，并在该 block 原位置向标准字符串响应插入：
 
@@ -66,7 +66,7 @@ API history 和 Agent session 另外保存去除正文后的结构化 blocks 与
 对应文件会清理。
 
 这是 Chat Completions 的有意降级，不是无损多模态往返。客户端下一轮重放的通知只是普通 assistant 文本，Shell
-不会把其中的路径恢复为媒体 block。Subagent、reasoning、tool 和其他内部模型媒体不会因此进入 Primary 公开响应。
+不会把其中的路径恢复为媒体 block。Subagent、reasoning、tool 和其他内部模型媒体不会因此进入 Main Agent 公开响应。
 
 服务端接受可选 headers：
 
@@ -82,7 +82,7 @@ session ID 只用于观察记录，不会从数据库加载消息或拼接上下
 ## API Key 与状态
 
 API Key 是 write-only 设置，用于 `/v1/*`；管理密码用于管理台和 `/api/*`。清除 API Key 后推理 API
-不可用。API Server 启动会执行仓库静态校验；单个 Primary 的外部资源和 Provider 状态仍在请求时确认。
+不可用。API Server 启动会执行仓库静态校验；单个 Main Agent 的外部资源和 Provider 状态仍在请求时确认。
 
 所有 API 调用都会形成有界历史记录。日志中心的精简预览不显示消息正文；management 鉴权的 RAW 下载
 包含实际请求与响应内容，应按敏感数据处理。

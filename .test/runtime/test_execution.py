@@ -31,11 +31,11 @@ def test_session_capture_persists_only_explicit_workflow_fields() -> None:
         ModelResponse(
             timestamp="2026-07-31T00:00:00.000Z",
             namespace="root",
-            agent_name="Primary",
+            agent_name="Main Agent",
             node="model",
             run_id="run-1",
             message_id="message-1",
-            is_primary=True,
+            is_main_agent=True,
             usage={"input_tokens": 2, "output_token_details": {"reasoning": 1}},
             response_metadata={
                 "finish_reason": "stop",
@@ -79,11 +79,11 @@ def test_session_capture_persists_only_explicit_workflow_fields() -> None:
     assert response["kind"] == "model_response"
     assert response["data"] == {
         "namespace": "root",
-        "agent_name": "Primary",
+        "agent_name": "Main Agent",
         "node": "model",
         "run_id": "run-1",
         "message_id": "message-1",
-        "is_primary": True,
+        "is_main_agent": True,
         "provider_finish_reason": "stop",
         "finish_reason_source": "response_metadata.finish_reason",
         "finish_reason_category": "stop",
@@ -174,7 +174,7 @@ def test_agent_execution_closes_v3_stream_when_consumer_is_cancelled() -> None:
             graph=Graph(run),
             input_state={"messages": [{"role": "user", "content": "cancel me"}]},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
-            normalizer=V3EventNormalizer("Primary"),
+            normalizer=V3EventNormalizer("Main Agent"),
             automation=noop_automation(),
             media_response=noop_media_response(),
         )
@@ -236,7 +236,7 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch) -> None:
             graph=Graph(run),
             input_state={"messages": [{"role": "user", "content": "wait"}]},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
-            normalizer=V3EventNormalizer("Primary"),
+            normalizer=V3EventNormalizer("Main Agent"),
             automation=noop_automation(),
             media_response=noop_media_response(),
         )
@@ -264,7 +264,7 @@ def test_graph_recursion_failure_uses_step_limit_error() -> None:
             rectifier=OutputEventRectifier(
                 OutputProjector(config(mode="blocklist"))
             ),
-            normalizer=V3EventNormalizer("Primary"),
+            normalizer=V3EventNormalizer("Main Agent"),
             automation=noop_automation(),
             media_response=noop_media_response(),
         )
@@ -317,7 +317,7 @@ def test_unclassified_graph_failure_is_not_mislabeled_as_provider() -> None:
             graph=Graph(),
             input_state={"messages": [{"role": "user", "content": "fail"}]},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
-            normalizer=V3EventNormalizer("Primary"),
+            normalizer=V3EventNormalizer("Main Agent"),
             automation=noop_automation(),
             media_response=noop_media_response(),
         )
@@ -351,7 +351,7 @@ def test_classified_graph_failure_emits_matching_lifecycle_error() -> None:
             graph=Graph(),
             input_state={"messages": [{"role": "user", "content": "fail"}]},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
-            normalizer=V3EventNormalizer("Primary"),
+            normalizer=V3EventNormalizer("Main Agent"),
             automation=noop_automation(),
             media_response=noop_media_response(),
         )

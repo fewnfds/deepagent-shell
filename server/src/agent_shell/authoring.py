@@ -306,7 +306,7 @@ _FILESYSTEM_TOOL_DESCRIPTIONS = {
 }
 
 _OUTPUT_EVENT_UI = {
-    "assistant_text": ("模型文本", "Primary 模型完成的普通文本块。"),
+    "assistant_text": ("模型文本", "Main Agent 模型完成的普通文本块。"),
     "reasoning": ("推理内容", "模型明确提供的完整 reasoning block。"),
     "tool_call": ("工具调用", "工具名称、调用 ID 与完整参数。"),
     "tool_result": ("工具结果", "工具完成后的最终结果。"),

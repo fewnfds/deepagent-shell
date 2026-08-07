@@ -2,14 +2,14 @@
 
 Agent Shell 是一个本地 Deep Agents 配置与运行服务。它提供 Vue 管理台、持久配置、
 OpenAI-compatible API、运行日志和历史会话，并使用 `deepagents.create_deep_agent()` 构造
-Primary Agent 与同步 Subagent。
+Main Agent 与同步 Subagent。
 
 ## 功能
 
 - 管理模型、系统提示词、文件系统、待办计划、自定义工具、Skill、自定义 Middleware、输出模式、
   异常重试、委派能力和 Deep Agents 其他默认 Middleware 配置；
 - 为每个 Agent 身份挂载可声明第三方依赖的 Python 自动化插件，接入 LangChain 原生 Hook 与 Shell 生命周期；
-- 通过 Primary Agent 组合组件，通过可复用 Subagent 实体定义路由身份、能力策略和下级引用；
+- 通过 Main Agent 组合组件，通过可复用 Subagent 实体定义路由身份、能力策略和下级引用；
 - 提供 `GET /v1/models` 与流式/非流式 `POST /v1/chat/completions`；
 - 支持 OpenAI、Anthropic、Google GenAI、Google Vertex AI、DeepSeek 和 xAI；
 - 使用 SQLite 保存配置、凭据状态、API 调用记录、拦截记录、运行日志和历史会话；
@@ -45,9 +45,9 @@ git pull --ff-only
 
 ## 配置第一份 Agent
 
-1. 在【组件】创建一个模型和一个输出模式；这两项是 Primary 的必选组件。
+1. 在【组件】创建一个模型和一个输出模式；这两项是 Main Agent 的必选组件。
 2. 按需创建系统提示词、文件系统、工具、Skill、Middleware、重试、委派或其他默认 Middleware 配置。
-3. 在【Agent / Primary Agent】选择组件并保存。Primary 名称就是公开 model ID。
+3. 在【Agent / Main Agent】选择组件并保存。Main Agent 名称就是公开 model ID。
 4. 在首页设置 `/v1/*` 使用的 API Key，并启动 API Server。
 
 ```http

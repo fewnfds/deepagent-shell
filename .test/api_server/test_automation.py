@@ -23,11 +23,11 @@ def automation_config(
     }
 
 
-def primary_update(primary: dict, automation: dict[str, object]) -> dict[str, object]:
+def main_agent_update(main_agent: dict, automation: dict[str, object]) -> dict[str, object]:
     return {
-        "name": primary["name"],
-        "capability_refs": primary["capability_refs"],
-        "subagents": primary["subagents"],
+        "name": main_agent["name"],
+        "capability_refs": main_agent["capability_refs"],
+        "subagents": main_agent["subagents"],
         "automation": automation,
     }
 
@@ -44,15 +44,15 @@ def test_plugin_catalog_direct_binding_and_old_workflow_routes_are_removed(
             entrypoints=("prepare", "lifecycle"),
         )
         catalog = client.get("/api/automation/plugins")
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         attached = client.put(
-            f"/api/primary-agents/{primary['id']}",
-            json=primary_update(
-                primary,
+            f"/api/main-agents/{main_agent['id']}",
+            json=main_agent_update(
+                main_agent,
                 automation_config("open-plugin", interval=2),
             ),
         )
-        stored = client.get(f"/api/primary-agents/{primary['id']}")
+        stored = client.get(f"/api/main-agents/{main_agent['id']}")
         old_catalog = client.get("/api/automation/scripts")
         old_hook = client.post(
             "/api/automation/hook-workflow",
@@ -95,10 +95,10 @@ def test_repository_validation_rechecks_changed_plugin_resources(
             "mutable-plugin",
             "async def prepare(ctx):\n    return None\n",
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         attached = client.put(
-            f"/api/primary-agents/{primary['id']}",
-            json=primary_update(primary, automation_config("mutable-plugin")),
+            f"/api/main-agents/{main_agent['id']}",
+            json=main_agent_update(main_agent, automation_config("mutable-plugin")),
         )
         stopped = client.post("/api/api-server/stop")
         script_path = (
@@ -117,7 +117,7 @@ def test_repository_validation_rechecks_changed_plugin_resources(
     assert started.status_code == 422
     issues = started.json()["detail"]["validation"]["issues"]
     assert any(
-        issue["owner_id"] == primary["id"]
+        issue["owner_id"] == main_agent["id"]
         and issue["code"] == "automation.plugin_invalid"
         for issue in issues
     )
@@ -143,10 +143,10 @@ def test_binding_requires_current_plugin_dependency_state(
             "Pillow>=11,<13\n", encoding="utf-8"
         )
         catalog = client.get("/api/automation/plugins").json()["catalog"]
-        primary = create_primary(client)
-        payload = primary_update(primary, automation_config("image-reader"))
+        main_agent = create_main_agent(client)
+        payload = main_agent_update(main_agent, automation_config("image-reader"))
         pending = client.put(
-            f"/api/primary-agents/{primary['id']}", json=payload
+            f"/api/main-agents/{main_agent['id']}", json=payload
         )
         state_path = dependency_state_path(tmp_path / "runtime")
         state_path.parent.mkdir(parents=True)
@@ -170,7 +170,7 @@ def test_binding_requires_current_plugin_dependency_state(
             encoding="utf-8",
         )
         ready = client.put(
-            f"/api/primary-agents/{primary['id']}", json=payload
+            f"/api/main-agents/{main_agent['id']}", json=payload
         )
 
     assert catalog[0]["dependency_status"] == "restart_required"
@@ -206,11 +206,11 @@ def test_native_middleware_hook_shares_prepare_context_and_original_messages(
                 {"marker": "string"}, required=("marker",)
             ),
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         attached = client.put(
-            f"/api/primary-agents/{primary['id']}",
-            json=primary_update(
-                primary,
+            f"/api/main-agents/{main_agent['id']}",
+            json=main_agent_update(
+                main_agent,
                 {
                     "hooks": [{
                         "plugin_id": "native-hook",
@@ -224,7 +224,7 @@ def test_native_middleware_hook_shares_prepare_context_and_original_messages(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "original"}],
             },
         )
@@ -248,11 +248,11 @@ def test_binding_config_must_satisfy_the_plugin_schema(
                 required=("transform_source",),
             ),
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         response = client.put(
-            f"/api/primary-agents/{primary['id']}",
-            json=primary_update(
-                primary,
+            f"/api/main-agents/{main_agent['id']}",
+            json=main_agent_update(
+                main_agent,
                 {
                     "hooks": [{
                         "plugin_id": "schema-plugin",
@@ -296,11 +296,11 @@ def test_python_plugin_config_must_parse_before_save(
                 "additionalProperties": False,
             },
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         response = client.put(
-            f"/api/primary-agents/{primary['id']}",
-            json=primary_update(
-                primary,
+            f"/api/main-agents/{main_agent['id']}",
+            json=main_agent_update(
+                main_agent,
                 {
                     "hooks": [{
                         "plugin_id": "python-config-plugin",
@@ -337,15 +337,15 @@ def test_prepare_can_relay_normalized_multimodal_message_to_langchain(
             "relay-for-test",
             "async def prepare(ctx):\n    ctx.messages.extend(ctx.request.messages)\n",
         )
-        primary = create_primary(client, include_filesystem=False)
+        main_agent = create_main_agent(client, include_filesystem=False)
         attached = client.put(
-            f"/api/primary-agents/{primary['id']}",
-            json=primary_update(primary, automation_config("relay-for-test")),
+            f"/api/main-agents/{main_agent['id']}",
+            json=main_agent_update(main_agent, automation_config("relay-for-test")),
         )
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [
                     {
                         "role": "user",

@@ -16,7 +16,7 @@ from agent_shell.contracts import (
     BLOCK_MODELS,
     CapabilityReference,
     FilesystemToolConfigs,
-    PrimaryAgentProfile,
+    MainAgentProfile,
     SubagentProfile,
 )
 from agent_shell.registries.custom_tools import (
@@ -62,7 +62,7 @@ class ResolvedSubagent:
 
 @dataclass(frozen=True, slots=True)
 class StaticAssembly:
-    primary: dict[str, Any]
+    main_agent: dict[str, Any]
     references: dict[str, str]
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
@@ -71,7 +71,7 @@ class StaticAssembly:
     subagent_nodes: dict[SubagentNodeKey, ResolvedSubagent]
 
 
-_PRIMARY_REQUIRED_CAPABILITY_TYPES = frozenset(
+_MAIN_AGENT_REQUIRED_CAPABILITY_TYPES = frozenset(
     manifest.type for manifest in CAPABILITY_MANIFESTS if manifest.required
 )
 _SUBAGENT_REQUIRED_CAPABILITY_TYPES = frozenset(
@@ -93,7 +93,7 @@ class ConfigurationValidationService:
         self._automation_validation = automation_validation
         self._custom_tools_dir = custom_tools_dir
 
-    def validate_primary(
+    def validate_main_agent(
         self,
         payload: dict[str, Any],
         *,
@@ -105,7 +105,7 @@ class ConfigurationValidationService:
     ) -> tuple[ValidationReport, dict[str, Any] | None, StaticAssembly | None]:
         owner_name = str(payload.get("name", ""))
         try:
-            model = PrimaryAgentProfile.model_validate(
+            model = MainAgentProfile.model_validate(
                 (
                     {key: value for key, value in payload.items() if key != "id"}
                     if stored
@@ -116,11 +116,11 @@ class ConfigurationValidationService:
             contract_report = report_from_validation_error(
                 exc,
                 stage=stage,
-                scope="primary",
+                scope="main_agent",
                 owner_id=owner_id,
                 owner_name=owner_name,
             )
-            reference_issues = self._reference_issues_from_invalid_primary(
+            reference_issues = self._reference_issues_from_invalid_main_agent(
                 payload,
                 owner_id=owner_id,
                 owner_name=owner_name,
@@ -134,15 +134,15 @@ class ConfigurationValidationService:
                 None,
                 None,
             )
-        primary = model.model_dump(mode="json")
-        report, assembly = self._assemble_primary(
-            primary,
+        main_agent = model.model_dump(mode="json")
+        report, assembly = self._assemble_main_agent(
+            main_agent,
             stage=stage,
             owner_id=owner_id,
             block_overrides=block_overrides,
             profile_overrides=profile_overrides,
         )
-        return report, primary, assembly
+        return report, main_agent, assembly
 
     def validate_block(
         self,
@@ -320,25 +320,25 @@ class ConfigurationValidationService:
             )
         return ValidationReport(stage=stage, issues=tuple(issues)), validated
 
-    def resolve_primary(
-        self, primary_id: str, *, stage: str = "request_assembly"
+    def resolve_main_agent(
+        self, main_agent_id: str, *, stage: str = "request_assembly"
     ) -> tuple[ValidationReport, StaticAssembly | None]:
-        primary = self._agent_configs.get_item("primary_agents", primary_id)
-        if primary is None:
+        main_agent = self._agent_configs.get_item("main_agents", main_agent_id)
+        if main_agent is None:
             issue = ValidationIssue(
-                code="assembly.primary_not_found",
-                scope="primary",
-                owner_id=primary_id,
+                code="assembly.main_agent_not_found",
+                scope="main_agent",
+                owner_id=main_agent_id,
                 path="id",
-                message="The requested Primary Agent does not exist.",
-                message_key="validation.issue.assembly.primaryNotFound",
+                message="The requested Main Agent does not exist.",
+                message_key="validation.issue.assembly.mainAgentNotFound",
                 message_args={},
             )
             return ValidationReport(stage=stage, issues=(issue,)), None
-        report, _, assembly = self.validate_primary(
-            primary,
+        report, _, assembly = self.validate_main_agent(
+            main_agent,
             stage=stage,
-            owner_id=primary_id,
+            owner_id=main_agent_id,
             stored=True,
         )
         return report, assembly
@@ -382,7 +382,7 @@ class ConfigurationValidationService:
                 stored=True,
             )
             issues.extend(report.issues)
-        issues.extend(self._saved_primary_issues(stage))
+        issues.extend(self._saved_main_agent_issues(stage))
         return ValidationReport(stage=stage, issues=tuple(issues))
 
     def validate_api_start(self) -> ValidationReport:
@@ -392,13 +392,13 @@ class ConfigurationValidationService:
             issues=repository.issues,
         )
 
-    def _saved_primary_issues(self, stage: str) -> list[ValidationIssue]:
+    def _saved_main_agent_issues(self, stage: str) -> list[ValidationIssue]:
         issues: list[ValidationIssue] = []
-        for primary in self._agent_configs.list_items("primary_agents"):
-            report, _, _ = self.validate_primary(
-                primary,
+        for main_agent in self._agent_configs.list_items("main_agents"):
+            report, _, _ = self.validate_main_agent(
+                main_agent,
                 stage=stage,
-                owner_id=str(primary.get("id", "")),
+                owner_id=str(main_agent.get("id", "")),
                 stored=True,
             )
             issues.extend(report.issues)
@@ -411,7 +411,7 @@ class ConfigurationValidationService:
             for item in profile.get("capability_refs", [])
         }
 
-    def _reference_issues_from_invalid_primary(
+    def _reference_issues_from_invalid_main_agent(
         self,
         payload: dict[str, Any],
         *,
@@ -431,7 +431,7 @@ class ConfigurationValidationService:
             references[reference.type] = reference.block_id
         _, issues = self._load_references(
             references,
-            scope="primary",
+            scope="main_agent",
             owner_id=owner_id,
             owner_name=owner_name,
             block_overrides=block_overrides,
@@ -777,30 +777,30 @@ class ConfigurationValidationService:
             )
         return model.model_dump(mode="json"), None
 
-    def _assemble_primary(
+    def _assemble_main_agent(
         self,
-        primary: dict[str, Any],
+        main_agent: dict[str, Any],
         *,
         stage: str,
         owner_id: str,
         block_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
         profile_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> tuple[ValidationReport, StaticAssembly | None]:
-        owner_name = str(primary.get("name", ""))
-        references = self._reference_map(primary)
+        owner_name = str(main_agent.get("name", ""))
+        references = self._reference_map(main_agent)
         selected, issues, filesystem_mode = self._resolve_capability_subject(
             references,
-            required_types=_PRIMARY_REQUIRED_CAPABILITY_TYPES,
-            scope="primary",
+            required_types=_MAIN_AGENT_REQUIRED_CAPABILITY_TYPES,
+            scope="main_agent",
             owner_id=owner_id,
             owner_name=owner_name,
             block_overrides=block_overrides,
         )
-        primary_automation = primary.get("automation", {})
+        main_agent_automation = main_agent.get("automation", {})
         issues.extend(
             self._automation_validation.configuration_issues(
-                primary_automation,
-                scope="primary",
+                main_agent_automation,
+                scope="main_agent",
                 owner_id=owner_id,
                 owner_name=owner_name,
                 path_prefix="automation",
@@ -808,13 +808,13 @@ class ConfigurationValidationService:
         )
 
         delegation_selected = selected.get("subagent") is not None
-        root_references = list(primary.get("subagents", []))
+        root_references = list(main_agent.get("subagents", []))
         active_roots = root_references if delegation_selected else []
         if delegation_selected and not active_roots:
             issues.append(
                 ValidationIssue(
                     code="assembly.subagent_reference_required",
-                    scope="primary",
+                    scope="main_agent",
                     owner_id=owner_id,
                     owner_name=owner_name,
                     path="subagents",
@@ -834,7 +834,7 @@ class ConfigurationValidationService:
             selected,
             has_subagents=bool(active_roots),
             filesystem_mode=filesystem_mode,
-            scope="primary",
+            scope="main_agent",
             owner_id=owner_id,
             owner_name=owner_name,
         )
@@ -1001,7 +1001,7 @@ class ConfigurationValidationService:
             subagent_reference_issues(
                 root_references,
                 profiles=known_profiles,
-                scope="primary",
+                scope="main_agent",
                 owner_id=owner_id,
                 owner_name=owner_name,
             )
@@ -1010,7 +1010,7 @@ class ConfigurationValidationService:
         issues.extend(
             filesystem_permission_warnings(
                 selected,
-                scope="primary",
+                scope="main_agent",
                 owner_id=owner_id,
                 owner_name=owner_name,
             )
@@ -1029,11 +1029,11 @@ class ConfigurationValidationService:
         if not report.valid:
             return report, None
         return report, StaticAssembly(
-            primary=primary,
+            main_agent=main_agent,
             references=references,
             blocks=selected,
             filesystem_mode=filesystem_mode,
-            automation=primary_automation,
+            automation=main_agent_automation,
             subagents=resolved_subagents,
             subagent_nodes=subagent_nodes,
         )
@@ -1051,23 +1051,23 @@ class ConfigurationValidationService:
 
     def _new_impact_issues(
         self,
-        primary: dict[str, Any],
+        main_agent: dict[str, Any],
         *,
         stage: str,
         block_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
         profile_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> list[ValidationIssue]:
-        primary_id = str(primary.get("id", ""))
-        baseline, _, _ = self.validate_primary(
-            primary,
+        main_agent_id = str(main_agent.get("id", ""))
+        baseline, _, _ = self.validate_main_agent(
+            main_agent,
             stage=stage,
-            owner_id=primary_id,
+            owner_id=main_agent_id,
             stored=True,
         )
-        prospective, _, _ = self.validate_primary(
-            primary,
+        prospective, _, _ = self.validate_main_agent(
+            main_agent,
             stage=stage,
-            owner_id=primary_id,
+            owner_id=main_agent_id,
             stored=True,
             block_overrides=block_overrides,
             profile_overrides=profile_overrides,
@@ -1088,8 +1088,8 @@ class ConfigurationValidationService:
         stage: str,
     ) -> list[ValidationIssue]:
         issues: list[ValidationIssue] = []
-        for primary in self._agent_configs.list_items("primary_agents"):
-            references = primary.get("capability_refs", [])
+        for main_agent in self._agent_configs.list_items("main_agents"):
+            references = main_agent.get("capability_refs", [])
             if not isinstance(references, list):
                 references = []
             direct = any(
@@ -1098,7 +1098,7 @@ class ConfigurationValidationService:
                 and item.get("block_id") == block_id
                 for item in references
             )
-            subagent_references = primary.get("subagents", [])
+            subagent_references = main_agent.get("subagents", [])
             if not isinstance(subagent_references, list):
                 subagent_references = []
             indirect = self._subagents_reach_block(
@@ -1107,7 +1107,7 @@ class ConfigurationValidationService:
             if direct or indirect:
                 issues.extend(
                     self._new_impact_issues(
-                        primary,
+                        main_agent,
                         stage=stage,
                         block_overrides={(block_type, block_id): prospective},
                     )
@@ -1122,8 +1122,8 @@ class ConfigurationValidationService:
         stage: str,
     ) -> list[ValidationIssue]:
         issues: list[ValidationIssue] = []
-        for primary in self._agent_configs.list_items("primary_agents"):
-            subagent_references = primary.get("subagents", [])
+        for main_agent in self._agent_configs.list_items("main_agents"):
+            subagent_references = main_agent.get("subagents", [])
             if not isinstance(subagent_references, list):
                 continue
             if not self._references_reach_subagent(
@@ -1132,7 +1132,7 @@ class ConfigurationValidationService:
                 continue
             issues.extend(
                 self._new_impact_issues(
-                    primary,
+                    main_agent,
                     stage=stage,
                     profile_overrides={profile_id: prospective},
                 )

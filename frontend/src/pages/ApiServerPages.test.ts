@@ -98,7 +98,7 @@ const messages = {
       invalid: 'Needs attention',
     },
     failure: { configuration: 'The configuration needs attention.' },
-    scope: { primary: 'Primary Agent configuration' },
+    scope: { mainAgent: 'Main Agent configuration' },
     location: {
       namedOwner: '{scope} named {name}',
       currentOwner: 'Current {scope}',
@@ -188,9 +188,9 @@ describe('ApiServerSettingsPage', () => {
         stage: 'repository_load',
         issues: [{
           code: 'assembly.reference_not_found',
-          scope: 'primary',
-          owner_id: 'primary-id',
-          owner_name: 'Broken Primary',
+          scope: 'main_agent',
+          owner_id: 'main-agent-id',
+          owner_name: 'Broken MainAgent',
           path: 'capability_refs.model',
           message: 'raw issue detail',
           message_key: 'validation.issue.assembly.referenceNotFound',
@@ -211,7 +211,7 @@ describe('ApiServerSettingsPage', () => {
       .toContain('Configuration problems: 1. Expand to view the full details')
     expect(alerts.get('.accordion-button').attributes('aria-expanded')).toBe('false')
     expect(alerts.text()).toContain('Configuration alerts')
-    expect(alerts.text()).toContain('Broken Primary')
+    expect(alerts.text()).toContain('Broken MainAgent')
     expect(alerts.find('a').exists()).toBe(false)
     const endpointCard = wrapper.get('[data-testid="endpoint-card"]')
     expect(endpointCard.text()).toContain('Endpoints')

@@ -34,8 +34,8 @@ import type {
   FileManagerScope,
   ModelProviderCatalog,
   PaginationResponse,
-  PrimaryAgent,
-  PrimaryAgentPayload,
+  MainAgent,
+  MainAgentPayload,
   ReadinessResponse,
   ResourceCatalog,
   RetentionSettings,
@@ -276,32 +276,32 @@ export const managementApi = {
     })
   },
 
-  listPrimaryAgents(): Promise<PrimaryAgent[]> {
-    return managementRequest('/api/primary-agents')
+  listMainAgents(): Promise<MainAgent[]> {
+    return managementRequest('/api/main-agents')
   },
 
-  getPrimaryAgent(id: string): Promise<PrimaryAgent> {
-    return managementRequest(recordPath('/api/primary-agents', id))
+  getMainAgent(id: string): Promise<MainAgent> {
+    return managementRequest(recordPath('/api/main-agents', id))
   },
 
-  savePrimaryAgent(data: PrimaryAgentPayload | PrimaryAgent): Promise<PrimaryAgent> {
+  saveMainAgent(data: MainAgentPayload | MainAgent): Promise<MainAgent> {
     const id = 'id' in data ? data.id : ''
-    return managementRequest(id ? recordPath('/api/primary-agents', id) : '/api/primary-agents', {
+    return managementRequest(id ? recordPath('/api/main-agents', id) : '/api/main-agents', {
       method: id ? 'PUT' : 'POST',
       body: JSON.stringify(withoutId(data)),
     })
   },
 
-  copyPrimaryAgent(id: string, name: string): Promise<PrimaryAgent> {
-    return managementRequest(`${recordPath('/api/primary-agents', id)}/copy`, jsonBody({ name }))
+  copyMainAgent(id: string, name: string): Promise<MainAgent> {
+    return managementRequest(`${recordPath('/api/main-agents', id)}/copy`, jsonBody({ name }))
   },
 
-  deletePrimaryAgent(id: string): Promise<{ ok: boolean }> {
-    return managementRequest(recordPath('/api/primary-agents', id), { method: 'DELETE' })
+  deleteMainAgent(id: string): Promise<{ ok: boolean }> {
+    return managementRequest(recordPath('/api/main-agents', id), { method: 'DELETE' })
   },
 
-  deletePrimaryAgents(ids: string[]): Promise<{ deleted: number }> {
-    return managementRequest('/api/primary-agents/delete', jsonBody({ ids }))
+  deleteMainAgents(ids: string[]): Promise<{ deleted: number }> {
+    return managementRequest('/api/main-agents/delete', jsonBody({ ids }))
   },
 
   listSubagents(): Promise<Subagent[]> {

@@ -1,6 +1,6 @@
 # Deep Agents runtime 基线
 
-Agent Shell 使用锁定版本的 `deepagents.create_deep_agent()` 构造 Primary Agent 和每个同步 Subagent。
+Agent Shell 使用锁定版本的 `deepagents.create_deep_agent()` 构造 Main Agent 和每个同步 Subagent。
 
 ## 责任边界
 
@@ -22,12 +22,12 @@ profile 基础消息与 delegated input。插件的 model/tool 逻辑由 Shell �
 
 ## 装配
 
-- Primary 必须有模型与输出模式；
+- Main Agent 必须有模型与输出模式；
 - 同步 child 以持久 Subagent 实体定义；父级只保存实体 UUID 引用，Shell 把实体的 `name`、`description` 和
   唯一编译 runnable 投影为 `CompiledSubAgent`；diamond 和显式 cycle 复用同一 profile ID 对应的 runnable；
 - 文件 workspace 在同一请求的代理树中共享；最终 Filesystem 与按 Agent 解析的 filesystem-permissions
   决定提示词、内置文件工具和 `permissions=`，Skill namespace 仍按 Agent 只读隔离；
-- Subagent 的能力按 inherit/replace/disabled 解析，模型必须保留，输出模式只属于 Primary；
+- Subagent 的能力按 inherit/replace/disabled 解析，模型必须保留，输出模式只属于 Main Agent；
 - 每个 Agent 身份的 automation bindings 独立物化原生 Middleware；Shell 不代理 Hook 返回值、排序或 wrap；
 - Shell 额外拥有 prepare、request-local fixed-delay lifecycle 和 graph 外 complete，三者不是 LangChain Hook。
 

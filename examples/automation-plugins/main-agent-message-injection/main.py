@@ -16,7 +16,7 @@ def _compile_transform(source: object) -> Transform | None:
     if not isinstance(source, str) or not source.strip():
         return None
     namespace: dict[str, Any] = {}
-    exec(compile(source, "<primary-message-transform>", "exec"), namespace)
+    exec(compile(source, "<main-agent-message-transform>", "exec"), namespace)
     transform = namespace.get("transform_messages")
     if not inspect.iscoroutinefunction(transform):
         raise ValueError("transform_messages must be an async function")
@@ -41,7 +41,7 @@ def _compile_transform(source: object) -> Transform | None:
 
 
 async def prepare(ctx: Any) -> None:
-    if ctx.agent["type"] != "primary":
+    if ctx.agent["type"] != "main_agent":
         return
     try:
         messages = mutable_request_messages(ctx.request.messages)
@@ -53,4 +53,4 @@ async def prepare(ctx: Any) -> None:
         )
         ctx.messages.extend(prepared_transformed_messages(transformed))
     except Exception:
-        raise RuntimeError("Primary message transform failed") from None
+        raise RuntimeError("Main Agent message transform failed") from None

@@ -239,7 +239,7 @@
         "name": "component-editor",
         "paths": [
           "src/pages/ComponentsPage.vue",
-          "src/pages/PrimaryAgentPage.vue",
+          "src/pages/MainAgentPage.vue",
           "src/pages/SubagentPage.vue"
         ],
         "classes": ["component-editor-region", "configuration-loading-surface"]
@@ -263,7 +263,7 @@
           "src/pages/ApiServerSettingsPage.vue",
           "src/pages/ComponentsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
-          "src/pages/PrimaryAgentPage.vue",
+          "src/pages/MainAgentPage.vue",
           "src/pages/SubagentPage.vue"
         ],
         "classes": ["validation-sidebar"]
@@ -358,7 +358,7 @@
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/EventFeedPage.vue",
           "src/pages/FileManagerPage.vue",
-          "src/pages/PrimaryAgentPage.vue",
+          "src/pages/MainAgentPage.vue",
           "src/pages/StyleLabPage.vue",
           "src/pages/SubagentPage.vue",
           "src/pages/SystemSettingsPage.vue",
@@ -398,7 +398,7 @@
         "kind": "domain-composition",
         "reason": "Owns independently ordered Agent Hook and periodic plugin bindings with per-plugin intervals",
         "callers": [
-          "src/pages/PrimaryAgentPage.vue",
+          "src/pages/MainAgentPage.vue",
           "src/pages/SubagentPage.vue"
         ]
       },
@@ -413,9 +413,9 @@
         "name": "SubagentReferencesEditor",
         "path": "src/components/SubagentReferencesEditor.vue",
         "kind": "domain-composition",
-        "reason": "Owns the shared ordered Subagent entity references for Primary and Subagent configurations",
+        "reason": "Owns the shared ordered Subagent entity references for Main Agent and Subagent configurations",
         "callers": [
-          "src/pages/PrimaryAgentPage.vue",
+          "src/pages/MainAgentPage.vue",
           "src/pages/SubagentPage.vue"
         ]
       },
@@ -426,7 +426,7 @@
         "reason": "Owns record selection, identity and create/copy/delete interaction",
         "callers": [
           "src/pages/ComponentsPage.vue",
-          "src/pages/PrimaryAgentPage.vue",
+          "src/pages/MainAgentPage.vue",
           "src/pages/SubagentPage.vue"
         ]
       },
@@ -450,7 +450,7 @@
           "src/pages/ApiServerSettingsPage.vue",
           "src/pages/ComponentsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
-          "src/pages/PrimaryAgentPage.vue",
+          "src/pages/MainAgentPage.vue",
           "src/pages/SubagentPage.vue"
         ]
       },

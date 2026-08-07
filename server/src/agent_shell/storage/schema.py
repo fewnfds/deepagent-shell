@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS blocks (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_blocks_type_name ON blocks(block_type, name);
 CREATE INDEX IF NOT EXISTS idx_blocks_type ON blocks(block_type);
 
-CREATE TABLE IF NOT EXISTS primary_agents (
+CREATE TABLE IF NOT EXISTS main_agents (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     payload TEXT NOT NULL

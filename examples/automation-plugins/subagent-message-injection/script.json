@@ -13,7 +13,7 @@
         "description": "Edit the current messages and return the complete ordered list for this invocation.",
         "contentMediaType": "text/x-python",
         "format": "python",
-        "default": "async def transform_messages(messages, ctx, state, runtime):\n    # The final message is the delegated Primary task. Insert prompts before it.\n    # messages.insert(-1, {\"role\": \"user\", \"content\": \"Subagent context\"})\n    return messages\n"
+        "default": "async def transform_messages(messages, ctx, state, runtime):\n    # The final message is the delegated Main Agent task. Insert prompts before it.\n    # messages.insert(-1, {\"role\": \"user\", \"content\": \"Subagent context\"})\n    return messages\n"
       }
     },
     "required": ["transform_source"],

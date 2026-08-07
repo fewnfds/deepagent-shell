@@ -298,12 +298,12 @@ class BlockStore:
         block_type: str,
         block_ids: set[str],
     ) -> None:
-        for table in ("primary_agents", "subagents"):
+        for table in ("main_agents", "subagents"):
             rows = connection.execute(f"SELECT id, payload FROM {table}").fetchall()
             for row in rows:
                 payload = json.loads(row["payload"])
                 changed = False
-                if table == "primary_agents":
+                if table == "main_agents":
                     references = payload.get("capability_refs")
                     if isinstance(references, list):
                         retained = [

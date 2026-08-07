@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 class AgentConfigStore:
     _IDENTITY_COLUMNS = {
-        "primary_agents": "name",
+        "main_agents": "name",
         "subagents": "component_name",
     }
 
@@ -96,7 +96,7 @@ class AgentConfigStore:
             )
             connection.commit()
         entities = {
-            "primary_agents": "primary-agent",
+            "main_agents": "main-agent",
             "subagents": "subagent",
         }
         emit_configuration_events(
@@ -111,11 +111,11 @@ class AgentConfigStore:
         connection: sqlite3.Connection,
         target_ids: set[str],
     ) -> None:
-        for table in ("primary_agents", "subagents"):
+        for table in ("main_agents", "subagents"):
             rows = connection.execute(f"SELECT id, payload FROM {table}").fetchall()
             for row in rows:
                 payload = json.loads(row["payload"])
-                if table == "primary_agents":
+                if table == "main_agents":
                     references = payload.get("subagents")
                 else:
                     settings = payload.get("settings")
@@ -136,7 +136,7 @@ class AgentConfigStore:
                 ]
                 if len(retained) == len(references):
                     continue
-                if table == "primary_agents":
+                if table == "main_agents":
                     payload["subagents"] = retained
                 else:
                     settings["subagents"] = retained
@@ -177,7 +177,7 @@ class AgentConfigStore:
             if item_id not in existing:
                 continue
             entities = {
-                "primary_agents": "primary-agent",
+                "main_agents": "main-agent",
                 "subagents": "subagent",
             }
             emit_configuration_events(

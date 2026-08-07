@@ -4,7 +4,7 @@ from .support import *
 from agent_shell.runtime.capabilities import deepagents as deepagents_capability
 
 
-def test_subagent_shares_primary_request_files_without_reloading_sources(
+def test_subagent_shares_main_agent_request_files_without_reloading_sources(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source = tmp_path / "seed" / "note.txt"
@@ -99,7 +99,7 @@ def test_subagent_shares_primary_request_files_without_reloading_sources(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, *_args: next(models),
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         filesystem = client.post(
             "/api/blocks/filesystem",
             json={
@@ -121,16 +121,16 @@ def test_subagent_shares_primary_request_files_without_reloading_sources(
             json=subagent_payload(
                 "Workspace worker",
                 name="workspace_worker",
-                description="Uses the current Primary workspace.",
+                description="Uses the current Main Agent workspace.",
             ),
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
                     *replace_capability_reference(
-                        primary, "filesystem", filesystem["id"]
+                        main_agent, "filesystem", filesystem["id"]
                     ),
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
@@ -141,7 +141,7 @@ def test_subagent_shares_primary_request_files_without_reloading_sources(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Use the shared workspace."}],
             },
         )
@@ -210,17 +210,17 @@ def test_new_request_resets_state_backend_files(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: next(models),
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         filesystem = client.post(
             "/api/blocks/filesystem",
             json={"name": "Ephemeral request workspace"},
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": replace_capability_reference(
-                    primary, "filesystem", filesystem["id"]
+                    main_agent, "filesystem", filesystem["id"]
                 ),
                 "subagents": [],
             },
@@ -229,14 +229,14 @@ def test_new_request_resets_state_backend_files(
         first = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Create a temporary file."}],
             },
         )
         second = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Read the temporary file."}],
             },
         )

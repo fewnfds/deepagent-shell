@@ -6,7 +6,7 @@ import {
   filesystemManifest,
   filesystemPermissionsManifest,
   modelManifest,
-  mountPrimaryPage,
+  mountMainAgentPage,
   mountSubagentPage,
   outputModeManifest,
   promptManifest,
@@ -20,7 +20,7 @@ beforeEach(resetAgentPageTestState)
 describe('Subagent authoring page', () => {
   it('adds, selects, and removes ordered Subagent entity references', async () => {
     const api = service()
-    const { wrapper } = await mountPrimaryPage(api)
+    const { wrapper } = await mountMainAgentPage(api)
 
     const addButton = wrapper.get('[data-action="add-subagent-reference"]')
     await addButton.trigger('click')
@@ -40,7 +40,7 @@ describe('Subagent authoring page', () => {
     await buttonByText(wrapper, 'common.save').trigger('click')
     await flushPromises()
 
-    expect(api.createPrimaryAgent).toHaveBeenCalledWith(expect.objectContaining({
+    expect(api.createMainAgent).toHaveBeenCalledWith(expect.objectContaining({
       subagents: [{
         subagent_id: '00000000-0000-0000-0000-000000000020',
       }],
@@ -50,16 +50,16 @@ describe('Subagent authoring page', () => {
 
   it('renders one select per configurable Subagent capability', async () => {
     const api = service()
-    const primaryPage = await mountPrimaryPage(api)
+    const mainAgentPage = await mountMainAgentPage(api)
     const { wrapper } = await mountSubagentPage(api)
 
     expect(wrapper.text()).toContain('agents.subagent.roleName')
     expect(wrapper.findAll('[data-capability] input[type="radio"]')).toHaveLength(0)
     expect(wrapper.findAll('[data-capability] select')).toHaveLength(2)
-    expect(primaryPage.wrapper.findAll('[data-testid^="primary-capability-filesystem"]')).toHaveLength(2)
+    expect(mainAgentPage.wrapper.findAll('[data-testid^="main-agent-capability-filesystem"]')).toHaveLength(2)
     expect(wrapper.findAll('[data-testid^="subagent-capability-filesystem"]')).toHaveLength(2)
 
-    primaryPage.wrapper.unmount()
+    mainAgentPage.wrapper.unmount()
     wrapper.unmount()
   })
 

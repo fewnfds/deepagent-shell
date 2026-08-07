@@ -113,7 +113,7 @@ const messages = {
   capabilities: {
     filesystem: { label: 'Filesystem' },
     model: { label: 'Model' },
-    'primary-agent': { label: 'Primary Agent' },
+    'main-agent': { label: 'Main Agent' },
     'subagent-profile': { label: 'Subagent' },
   },
   navigation: {
@@ -190,7 +190,7 @@ function createApi() {
     issues: [],
   }))
   const listBlocks = vi.fn(async () => [...stored])
-  const listPrimaryAgents = vi.fn(async () => [])
+  const listMainAgents = vi.fn(async () => [])
   const listSubagents = vi.fn(async () => [])
   const copyBlock = vi.fn(async () => {
     stored = [...stored, copied]
@@ -209,17 +209,17 @@ function createApi() {
     getCatalog,
     validateRepository,
     listBlocks,
-    listPrimaryAgents,
+    listMainAgents,
     listSubagents,
     copyBlock,
-    copyPrimaryAgent: vi.fn(),
+    copyMainAgent: vi.fn(),
     copySubagent: vi.fn(),
     deleteBlock,
     deleteUnsupportedBlock,
     deleteBlocks: vi.fn(async (_type, ids) => deleteBlocks(ids)),
-    deletePrimaryAgent: vi.fn(),
+    deleteMainAgent: vi.fn(),
     deleteSubagent: vi.fn(),
-    deletePrimaryAgents: vi.fn(),
+    deleteMainAgents: vi.fn(),
     deleteSubagents: vi.fn(),
   }
   return {
@@ -228,7 +228,7 @@ function createApi() {
     getCatalog,
     validateRepository,
     listBlocks,
-    listPrimaryAgents,
+    listMainAgents,
     listSubagents,
     copyBlock,
     deleteBlock,
@@ -308,7 +308,7 @@ describe('ConfigLibraryPage', () => {
     expect(wrapper
       .get('[data-testid="library-agent-group"] [data-testid="section-nav"]')
       .findAll('button')
-      .map((item) => item.text())).toEqual(['Primary Agent', 'Subagent'])
+      .map((item) => item.text())).toEqual(['Main Agent', 'Subagent'])
     expect(wrapper.get('[data-testid="library-plugin-group"] > span').text()).toBe('Plugins')
     expect(wrapper
       .get('[data-testid="library-plugin-group"] [data-testid="section-nav"]')

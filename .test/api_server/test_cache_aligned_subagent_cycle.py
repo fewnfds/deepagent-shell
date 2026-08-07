@@ -19,7 +19,7 @@ def _message_pairs(messages: list[object]) -> list[tuple[str, str]]:
 def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    class PrimaryModel(ToolCallingFakeModel):
+    class MainAgentModel(ToolCallingFakeModel):
         seen_messages: ClassVar[list[list[object]]] = []
         tool_signatures: ClassVar[list[list[tuple[str, str, dict]]]] = []
 
@@ -63,7 +63,7 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
                     response = AIMessage(content="C completed")
             return ChatResult(generations=[ChatGeneration(message=response)])
 
-    primary_model = PrimaryModel(
+    main_agent_model = MainAgentModel(
         responses=[
             AIMessage(
                 content="",
@@ -88,7 +88,7 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
         nonlocal model_build_count
         model_build_count += 1
         model_blocks.append(block)
-        return primary_model if model_build_count == 1 else worker_model
+        return main_agent_model if model_build_count == 1 else worker_model
 
     common_system_prompt = (
         "You are Xiao Ai, one of infinitely cloned writers with the same "
@@ -106,7 +106,7 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
             "agent_shell.runtime.agent_builder._build_chat_model",
             build_model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         system_prompt = client.post(
             "/api/blocks/system-prompt",
             json={
@@ -157,9 +157,9 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
                 "periodic": [],
             }
 
-        primary_automation = automation(
-            "PRIMARY ROLE: read files, plan the work, and delegate units.",
-            "PRIMARY READY",
+        main_agent_automation = automation(
+            "MAIN AGENT ROLE: read files, plan the work, and delegate units.",
+            "MAIN AGENT READY",
         )
         worker_automation = automation(
             "WORKER ROLE: execute the delegated unit using the shared context.",
@@ -212,16 +212,16 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
         )
         assert c_response.status_code == 200, c_response.text
         a_response = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
                 "name": "A",
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {"type": "system-prompt", "block_id": system_prompt["id"]},
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
                 "subagents": [{"subagent_id": b["id"]}],
-                "automation": primary_automation,
+                "automation": main_agent_automation,
             },
         )
         assert a_response.status_code == 200, a_response.text
@@ -247,18 +247,18 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
     )
     assert model_build_count == 3
     assert model_blocks[1:] == [model_blocks[0], model_blocks[0]]
-    assert len(PrimaryModel.tool_signatures) >= 1
+    assert len(MainAgentModel.tool_signatures) >= 1
     assert len(WorkerModel.tool_signatures) >= 2
-    expected_tools = PrimaryModel.tool_signatures[0]
+    expected_tools = MainAgentModel.tool_signatures[0]
     assert all(signature == expected_tools for signature in WorkerModel.tool_signatures)
     assert [item[0] for item in expected_tools] == ["read_file", "task"]
 
-    primary_messages = _message_pairs(PrimaryModel.seen_messages[0])
+    main_agent_messages = _message_pairs(MainAgentModel.seen_messages[0])
     b_messages = _message_pairs(WorkerModel.seen_messages[0])
     c_messages = _message_pairs(WorkerModel.seen_messages[1])
-    primary_start = primary_messages.index((
+    main_agent_start = main_agent_messages.index((
         "human",
-        "PRIMARY ROLE: read files, plan the work, and delegate units.",
+        "MAIN AGENT ROLE: read files, plan the work, and delegate units.",
     ))
     b_start = b_messages.index((
         "human",
@@ -268,17 +268,17 @@ def test_user_configured_a_b_c_cycle_keeps_the_shared_prefix_aligned(
         "human",
         "WORKER ROLE: execute the delegated unit using the shared context.",
     ))
-    assert primary_messages[:primary_start] == b_messages[:b_start]
-    assert primary_messages[:primary_start] == c_messages[:c_start]
+    assert main_agent_messages[:main_agent_start] == b_messages[:b_start]
+    assert main_agent_messages[:main_agent_start] == c_messages[:c_start]
     assert ("human", shared_replacement + "\nWrite the complete story.") in (
-        primary_messages[:primary_start]
+        main_agent_messages[:main_agent_start]
     )
-    assert primary_messages[primary_start:] == [
+    assert main_agent_messages[main_agent_start:] == [
         (
             "human",
-            "PRIMARY ROLE: read files, plan the work, and delegate units.",
+        "MAIN AGENT ROLE: read files, plan the work, and delegate units.",
         ),
-        ("ai", "PRIMARY READY"),
+        ("ai", "MAIN AGENT READY"),
     ]
     assert b_messages[b_start:] == [
         (

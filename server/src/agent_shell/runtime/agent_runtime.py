@@ -12,13 +12,13 @@ from agent_shell.automation.runtime import AutomationRuntime
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.model_response import ModelResponse
-from agent_shell.runtime.media_response import PrimaryMediaResponse
+from agent_shell.runtime.media_response import MainAgentMediaResponse
 from agent_shell.runtime.output_event_pool import OutputEventRectifier
 from agent_shell.runtime.output_projection import OutputProjector
 from agent_shell.runtime.output_stream import (
     ModelCallBoundary,
     OutputEvent,
-    PrimaryMediaBlock,
+    MainAgentMediaBlock,
     V3EventNormalizer,
 )
 from agent_shell.storage.media_outputs import MediaOutputStore
@@ -35,7 +35,7 @@ class AgentExecution:
     rectifier: OutputEventRectifier
     normalizer: V3EventNormalizer
     automation: AutomationRuntime
-    media_response: PrimaryMediaResponse
+    media_response: MainAgentMediaResponse
     context: dict[str, Any] = field(default_factory=dict)
     event_observers: tuple[Callable[[OutputEvent], None], ...] = ()
     _started: bool = False
@@ -55,7 +55,7 @@ class AgentExecution:
     @property
     def response_blocks(self) -> list[dict[str, Any]]:
         return self.media_response.structured_blocks(
-            self.normalizer.last_primary_response
+            self.normalizer.last_main_agent_response
         )
 
     @property
@@ -98,7 +98,7 @@ class AgentExecution:
             return self.rectifier.feed(event)
 
         def failure_output(error_code: str) -> list[str]:
-            self.normalizer.abort_primary_messages()
+            self.normalizer.abort_main_agent_messages()
             parts = self.rectifier.abort()
             parts.extend(
                 project_event(
@@ -165,7 +165,7 @@ class AgentExecution:
                             for event in self.normalizer.feed(envelope):
                                 if isinstance(event, ModelCallBoundary):
                                     projected = self.rectifier.flush()
-                                elif isinstance(event, PrimaryMediaBlock):
+                                elif isinstance(event, MainAgentMediaBlock):
                                     notification = await self.media_response.project(event)
                                     projected = (
                                         project_event(
@@ -187,12 +187,12 @@ class AgentExecution:
                             with suppress(asyncio.CancelledError):
                                 await next_envelope
                     await stream.output()
-                    self.normalizer.close_primary_messages()
+                    self.normalizer.close_main_agent_messages()
                     for rendered in self.rectifier.flush():
                         if rendered:
                             yield rendered
         except asyncio.CancelledError:
-            self.normalizer.abort_primary_messages()
+            self.normalizer.abort_main_agent_messages()
             self.rectifier.discard()
             raise
         except TimeoutError as exc:
@@ -250,7 +250,7 @@ class AgentRuntime:
 
     async def start(
         self,
-        primary_id: str,
+        main_agent_id: str,
         raw_messages: object,
         *,
         model_request_interceptor: Callable[[dict[str, Any]], Any] | None = None,
@@ -263,7 +263,7 @@ class AgentRuntime:
     ) -> AgentExecution:
         try:
             built = await self._builder.build(
-                primary_id,
+                main_agent_id,
                 raw_messages,
                 model_request_interceptor=model_request_interceptor,
                 model_request_observer=model_request_observer,
@@ -288,7 +288,7 @@ class AgentRuntime:
             input_state=built.input_state,
             context=built.context,
             automation=built.automation,
-            media_response=PrimaryMediaResponse(self._media_outputs, request_id),
+            media_response=MainAgentMediaResponse(self._media_outputs, request_id),
             rectifier=OutputEventRectifier(OutputProjector(built.output_config)),
             normalizer=V3EventNormalizer(
                 built.agent_name,

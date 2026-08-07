@@ -4,7 +4,7 @@ import type { JsonPrimitive, ValidationIssue } from '@/api'
 import { fieldLabelKeys } from '@/locales/fieldLabels'
 
 const resolutionKeys: Record<string, string> = {
-  'assembly.primary_not_found': 'primaryNotFound',
+  'assembly.mainAgent_not_found': 'mainAgentNotFound',
   'assembly.referenced_block_invalid': 'referencedBlockInvalid',
   'assembly.reference_not_found': 'referenceNotFound',
   'assembly.required_capability_missing': 'requiredCapabilityMissing',
@@ -188,8 +188,8 @@ export function useValidationIssuePresentation() {
     const subagentIndex = tokens[0] === 'subagents' && typeof tokens[1] === 'number'
       ? tokens[1]
       : null
-    if (issue.scope === 'primary' && issue.owner_name && subagentIndex !== null) {
-      return t('validation.resolution.unknownPrimarySubagentField', {
+    if (issue.scope === 'main_agent' && issue.owner_name && subagentIndex !== null) {
+      return t('validation.resolution.unknownMainAgentSubagentField', {
         owner: issue.owner_name,
         index: subagentIndex + 1,
       })

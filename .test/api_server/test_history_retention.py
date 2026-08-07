@@ -15,22 +15,22 @@ def test_history_page_retention_limits_trim_oldest_records_and_persist(
         "/api/interception-test/records/retention",
     )
 
-    def send_three(client: TestClient, primary: dict, prefix: str) -> None:
+    def send_three(client: TestClient, main_agent: dict, prefix: str) -> None:
         for index in range(3):
             response = client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": primary["name"],
+                    "model": main_agent["name"],
                     "messages": [{"role": "user", "content": f"{prefix}-{index}"}],
                 },
             )
             assert response.status_code == 200, response.text
 
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         for path in settings_paths:
             assert client.get(path).json() == retention_settings(20)
-        send_three(client, primary, "retention")
+        send_three(client, main_agent, "retention")
 
         assert client.put(
             "/api/api-server/history/retention",
@@ -48,7 +48,7 @@ def test_history_page_retention_limits_trim_oldest_records_and_persist(
         assert sessions["total"] == 2
 
         client.put("/api/interception-test", json={"enabled": True})
-        send_three(client, primary, "capture")
+        send_three(client, main_agent, "capture")
         assert client.put(
             "/api/interception-test/records/retention",
             json={"retention_limit": 2},
@@ -82,24 +82,24 @@ def test_history_page_retention_limits_trim_oldest_records_and_persist(
 def test_agent_session_retention_keeps_or_deletes_every_run_as_one_group(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def run(client: TestClient, primary: dict, session_id: str, message: str) -> None:
+    def run(client: TestClient, main_agent: dict, session_id: str, message: str) -> None:
         response = client.post(
             "/v1/chat/completions",
             headers={"X-Agent-Session-ID": session_id},
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": message}],
             },
         )
         assert response.status_code == 200, response.text
 
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
-        run(client, primary, "session-old", "old first")
-        run(client, primary, "session-old", "old second")
-        run(client, primary, "session-middle", "middle first")
-        run(client, primary, "session-middle", "middle second")
-        run(client, primary, "session-new", "new only")
+        main_agent = create_main_agent(client)
+        run(client, main_agent, "session-old", "old first")
+        run(client, main_agent, "session-old", "old second")
+        run(client, main_agent, "session-middle", "middle first")
+        run(client, main_agent, "session-middle", "middle second")
+        run(client, main_agent, "session-new", "new only")
 
         updated = client.put(
             "/api/agent-sessions/retention",

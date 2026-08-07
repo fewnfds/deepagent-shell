@@ -42,13 +42,13 @@ function profileFor(reference: SubagentReference): SubagentProfile | undefined {
   <section class="card mb-3" aria-labelledby="subagent-references-title">
     <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
       <h2 id="subagent-references-title" class="card-title mb-0">
-        {{ t('agents.primary.referencesTitle') }}
+        {{ t('agents.mainAgent.referencesTitle') }}
       </h2>
       <LteButton
         class="ms-auto"
         data-action="add-subagent-reference"
-        :aria-label="t('agents.primary.addReference')"
-        :title="t('agents.primary.addReference')"
+        :aria-label="t('agents.mainAgent.addReference')"
+        :title="t('agents.mainAgent.addReference')"
         size="sm"
         theme="success"
         type="button"
@@ -58,7 +58,7 @@ function profileFor(reference: SubagentReference): SubagentProfile | undefined {
       </LteButton>
     </header>
     <div v-if="references.length === 0" class="card-body text-body-secondary">
-      {{ t('agents.primary.noReferences') }}
+      {{ t('agents.mainAgent.noReferences') }}
     </div>
     <div v-else class="list-group list-group-flush">
       <div
@@ -69,7 +69,7 @@ function profileFor(reference: SubagentReference): SubagentProfile | undefined {
       >
         <div class="d-flex align-items-center gap-2">
           <label class="visually-hidden" :for="`subagent-reference-${index}`">
-            {{ t('agents.primary.reference') }}
+            {{ t('agents.mainAgent.reference') }}
           </label>
           <select
             :id="`subagent-reference-${index}`"

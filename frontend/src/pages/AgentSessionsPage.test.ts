@@ -21,7 +21,7 @@ vi.mock('@/utils/download', () => ({ triggerBrowserDownload }))
 const summary: AgentSessionSummary = {
   session_id: 'session-1',
   model: 'model-1',
-  agent_name: 'Primary',
+  agent_name: 'Main Agent',
   started_at: '2026-01-02T03:04:00Z',
   updated_at: '2026-01-02T03:04:05Z',
   status: 'completed',
@@ -42,7 +42,7 @@ function sessionTimeline(responseSummary = 'final response'): AgentSessionTimeli
       session_id: 'session-1',
       request_id: 'request-1',
       model: 'model-1',
-      agent_name: 'Primary',
+      agent_name: 'Main Agent',
       started_at: '2026-01-02T03:04:00Z',
       finished_at: '2026-01-02T03:04:05Z',
       status: 'completed',
@@ -152,7 +152,7 @@ describe('AgentSessionsPage', () => {
     })
 
     await wrapper.get('#agent-sessions-query').setValue('request-2')
-    await wrapper.get('#agent-sessions-filter-agent').setValue('Primary')
+    await wrapper.get('#agent-sessions-filter-agent').setValue('Main Agent')
     await wrapper.get('#agent-sessions-filter-status').setValue('failed')
     await nextTick()
     await wrapper.get('form[role="search"]').trigger('submit')
@@ -160,23 +160,23 @@ describe('AgentSessionsPage', () => {
     const newer = {
       ...summary,
       session_id: 'session-new',
-      agent_name: 'New Primary',
+      agent_name: 'New MainAgent',
       status: 'failed' as const,
     }
     newResponse.resolve(page([newer]))
     await flushPromises()
-    oldResponse.resolve(page([{ ...summary, session_id: 'session-old', agent_name: 'Old Primary' }]))
+    oldResponse.resolve(page([{ ...summary, session_id: 'session-old', agent_name: 'Old MainAgent' }]))
     await flushPromises()
 
     expect(listAgentSessions).toHaveBeenNthCalledWith(2, {
       page: 1,
       page_size: 20,
       query: 'request-2',
-      agent: 'Primary',
+      agent: 'Main Agent',
       status: 'failed',
     })
-    expect(wrapper.text()).toContain('New Primary')
-    expect(wrapper.text()).not.toContain('Old Primary')
+    expect(wrapper.text()).toContain('New MainAgent')
+    expect(wrapper.text()).not.toContain('Old MainAgent')
   })
 
   it('deletes complete sessions using only the submitted filters', async () => {

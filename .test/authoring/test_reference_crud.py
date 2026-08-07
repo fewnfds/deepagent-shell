@@ -6,7 +6,7 @@ from uuid import UUID
 
 from .reference_support import *
 
-def test_primary_reference_delete_detaches_optional_and_protects_required_types(
+def test_main_agent_reference_delete_detaches_optional_and_protects_required_types(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
@@ -22,16 +22,16 @@ def test_primary_reference_delete_detaches_optional_and_protects_required_types(
     ).json()
 
     response = client.post(
-        "/api/primary-agents",
+        "/api/main-agents",
         json={
-            "name": "Primary matrix",
+            "name": "Main Agent matrix",
             "capability_refs": references(original),
             "subagents": [{"subagent_id": subagent["id"]}],
         },
     )
     assert response.status_code == 200, response.text
-    primary = response.json()
-    assert [item["type"] for item in primary["capability_refs"]] == list(PUBLIC_TYPES)
+    main_agent = response.json()
+    assert [item["type"] for item in main_agent["capability_refs"]] == list(PUBLIC_TYPES)
 
     for capability_type, block in original.items():
         deleted = client.delete(f"/api/blocks/{capability_type}/{block['id']}")
@@ -39,11 +39,11 @@ def test_primary_reference_delete_detaches_optional_and_protects_required_types(
         assert deleted.status_code == expected, (capability_type, deleted.text)
 
     updated = client.put(
-        f"/api/primary-agents/{primary['id']}",
+        f"/api/main-agents/{main_agent['id']}",
         json={
-            "name": primary["name"],
+            "name": main_agent["name"],
             "capability_refs": references(replacement),
-            "subagents": primary["subagents"],
+            "subagents": main_agent["subagents"],
         },
     )
     assert updated.status_code == 200, updated.text
@@ -57,7 +57,7 @@ def test_primary_reference_delete_detaches_optional_and_protects_required_types(
         expected = 409 if capability_type in REQUIRED_TYPES else 200
         assert deleted.status_code == expected, (capability_type, deleted.text)
 
-    assert client.delete(f"/api/primary-agents/{primary['id']}").status_code == 200
+    assert client.delete(f"/api/main-agents/{main_agent['id']}").status_code == 200
     for capability_type in REQUIRED_TYPES:
         block = replacement[capability_type]
         released = client.delete(f"/api/blocks/{capability_type}/{block['id']}")
@@ -137,7 +137,7 @@ def test_subagent_delete_detaches_entity_references(
     subagent = subagent_response.json()
 
     owner_response = client.post(
-        "/api/primary-agents",
+        "/api/main-agents",
         json={
             "name": "Override owner",
             "capability_refs": required_refs,
@@ -148,19 +148,19 @@ def test_subagent_delete_detaches_entity_references(
     owner = owner_response.json()
 
     independent_response = client.post(
-        "/api/primary-agents",
-        json={"name": "Independent Primary", "capability_refs": required_refs},
+        "/api/main-agents",
+        json={"name": "Independent Main Agent", "capability_refs": required_refs},
     )
     assert independent_response.status_code == 200, independent_response.text
     independent = independent_response.json()
-    assert client.delete(f"/api/primary-agents/{independent['id']}").status_code == 200
+    assert client.delete(f"/api/main-agents/{independent['id']}").status_code == 200
 
     deleted = client.delete(f"/api/subagents/{subagent['id']}")
     assert deleted.status_code == 200, deleted.text
-    stored_owner = client.get(f"/api/primary-agents/{owner['id']}").json()
+    stored_owner = client.get(f"/api/main-agents/{owner['id']}").json()
     assert stored_owner["subagents"] == []
 
-    assert client.delete(f"/api/primary-agents/{owner['id']}").status_code == 200
+    assert client.delete(f"/api/main-agents/{owner['id']}").status_code == 200
 
 def test_subagent_delete_detaches_self_and_external_references(
     tmp_path: Path, monkeypatch

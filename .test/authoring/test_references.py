@@ -19,8 +19,8 @@ def test_default_deep_agent_tool_conflict_is_rejected_at_save(
     )
     assert selected.status_code == 200, selected.text
 
-    primary = client.post(
-        "/api/primary-agents",
+    main_agent = client.post(
+        "/api/main-agents",
         json={
             "name": "Default tool conflict",
             "capability_refs": references(
@@ -30,8 +30,8 @@ def test_default_deep_agent_tool_conflict_is_rejected_at_save(
         },
     )
 
-    assert primary.status_code == 422
-    issues = primary.json()["detail"]["validation"]["issues"]
+    assert main_agent.status_code == 422
+    issues = main_agent.json()["detail"]["validation"]["issues"]
     assert any(
         issue["code"] == "assembly.tool_name_conflict"
         and issue["path"] == "tools.read_file"
@@ -55,8 +55,8 @@ def test_minimal_filesystem_allows_non_read_file_tool_names(
     )
     assert selected.status_code == 200, selected.text
 
-    primary = client.post(
-        "/api/primary-agents",
+    main_agent = client.post(
+        "/api/main-agents",
         json={
             "name": "Minimal filesystem",
             "capability_refs": references(
@@ -66,10 +66,10 @@ def test_minimal_filesystem_allows_non_read_file_tool_names(
         },
     )
 
-    assert primary.status_code == 200, primary.text
+    assert main_agent.status_code == 200, main_agent.text
 
 
-def test_block_update_rejects_new_conflict_in_referencing_primary(
+def test_block_update_rejects_new_conflict_in_referencing_main_agent(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
@@ -85,17 +85,17 @@ def test_block_update_rejects_new_conflict_in_referencing_primary(
         json={"name": blocks["custom-tool"]["name"], "tools": ["safe_tool"]},
     )
     assert safe.status_code == 200, safe.text
-    primary = client.post(
-        "/api/primary-agents",
+    main_agent = client.post(
+        "/api/main-agents",
         json={
-            "name": "Protected Primary",
+            "name": "Protected Main Agent",
             "capability_refs": references(
                 blocks,
                 ("model", "filesystem", "output-mode", "todo-list", "custom-tool"),
             ),
         },
     )
-    assert primary.status_code == 200, primary.text
+    assert main_agent.status_code == 200, main_agent.text
 
     rejected = client.put(
         f"/api/blocks/custom-tool/{blocks['custom-tool']['id']}",
@@ -126,8 +126,8 @@ def test_static_tool_conflicts_use_ast_declared_name_not_resource_filename(
     )
     assert selected.status_code == 200, selected.text
 
-    primary = client.post(
-        "/api/primary-agents",
+    main_agent = client.post(
+        "/api/main-agents",
         json={
             "name": "No false tool conflict",
             "capability_refs": references(
@@ -137,7 +137,7 @@ def test_static_tool_conflicts_use_ast_declared_name_not_resource_filename(
         },
     )
 
-    assert primary.status_code == 200, primary.text
+    assert main_agent.status_code == 200, main_agent.text
 
 def test_hidden_delete_only_conflicts_after_filesystem_enables_it(
     tmp_path: Path, monkeypatch
@@ -154,17 +154,17 @@ def test_hidden_delete_only_conflicts_after_filesystem_enables_it(
         json={"name": blocks["custom-tool"]["name"], "tools": ["delete"]},
     )
     assert selected.status_code == 200, selected.text
-    primary = client.post(
-        "/api/primary-agents",
+    main_agent = client.post(
+        "/api/main-agents",
         json={
-            "name": "Delete opt-in Primary",
+            "name": "Delete opt-in Main Agent",
             "capability_refs": references(
                 blocks,
                 ("model", "filesystem", "output-mode", "custom-tool"),
             ),
         },
     )
-    assert primary.status_code == 200, primary.text
+    assert main_agent.status_code == 200, main_agent.text
 
     enabled = client.put(
         f"/api/blocks/filesystem/{blocks['filesystem']['id']}",
@@ -218,10 +218,10 @@ def test_override_update_rejects_new_conflict_in_bound_subagent(
         ),
     )
     assert subagent.status_code == 200, subagent.text
-    primary = client.post(
-        "/api/primary-agents",
+    main_agent = client.post(
+        "/api/main-agents",
         json={
-            "name": "Delegating Primary",
+            "name": "Delegating Main Agent",
             "capability_refs": references(
                 blocks,
                 ("model", "filesystem", "output-mode", "todo-list", "subagent"),
@@ -229,7 +229,7 @@ def test_override_update_rejects_new_conflict_in_bound_subagent(
             "subagents": [{"subagent_id": subagent.json()["id"]}],
         },
     )
-    assert primary.status_code == 200, primary.text
+    assert main_agent.status_code == 200, main_agent.text
 
     rejected = client.put(
         f"/api/subagents/{subagent.json()['id']}",
@@ -252,7 +252,7 @@ def test_override_update_rejects_new_conflict_in_bound_subagent(
     assert any(issue["code"] == "assembly.tool_name_conflict" for issue in issues)
     stored = client.get(f"/api/subagents/{subagent.json()['id']}").json()
     assert stored["settings"]["capability_overrides"][0]["block_id"] == safe_tool["id"]
-def test_repository_report_owns_invalid_subagent_issue_by_primary(
+def test_repository_report_owns_invalid_subagent_issue_by_main_agent(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
@@ -261,10 +261,10 @@ def test_repository_report_owns_invalid_subagent_issue_by_primary(
         "/api/blocks/subagent",
         json={"name": "Delegation owner"},
     ).json()
-    primary = client.post(
-        "/api/primary-agents",
+    main_agent = client.post(
+        "/api/main-agents",
         json={
-            "name": "Subagent owner Primary",
+            "name": "Subagent owner Main Agent",
             "capability_refs": [
                 *references(blocks, ("model", "filesystem", "output-mode")),
                 {"type": "subagent", "block_id": delegation["id"]},
@@ -274,12 +274,12 @@ def test_repository_report_owns_invalid_subagent_issue_by_primary(
             }],
         },
     )
-    assert primary.status_code == 422
+    assert main_agent.status_code == 422
 
-    valid_primary = client.post(
-        "/api/primary-agents",
+    valid_main_agent = client.post(
+        "/api/main-agents",
         json={
-            "name": "Subagent owner Primary",
+            "name": "Subagent owner Main Agent",
             "capability_refs": references(
                 blocks, ("model", "filesystem", "output-mode")
             ),
@@ -289,7 +289,7 @@ def test_repository_report_owns_invalid_subagent_issue_by_primary(
     database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
     with closing(sqlite3.connect(database_path)) as connection, connection:
         row = connection.execute(
-            "SELECT payload FROM primary_agents WHERE id = ?", (valid_primary["id"],)
+            "SELECT payload FROM main_agents WHERE id = ?", (valid_main_agent["id"],)
         ).fetchone()
         payload = json.loads(row[0])
         payload["capability_refs"].append(
@@ -299,8 +299,8 @@ def test_repository_report_owns_invalid_subagent_issue_by_primary(
             "subagent_id": "00000000-0000-0000-0000-000000000000"
         }]
         connection.execute(
-            "UPDATE primary_agents SET payload = ? WHERE id = ?",
-            (json.dumps(payload, ensure_ascii=False), valid_primary["id"]),
+            "UPDATE main_agents SET payload = ? WHERE id = ?",
+            (json.dumps(payload, ensure_ascii=False), valid_main_agent["id"]),
         )
 
     issues = client.get("/api/validation/repository").json()["issues"]
@@ -310,8 +310,8 @@ def test_repository_report_owns_invalid_subagent_issue_by_primary(
         if item["code"] == "assembly.subagent_not_found"
     )
     assert issue["scope"] == "subagent"
-    assert issue["owner_id"] == valid_primary["id"]
-    assert issue["owner_name"] == "Subagent owner Primary"
+    assert issue["owner_id"] == valid_main_agent["id"]
+    assert issue["owner_name"] == "Subagent owner Main Agent"
 def test_generic_draft_validation_covers_each_target_without_writing(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -328,11 +328,11 @@ def test_generic_draft_validation_covers_each_target_without_writing(
             },
         },
     )
-    primary_report = client.post(
+    main_agent_report = client.post(
         "/api/validation/draft",
         json={
-            "target": {"kind": "primary"},
-            "payload": {"name": "Draft Primary", "capability_refs": []},
+            "target": {"kind": "main_agent"},
+            "payload": {"name": "Draft Main Agent", "capability_refs": []},
         },
     )
     subagent_report = client.post(
@@ -354,16 +354,16 @@ def test_generic_draft_validation_covers_each_target_without_writing(
     )
 
     assert block_report.status_code == 200
-    assert primary_report.status_code == 200
+    assert main_agent_report.status_code == 200
     assert subagent_report.status_code == 200
     assert block_report.json()["issues"][0]["code"] == "contract.unknown_field"
     assert any(
         issue["code"] == "assembly.required_capability_missing"
-        for issue in primary_report.json()["issues"]
+        for issue in main_agent_report.json()["issues"]
     )
     assert subagent_report.json()["issues"][0]["code"] == "assembly.reference_not_found"
     assert client.get("/api/blocks/system-prompt").json() == []
-    assert client.get("/api/primary-agents").json() == []
+    assert client.get("/api/main-agents").json() == []
     assert client.get("/api/subagents").json() == []
 
 

@@ -5,12 +5,12 @@ import { createMemoryHistory, createRouter } from 'vue-router'
 import type {
   AgentAuthoringService,
   CapabilityManifest,
-  PrimaryAgentProfile,
+  MainAgentProfile,
   SubagentProfile,
   ValidationReport,
 } from '@/domain/agents'
 
-import PrimaryAgentPage from './PrimaryAgentPage.vue'
+import MainAgentPage from './MainAgentPage.vue'
 import SubagentPage from './SubagentPage.vue'
 
 const toastNotify = vi.hoisted(() => vi.fn())
@@ -102,7 +102,7 @@ export const subagentManifest: CapabilityManifest = {
 }
 
 export function service(overrides: Partial<AgentAuthoringService> = {}): AgentAuthoringService {
-  const primary: PrimaryAgentProfile = {
+  const mainAgent: MainAgentProfile = {
     id: '00000000-0000-0000-0000-000000000010',
     name: 'Shared name',
     capability_refs: [],
@@ -130,10 +130,10 @@ export function service(overrides: Partial<AgentAuthoringService> = {}): AgentAu
       name: `${type} block`,
     }]),
     listAutomationPlugins: vi.fn(async () => ({ catalog: [], errors: {} })),
-    listPrimaryAgents: vi.fn(async () => [primary]),
-    getPrimaryAgent: vi.fn(async () => primary),
-    createPrimaryAgent: vi.fn(async (payload) => ({ ...primary, ...payload, id: 'created-primary' })),
-    updatePrimaryAgent: vi.fn(async (id, payload) => ({ ...primary, ...payload, id })),
+    listMainAgents: vi.fn(async () => [mainAgent]),
+    getMainAgent: vi.fn(async () => mainAgent),
+    createMainAgent: vi.fn(async (payload) => ({ ...mainAgent, ...payload, id: 'created-mainAgent' })),
+    updateMainAgent: vi.fn(async (id, payload) => ({ ...mainAgent, ...payload, id })),
     listSubagents: vi.fn(async () => [subagent]),
     getSubagent: vi.fn(async () => subagent),
     createSubagent: vi.fn(async (payload) => ({ ...subagent, ...payload, id: 'created-subagent' })),
@@ -157,17 +157,17 @@ export function getToastNotify() {
   return toastNotify
 }
 
-export async function mountPrimaryPage(
+export async function mountMainAgentPage(
   api: AgentAuthoringService,
-  path = '/agents/primary',
+  path = '/agents/main',
 ) {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/agents/primary', component: PrimaryAgentPage }],
+    routes: [{ path: '/agents/main', component: MainAgentPage }],
   })
   await router.push(path)
   await router.isReady()
-  const wrapper = mount(PrimaryAgentPage, {
+  const wrapper = mount(MainAgentPage, {
     props: { service: api },
     global: { plugins: [router] },
   })

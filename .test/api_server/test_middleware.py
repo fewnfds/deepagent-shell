@@ -34,7 +34,7 @@ def test_selected_todo_middleware_updates_state_and_uses_overrides(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         todo = client.post(
             "/api/blocks/todo-list",
             json={
@@ -44,11 +44,11 @@ def test_selected_todo_middleware_updates_state_and_uses_overrides(
             },
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {"type": "todo-list", "block_id": todo["id"]},
                 ],
                 "subagents": [],
@@ -58,7 +58,7 @@ def test_selected_todo_middleware_updates_state_and_uses_overrides(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Plan the work."}],
             },
         )
@@ -119,7 +119,7 @@ def test_selected_middleware_prompt_hooks_follow_product_order(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         todo = client.post(
             "/api/blocks/todo-list",
             json={"name": "Ordered Todo", "system_prompt_override": "TODO"},
@@ -148,12 +148,12 @@ def test_selected_middleware_prompt_hooks_follow_product_order(
             },
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
                     *replace_capability_reference(
-                        primary, "filesystem", filesystem["id"]
+                        main_agent, "filesystem", filesystem["id"]
                     ),
                     {"type": "todo-list", "block_id": todo["id"]},
                     {"type": "skill", "block_id": skill["id"]},
@@ -166,7 +166,7 @@ def test_selected_middleware_prompt_hooks_follow_product_order(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Check order."}],
             },
         )

@@ -9,7 +9,7 @@ from langchain_core.messages import AIMessage
 
 from .support import (
     ToolCallingFakeModel,
-    create_primary,
+    create_main_agent,
     make_client,
     write_automation_script,
 )
@@ -88,7 +88,7 @@ def test_parallel_same_profile_invocations_have_isolated_plugin_workspaces(
                 child_model if block["name"] == "Parallel child model" else parent_model
             ),
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         child_block = client.post(
             "/api/blocks/model",
             json={
@@ -137,11 +137,11 @@ def test_parallel_same_profile_invocations_have_isolated_plugin_workspaces(
             "/api/blocks/subagent", json={"name": "Parallel delegation"}
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {"type": "subagent", "block_id": delegation["id"]},
                 ],
                 "subagents": [{"subagent_id": subagent["id"]}],
@@ -151,7 +151,7 @@ def test_parallel_same_profile_invocations_have_isolated_plugin_workspaces(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "run four"}],
             },
         )
@@ -184,7 +184,7 @@ def test_parallel_same_profile_invocations_have_isolated_plugin_workspaces(
         for item in session["runs"][0]["timeline"]
         if item["kind"] == "agent_input"
     ]
-    root = next(item for item in inputs if item["agent_type"] == "primary")
+    root = next(item for item in inputs if item["agent_type"] == "main_agent")
     children = [item for item in inputs if item["agent_type"] == "subagent"]
     assert len(children) == 4
     assert {item["invocation_id"] for item in children} == {

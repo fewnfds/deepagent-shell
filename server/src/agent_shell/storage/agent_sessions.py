@@ -123,7 +123,7 @@ def _timeline_event_summary(
     elif kind == "model_response":
         for key in (
             "agent_name",
-            "is_primary",
+            "is_main_agent",
             "provider_finish_reason",
             "finish_reason_source",
             "finish_reason_category",

@@ -25,13 +25,13 @@ describe('useManagementError', () => {
       code: 'configuration_in_use',
       message: 'raw backend text must stay hidden',
       messageKey: 'backend.configurationInUse',
-      messageArgs: { name: 'Primary' },
+      messageArgs: { name: 'Main Agent' },
       requestId: 'request-123',
       payload: { traceback: 'hidden' },
     })
 
     const result = useManagementError().describe(error)
-    expect(result.message).toBe('backend.configurationInUse:{"name":"Primary"}')
+    expect(result.message).toBe('backend.configurationInUse:{"name":"Main Agent"}')
     expect(result.display).toContain('configuration_in_use')
     expect(result.display).toContain('request-123')
     expect(result.display).not.toContain('raw backend text')
@@ -51,9 +51,9 @@ describe('useManagementError', () => {
         issues: [
           {
             code: 'assembly.reference_not_found',
-            scope: 'primary',
-            owner_id: 'primary-id',
-            owner_name: 'Primary A',
+            scope: 'main_agent',
+            owner_id: 'main-agent-id',
+            owner_name: 'Main Agent A',
             path: 'capability_refs.model',
             message: 'raw issue text',
             message_key: 'validation.issue.assembly.referenceNotFound',

@@ -8,13 +8,13 @@
 - `/admin`：管理台；
 - `/api/health`、`/api/readiness`：存活与就绪状态；
 - `/api/catalog`、`/api/blocks/*`：组件目录与 CRUD；
-- `/api/primary-agents`、`/api/subagents`：Agent 配置；
+- `/api/main-agents`、`/api/subagents`：Agent 配置；
 - `/api/tools/custom`、`/api/middlewares/custom`、`/api/skills`：用户资源发现；
 - `/api/file-manager/*`、`/api/system/settings`：数据与实例设置；
 - `/api/event-feed`、`/api/agent-sessions`：日志与历史会话；
 - `/v1/models`、`/v1/chat/completions`：OpenAI-compatible 推理接口。
 
-每个推理请求从单次 SQLite 快照解析配置，再通过 `deepagents.create_deep_agent()` 构造 Primary 和
+每个推理请求从单次 SQLite 快照解析配置，再通过 `deepagents.create_deep_agent()` 构造 Main Agent 和
 同步 Subagent。用户资源文件在装配时重新校验和物化。多轮消息由客户端提交；历史会话只用于观察。
 
 ## 运行与开发

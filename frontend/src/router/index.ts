@@ -7,7 +7,7 @@ const ComponentsPage = () => import('@/pages/ComponentsPage.vue')
 const ConfigLibraryPage = () => import('@/pages/ConfigLibraryPage.vue')
 const EventFeedPage = () => import('@/pages/EventFeedPage.vue')
 const FileManagerPage = () => import('@/pages/FileManagerPage.vue')
-const PrimaryAgentPage = () => import('@/pages/PrimaryAgentPage.vue')
+const MainAgentPage = () => import('@/pages/MainAgentPage.vue')
 const StyleLabPage = () => import('@/pages/StyleLabPage.vue')
 const SystemSettingsPage = () => import('@/pages/SystemSettingsPage.vue')
 const SubagentPage = () => import('@/pages/SubagentPage.vue')
@@ -17,8 +17,8 @@ export const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', component: ApiServerSettingsPage, meta: { titleKey: 'apiServer.homeTitle' } },
-    { path: '/agents', redirect: '/agents/primary' },
-    { path: '/agents/primary', component: PrimaryAgentPage, meta: { titleKey: 'navigation.agents' } },
+    { path: '/agents', redirect: '/agents/main' },
+    { path: '/agents/main', component: MainAgentPage, meta: { titleKey: 'navigation.agents' } },
     { path: '/agents/subagents', component: SubagentPage, meta: { titleKey: 'navigation.agents' } },
     { path: '/components', redirect: '/components/model' },
     { path: '/components/:type', component: ComponentsPage, meta: { titleKey: 'components.title' } },

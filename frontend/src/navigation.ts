@@ -37,7 +37,7 @@ const sectionNavigationGroups: SectionNavigationGroup[] = [
   {
     prefix: '/agents',
     items: [
-      { path: '/agents/primary', labelKey: 'navigation.sections.primary' },
+      { path: '/agents/main', labelKey: 'navigation.sections.mainAgent' },
       { path: '/agents/subagents', labelKey: 'navigation.sections.subagents' },
     ],
   },

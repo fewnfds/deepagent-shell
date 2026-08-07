@@ -35,8 +35,8 @@ describe('ValidationChecklist', () => {
         stage: 'draft_validation',
         issues: [{
           code: 'assembly.filesystem_permission_path_unmatched',
-          scope: 'primary',
-          owner_id: 'primary-id',
+          scope: 'main_agent',
+          owner_id: 'main-agent-id',
           owner_name: 'Writer',
           path: 'capability_refs.filesystem-permissions.permissions[0].path',
           message: 'raw warning',
@@ -96,7 +96,7 @@ describe('ValidationChecklist', () => {
           },
           {
             code: 'contract.text_too_short',
-            scope: 'primary',
+            scope: 'main_agent',
             owner_id: 'profile-id',
             owner_name: '',
             path: 'name',
@@ -129,7 +129,7 @@ describe('ValidationChecklist', () => {
     expect(wrapper.text()).toContain('配置名称不能为空。')
     expect(wrapper.text()).toContain('配置名称未通过当前配置规则')
     expect(wrapper.text()).not.toContain('backend report message')
-    expect(wrapper.text()).toContain('当前编辑的 Primary Agent 配置')
+    expect(wrapper.text()).toContain('当前编辑的 Main Agent 配置')
   })
 
   it('pinpoints malformed output templates and always provides a concrete next step', () => {
@@ -184,7 +184,7 @@ describe('ValidationChecklist', () => {
         path: 'subagents[2].description',
         message_key: 'validation.issue.contract.subagentDescriptionRequired',
         reason: 'Subagent 必须填写说明。',
-        resolution: '说明 Primary Agent 应在什么情况下把任务交给这个 Subagent',
+        resolution: '说明 Main Agent 应在什么情况下把任务交给这个 Subagent',
       },
       {
         code: 'contract.subagent_name_duplicate',
@@ -204,8 +204,8 @@ describe('ValidationChecklist', () => {
           code,
           path,
           message_key,
-          scope: 'primary',
-          owner_id: 'primary-id',
+          scope: 'main_agent',
+          owner_id: 'main-agent-id',
           owner_name: 'coordinator',
           message: 'safe backend detail',
           message_args: {},
@@ -286,9 +286,9 @@ describe('ValidationChecklist', () => {
         stage: 'repository_validation',
         issues: [{
           code: 'contract.unknown_field',
-          scope: 'primary',
-          owner_id: 'primary-id',
-          owner_name: 'test-primary-agent',
+          scope: 'main_agent',
+          owner_id: 'main-agent-id',
+          owner_name: 'test-main-agent',
           path: 'subagents[0].inherit_all',
           message: 'raw backend report message',
           message_key: 'validation.issue.contract.unknownField',
@@ -298,7 +298,7 @@ describe('ValidationChecklist', () => {
     })
 
     const card = wrapper.get('[data-testid="validation-issue"]')
-    expect(card.get('[data-testid="validation-owner"]').text()).toContain('test-primary-agent 的 Primary Agent 配置')
+    expect(card.get('[data-testid="validation-owner"]').text()).toContain('test-main-agent 的 Main Agent 配置')
     expect(card.get('dl').text()).toContain('问题位置')
     expect(card.get('[data-testid="validation-location"]').text()).toContain('Subagent 引用中的第 1 项下的inherit_all 字段')
     const technicalPath = card.get('[data-testid="validation-technical-path"]')
@@ -308,7 +308,7 @@ describe('ValidationChecklist', () => {
     expect(card.get('[data-testid="validation-reason"]').text())
       .toContain('inherit_all 字段不属于当前配置结构，可能已被删除或名称有误。')
     expect(card.get('[data-testid="validation-resolution"]').text())
-      .toContain('打开 test-primary-agent 对应的 Primary Agent 配置，找到第 1 个 Subagent')
+      .toContain('打开 test-main-agent 对应的 Main Agent 配置，找到第 1 个 Subagent')
     expect(card.text()).not.toContain('配置项')
     expect(card.text()).not.toContain('raw backend report message')
     expect(card.text()).not.toMatch(/[\u300c\u300d\u201c\u201d\u00b7\u2192]/)
@@ -330,8 +330,8 @@ describe('ValidationChecklist', () => {
         stage: 'draft_validation',
         issues: [{
           code: 'assembly.required_capability_missing',
-          scope: 'primary',
-          owner_id: 'primary-id',
+          scope: 'main_agent',
+          owner_id: 'main-agent-id',
           owner_name: 'writer',
           path: 'capability_refs.output-mode',
           message: 'raw backend report message',
@@ -365,8 +365,8 @@ describe('ValidationChecklist', () => {
             stage: 'draft_validation',
             issues: [{
               code: 'automation.plugin_not_found',
-              scope: 'primary',
-              owner_id: 'primary-id',
+              scope: 'main_agent',
+              owner_id: 'main-agent-id',
               owner_name: 'coordinator',
               path,
               message: 'safe backend detail',

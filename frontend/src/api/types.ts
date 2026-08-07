@@ -213,25 +213,25 @@ export interface AutomationScriptResource {
   dependency_error_code: string
 }
 
-export interface PrimaryAutomation {
+export interface MainAgentAutomation {
   hooks: AutomationPluginBinding[]
   periodic: PeriodicAutomationPluginBinding[]
 }
 
-export type SubagentAutomation = PrimaryAutomation
+export type SubagentAutomation = MainAgentAutomation
 
 export interface SubagentReference {
   subagent_id: string
 }
 
-export interface PrimaryAgentPayload {
+export interface MainAgentPayload {
   name: string
   capability_refs: CapabilityReference[]
   subagents: SubagentReference[]
-  automation: PrimaryAutomation
+  automation: MainAgentAutomation
 }
 
-export type PrimaryAgent = PrimaryAgentPayload & { id: string }
+export type MainAgent = MainAgentPayload & { id: string }
 
 export interface CapabilityOverride {
   type: string
@@ -256,7 +256,7 @@ export type Subagent = SubagentPayload & { id: string }
 
 type ValidationTarget =
   | { kind: 'block'; type: BlockType; id?: string }
-  | { kind: 'primary'; type?: ''; id?: string }
+  | { kind: 'main_agent'; type?: ''; id?: string }
   | { kind: 'subagent'; type?: ''; id?: string }
 
 export interface DraftValidationRequest {

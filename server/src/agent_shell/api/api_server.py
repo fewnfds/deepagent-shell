@@ -197,7 +197,7 @@ def _usage_payload(usage: dict[str, int]) -> dict[str, object]:
     return payload
 
 
-def _primary_completion_payload(
+def _main_agent_completion_payload(
     model: str,
     content: str,
     usage: dict[str, int],
@@ -253,7 +253,7 @@ def build_api_server_router(
             "runtime": "model_streaming",
         }
 
-    async def primary_completion_stream(
+    async def main_agent_completion_stream(
         *,
         execution: AgentExecution,
         model: str,
@@ -503,11 +503,11 @@ def build_api_server_router(
     async def models() -> JSONResponse:
         if not store.is_enabled():
             return _openai_error(503, "api_server_stopped", "The API server is stopped.")
-        primary_models = [
+        main_agent_models = [
             _model_object(item["name"])
-            for item in agent_configs.list_items("primary_agents")
+            for item in agent_configs.list_items("main_agents")
         ]
-        return JSONResponse(content={"object": "list", "data": primary_models})
+        return JSONResponse(content={"object": "list", "data": main_agent_models})
 
     @router.post("/v1/chat/completions", response_model=None)
     async def chat_completions(request: Request) -> JSONResponse | StreamingResponse:
@@ -549,15 +549,15 @@ def build_api_server_router(
                 status_code=500,
             )
             return JSONResponse(status_code=500, content=error)
-        primary = request_snapshot.primary_by_name(model)
-        if primary is None:
+        main_agent = request_snapshot.main_agent_by_name(model)
+        if main_agent is None:
             return _openai_error(
                 404,
                 "model_not_found",
                 "The requested model does not exist.",
                 param="model",
             )
-        agent_name = str(primary["name"])
+        agent_name = str(main_agent["name"])
         stream = payload.get("stream", False)
         if not isinstance(stream, bool):
             error = _openai_error_payload(
@@ -601,7 +601,7 @@ def build_api_server_router(
                 error_code="input_messages_too_many",
             )
             return JSONResponse(status_code=422, content=error)
-        if primary is not None:
+        if main_agent is not None:
             requested_session_id = request.headers.get("x-agent-session-id", "")
             if requested_session_id and not SESSION_ID_PATTERN.fullmatch(
                 requested_session_id
@@ -676,7 +676,7 @@ def build_api_server_router(
 
             try:
                 execution = await request_snapshot.start_agent(
-                    str(primary["id"]),
+                    str(main_agent["id"]),
                     payload.get("messages"),
                     model_request_interceptor=model_request_interceptor,
                     model_request_observer=capture.model_request,
@@ -739,7 +739,7 @@ def build_api_server_router(
                 )
             if stream:
                 return StreamingResponse(
-                    primary_completion_stream(
+                    main_agent_completion_stream(
                         execution=execution,
                         model=model,
                         finalizer=finalizer,
@@ -815,7 +815,7 @@ def build_api_server_router(
                 return JSONResponse(
                     status_code=500, content=error, headers=session_headers
                 )
-            response_payload = _primary_completion_payload(
+            response_payload = _main_agent_completion_payload(
                 model,
                 content,
                 usage,

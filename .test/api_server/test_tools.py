@@ -43,17 +43,17 @@ def test_selected_custom_tool_runs_in_the_real_agent_loop(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         tools = client.post(
             "/api/blocks/custom-tool",
             json={"name": "Runtime tools", "tools": ["ping"]},
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {"type": "custom-tool", "block_id": tools["id"]},
                 ],
                 "subagents": [],
@@ -63,7 +63,7 @@ def test_selected_custom_tool_runs_in_the_real_agent_loop(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Use ping."}],
             },
         )
@@ -137,7 +137,7 @@ def test_selected_custom_tool_can_run_in_two_consecutive_model_steps(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         tools = client.post(
             "/api/blocks/custom-tool",
             json={"name": "Two-step tools", "tools": ["ping"]},
@@ -147,11 +147,11 @@ def test_selected_custom_tool_can_run_in_two_consecutive_model_steps(
             json={"name": "Loop prompt", "system_prompt": "AGENT LOOP"},
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {"type": "custom-tool", "block_id": tools["id"]},
                     {"type": "system-prompt", "block_id": prompt["id"]},
                 ],
@@ -162,7 +162,7 @@ def test_selected_custom_tool_can_run_in_two_consecutive_model_steps(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [
                     {"role": "system", "content": "CLIENT HEAD"},
                     {
@@ -205,17 +205,17 @@ def test_missing_selected_custom_tool_fails_before_provider(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         tools = client.post(
             "/api/blocks/custom-tool",
             json={"name": "Missing runtime tool", "tools": ["missing_tool"]},
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {"type": "custom-tool", "block_id": tools["id"]},
                 ],
                 "subagents": [],
@@ -225,7 +225,7 @@ def test_missing_selected_custom_tool_fails_before_provider(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Do not run."}],
             },
         )
@@ -256,7 +256,7 @@ def test_cross_capability_tool_name_conflict_fails_before_provider(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         todo = client.post(
             "/api/blocks/todo-list",
             json={"name": "Conflicting Todo"},
@@ -266,11 +266,11 @@ def test_cross_capability_tool_name_conflict_fails_before_provider(
             json={"name": "Conflicting tools", "tools": ["conflicting_todo"]},
         ).json()
         updated = client.put(
-            f"/api/primary-agents/{primary['id']}",
+            f"/api/main-agents/{main_agent['id']}",
             json={
-                "name": primary["name"],
+                "name": main_agent["name"],
                 "capability_refs": [
-                    *primary["capability_refs"],
+                    *main_agent["capability_refs"],
                     {"type": "todo-list", "block_id": todo["id"]},
                     {"type": "custom-tool", "block_id": tools["id"]},
                 ],
@@ -281,7 +281,7 @@ def test_cross_capability_tool_name_conflict_fails_before_provider(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "Do not run."}],
             },
         )

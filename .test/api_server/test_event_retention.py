@@ -120,7 +120,7 @@ def test_runtime_retention_persists_entries_across_restart_and_deletes_them(
             diagnostics.request_started(
                 request_id=f"persisted-runtime-{index}",
                 model="published-model",
-                agent_name="Published Primary",
+                agent_name="Published Main Agent",
             )
 
     with make_client(tmp_path, monkeypatch) as restarted:

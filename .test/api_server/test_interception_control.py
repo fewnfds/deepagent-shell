@@ -13,14 +13,14 @@ def test_interception_records_are_persistent_paged_searchable_and_deletable(
                 responses=["provider must not run"]
             ),
         )
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         enabled = client.put("/api/interception-test", json={"enabled": True})
         assert enabled.json() == {"enabled": True}
         for number in range(3):
             response = client.post(
                 "/v1/chat/completions",
                 json={
-                    "model": primary["name"],
+                    "model": main_agent["name"],
                     "messages": [{"role": "user", "content": f"message-{number}"}],
                     "metadata": {"number": number},
                 },

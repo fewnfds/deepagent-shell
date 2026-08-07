@@ -23,9 +23,9 @@ def test_invocation_context_is_read_only_and_preserves_nested_parent_chain(
         request_id="request-id",
         owners=[
             AutomationOwner(
-                id="primary-id",
-                type="primary",
-                name="Primary",
+                id="main_agent-id",
+                type="main_agent",
+                name="Main Agent",
                 automation={"hooks": [binding], "periodic": []},
                 mapped_paths={},
             ),
@@ -43,7 +43,7 @@ def test_invocation_context_is_read_only_and_preserves_nested_parent_chain(
         runtime_root=tmp_path / "runtime",
     )
 
-    root = runtime.root_context("primary-id")["agent_shell_invocation"]
+    root = runtime.root_context("main_agent-id")["agent_shell_invocation"]
     child = runtime.child_context(
         "child-id", root, "call-child"
     )["agent_shell_invocation"]
@@ -94,7 +94,7 @@ async def test_multimodal_request_is_recursively_frozen_and_owner_copies_are_iso
             automation={"hooks": [binding], "periodic": []},
             mapped_paths={},
         )
-        for owner_id, owner_type in (("primary", "primary"), ("child", "subagent"))
+        for owner_id, owner_type in (("main_agent", "main_agent"), ("child", "subagent"))
     ]
     messages = validate_client_messages(
         [
@@ -122,11 +122,11 @@ async def test_multimodal_request_is_recursively_frozen_and_owner_copies_are_iso
         runtime.request.messages[0]["content"][1]["url"] = "changed"
     with pytest.raises(AttributeError):
         runtime.request.messages[0]["content"].append({"type": "text", "text": "x"})
-    primary = runtime.messages_for("primary")
+    main_agent = runtime.messages_for("main_agent")
     child = runtime.messages_for("child")
-    primary[0]["content"][1]["url"] = "https://changed.example/image.png"
+    main_agent[0]["content"][1]["url"] = "https://changed.example/image.png"
     assert child[0]["content"][1]["url"] == "https://media.example/image.png"
-    assert runtime.messages_for("primary")[0]["content"][1]["url"] == (
+    assert runtime.messages_for("main_agent")[0]["content"][1]["url"] == (
         "https://media.example/image.png"
     )
     await runtime.finish({"status": "completed"})

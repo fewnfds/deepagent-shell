@@ -1,6 +1,6 @@
 # Subagent
 
-Subagent 页面保存可复用的完整 Subagent 实体。实体只有被 Primary 或另一个 Subagent 引用时才参与运行：
+Subagent 页面保存可复用的完整 Subagent 实体。实体只有被 Main Agent 或另一个 Subagent 引用时才参与运行：
 
 ```json
 {
@@ -33,11 +33,11 @@ Subagent 页面保存可复用的完整 Subagent 实体。实体只有被 Primar
 - 模型可继承或替换，不能关闭；
 - 文件系统由整棵请求代理树共享，不参与覆写；
 - 文件系统权限可以继承、替换或关闭；关闭表示使用无路径限制、无额外覆写的默认策略；
-- 输出模式只属于顶层 Primary；
+- 输出模式只属于顶层 Main Agent；
 - 其余可覆写组件支持继承、替换或关闭。
 
 `settings.automation.hooks` 与 `settings.automation.periodic` 都直接保存该 Subagent 自己的 bindings，不继承
-Primary 插件。每个周期 binding 自己保存 interval，因此同一 Agent 的周期插件可以使用不同间隔。自动化不是
+Main Agent 插件。每个周期 binding 自己保存 interval，因此同一 Agent 的周期插件可以使用不同间隔。自动化不是
 组件，不放入 `capability_overrides`，自定义 Tool 与自定义 Middleware 也继续使用各自 capability。
 
 `settings.subagents[]` 是该 Subagent 自己可以调用的有序实体引用。父级引用不会自动复制给 child。同一个
@@ -53,6 +53,6 @@ messages。Hook 插件的 prepare 显式建立基础多轮消息后，每次 `ta
 scratch 路径。因此同 profile 四次并行调用可以在各自 scratch 使用同名中间文件，而 prepare 和 Middleware factory
 仍只按 owner/binding 执行一次。请求终态统一清理 scratch；插件写入 mapped 或其他外部路径时仍需自行协调并发。
 
-同一次请求中的 Primary 与同步 Subagent 共享普通 workspace 和 mapped routes。每个 Agent 根据自己的
+同一次请求中的 Main Agent 与同步 Subagent 共享普通 workspace 和 mapped routes。每个 Agent 根据自己的
 最终文件系统权限获得路径访问和文件工具，再根据最终 Skill 配置获得只读 `/skills/` 视图。请求结束后，
 内存 workspace 不保留；mapped directory 的磁盘写入按本地文件系统持久化。

@@ -192,9 +192,9 @@ async def test_no_binding_keeps_client_messages_out_of_owner_activity(
         request_id="request-id",
         owners=[
             AutomationOwner(
-                id="primary",
-                type="primary",
-                name="Primary",
+                id="main_agent",
+                type="main_agent",
+                name="Main Agent",
                 automation={"hooks": [], "periodic": []},
                 mapped_paths={},
             ),
@@ -215,7 +215,7 @@ async def test_no_binding_keeps_client_messages_out_of_owner_activity(
     await runtime.prepare()
 
     assert runtime.request.messages[0]["content"] == "original"
-    assert runtime.messages_for("primary") == []
+    assert runtime.messages_for("main_agent") == []
     assert runtime.messages_for("child") == []
     await runtime.finish({"status": "completed"})
 
@@ -245,8 +245,8 @@ async def test_vars_is_one_request_local_mapping_shared_by_all_bindings(
         owners=[
             AutomationOwner(
                 id="owner",
-                type="primary",
-                name="Primary",
+                type="main_agent",
+                name="Main Agent",
                 automation={"hooks": [binding, binding], "periodic": []},
                 mapped_paths={},
             )
@@ -354,8 +354,8 @@ async def test_periodic_bindings_have_independent_tasks_and_failure_boundaries(
         owners=[
             AutomationOwner(
                 id="owner",
-                type="primary",
-                name="Primary",
+                type="main_agent",
+                name="Main Agent",
                 automation={
                     "hooks": [],
                     "periodic": [
@@ -424,7 +424,7 @@ def test_from_assembly_keeps_one_owner_per_recursive_subagent_profile(
         key="C", name="C", blocks={}, automation=empty, subagents=(edge_b,)
     )
     assembly = SimpleNamespace(
-        primary={"name": "A"},
+        main_agent={"name": "A"},
         blocks={},
         automation=empty,
         subagents=(edge_b, edge_c),
@@ -434,7 +434,7 @@ def test_from_assembly_keeps_one_owner_per_recursive_subagent_profile(
     runtime = AutomationRuntime.from_assembly(
         assembly,
         [{"role": "user", "content": "input"}],
-        primary_id="A",
+        main_agent_id="A",
         request_id="request",
         plugins_dir=tmp_path / "plugins",
         skills_dir=tmp_path / "skills",

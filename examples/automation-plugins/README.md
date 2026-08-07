@@ -4,7 +4,7 @@ Each child folder is a complete `api_version: 3` automation plugin. Copy one chi
 folder into the instance `data/resources/automation_scripts/` directory, or upload it
 with the management file tool, then bind it to an Agent.
 
-- `primary-message-injection` injects transformed client messages into each Primary
+- `main-agent-message-injection` injects transformed client messages into each Main Agent
   request during `prepare`.
 - `subagent-message-injection` edits the current Subagent message list at the start
   of every real invocation through `AgentMiddleware.abefore_agent`.
@@ -12,7 +12,7 @@ with the management file tool, then bind it to an Agent.
   Subagent filesystem and inserts rendered assistant/user/system messages directly
   before the delegated task.
 
-The two message-transform examples expose one Schema-driven Python field. The Primary
+The two message-transform examples expose one Schema-driven Python field. The Main Agent
 function receives a fresh mutable copy of the normalized client `messages[]`. The
 Subagent function receives a deep copy of the current LangGraph `state["messages"]`;
 its final item is normally the delegated task. Insert a new message at index `-1` to
@@ -28,10 +28,10 @@ invocation scratch directory yourself.
 The Subagent function can obtain the current invocation identity from
 `runtime.context["agent_shell_invocation"]`. Its binding-specific scratch directory is
 available in that mapping's `workspaces` entry under
-`f"hook:{ctx.plugin['binding_index']}"`. Primary `prepare` runs before the root graph
+`f"hook:{ctx.plugin['binding_index']}"`. Main Agent `prepare` runs before the root graph
 invocation exists, so its `state` and `runtime` arguments are `None`.
 
-Returning `[]` from the Primary transform skips client-message injection. Returning
+Returning `[]` from the Main Agent transform skips client-message injection. Returning
 `[]` from the Subagent transform intentionally clears the current invocation input.
 The Subagent example rebuilds only the in-memory LangGraph message order from the
 current state, so sequential bindings that each insert at `-1` produce

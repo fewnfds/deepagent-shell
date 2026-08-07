@@ -31,9 +31,9 @@ def test_real_provider_finish_reason_reaches_both_api_transports(
         start_incomplete,
     )
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         request = {
-            "model": primary["name"],
+            "model": main_agent["name"],
             "messages": [{"role": "user", "content": "finish reason"}],
         }
         plain = client.post("/v1/chat/completions", json=request)
@@ -76,7 +76,7 @@ def test_real_provider_finish_reason_reaches_both_api_transports(
         ("api_history", True),
     ],
 )
-def test_observation_storage_failure_does_not_replace_primary_response(
+def test_observation_storage_failure_does_not_replace_main_agent_response(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     failure_target: str,
@@ -84,7 +84,7 @@ def test_observation_storage_failure_does_not_replace_primary_response(
 ) -> None:
     private_detail = f"{failure_target}-private-storage-detail"
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
 
         def fail_record(*_args, **_kwargs):
             raise OSError(private_detail)
@@ -102,7 +102,7 @@ def test_observation_storage_failure_does_not_replace_primary_response(
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": primary["name"],
+                "model": main_agent["name"],
                 "messages": [{"role": "user", "content": "keep the main result"}],
                 "stream": stream,
             },
@@ -134,7 +134,7 @@ def test_observation_storage_failure_does_not_replace_primary_response(
     assert private_detail not in json.dumps(diagnostics, ensure_ascii=False)
     assert not (tmp_path / "data" / "logs" / "runtime.log").exists()
 
-def test_closing_primary_stream_records_client_disconnected_terminal_run(
+def test_closing_main_agent_stream_records_client_disconnected_terminal_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async def close_after_first_chunk(client: TestClient, model: str) -> tuple[str, int]:
@@ -194,9 +194,9 @@ def test_closing_primary_stream_records_client_disconnected_terminal_run(
         return response.headers["x-agent-session-id"], before["total"]
 
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         session_id, running_rows = asyncio.run(
-            close_after_first_chunk(client, primary["name"])
+            close_after_first_chunk(client, main_agent["name"])
         )
         session = client.get(f"/api/agent-sessions/{session_id}").json()
         history = client.get(
@@ -290,7 +290,7 @@ def test_closing_non_stream_request_cancels_execution_and_records_disconnect(
         return response
 
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         execution = WaitingExecution()
 
         async def start_waiting(*_args, **_kwargs):
@@ -300,7 +300,7 @@ def test_closing_non_stream_request_cancels_execution_and_records_disconnect(
             "agent_shell.runtime.agent_runtime.AgentRuntime.start",
             start_waiting,
         )
-        response = asyncio.run(close_after_body(client, primary["name"], execution))
+        response = asyncio.run(close_after_body(client, main_agent["name"], execution))
         session_id = response.headers["x-agent-session-id"]
         session = client.get(f"/api/agent-sessions/{session_id}").json()
         history = client.get(
@@ -321,9 +321,9 @@ def test_reused_client_request_id_does_not_conflict_with_session_rows(
 ) -> None:
     headers = {"X-Request-ID": "client-retry-1"}
     with make_client(tmp_path, monkeypatch) as client:
-        primary = create_primary(client)
+        main_agent = create_main_agent(client)
         payload = {
-            "model": primary["name"],
+            "model": main_agent["name"],
             "messages": [{"role": "user", "content": "retry safely"}],
         }
         first = client.post("/v1/chat/completions", headers=headers, json=payload)
