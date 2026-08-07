@@ -70,6 +70,8 @@ export const en: MessageSchema = {
     host: 'Listen address',
     port: 'Port',
     allowRemote: 'Allow remote access',
+    managementAuthEnabled: 'Require management password authentication',
+    managementAuthEnabledHint: 'When disabled, the console and management API do not require a management Bearer token. The API Server access-key policy is unchanged.',
     credentials: 'Access credentials',
     managementPassword: 'Management password',
     runtimeControls: 'API and runtime',

@@ -5,19 +5,30 @@ from typing import Annotated, Any, TypedDict
 from langgraph.graph.message import add_messages
 
 
-def merge_node_outputs(
-    left: dict[str, dict[str, Any]] | None,
-    right: dict[str, dict[str, Any]] | None,
-) -> dict[str, dict[str, Any]]:
+def merge_port_values(
+    left: dict[str, Any] | None,
+    right: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Merge addressable port channels without exposing the whole state to nodes."""
+
     result = dict(left or {})
-    for node_id, value in (right or {}).items():
-        if node_id in result:
-            raise ValueError(f"Workflow node output was written twice: {node_id}")
-        result[node_id] = dict(value)
+    result.update(right or {})
+    return result
+
+
+def merge_mapping(
+    left: dict[str, Any] | None,
+    right: dict[str, Any] | None,
+) -> dict[str, Any]:
+    result = dict(left or {})
+    result.update(right or {})
     return result
 
 
 class WorkflowState(TypedDict, total=False):
+    input_values: dict[str, Any]
+    port_values: Annotated[dict[str, Any], merge_port_values]
     messages: Annotated[list[Any], add_messages]
-    node_outputs: Annotated[dict[str, dict[str, Any]], merge_node_outputs]
-    files: dict[str, Any]
+    artifacts: Annotated[dict[str, Any], merge_mapping]
+    control: Annotated[dict[str, Any], merge_mapping]
+    output_values: Annotated[dict[str, Any], merge_mapping]

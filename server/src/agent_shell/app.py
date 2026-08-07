@@ -410,6 +410,7 @@ def create_app(
         ScopeAuthenticationMiddleware,
         settings=settings,
         api_key_provider=api_server_store.api_key,
+        management_auth_enabled_provider=system_settings.management_auth_enabled,
         event_logger=event_logger,
     )
     if settings.trusted_proxy_cidrs:

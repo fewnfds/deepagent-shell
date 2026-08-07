@@ -47,6 +47,7 @@ const pageError = ref('')
 const host = ref('127.0.0.1')
 const port = ref(19100)
 const allowRemote = ref(false)
+const managementAuthEnabled = ref(true)
 const langsmithTracingEnabled = ref(false)
 const managementPassword = ref('')
 const showManagementPassword = ref(false)
@@ -93,6 +94,7 @@ function applySystemSettings(value: SystemSettings): void {
   host.value = value.host
   port.value = value.port
   allowRemote.value = value.allow_remote
+  managementAuthEnabled.value = value.management_auth_enabled
   langsmithTracingEnabled.value = value.langsmith_tracing_enabled
   corsOrigins.value = value.cors_origins.join('\n')
   trustedProxies.value = value.trusted_proxy_cidrs.join('\n')
@@ -168,6 +170,7 @@ async function save(): Promise<void> {
         host: host.value.trim(),
         port: Number(port.value),
         allow_remote: allowRemote.value,
+        management_auth_enabled: managementAuthEnabled.value,
         langsmith_tracing_enabled: langsmithTracingEnabled.value,
         management_token: managementPassword.value
           ? { operation: 'replace', value: managementPassword.value }
@@ -294,6 +297,23 @@ onMounted(() => { void load() })
               </h2>
             </header>
             <div class="card-body">
+              <div class="mb-3">
+                <div class="form-check form-switch">
+                  <input
+                    id="management-auth-enabled"
+                    v-model="managementAuthEnabled"
+                    class="form-check-input"
+                    role="switch"
+                    type="checkbox"
+                  >
+                  <label class="form-check-label" for="management-auth-enabled">
+                    {{ fieldLabel('systemSettings.managementAuthEnabled', 'management_auth_enabled') }}
+                  </label>
+                </div>
+                <div class="form-text">
+                  {{ t('systemSettings.managementAuthEnabledHint') }}
+                </div>
+              </div>
               <div class="mb-3">
                 <label class="form-label" for="management-password">
                   {{ fieldLabel('systemSettings.managementPassword', 'management_token') }}

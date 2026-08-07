@@ -120,6 +120,7 @@ export interface SystemSettings {
   host: string
   port: number
   allow_remote: boolean
+  management_auth_enabled: boolean
   langsmith_tracing_enabled: boolean
   management_token: { configured: boolean }
   cors_origins: string[]
@@ -132,6 +133,7 @@ export interface SystemSettingsUpdate {
   host: string
   port: number
   allow_remote: boolean
+  management_auth_enabled: boolean
   langsmith_tracing_enabled: boolean
   management_token: SystemSecretUpdate
   cors_origins: string[]

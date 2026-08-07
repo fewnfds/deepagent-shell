@@ -185,6 +185,7 @@ class ScopeAuthenticationMiddleware:
         app: ASGIApp,
         settings: Settings,
         api_key_provider: Callable[[], str | None],
+        management_auth_enabled_provider: Callable[[], bool] | None = None,
         event_logger: SecurityEventLogger | None = None,
     ) -> None:
         self.app = app
@@ -194,6 +195,9 @@ class ScopeAuthenticationMiddleware:
             else None
         )
         self.api_key_provider = api_key_provider
+        self.management_auth_enabled_provider = (
+            management_auth_enabled_provider or (lambda: True)
+        )
         self.event_logger = event_logger
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -211,10 +215,20 @@ class ScopeAuthenticationMiddleware:
 
         api_key = self._current_api_key()
         try:
-            candidate = _parse_bearer(scope)
-            principal = self._authenticate(
-                candidate, required_scope, api_key=api_key
-            )
+            if (
+                required_scope == "management"
+                and not self.management_auth_enabled_provider()
+            ):
+                principal = SecurityPrincipal(
+                    scope="management",
+                    authenticated=False,
+                    subject="management-auth-disabled",
+                )
+            else:
+                candidate = _parse_bearer(scope)
+                principal = self._authenticate(
+                    candidate, required_scope, api_key=api_key
+                )
         except SecurityFailure as exc:
             if self.event_logger is not None:
                 self.event_logger.emit(

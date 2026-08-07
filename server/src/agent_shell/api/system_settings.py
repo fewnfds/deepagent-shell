@@ -30,6 +30,7 @@ class SystemSettingsUpdate(BaseModel):
     host: str
     port: int
     allow_remote: bool
+    management_auth_enabled: bool
     langsmith_tracing_enabled: bool
     management_token: ManagementPasswordUpdate
     cors_origins: list[str] = Field(max_length=100)

@@ -59,6 +59,8 @@ def serialize_settings_file(settings: Settings, existing: str) -> str:
         f"AGENT_SHELL_HOST={settings.host}",
         f"AGENT_SHELL_PORT={settings.port}",
         f"AGENT_SHELL_ALLOW_REMOTE={'true' if settings.allow_remote else 'false'}",
+        "AGENT_SHELL_MANAGEMENT_AUTH_ENABLED="
+        f"{'true' if settings.management_auth_enabled else 'false'}",
         "AGENT_SHELL_LANGSMITH_TRACING_ENABLED="
         f"{'true' if settings.langsmith_tracing_enabled else 'false'}",
         (
@@ -115,6 +117,7 @@ class SystemSettingsService:
             "host": settings.host,
             "port": settings.port,
             "allow_remote": settings.allow_remote,
+            "management_auth_enabled": settings.management_auth_enabled,
             "langsmith_tracing_enabled": settings.langsmith_tracing_enabled,
             "cors_origins": list(settings.cors_origins),
             "trusted_proxy_cidrs": list(settings.trusted_proxy_cidrs),
@@ -132,10 +135,24 @@ class SystemSettingsService:
             == _secret_value(right.management_token)
         )
 
+    @staticmethod
+    def _same_restartable_settings(left: Settings, right: Settings) -> bool:
+        left_public = SystemSettingsService._public(left)
+        right_public = SystemSettingsService._public(right)
+        left_public.pop("management_auth_enabled", None)
+        right_public.pop("management_auth_enabled", None)
+        return (
+            left_public == right_public
+            and _secret_value(left.management_token)
+            == _secret_value(right.management_token)
+        )
+
     def get(self) -> dict[str, Any]:
         return {
             **self._public(self._saved),
-            "restart_required": not self._same(self._active, self._saved),
+            "restart_required": not self._same_restartable_settings(
+                self._active, self._saved
+            ),
         }
 
     @staticmethod
@@ -162,6 +179,7 @@ class SystemSettingsService:
             "host": payload["host"],
             "port": payload["port"],
             "allow_remote": payload["allow_remote"],
+            "management_auth_enabled": payload["management_auth_enabled"],
             "langsmith_tracing_enabled": payload["langsmith_tracing_enabled"],
             "management_token": self._apply_management_password(
                 self._saved.management_token,
@@ -221,3 +239,6 @@ class SystemSettingsService:
             ) from exc
         self._saved = candidate
         return self.get()
+
+    def management_auth_enabled(self) -> bool:
+        return self._saved.management_auth_enabled

@@ -80,6 +80,7 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = Field(default=19100, ge=1, le=65535)
     allow_remote: bool = False
+    management_auth_enabled: bool = True
     langsmith_tracing_enabled: bool = False
     management_token: SecretStr | None = None
     cors_origins: Annotated[tuple[str, ...], NoDecode] = ()
@@ -182,7 +183,7 @@ class Settings(BaseSettings):
             )
             actions.append("Trusted proxy deployment requires explicit remote access.")
 
-        if self.management_token is None:
+        if self.management_auth_enabled and self.management_token is None:
             keys.add("AGENT_SHELL_MANAGEMENT_TOKEN")
             actions.append("Configure the management Bearer token.")
 

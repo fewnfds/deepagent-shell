@@ -68,6 +68,8 @@ export const zhCN = {
     host: '监听地址',
     port: '端口',
     allowRemote: '允许远程访问',
+    managementAuthEnabled: '启用管理密码验证',
+    managementAuthEnabledHint: '关闭后，管理台和管理 API 不再要求 Bearer 管理密码；API Server 的访问密钥策略不受影响。',
     credentials: '访问凭据',
     managementPassword: '管理密码',
     runtimeControls: 'API 与运行',

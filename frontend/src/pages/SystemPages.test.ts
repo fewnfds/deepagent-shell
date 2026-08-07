@@ -21,6 +21,7 @@ const currentSettings: SystemSettings = {
   host: '127.0.0.1',
   port: 19100,
   allow_remote: false,
+  management_auth_enabled: true,
   langsmith_tracing_enabled: false,
   management_token: { configured: true },
   cors_origins: [],
@@ -88,6 +89,7 @@ describe('SystemSettingsPage', () => {
       host: '127.0.0.1',
       port: 19100,
       allow_remote: false,
+      management_auth_enabled: true,
       langsmith_tracing_enabled: false,
       management_token: { operation: 'preserve' },
       cors_origins: [],
@@ -128,6 +130,7 @@ describe('SystemSettingsPage', () => {
     await wrapper.get('input[type="text"]').setValue('0.0.0.0')
     await wrapper.get('#system-port').setValue('21000')
     await wrapper.get('#allow-remote').setValue(true)
+    await wrapper.get('#management-auth-enabled').setValue(false)
     await wrapper.get('#management-password').setValue('new-management-password')
     await wrapper.get('#api-server-key').setValue('new-api-key')
     await wrapper.get('#max-initial-messages').setValue('2500')
@@ -144,6 +147,7 @@ describe('SystemSettingsPage', () => {
       host: '0.0.0.0',
       port: 21000,
       allow_remote: true,
+      management_auth_enabled: false,
       langsmith_tracing_enabled: true,
       management_token: { operation: 'replace', value: 'new-management-password' },
       cors_origins: ['http://localhost:3000', 'http://127.0.0.1:3000'],
