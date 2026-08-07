@@ -17,7 +17,13 @@ const route = useRoute()
 const router = useRouter()
 
 const activeCategoryId = computed(() => (
-  route.path === '/library/automation' ? 'automation' : routeCategory(route.params.type)
+  route.path === '/library/automation'
+    ? 'automation'
+    : route.path === '/library/entry-scripts'
+      ? 'entry-scripts'
+      : route.path === '/workflows' || route.path === '/workflows/new' || route.path.startsWith('/workflows/')
+        ? 'workflows'
+        : routeCategory(route.params.type)
 ))
 const componentItems = computed<SectionNavItem[]>(() => props.manifests.map((manifest) => ({
   id: manifest.type,
@@ -31,9 +37,21 @@ const pluginItems = computed<SectionNavItem[]>(() => [{
   id: 'automation',
   label: t('navigation.automation'),
 }])
+const graphItems = computed<SectionNavItem[]>(() => [
+  { id: 'workflows', label: t('navigation.workflows') },
+  { id: 'entry-scripts', label: t('workflow.entryScripts') },
+])
 
 function selectCategory(id: string): void {
   if (id === activeCategoryId.value) return
+  if (id === 'workflows') {
+    void router.push('/workflows')
+    return
+  }
+  if (id === 'entry-scripts') {
+    void router.push('/library/entry-scripts')
+    return
+  }
   void router.push(`/library/${encodeURIComponent(id)}`)
 }
 </script>
@@ -69,6 +87,16 @@ function selectCategory(id: string): void {
       :active-id="activeCategoryId"
       :aria-label="t('library.groups.plugins')"
       :items="pluginItems"
+      layout="inline"
+      @select="selectCategory"
+    />
+  </div>
+  <div class="d-flex flex-wrap align-items-center gap-2 mb-3" data-testid="library-graph-group">
+    <span class="fw-semibold">{{ t('library.groups.graphs') }}</span>
+    <SectionNav
+      :active-id="activeCategoryId"
+      :aria-label="t('library.groups.graphs')"
+      :items="graphItems"
       layout="inline"
       @select="selectCategory"
     />

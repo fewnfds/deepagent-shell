@@ -401,7 +401,9 @@
         "reason": "Owns the shared component, Agent and plugin navigation rows across configuration repository pages",
         "callers": [
           "src/pages/AutomationPage.vue",
-          "src/pages/ConfigLibraryPage.vue"
+          "src/pages/ConfigLibraryPage.vue",
+          "src/pages/EntryScriptPage.vue",
+          "src/pages/WorkflowHomePage.vue"
         ]
       },
       {

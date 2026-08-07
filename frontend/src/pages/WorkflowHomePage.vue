@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 
 import { managementApi, type Workflow } from '@/api'
+import ConfigurationLibraryNav from '@/components/ConfigurationLibraryNav.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useManagementError } from '@/composables/useManagementError'
 
@@ -30,6 +31,7 @@ onMounted(() => { void load() })
   <PageShell>
     <template #actions><LteButton theme="secondary" type="button" @click="void router.push('/library/entry-scripts')">{{ t('workflow.entryScripts') }}</LteButton><LteButton theme="success" type="button" @click="create">{{ t('common.new') }}</LteButton></template>
     <template #status><LteAlert v-if="error" theme="danger" :title="error" /></template>
+    <ConfigurationLibraryNav :manifests="[]" />
     <section class="card">
       <div class="card-header d-flex align-items-center justify-content-between"><div><h2 class="card-title h5 mb-1">{{ t('workflow.listTitle') }}</h2><p class="card-text text-body-secondary mb-0">在这里管理 Graph Definition；点击后进入独立画布。</p></div><span class="badge text-bg-secondary">{{ workflows.length }}</span></div>
       <div class="list-group list-group-flush">

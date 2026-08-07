@@ -793,6 +793,7 @@ export const zhCN = {
       components: 'Agent 组件',
       agents: '代理',
       plugins: '插件',
+      graphs: 'Graph 资源',
     },
     catalogUnavailable: '暂时无法载入能力目录。',
     unknownCategory: '未知配置类型',

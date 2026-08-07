@@ -795,6 +795,7 @@ export const en: MessageSchema = {
       components: 'Agent components',
       agents: 'Agents',
       plugins: 'Plugins',
+      graphs: 'Graph resources',
     },
     catalogUnavailable: 'The capability catalog is currently unavailable.',
     unknownCategory: 'Unknown configuration type',
