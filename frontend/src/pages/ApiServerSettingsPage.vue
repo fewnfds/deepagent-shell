@@ -80,7 +80,7 @@ onMounted(() => {
     </div>
     <template v-else-if="settings">
       <div class="row g-3">
-        <div class="col-xl-7">
+        <div class="col-lg-9">
           <LteCard class="mb-3" data-testid="endpoint-card" :title="t('apiServer.endpoints.title')">
             <div class="mb-3">
               <label class="form-label" for="api-base-url">{{ t('apiServer.endpoints.base') }}</label>
@@ -104,7 +104,7 @@ onMounted(() => {
           </LteCard>
         </div>
 
-        <div class="col-xl-5 validation-sidebar" data-testid="configuration-alerts">
+        <div class="col-lg-3 validation-sidebar" data-testid="configuration-alerts">
           <ValidationChecklist
             :title="t('apiServer.alerts.title')"
             :validation="repositoryValidation"

@@ -96,27 +96,20 @@ pre code {
   top: 3.5rem;
 }
 
-.validation-sidebar > .card {
-  overflow: hidden;
-}
-
 @media (min-width: 992px) {
   .validation-sidebar {
-    position: sticky;
-    inset-block-start: 4.5rem;
-    inset-block-end: 1rem;
-    align-self: flex-start;
-    max-block-size: calc(100vh - 5.5rem);
-    max-block-size: calc(100dvh - 5.5rem);
-    overflow-y: auto;
+    align-self: stretch;
+    position: relative;
+    overflow: visible;
   }
-}
 
-@media (min-width: 992px) and (max-width: 1199.98px) {
-  .validation-sidebar.col-xl-5 {
-    position: static;
-    max-height: none;
-    overflow-y: visible;
+  .validation-sidebar > .card {
+    position: sticky;
+    inset-block-start: 1rem;
+    inset-block-end: 1rem;
+    max-block-size: calc(100vh - 2rem);
+    max-block-size: calc(100dvh - 2rem);
+    overflow-y: auto;
   }
 }
 
