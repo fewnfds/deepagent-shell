@@ -386,9 +386,9 @@ export const zhCN = {
       truncate_args_trigger: { type: '参数截断触发方式', value: '参数截断触发值' },
       truncate_args_keep: { type: '参数截断保留方式', value: '参数截断保留值' },
       truncate_args_max_length: '单个工具参数最大字符数',
-      truncate_args_text: '参数截断替代文本',
+      truncate_args_text: '工具参数截断后的替代文本',
       trim_tokens_to_summarize: '摘要输入最大 token',
-      summary_prompt_override: '摘要 Prompt 覆写',
+      summary_prompt_override: '摘要 Prompt',
     },
     prompt_caching: {
       type: '缓存类型',
@@ -618,6 +618,8 @@ export const zhCN = {
       summarizationTitle: 'SummarizationMiddleware',
       summarizationHint: '自动配置会继续使用 Deep Agents 根据模型上下文窗口计算的默认值。',
       truncateArgsEnabled: '摘要前截断较大的旧工具参数',
+      truncateArgsTextHint: '历史工具参数超过长度阈值时，超出的部分会在摘要前被删除，并用这段文本替代。',
+      summaryPromptHint: '这里显示 Deep Agents 默认 Prompt；修改后会覆盖默认值，也可以用上方按钮恢复。',
       promptCachingTitle: 'Prompt caching middleware',
       promptCachingHint: '当前配置 Anthropic Prompt caching；非 ChatAnthropic 模型会直接忽略。',
       thresholdTypes: {

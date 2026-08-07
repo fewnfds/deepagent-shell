@@ -8,11 +8,13 @@ import {
   filesystemAdapter,
   filesystemPermissionsAdapter,
   modelAdapter,
+  otherAdapter,
   outputModeAdapter,
   skillAdapter,
   systemPromptAdapter,
   type FilesystemDefaults,
   type FilesystemPermissionsDefaults,
+  type OtherDefaults,
   type OutputModeDefaults,
   type SkillDefaults,
 } from '@/domain/blocks'
@@ -23,6 +25,7 @@ import {
   FilesystemEditor,
   FilesystemPermissionsEditor,
   ModelEditor,
+  OtherEditor,
   OutputModeEditor,
   SkillEditor,
   SystemPromptEditor,
@@ -61,6 +64,27 @@ const outputDefaults: OutputModeDefaults = {
 const skillDefaults: SkillDefaults = {
   system_prompt: 'skill default',
   required_placeholders: ['{skills_locations}', '{skills_load_warnings}', '{skills_list}'],
+}
+const otherDefaults: OtherDefaults = {
+  summary_prompt_default: '<role>default summary</role>',
+  summarization: {
+    enabled: true,
+    trigger: { type: 'auto', value: null },
+    keep: { type: 'auto', value: null },
+    truncate_args_enabled: true,
+    truncate_args_trigger: { type: 'auto', value: null },
+    truncate_args_keep: { type: 'auto', value: null },
+    truncate_args_max_length: 2_000,
+    truncate_args_text: '...(argument truncated)',
+    trim_tokens_to_summarize: 4_000,
+    summary_prompt_override: '',
+  },
+  prompt_caching: {
+    enabled: true,
+    type: 'ephemeral',
+    ttl: '5m',
+    min_messages_to_cache: 0,
+  },
 }
 const i18n = createI18n({
   legacy: false,
@@ -309,15 +333,11 @@ describe('dedicated block editors', () => {
     ])
     expect(select.findAll('option').map((option) => option.text())).toEqual([
       'editors.model.providerPlaceholder',
-      'openai · langchain-openai',
-      'google_vertexai · langchain-google-vertexai',
+      'langchain-openai',
+      'langchain-google-vertexai',
     ])
 
     await select.setValue('google_vertexai')
-    expect(editor.get('[data-testid="provider-details"]').text()).toContain(
-      'langchain-google-vertexai',
-    )
-    expect(editor.get('[data-testid="provider-details"]').text()).toContain('3.2.4')
     expect(editor.find('[data-provider-setting="max_completion_tokens"]').exists()).toBe(false)
     expect(editor.find('[data-provider-setting="max_tokens"]').exists()).toBe(true)
     expect(editor.find('[data-provider-setting="thinking_budget"]').exists()).toBe(true)
@@ -325,6 +345,28 @@ describe('dedicated block editors', () => {
       provider: 'google_vertexai',
       provider_settings: {},
     })
+  })
+
+  it('switches all summarization threshold units without carrying incompatible values', async () => {
+    const editor = mountEditor(OtherEditor, {
+      modelValue: otherAdapter.blank(otherDefaults),
+      defaults: otherDefaults,
+    })
+    const selects = editor.findAll('[data-editor="other"] select')
+    const valueInputs = editor.findAll('[data-editor="other"] input[type="number"]')
+    const summaryPrompt = editor.findAll('textarea').at(-1)
+
+    expect(selects).toHaveLength(6)
+    expect(valueInputs).toHaveLength(7)
+    expect(summaryPrompt?.element).toHaveProperty('value', otherDefaults.summary_prompt_default)
+    for (const [index, select] of [selects[0], selects[1], selects[2], selects[3]].entries()) {
+      await select?.setValue('tokens')
+      expect(valueInputs[index]?.element).toHaveProperty('value', '')
+      expect(valueInputs[index]?.attributes('step')).toBe('1')
+    }
+    await summaryPrompt?.setValue('custom summary prompt')
+    await editor.get('[data-action="restore-summary-prompt"]').trigger('click')
+    expect(summaryPrompt?.element).toHaveProperty('value', otherDefaults.summary_prompt_default)
   })
 
   it('labels every custom tool identifier explicitly', () => {

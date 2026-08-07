@@ -388,9 +388,9 @@ export const en: MessageSchema = {
       truncate_args_trigger: { type: 'Argument truncation trigger type', value: 'Argument truncation trigger value' },
       truncate_args_keep: { type: 'Argument truncation keep type', value: 'Argument truncation keep value' },
       truncate_args_max_length: 'Maximum tool argument length',
-      truncate_args_text: 'Argument truncation text',
+      truncate_args_text: 'Replacement text for truncated tool arguments',
       trim_tokens_to_summarize: 'Maximum summary input tokens',
-      summary_prompt_override: 'Summary prompt override',
+      summary_prompt_override: 'Summary prompt',
     },
     prompt_caching: {
       type: 'Cache type',
@@ -620,6 +620,8 @@ export const en: MessageSchema = {
       summarizationTitle: 'SummarizationMiddleware',
       summarizationHint: 'Auto keeps the model-aware defaults computed by Deep Agents from the context window.',
       truncateArgsEnabled: 'Truncate large historical tool arguments before summarization',
+      truncateArgsTextHint: 'When an older tool argument exceeds the limit, the omitted portion is replaced with this text before summarization.',
+      summaryPromptHint: 'This shows the Deep Agents default prompt. Edit it to override the default, or restore it with the button above.',
       promptCachingTitle: 'Prompt caching middleware',
       promptCachingHint: 'This configures Anthropic prompt caching; non-ChatAnthropic models ignore it.',
       thresholdTypes: {

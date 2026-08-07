@@ -269,7 +269,9 @@ export interface OtherDraft extends BlockDraftBase {
   summarization: SummarizationDraft
   prompt_caching: PromptCachingDraft
 }
-export type OtherDefaults = Omit<OtherDraft, 'id' | 'name'>
+export type OtherDefaults = Omit<OtherDraft, 'id' | 'name'> & {
+  summary_prompt_default: string
+}
 interface OtherApiRecord extends BlockDraftBase {
   summarization?: unknown
   prompt_caching?: unknown
@@ -692,7 +694,15 @@ function summarizationThresholdDraft(
 
 export const otherAdapter = {
   blank(defaults: OtherDefaults): OtherDraft {
-    return { id: '', name: '', ...clone(defaults) }
+    return {
+      id: '',
+      name: '',
+      summarization: {
+        ...clone(defaults.summarization),
+        summary_prompt_override: defaults.summary_prompt_default,
+      },
+      prompt_caching: clone(defaults.prompt_caching),
+    }
   },
   fromApi(value: OtherApiRecord, defaults: OtherDefaults): OtherDraft {
     const summarization = isRecord(value.summarization) ? value.summarization : {}
@@ -734,7 +744,10 @@ export const otherAdapter = {
           summarization.trim_tokens_to_summarize,
           defaults.summarization.trim_tokens_to_summarize as number | null,
         ),
-        summary_prompt_override: stringValue(summarization.summary_prompt_override),
+        summary_prompt_override: stringValue(
+          summarization.summary_prompt_override,
+          defaults.summary_prompt_default,
+        ),
       },
       prompt_caching: {
         enabled: typeof promptCaching.enabled === 'boolean'
@@ -751,7 +764,7 @@ export const otherAdapter = {
       },
     }
   },
-  toPayload(value: OtherDraft): OtherPayload {
+  toPayload(value: OtherDraft, defaults: OtherDefaults): OtherPayload {
     const threshold = (item: SummarizationThresholdDraft): SummarizationThresholdDraft => ({
       type: item.type,
       value: item.type === 'auto' ? null : normalizeTokenLimit(item.value, null),
@@ -772,7 +785,9 @@ export const otherAdapter = {
           value.summarization.trim_tokens_to_summarize,
           null,
         ),
-        summary_prompt_override: value.summarization.summary_prompt_override || null,
+        summary_prompt_override: value.summarization.summary_prompt_override === defaults.summary_prompt_default
+          ? null
+          : value.summarization.summary_prompt_override || null,
       },
       prompt_caching: {
         ...value.prompt_caching,

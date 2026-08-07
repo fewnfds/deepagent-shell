@@ -35,9 +35,6 @@ const credentialPlaceholder = computed(() => draft.credential_status === 'masked
   ? t('common.configuredSecretPlaceholder')
   : t('common.apiKeyPlaceholder'))
 const selectedProviderId = computed(() => draft.provider.trim())
-const selectedProvider = computed(() => props.providers.find(
-  (item) => item.provider === selectedProviderId.value,
-) ?? null)
 
 type ParameterKind = 'boolean' | 'boolean-number' | 'enum' | 'number' | 'string-list' | 'text'
 interface ProviderParameterField {
@@ -145,12 +142,6 @@ const providerParameterFields: Record<string, ProviderParameterField[]> = {
 }
 const parameterFields = computed(() => providerParameterFields[selectedProviderId.value] ?? [])
 
-function providerStatus(item: ModelProviderCatalogItem): string {
-  return item.installed
-    ? t('editors.model.providerBundled')
-    : t('editors.model.providerUnavailable')
-}
-
 function fetchModels(): void {
   emit('fetch-models', {
     provider: draft.provider,
@@ -215,25 +206,24 @@ function setBooleanNumber(key: string, event: Event): void {
         <h3 class="card-title">{{ t('editors.model.providerTitle') }}</h3>
       </header>
       <div class="card-body">
-        <FormField field-path="provider" technical>
-          <select
-            :value="draft.provider"
-            class="form-select"
-            data-testid="model-provider-input"
-            :disabled="loadingProviders || providers.length === 0"
-            @change="setProvider"
+        <select
+          :value="draft.provider"
+          :aria-label="t('editors.model.providerTitle')"
+          class="form-select"
+          data-testid="model-provider-input"
+          :disabled="loadingProviders || providers.length === 0"
+          @change="setProvider"
+        >
+          <option disabled value="">{{ t('editors.model.providerPlaceholder') }}</option>
+          <option
+            v-for="provider in providers"
+            :key="provider.provider"
+            :value="provider.provider"
+            :disabled="!provider.installed"
           >
-            <option disabled value="">{{ t('editors.model.providerPlaceholder') }}</option>
-            <option
-              v-for="provider in providers"
-              :key="provider.provider"
-              :value="provider.provider"
-              :disabled="!provider.installed"
-            >
-              {{ provider.provider }} {{ '·' }} {{ provider.package }}
-            </option>
-          </select>
-        </FormField>
+            {{ provider.package }}
+          </option>
+        </select>
         <div
           v-if="loadingProviders"
           class="small text-body-secondary mt-3"
@@ -241,20 +231,6 @@ function setBooleanNumber(key: string, event: Event): void {
         >
           <span class="spinner-border spinner-border-sm me-2" aria-hidden="true" />
           {{ t('editors.model.providerCatalogLoading') }}
-        </div>
-        <div
-          v-else-if="selectedProvider"
-          class="mt-3"
-          data-testid="provider-details"
-        >
-          <div class="d-flex flex-wrap align-items-center gap-2">
-            <span class="font-monospace">{{ selectedProvider.provider }}</span>
-            <span class="text-body-secondary">{{ selectedProvider.package }}</span>
-            <span class="badge text-bg-secondary">{{ providerStatus(selectedProvider) }}</span>
-            <span v-if="selectedProvider.version" class="small text-body-secondary">
-              {{ selectedProvider.version }}
-            </span>
-          </div>
         </div>
       </div>
     </section>
