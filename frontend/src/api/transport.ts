@@ -28,6 +28,7 @@ class ManagementAuthController {
   private token: string | null = null
   private generation = 0
   private pending: PendingChallenge | null = null
+  private authRequired: boolean | null = null
   private snapshot: ManagementAuthSnapshot = { open: false, reason: 'required' }
   private readonly listeners = new Set<AuthListener>()
 
@@ -41,9 +42,35 @@ class ManagementAuthController {
     return () => this.listeners.delete(listener)
   }
 
+  managementAuthRequired(): boolean | null {
+    return this.authRequired
+  }
+
+  setManagementAuthRequired(required: boolean): void {
+    const changed = this.authRequired !== required
+    this.authRequired = required
+    if (!required) {
+      const pending = this.pending
+      this.pending = null
+      this.clearToken()
+      this.updateSnapshot({ open: false, reason: 'required' })
+      pending?.reject(new ManagementAuthCancelledError())
+      return
+    }
+    if (changed) this.clearToken()
+  }
+
+  setManagementAuthRequiredIfUnknown(required: boolean): void {
+    if (this.authRequired === null) this.setManagementAuthRequired(required)
+  }
+
   clear(): void {
-    this.token = null
-    this.generation += 1
+    this.clearToken()
+  }
+
+  reset(): void {
+    this.authRequired = null
+    this.cancel()
   }
 
   credentialGeneration(): number {
@@ -52,7 +79,7 @@ class ManagementAuthController {
 
   invalidate(generation: number): boolean {
     if (generation !== this.generation) return false
-    this.clear()
+    this.clearToken()
     return true
   }
 
@@ -76,6 +103,7 @@ class ManagementAuthController {
     if (candidate.trim() === '') return false
     const pending = this.pending
     this.pending = null
+    this.authRequired = true
     this.token = candidate
     this.generation += 1
     this.updateSnapshot({ open: false, reason: 'required' })
@@ -86,9 +114,14 @@ class ManagementAuthController {
   cancel(): void {
     const pending = this.pending
     this.pending = null
-    this.clear()
+    this.clearToken()
     this.updateSnapshot({ open: false, reason: 'required' })
     pending?.reject(new ManagementAuthCancelledError())
+  }
+
+  private clearToken(): void {
+    this.token = null
+    this.generation += 1
   }
 
   private updateSnapshot(snapshot: ManagementAuthSnapshot): void {
@@ -260,25 +293,23 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError'
 }
 
-function waitForToken(
-  auth: ManagementAuthController,
-  reason: AuthChallengeReason,
+function waitForPromise<T>(
+  promise: Promise<T>,
   signal: AbortSignal | null | undefined,
-): Promise<string> {
-  const challenge = auth.challenge(reason)
-  if (!signal) return challenge
+): Promise<T> {
+  if (!signal) return promise
   if (signal.aborted) return Promise.reject(abortError())
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<T>((resolve, reject) => {
     const onAbort = (): void => {
       cleanup()
       reject(abortError())
     }
     const cleanup = (): void => signal.removeEventListener('abort', onAbort)
     signal.addEventListener('abort', onAbort, { once: true })
-    challenge.then(
-      (token) => {
+    promise.then(
+      (value) => {
         cleanup()
-        resolve(token)
+        resolve(value)
       },
       (error: unknown) => {
         cleanup()
@@ -288,12 +319,64 @@ function waitForToken(
   })
 }
 
+function waitForToken(
+  auth: ManagementAuthController,
+  reason: AuthChallengeReason,
+  signal: AbortSignal | null | undefined,
+): Promise<string> {
+  const challenge = auth.challenge(reason)
+  return waitForPromise(challenge, signal)
+}
+
+let managementAuthStatusRequest: Promise<boolean> | null = null
+
+async function discoverManagementAuthRequirement(
+  signal: AbortSignal | null | undefined,
+): Promise<boolean> {
+  const known = managementAuth.managementAuthRequired()
+  if (known !== null) return known
+  if (managementAuthStatusRequest === null) {
+    managementAuthStatusRequest = fetch('/api/health', {
+      headers: { Accept: 'application/json' },
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          await response.body?.cancel().catch(() => undefined)
+          return true
+        }
+        try {
+          const payload = await response.json() as unknown
+          return !(isRecord(payload) && payload.management_auth_enabled === false)
+        } catch {
+          return true
+        }
+      })
+      .catch((error: unknown) => {
+        if (isAbortError(error)) throw error
+        return true
+      })
+      .then((required) => {
+        managementAuth.setManagementAuthRequiredIfUnknown(required)
+        return managementAuth.managementAuthRequired() ?? required
+      })
+      .finally(() => {
+        managementAuthStatusRequest = null
+      })
+  }
+  return waitForPromise(managementAuthStatusRequest, signal)
+}
+
 async function authenticatedFetch(
   path: string,
   init: RequestInit,
   accept: string,
 ): Promise<Response> {
   const needsAuth = requiresManagementAuth(path)
+  let authRequired = false
+  if (needsAuth) {
+    const known = managementAuth.managementAuthRequired()
+    authRequired = known ?? await discoverManagementAuthRequirement(init.signal)
+  }
   let reason: AuthChallengeReason = 'required'
   while (true) {
     if (init.signal?.aborted) throw abortError()
@@ -303,7 +386,7 @@ async function authenticatedFetch(
       headers.set('Content-Type', 'application/json')
     }
     let requestGeneration = -1
-    if (needsAuth) {
+    if (needsAuth && authRequired) {
       const token = await waitForToken(managementAuth, reason, init.signal)
       requestGeneration = managementAuth.credentialGeneration()
       headers.set('Authorization', `Bearer ${token}`)
@@ -321,6 +404,13 @@ async function authenticatedFetch(
       })
     }
     if (needsAuth && (response.status === 401 || response.status === 403)) {
+      if (!authRequired) {
+        managementAuth.setManagementAuthRequired(true)
+        authRequired = true
+        reason = 'required'
+        await response.body?.cancel().catch(() => undefined)
+        continue
+      }
       reason = managementAuth.invalidate(requestGeneration) ? 'invalid' : 'required'
       await response.body?.cancel().catch(() => undefined)
       continue
@@ -362,7 +452,7 @@ function uploadResponse(xhr: XMLHttpRequest): Response {
 function sendUpload(
   path: string,
   body: Blob,
-  token: string,
+  token: string | null,
   signal: AbortSignal | undefined,
   onProgress: ((loaded: number, total: number) => void) | undefined,
 ): Promise<Response> {
@@ -372,7 +462,7 @@ function sendUpload(
     const cleanup = (): void => signal?.removeEventListener('abort', abort)
     xhr.open('PUT', path)
     xhr.setRequestHeader('Accept', 'application/json')
-    xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    if (token !== null) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
     xhr.setRequestHeader('Content-Type', 'application/octet-stream')
     xhr.upload.addEventListener('progress', (event) => {
       onProgress?.(event.loaded, event.lengthComputable ? event.total : body.size)
@@ -411,9 +501,12 @@ export async function managementUpload<T>(
     onProgress?: (loaded: number, total: number) => void
   } = {},
 ): Promise<T> {
+  let authRequired = await discoverManagementAuthRequirement(options.signal)
   let reason: AuthChallengeReason = 'required'
   while (true) {
-    const token = await waitForToken(managementAuth, reason, options.signal)
+    const token = authRequired
+      ? await waitForToken(managementAuth, reason, options.signal)
+      : null
     const generation = managementAuth.credentialGeneration()
     const response = await sendUpload(
       path,
@@ -423,6 +516,12 @@ export async function managementUpload<T>(
       options.onProgress,
     )
     if (response.status === 401 || response.status === 403) {
+      if (!authRequired) {
+        managementAuth.setManagementAuthRequired(true)
+        authRequired = true
+        reason = 'required'
+        continue
+      }
       reason = managementAuth.invalidate(generation) ? 'invalid' : 'required'
       continue
     }

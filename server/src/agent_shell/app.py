@@ -430,7 +430,9 @@ def create_app(
             expose_headers=["X-Request-ID", "X-Agent-Session-ID"],
             max_age=600,
         )
-    app.include_router(build_system_router(readiness))
+    app.include_router(
+        build_system_router(readiness, system_settings.management_auth_enabled)
+    )
     app.include_router(
         build_router(
             block_store,

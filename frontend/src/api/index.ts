@@ -78,7 +78,10 @@ export const managementApi = {
   },
 
   getHealth(): Promise<HealthResponse> {
-    return managementRequest('/api/health')
+    return managementRequest<HealthResponse>('/api/health').then((health) => {
+      managementAuth.setManagementAuthRequired(health.management_auth_enabled !== false)
+      return health
+    })
   },
 
   getReadiness(): Promise<ReadinessResponse> {

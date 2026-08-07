@@ -35,7 +35,7 @@ function mountGate() {
 }
 
 afterEach(() => {
-  managementAuth.clear()
+  managementAuth.reset()
   vi.unstubAllGlobals()
 })
 

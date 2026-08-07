@@ -21,13 +21,49 @@ function deferred<T>() {
 }
 
 afterEach(() => {
-  managementAuth.clear()
+  managementAuth.reset()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 
 describe('management transport', () => {
+  it('discovers disabled management authentication before the first request', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        status: 'ok',
+        runtime: 'model_streaming',
+        management_auth_enabled: false,
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(managementRequest<{ ok: boolean }>('/api/catalog')).resolves.toEqual({ ok: true })
+
+    expect(managementAuth.managementAuthRequired()).toBe(false)
+    expect(managementAuth.getSnapshot()).toEqual({ open: false, reason: 'required' })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/health')
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('Authorization')).toBeNull()
+  })
+
+  it('defaults to requiring authentication when health omits the setting', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'ok' }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const request = managementRequest<{ ok: boolean }>('/api/catalog')
+    await until(() => managementAuth.getSnapshot().open)
+    expect(managementAuth.managementAuthRequired()).toBe(true)
+    managementAuth.submit('management-token')
+
+    await expect(request).resolves.toEqual({ ok: true })
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('Authorization'))
+      .toBe('Bearer management-token')
+  })
+
   it('challenges in memory and retries 401 with a replacement token', async () => {
+    managementAuth.setManagementAuthRequired(true)
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
         error: { code: 'invalid_api_key', message: 'Rejected.' },
@@ -55,6 +91,7 @@ describe('management transport', () => {
   })
 
   it('does not let a stale concurrent 401 clear a newer token', async () => {
+    managementAuth.setManagementAuthRequired(true)
     const firstFailure = deferred<Response>()
     const secondFailure = deferred<Response>()
     const fetchMock = vi.fn()
@@ -137,6 +174,7 @@ describe('management transport', () => {
   })
 
   it('uploads a blob with progress and retries after an authentication challenge', async () => {
+    managementAuth.setManagementAuthRequired(true)
     class FakeUploadRequest {
       static readonly instances: FakeUploadRequest[] = []
 
@@ -212,6 +250,60 @@ describe('management transport', () => {
     expect(FakeUploadRequest.instances[1]?.headers.get('Authorization'))
       .toBe('Bearer new-token')
     expect(progress).toHaveBeenLastCalledWith(5, 5)
+  })
+
+  it('uploads without a password when management authentication is disabled', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      management_auth_enabled: false,
+    }), { status: 200 })))
+
+    class FakeUploadRequest {
+      static readonly instances: FakeUploadRequest[] = []
+
+      readonly headers = new Map<string, string>()
+      readonly upload = { addEventListener: vi.fn() }
+      status = 200
+      statusText = 'OK'
+      responseText = JSON.stringify({ path: 'notes/readme.md' })
+      private readonly listeners = new Map<string, () => void>()
+
+      constructor() {
+        FakeUploadRequest.instances.push(this)
+      }
+
+      open(): void {}
+
+      setRequestHeader(name: string, value: string): void {
+        this.headers.set(name, value)
+      }
+
+      addEventListener(type: string, listener: () => void): void {
+        this.listeners.set(type, listener)
+      }
+
+      getAllResponseHeaders(): string {
+        return 'Content-Type: application/json\r\n'
+      }
+
+      send(): void {
+        this.listeners.get('load')?.()
+      }
+
+      abort(): void {
+        this.listeners.get('abort')?.()
+      }
+    }
+
+    vi.stubGlobal('XMLHttpRequest', FakeUploadRequest)
+
+    const result = await managementUpload<{ path: string }>(
+      '/api/file-manager/files/upload?path=notes%2Freadme.md',
+      new Blob(['hello']),
+    )
+
+    expect(result).toEqual({ path: 'notes/readme.md' })
+    expect(FakeUploadRequest.instances).toHaveLength(1)
+    expect(FakeUploadRequest.instances[0]?.headers.get('Authorization')).toBeUndefined()
   })
 
   it('parses comments, split CRLF boundaries, and multi-line data blocks', () => {

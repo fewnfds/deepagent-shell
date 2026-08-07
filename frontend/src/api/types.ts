@@ -356,6 +356,7 @@ export type AutoRoot = AutoRootDefinition & { id: string; revision: number }
 export interface HealthResponse {
   status: string
   runtime: string
+  management_auth_enabled: boolean
 }
 
 export interface ReadinessResponse {

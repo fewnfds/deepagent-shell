@@ -187,9 +187,7 @@ async function save(): Promise<void> {
       api.updateValidationSettings(Number(validationDebounceMs.value)),
     ])
     applySystemSettings(savedSystemSettings)
-    if (!savedSystemSettings.management_auth_enabled) {
-      managementAuth.cancel()
-    }
+    managementAuth.setManagementAuthRequired(savedSystemSettings.management_auth_enabled)
     applyApiServerSettings(savedApiServerSettings)
     applyInterceptionSetting(savedInterception)
     applyValidationSettings(savedValidationSettings)
