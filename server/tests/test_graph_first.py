@@ -295,6 +295,13 @@ def test_management_api_runs_graph_with_entry_script(tmp_path) -> None:
             "enabled": True,
         })
         assert entry_response.status_code == 200, entry_response.text
+        invalid_entry = client.post("/api/entry-scripts", json={
+            "name": "invalid:name",
+            "graph_id": graph["id"],
+            "enabled": True,
+        })
+        assert invalid_entry.status_code == 422, invalid_entry.text
+        assert invalid_entry.json()["detail"]["code"] == "entry_script_validation_failed"
         started = client.post(f"/api/workflows/{graph['id']}/runs", json={
             "messages": [{"role": "user", "content": "hello"}],
             "entry_script_id": entry_response.json()["id"],

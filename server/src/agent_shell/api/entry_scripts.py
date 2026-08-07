@@ -3,6 +3,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 from fastapi import APIRouter
+from pydantic import ValidationError
 
 from agent_shell.api.errors import management_error
 from agent_shell.storage.entry_scripts import EntryScriptStore
@@ -14,7 +15,16 @@ def build_entry_script_router(store: EntryScriptStore, workflows: WorkflowStore)
     router = APIRouter()
 
     def validate(payload: dict) -> EntryScriptDefinition:
-        definition = EntryScriptDefinition.model_validate(payload)
+        try:
+            definition = EntryScriptDefinition.model_validate(payload)
+        except ValidationError as exc:
+            raise management_error(
+                422,
+                code="entry_script_validation_failed",
+                message_key="errors.requestValidationFailed",
+                message="The Entry Script definition is invalid.",
+                message_args={"count": exc.error_count()},
+            ) from exc
         graph = workflows.get_item(definition.graph_id)
         if graph is None:
             raise management_error(422, code="entry_script_graph_missing", message_key="errors.workflowNotFound", message="The selected Graph does not exist.")
