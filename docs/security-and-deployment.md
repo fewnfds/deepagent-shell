@@ -76,5 +76,4 @@ AGENT_SHELL_MANAGEMENT_TOKEN=<management password>
 LangSmith/LangChain tracing 开关为 `false`；不会修改宿主机或其他进程的环境变量。开启后，LangSmith
 凭据、Endpoint、项目名和其他 tracing 选项仍由部署者自行配置，并应按敏感数据策略控制上传内容。
 
-未知 `AGENT_SHELL_*` 键会使启动失败。Windows 源码启动器读取当前 Clone 的 data 配置；具体入口见根
-README。
+未知 `AGENT_SHELL_*` 键会使启动失败。Windows 源码启动器读取当前 Clone 的 data 配置；启动和维护方式见[开发与版本](development-and-release.md)。

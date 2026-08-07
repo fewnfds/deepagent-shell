@@ -100,15 +100,14 @@ pre code {
   .validation-sidebar {
     align-self: stretch;
     position: relative;
-    overflow: visible;
   }
 
   .validation-sidebar > .card {
+    position: -webkit-sticky;
     position: sticky;
-    inset-block-start: 1rem;
-    inset-block-end: 1rem;
-    max-block-size: calc(100vh - 2rem);
-    max-block-size: calc(100dvh - 2rem);
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+    max-height: calc(100dvh - 2rem);
     overflow-y: auto;
   }
 }
