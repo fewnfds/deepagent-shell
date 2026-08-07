@@ -18,10 +18,10 @@ import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 import '@vue-flow/minimap/dist/style.css'
-import { computed, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
 
 import type { EntryScript, WorkflowDefinition, WorkflowNodeCatalogItem } from '@/api'
-import { edgeId, nextNodeId, nodeCatalogItem } from '@/domain/workflows'
+import { nodeCatalogItem } from '@/domain/workflows'
 import { API_BOUNDARY_ID, ENTRY_BOUNDARY_ID, toFlowEdges, toFlowNodes, type GraphNodeData } from '@/domain/graphWorkspace'
 import BoundaryNodeView from './BoundaryNodeView.vue'
 import ControlEdgeView from './ControlEdgeView.vue'
@@ -133,7 +133,7 @@ defineExpose({ defaultNode, fitView: () => undefined, boundaryIds: [API_BOUNDARY
       :selection-on-drag="true"
       :select-nodes-on-drag="true"
       :pan-on-drag="[1, 2]"
-      fit-view-on-init
+      :default-viewport="{ x: 0, y: 0, zoom: 1 }"
       class="graph-canvas__surface"
       @nodes-change="onNodesChange"
       @edges-change="onEdgesChange"
