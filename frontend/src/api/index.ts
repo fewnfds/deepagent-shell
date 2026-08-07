@@ -48,6 +48,11 @@ import type {
   SystemSettings,
   SystemSettingsUpdate,
   ValidationReport,
+  Workflow,
+  WorkflowDefinition,
+  WorkflowNodeCatalogResponse,
+  AutoRoot,
+  AutoRootDefinition,
 } from './types'
 
 export * from './transport'
@@ -263,6 +268,58 @@ export const managementApi = {
 
   validateDraft(request: DraftValidationRequest): Promise<ValidationReport> {
     return managementRequest('/api/validation/draft', jsonBody(request))
+  },
+
+  listWorkflows(): Promise<Workflow[]> {
+    return managementRequest('/api/workflows')
+  },
+
+  getWorkflow(id: string): Promise<Workflow> {
+    return managementRequest(recordPath('/api/workflows', id))
+  },
+
+  getWorkflowNodeCatalog(): Promise<WorkflowNodeCatalogResponse> {
+    return managementRequest('/api/workflow-node-catalog')
+  },
+
+  saveWorkflow(data: WorkflowDefinition | Workflow): Promise<Workflow> {
+    const id = 'id' in data ? data.id : ''
+    return managementRequest(id ? recordPath('/api/workflows', id) : '/api/workflows', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(withoutId(data)),
+    })
+  },
+
+  deleteWorkflow(id: string): Promise<{ ok: boolean }> {
+    return managementRequest(recordPath('/api/workflows', id), { method: 'DELETE' })
+  },
+
+  validateWorkflowDraft(data: WorkflowDefinition & { id?: string }): Promise<ValidationReport> {
+    return managementRequest('/api/workflows/validate-draft', jsonBody(data))
+  },
+
+  listAutoRoots(): Promise<AutoRoot[]> {
+    return managementRequest('/api/auto-roots')
+  },
+
+  getAutoRoot(id: string): Promise<AutoRoot> {
+    return managementRequest(recordPath('/api/auto-roots', id))
+  },
+
+  saveAutoRoot(data: AutoRootDefinition | AutoRoot): Promise<AutoRoot> {
+    const id = 'id' in data ? data.id : ''
+    return managementRequest(id ? recordPath('/api/auto-roots', id) : '/api/auto-roots', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(withoutId(data)),
+    })
+  },
+
+  deleteAutoRoot(id: string): Promise<{ ok: boolean }> {
+    return managementRequest(recordPath('/api/auto-roots', id), { method: 'DELETE' })
+  },
+
+  resolveAutoRoot(id: string, messages: unknown[]): Promise<{ kind: 'agent' | 'workflow'; public_id: string }> {
+    return managementRequest(`${recordPath('/api/auto-roots', id)}/resolve`, jsonBody({ messages }))
   },
 
   getValidationSettings(): Promise<ConfigurationValidationSettings> {

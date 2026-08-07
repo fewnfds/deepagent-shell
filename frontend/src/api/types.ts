@@ -284,6 +284,73 @@ export interface ValidationReport {
   issues: ValidationIssue[]
 }
 
+export interface WorkflowPort {
+  name: string
+  data_type: string
+}
+
+export interface WorkflowNodeCatalogItem {
+  type: string
+  version: string
+  title: string
+  input_ports: WorkflowPort[]
+  output_ports: WorkflowPort[]
+  config_schema: Record<string, unknown>
+}
+
+export interface WorkflowNodeCatalogResponse {
+  api_version: number
+  nodes: WorkflowNodeCatalogItem[]
+}
+
+export interface WorkflowNode {
+  id: string
+  type: string
+  version: string
+  config: Record<string, unknown>
+}
+
+export interface WorkflowPortRef {
+  node: string
+  port: string
+}
+
+export interface WorkflowEdge {
+  id: string
+  source: WorkflowPortRef
+  target: WorkflowPortRef
+}
+
+export interface WorkflowPosition {
+  x: number
+  y: number
+}
+
+export interface WorkflowDefinition {
+  public_id: string
+  name: string
+  description: string
+  schema_version: 1
+  enabled: boolean
+  root_interface: { kind: 'chat'; input: 'messages'; output: 'message' }
+  agent_base: { source: { kind: 'main-agent-profile'; id: string }; inherit: string[] } | null
+  preparation: AutomationPluginBinding[]
+  nodes: WorkflowNode[]
+  edges: WorkflowEdge[]
+  layout: Record<string, WorkflowPosition>
+}
+
+export type Workflow = WorkflowDefinition & { id: string; revision: number }
+
+export interface AutoRootDefinition {
+  public_id: string
+  name: string
+  source: string
+  enabled: boolean
+}
+
+export type AutoRoot = AutoRootDefinition & { id: string; revision: number }
+
 export interface HealthResponse {
   status: string
   runtime: string

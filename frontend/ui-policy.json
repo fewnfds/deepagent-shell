@@ -362,7 +362,9 @@
           "src/pages/StyleLabPage.vue",
           "src/pages/SubagentPage.vue",
           "src/pages/SystemSettingsPage.vue",
-          "src/pages/TerminologyPage.vue"
+          "src/pages/TerminologyPage.vue",
+          "src/pages/WorkflowPage.vue",
+          "src/pages/AutoPage.vue"
         ]
       },
       {

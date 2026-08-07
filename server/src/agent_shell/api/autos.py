@@ -71,4 +71,16 @@ def build_auto_router(store: AutoStore) -> APIRouter:
             raise management_error(404, code="auto_not_found", message_key="errors.autoNotFound", message="The Auto root does not exist.")
         return {"ok": True}
 
+    @router.post("/api/auto-roots/{auto_id}/resolve")
+    async def resolve_auto_root(auto_id: str, payload: dict) -> dict[str, str]:
+        item = store.get_item(auto_id)
+        if item is None:
+            raise management_error(404, code="auto_not_found", message_key="errors.autoNotFound", message="The Auto root does not exist.")
+        from agent_shell.auto.resolver import resolve_auto_source
+
+        return await resolve_auto_source(
+            str(item.get("source", "")),
+            payload.get("messages"),
+        )
+
     return router

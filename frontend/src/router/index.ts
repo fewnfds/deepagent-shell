@@ -12,6 +12,8 @@ const StyleLabPage = () => import('@/pages/StyleLabPage.vue')
 const SystemSettingsPage = () => import('@/pages/SystemSettingsPage.vue')
 const SubagentPage = () => import('@/pages/SubagentPage.vue')
 const TerminologyPage = () => import('@/pages/TerminologyPage.vue')
+const WorkflowPage = () => import('@/pages/WorkflowPage.vue')
+const AutoPage = () => import('@/pages/AutoPage.vue')
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -20,6 +22,8 @@ export const router = createRouter({
     { path: '/agents', redirect: '/agents/main' },
     { path: '/agents/main', component: MainAgentPage, meta: { titleKey: 'navigation.agents' } },
     { path: '/agents/subagents', component: SubagentPage, meta: { titleKey: 'navigation.agents' } },
+    { path: '/workflows', component: WorkflowPage, meta: { titleKey: 'navigation.workflows' } },
+    { path: '/auto', component: AutoPage, meta: { titleKey: 'navigation.auto' } },
     { path: '/components', redirect: '/components/model' },
     { path: '/components/:type', component: ComponentsPage, meta: { titleKey: 'components.title' } },
     { path: '/library', redirect: '/library/model' },

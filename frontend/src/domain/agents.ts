@@ -109,11 +109,21 @@ export function blankMainAgent(): MainAgentProfile {
   return {
     id: '',
     name: '',
-    public_id: 'agent-',
+    public_id: '',
     capability_refs: [],
     subagents: [],
     automation: { hooks: [], periodic: [] },
   }
+}
+
+export function defaultMainAgentPublicId(name: string): string {
+  const slug = name
+    .normalize('NFKD')
+    .replace(/[^\u0000-\u007F]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return `agent-${slug || 'config'}`
 }
 
 export function normalizeMainAgent(value: unknown): MainAgentProfile {

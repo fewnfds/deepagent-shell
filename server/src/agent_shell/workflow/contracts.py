@@ -5,6 +5,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from agent_shell.automation.contracts import AutomationPluginBinding
+from agent_shell.public_ids import default_public_id
 
 
 PUBLIC_ID_PATTERN = re.compile(r"^[a-z]+(?:-[a-z]+)*$")
@@ -102,6 +103,14 @@ class WorkflowDefinition(StrictWorkflowModel):
     nodes: list[WorkflowNode] = Field(min_length=2, max_length=100)
     edges: list[WorkflowEdge] = Field(default_factory=list, max_length=300)
     layout: dict[str, WorkflowPosition] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def default_public_id_from_name(cls, value: Any) -> Any:
+        if isinstance(value, dict) and not value.get("public_id"):
+            value = dict(value)
+            value["public_id"] = default_public_id("workflow", str(value.get("name", "")))
+        return value
 
     @field_validator("public_id")
     @classmethod

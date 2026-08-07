@@ -31,7 +31,7 @@ def test_main_agent_and_subagent_copy_create_server_ids_and_preserve_sources(
 
     main_agent_copy_response = client.post(
         f"/api/main-agents/{main_agent['id']}/copy",
-        json={"name": "  Copied Main Agent  ", "public_id": "agent-copied-main-agent"},
+        json={"name": "  Copied Main Agent  "},
     )
     subagent_copy_response = client.post(
         f"/api/subagents/{subagent['id']}/copy",
@@ -45,6 +45,7 @@ def test_main_agent_and_subagent_copy_create_server_ids_and_preserve_sources(
     assert UUID(main_agent_copy["id"]) and main_agent_copy["id"] != main_agent["id"]
     assert UUID(subagent_copy["id"]) and subagent_copy["id"] != subagent["id"]
     assert main_agent_copy["name"] == "Copied Main Agent"
+    assert main_agent_copy["public_id"] == "agent-copied-main-agent"
     assert subagent_copy["component_name"] == "Copied Subagent"
     assert subagent_copy["name"] == subagent["name"]
     assert main_agent_copy["capability_refs"] == main_agent["capability_refs"]

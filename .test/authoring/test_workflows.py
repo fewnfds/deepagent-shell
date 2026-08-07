@@ -69,3 +69,24 @@ def test_workflow_validator_rejects_cycle_and_bad_port(tmp_path: Path, monkeypat
     assert response.status_code == 422
     codes = {issue["code"] for issue in response.json()["detail"]["validation"]["issues"]}
     assert "workflow.source_port_missing" in codes
+
+
+def test_auto_root_resolve_management_endpoint_returns_script_target(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = make_client(tmp_path, monkeypatch)
+    auto = client.post(
+        "/api/auto-roots",
+        json={
+            "public_id": "auto-resolve",
+            "name": "Resolve route",
+            "source": "def route(messages):\n    return {'kind': 'agent', 'public_id': 'agent-research'}\n",
+        },
+    )
+    assert auto.status_code == 200, auto.text
+    resolved = client.post(
+        f"/api/auto-roots/{auto.json()['id']}/resolve",
+        json={"messages": [{"role": "user", "content": "research"}]},
+    )
+    assert resolved.status_code == 200, resolved.text
+    assert resolved.json() == {"kind": "agent", "public_id": "agent-research"}
