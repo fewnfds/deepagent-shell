@@ -96,22 +96,6 @@ pre code {
   top: 3.5rem;
 }
 
-@media (min-width: 992px) {
-  .validation-sidebar {
-    align-self: stretch;
-    position: relative;
-  }
-
-  .validation-sidebar > .card {
-    position: -webkit-sticky;
-    position: sticky;
-    top: 1rem;
-    max-height: calc(100vh - 2rem);
-    max-height: calc(100dvh - 2rem);
-    overflow-y: auto;
-  }
-}
-
 .form-check.form-switch {
   display: inline-flex;
   align-items: center;
