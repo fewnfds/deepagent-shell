@@ -402,8 +402,7 @@
         "callers": [
           "src/pages/AutomationPage.vue",
           "src/pages/ConfigLibraryPage.vue",
-          "src/pages/EntryScriptPage.vue",
-          "src/pages/WorkflowHomePage.vue"
+          "src/pages/EntryScriptPage.vue"
         ]
       },
       {
@@ -501,7 +500,8 @@
           "src/pages/AgentSessionsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/EventFeedPage.vue",
-          "src/pages/TerminologyPage.vue"
+          "src/pages/TerminologyPage.vue",
+          "src/pages/WorkflowHomePage.vue"
         ]
       },
       {

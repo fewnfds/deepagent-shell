@@ -25,6 +25,7 @@ const messages = {
       components: 'Components',
       agents: 'Agents',
       plugins: 'Plugins',
+      graphs: 'Graphs',
     },
     catalogUnavailable: 'Catalog unavailable',
     unknownCategory: 'Unknown category {type}',
@@ -118,6 +119,10 @@ const messages = {
   },
   navigation: {
     automation: 'Automation',
+    workflows: 'Workflows',
+  },
+  workflow: {
+    entryScripts: 'Entry Scripts',
   },
   validation: {
     status: {
@@ -313,7 +318,7 @@ describe('ConfigLibraryPage', () => {
     expect(wrapper
       .get('[data-testid="library-plugin-group"] [data-testid="section-nav"]')
       .findAll('button')
-      .map((item) => item.text())).toEqual(['Automation'])
+      .map((item) => item.text())).toEqual(['Automation', 'Entry Scripts'])
     expect(wrapper.get('[data-testid="data-table-row"]').text()).not.toContain('block-uuid')
   })
 

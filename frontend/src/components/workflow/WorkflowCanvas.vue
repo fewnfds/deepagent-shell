@@ -4,8 +4,6 @@ import { Controls } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
 import {
   VueFlow,
-  applyEdgeChanges,
-  applyNodeChanges,
   useVueFlow,
   type Connection,
   type Edge,
@@ -21,7 +19,6 @@ import '@vue-flow/minimap/dist/style.css'
 import { ref, watch } from 'vue'
 
 import type { EntryScript, WorkflowDefinition, WorkflowNodeCatalogItem } from '@/api'
-import { nodeCatalogItem } from '@/domain/workflows'
 import { API_BOUNDARY_ID, ENTRY_BOUNDARY_ID, toFlowEdges, toFlowNodes, type GraphNodeData } from '@/domain/graphWorkspace'
 import BoundaryNodeView from './BoundaryNodeView.vue'
 import ControlEdgeView from './ControlEdgeView.vue'
@@ -51,7 +48,12 @@ const nodes = ref<Node<GraphNodeData>[]>([])
 const edges = ref<Edge[]>([])
 const nodeTypes = { 'graph-node': GraphNodeView, 'boundary-node': BoundaryNodeView }
 const edgeTypes = { 'control-edge': ControlEdgeView, 'data-edge': DataEdgeView }
-const { screenToFlowCoordinate } = useVueFlow()
+// The composable lives in this adapter (the parent of <VueFlow>), so bind it
+// explicitly to the same store instead of creating a second, unmounted store.
+// Without the stable id, screenToFlowCoordinate() has no viewport element and
+// palette drops are converted to { x: 0, y: 0 }.
+const flowId = 'workflow-canvas'
+const { screenToFlowCoordinate } = useVueFlow(flowId)
 
 function refreshElements(): void {
   nodes.value = toFlowNodes(props.workflow, props.catalog, props.statuses ?? {}, props.entryScript)
@@ -61,14 +63,12 @@ function refreshElements(): void {
 watch(() => [props.workflow, props.catalog, props.statuses, props.entryScript], refreshElements, { deep: true, immediate: true })
 
 function onNodesChange(changes: NodeChange[]): void {
-  nodes.value = applyNodeChanges(changes, nodes.value) as Node<GraphNodeData>[]
   for (const change of changes) {
     if (change.type === 'remove' && !change.id.startsWith('boundary-')) emit('removeNode', change.id)
   }
 }
 
 function onEdgesChange(changes: EdgeChange[]): void {
-  edges.value = applyEdgeChanges(changes, edges.value)
   for (const change of changes) {
     if (change.type === 'remove' && !change.id.startsWith('boundary-')) emit('removeEdge', change.id)
   }
@@ -88,6 +88,7 @@ function onNodeDragStop(event: { node: Node }): void {
 function onDrop(event: DragEvent): void {
   event.preventDefault()
   const type = event.dataTransfer?.getData('application/x-agent-shell-node')
+    || event.dataTransfer?.getData('text/plain')
   if (!type || event.clientX === undefined || event.clientY === undefined) return
   emit('addNode', type, screenToFlowCoordinate({ x: event.clientX, y: event.clientY }))
 }
@@ -110,26 +111,20 @@ function onEdgeClick(event: { edge: Edge }): void {
   if (!event.edge.id.startsWith('boundary-')) emit('selectEdge', event.edge.id)
 }
 
-function defaultNode(type: string): void {
-  const definition = nodeCatalogItem(props.catalog, type)
-  if (!definition) return
-  const nodeId = nextNodeId(props.workflow.nodes, type)
-  emit('addNode', type, { x: 240 + props.workflow.nodes.length * 36, y: 180 + props.workflow.nodes.length * 36 })
-  void nodeId
-}
-
-defineExpose({ defaultNode, fitView: () => undefined, boundaryIds: [API_BOUNDARY_ID, ENTRY_BOUNDARY_ID] })
 </script>
 
 <template>
-  <div class="graph-canvas graph-canvas--workspace" @drop="onDrop" @dragover="onDragOver">
+  <div class="graph-canvas graph-canvas--workspace" @drop.capture="onDrop" @dragover.capture="onDragOver">
     <VueFlow
-      :nodes="nodes"
-      :edges="edges"
+      :id="flowId"
+      v-model:edges="edges"
+      v-model:nodes="nodes"
       :node-types="nodeTypes"
       :edge-types="edgeTypes"
-      :apply-default="false"
       :delete-key-code="['Backspace', 'Delete']"
+      :nodes-draggable="true"
+      :nodes-connectable="true"
+      :elements-selectable="true"
       :selection-on-drag="true"
       :select-nodes-on-drag="true"
       :pan-on-drag="[1, 2]"

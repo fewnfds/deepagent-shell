@@ -21,8 +21,12 @@ const filtered = computed(() => {
 })
 
 function onDragStart(event: DragEvent, type: string): void {
-  event.dataTransfer?.setData('application/x-agent-shell-node', type)
-  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy'
+  if (!event.dataTransfer) return
+  // Keep a namespaced MIME type for Chromium and a plain-text fallback for
+  // browsers/webviews that strip custom drag payloads.
+  event.dataTransfer.setData('application/x-agent-shell-node', type)
+  event.dataTransfer.setData('text/plain', type)
+  event.dataTransfer.effectAllowed = 'copy'
 }
 </script>
 

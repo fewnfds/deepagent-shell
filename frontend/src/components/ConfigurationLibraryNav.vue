@@ -21,7 +21,7 @@ const activeCategoryId = computed(() => (
     ? 'automation'
     : route.path === '/library/entry-scripts'
       ? 'entry-scripts'
-      : route.path === '/workflows' || route.path === '/workflows/new' || route.path.startsWith('/workflows/')
+      : route.path === '/library/workflows'
         ? 'workflows'
         : routeCategory(route.params.type)
 ))
@@ -33,19 +33,18 @@ const agentItems = computed<SectionNavItem[]>(() => agentLibraryCategories.map((
   id,
   label: t(`capabilities.${id}.label`),
 })))
-const pluginItems = computed<SectionNavItem[]>(() => [{
-  id: 'automation',
-  label: t('navigation.automation'),
-}])
+const pluginItems = computed<SectionNavItem[]>(() => [
+  { id: 'automation', label: t('navigation.automation') },
+  { id: 'entry-scripts', label: t('workflow.entryScripts') },
+])
 const graphItems = computed<SectionNavItem[]>(() => [
   { id: 'workflows', label: t('navigation.workflows') },
-  { id: 'entry-scripts', label: t('workflow.entryScripts') },
 ])
 
 function selectCategory(id: string): void {
   if (id === activeCategoryId.value) return
   if (id === 'workflows') {
-    void router.push('/workflows')
+    void router.push('/library/workflows')
     return
   }
   if (id === 'entry-scripts') {

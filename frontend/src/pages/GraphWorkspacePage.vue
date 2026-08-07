@@ -49,6 +49,10 @@ const selectedNode = computed(() => workflow.value.nodes.find((node) => node.id 
 const selectedDefinition = computed(() => selectedNode.value ? nodeCatalogItem(catalog.value, selectedNode.value.type) : undefined)
 const selectedEdge = computed(() => workflow.value.edges.find((edge) => edge.id === selectedEdgeId.value))
 const selectedEntry = computed(() => entries.value.find((entry) => entry.id === selectedEntryId.value))
+const isNewRoute = computed(() => (
+  route.path === '/workflows/new'
+  || String(route.params.workflowId ?? '') === 'new'
+))
 
 const { isDirty, markClean, runAfterDiscard } = useUnsavedChanges(
   () => workflow.value,
@@ -183,7 +187,7 @@ async function load(): Promise<void> {
       managementApi.getWorkflowNodeCatalog(),
       managementApi.listMainAgents(),
       managementApi.listEntryScripts(),
-      route.params.workflowId === 'new' ? Promise.resolve(null) : managementApi.getWorkflow(String(route.params.workflowId)),
+      isNewRoute.value ? Promise.resolve(null) : managementApi.getWorkflow(String(route.params.workflowId)),
     ])
     catalog.value = nodeCatalog.nodes
     agents.value = mainAgents
@@ -198,7 +202,21 @@ async function load(): Promise<void> {
 }
 
 function goBack(): void { void runAfterDiscard(() => router.push('/workflows')) }
-function newWorkflow(): void { void runAfterDiscard(() => router.push('/workflows/new')) }
+function newWorkflow(): void {
+  void runAfterDiscard(async () => {
+    if (isNewRoute.value) {
+      initializeHistory(blankWorkflow())
+      selectedNodeId.value = 'agent-1'
+      selectedEdgeId.value = ''
+      selectedEntryId.value = ''
+      validation.value = null
+      error.value = ''
+      markClean()
+      return
+    }
+    await router.push('/workflows/new')
+  })
+}
 
 onMounted(() => { void load() })
 </script>

@@ -66,6 +66,16 @@ export const en: MessageSchema = {
     entryNode: 'Graph entry node',
     recursionLimit: 'Step limit',
     dataEdgeNoCondition: 'Data edge',
+    unnamed: 'Unnamed Graph',
+    loadFailed: 'Could not load Graphs',
+    table: {
+      ariaLabel: 'Graph list',
+      search: 'Search Graphs',
+      searchPlaceholder: 'Search by name, description, or ID',
+      name: 'Name',
+      description: 'Description',
+      status: 'Status',
+    },
   },
   systemSettings: {
     title: 'System settings',

@@ -31,6 +31,7 @@ export const router = createRouter({
     { path: '/library', redirect: '/library/model' },
     { path: '/library/automation', component: AutomationPage, meta: { titleKey: 'library.title' } },
     { path: '/library/entry-scripts', component: EntryScriptPage, meta: { titleKey: 'workflow.entryScripts' } },
+    { path: '/library/workflows', component: WorkflowHomePage, meta: { titleKey: 'library.title' } },
     { path: '/library/:type', component: ConfigLibraryPage, meta: { titleKey: 'library.title' } },
     { path: '/system', redirect: '/system/config' },
     {
