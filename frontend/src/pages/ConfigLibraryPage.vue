@@ -346,7 +346,7 @@ onMounted(async () => {
     <ConfigurationLibraryNav :manifests="manifests" />
 
     <div class="row g-3 align-items-start" data-testid="library-layout">
-      <section class="col-lg-8" data-testid="library-content-region">
+      <section class="col-lg-9" data-testid="library-content-region">
         <LteAlert
           v-if="catalogError"
           class="mb-3"
@@ -372,7 +372,7 @@ onMounted(async () => {
         </LteAlert>
       </section>
 
-      <aside class="col-lg-4 validation-sidebar" data-testid="library-validation-region">
+      <aside class="col-lg-3 validation-sidebar" data-testid="library-validation-region">
         <ValidationChecklist
           :title="t('library.validationTitle')"
           :validation="repositoryValidation"

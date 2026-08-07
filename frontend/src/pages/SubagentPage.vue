@@ -304,7 +304,7 @@ watch(
       :data-loading="loading"
       :inert="loading || undefined"
     >
-      <section class="col-lg-8">
+      <section class="col-lg-9">
         <div class="mb-3">
           <RecordPicker
             :model-value="selectedProfileId"
@@ -492,7 +492,7 @@ watch(
         />
       </section>
 
-      <aside class="col-lg-4 validation-sidebar">
+      <aside class="col-lg-3 validation-sidebar">
         <ValidationChecklist
           :title="t('agents.override.validationTitle')"
           :validation="validation"

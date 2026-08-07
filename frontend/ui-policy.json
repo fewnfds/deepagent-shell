@@ -205,7 +205,7 @@
         "name": "approved-utilities",
         "paths": ["src/components/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
         "classes": [
-          "align-items-center", "align-items-end", "align-items-start", "bg-body-tertiary", "col", "col-12", "col-lg-3", "col-lg-4", "col-lg-6", "col-lg-8", "col-md-6", "col-xl-5", "col-xl-7", "col-xxl-4", "d-block", "d-flex", "d-none", "d-sm-inline", "flex-wrap", "font-monospace", "form-text", "fw-semibold", "g-3", "gap-1", "gap-2", "gap-3", "h-100", "h4", "h5",
+          "align-items-center", "align-items-end", "align-items-start", "bg-body-tertiary", "col", "col-12", "col-lg-3", "col-lg-4", "col-lg-6", "col-lg-8", "col-lg-9", "col-md-6", "col-xl-5", "col-xl-7", "col-xxl-4", "d-block", "d-flex", "d-none", "d-sm-inline", "flex-wrap", "font-monospace", "form-text", "fw-semibold", "g-3", "gap-1", "gap-2", "gap-3", "h-100", "h4", "h5",
           "fs-6", "justify-content-between", "justify-content-end", "lh-sm", "mb-0", "mb-1", "mb-2", "mb-3", "me-2", "ms-auto", "mt-2", "mt-3", "overflow-auto", "p-3", "small",
           "text-body-secondary", "text-break", "text-center", "text-danger", "text-end", "text-start", "text-success", "text-uppercase", "visually-hidden", "w-100"
         ]

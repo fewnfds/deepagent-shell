@@ -590,7 +590,7 @@ onMounted(() => {
       :data-loading="loading"
       :inert="loading || undefined"
     >
-      <section class="col-lg-8 component-editor-region" data-testid="editor-region">
+      <section class="col-lg-9 component-editor-region" data-testid="editor-region">
         <LteAlert
           v-if="storedRecordInvalid"
           class="mb-3"
@@ -619,7 +619,7 @@ onMounted(() => {
         />
       </section>
 
-      <aside class="col-lg-4 validation-sidebar" data-testid="inspector-region">
+      <aside class="col-lg-3 validation-sidebar" data-testid="inspector-region">
         <ValidationChecklist
           :title="t('components.validationTitle')"
           :validation="displayedValidation"

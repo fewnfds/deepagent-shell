@@ -96,12 +96,18 @@ pre code {
   top: 3.5rem;
 }
 
+.validation-sidebar > .card {
+  overflow: hidden;
+}
+
 @media (min-width: 992px) {
   .validation-sidebar {
     position: sticky;
-    top: 4.5rem;
-    max-height: calc(100vh - 5.5rem);
-    max-height: calc(100dvh - 5.5rem);
+    inset-block-start: 4.5rem;
+    inset-block-end: 1rem;
+    align-self: flex-start;
+    max-block-size: calc(100vh - 5.5rem);
+    max-block-size: calc(100dvh - 5.5rem);
     overflow-y: auto;
   }
 }
