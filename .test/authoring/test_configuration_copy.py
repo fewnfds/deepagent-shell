@@ -31,7 +31,7 @@ def test_main_agent_and_subagent_copy_create_server_ids_and_preserve_sources(
 
     main_agent_copy_response = client.post(
         f"/api/main-agents/{main_agent['id']}/copy",
-        json={"name": "  Copied Main Agent  "},
+        json={"name": "  Copied Main Agent  ", "public_id": "agent-copied-main-agent"},
     )
     subagent_copy_response = client.post(
         f"/api/subagents/{subagent['id']}/copy",
@@ -149,7 +149,7 @@ def test_agent_config_copy_rejects_duplicate_names_without_writing(
 
     main_agent_copy = client.post(
         f"/api/main-agents/{main_agent['id']}/copy",
-        json={"name": main_agent["name"]},
+        json={"name": main_agent["name"], "public_id": main_agent["public_id"]},
     )
     subagent_copy = client.post(
         f"/api/subagents/{subagent['id']}/copy",

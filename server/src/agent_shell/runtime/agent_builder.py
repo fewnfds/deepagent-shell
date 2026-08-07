@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, cast
@@ -23,6 +24,7 @@ from agent_shell.runtime.capabilities import (
     DeepAgentsCapabilityError,
     DeepAgentsWorkspace,
     build_deepagents_capabilities,
+    create_empty_workspace,
 )
 from agent_shell.runtime.capabilities.custom_middlewares import (
     materialize_custom_middlewares,
@@ -56,6 +58,7 @@ from agent_shell.runtime.model_response import ModelResponse
 from agent_shell.runtime.subagent_input import AgentRequestContext
 from agent_shell.validation.capability_assembly import FilesystemMode
 from agent_shell.validation.service import ConfigurationValidationService
+from agent_shell.workflow.artifacts import ArtifactCommitter
 
 
 _OPENAI_COMPATIBLE_PROVIDERS = frozenset({"deepseek", "openai", "xai"})
@@ -132,6 +135,7 @@ class AgentBuilder:
         skills_dir: Path,
         validation: ConfigurationValidationService,
         provider_http_clients: ProviderHttpClients,
+        workflow_provider: Callable[[str], dict[str, Any]] | None = None,
     ) -> None:
         self._secrets = secrets
         self._custom_tools_dir = custom_tools_dir
@@ -140,14 +144,44 @@ class AgentBuilder:
         self._skills_dir = skills_dir
         self._validation = validation
         self._provider_http_clients = provider_http_clients
-        self._automation_runtime: AutomationRuntime | None = None
+        self._workflow_provider = workflow_provider
+        self._automation_runtime: ContextVar[AutomationRuntime | None] = ContextVar(
+            "agent_builder_automation_runtime",
+            default=None,
+        )
 
     async def finish_failed_build(self) -> None:
-        if self._automation_runtime is None:
+        automation = self._automation_runtime.get()
+        if automation is None:
             return
-        await self._automation_runtime.finish(
+        self._automation_runtime.set(None)
+        await automation.finish(
             {"status": "failed", "error_code": "agent_construction_failed"}
         )
+
+    def prepare_workspace(self, main_agent_id: str) -> DeepAgentsWorkspace:
+        """Materialize the request-scoped workspace without running an Agent."""
+        report, assembly = self._validation.resolve_main_agent(main_agent_id)
+        if not report.valid or assembly is None:
+            issue = report.issues[0]
+            raise AgentRuntimeError(
+                issue.code,
+                issue.message,
+                status_code=422,
+                validation_report=report,
+            )
+        materialized = self._materialize_profile(
+            assembly.references,
+            assembly.blocks,
+            filesystem_mode=assembly.filesystem_mode,
+            scope="workflow_agent_base",
+            owner_id=main_agent_id,
+            owner_name=str(assembly.main_agent.get("name", "")),
+        )
+        return materialized.workspace
+
+    def create_workspace(self) -> DeepAgentsWorkspace:
+        return create_empty_workspace(skills_dir=self._skills_dir)
 
     def _materialize_profile(
         self,
@@ -288,11 +322,10 @@ class AgentBuilder:
             selected_skill_names = (
                 list(skill_block.skills) if skill_block is not None else []
             )
+            automation = self._automation_runtime.get()
             effective_skills_dir = (
-                self._automation_runtime.effective_skills_dir(
-                    owner_id, selected_skill_names
-                )
-                if self._automation_runtime is not None
+                automation.effective_skills_dir(owner_id, selected_skill_names)
+                if automation is not None
                 else self._skills_dir
             )
             deepagents = build_deepagents_capabilities(
@@ -334,8 +367,9 @@ class AgentBuilder:
         backend = deepagents.backend
         middleware.extend(deepagents.middleware)
         initial_files.update(deepagents.initial_files)
-        if self._automation_runtime is not None:
-            automation_files = self._automation_runtime.initial_files_for(owner_id)
+        automation = self._automation_runtime.get()
+        if automation is not None:
+            automation_files = automation.initial_files_for(owner_id)
             if automation_files:
                 from deepagents.backends.utils import create_file_data
 
@@ -405,9 +439,10 @@ class AgentBuilder:
                 ) from exc
 
         automation_middleware: tuple[Any, ...] = ()
-        if self._automation_runtime is not None:
+        automation = self._automation_runtime.get()
+        if automation is not None:
             try:
-                automation_middleware = self._automation_runtime.middleware_for(owner_id)
+                automation_middleware = automation.middleware_for(owner_id)
             except AgentRuntimeError as exc:
                 raise reported_error(
                     exc,
@@ -454,6 +489,8 @@ class AgentBuilder:
         model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
         agent_input_observer: Callable[[dict[str, object]], Any] | None = None,
         model_response_observer: Callable[[ModelResponse], Any] | None = None,
+        artifact_committer: ArtifactCommitter | None = None,
+        workspace: DeepAgentsWorkspace | None = None,
         request_id: str = "",
     ) -> BuiltAgent:
         # Validate the immutable request snapshot before any selected user module
@@ -501,7 +538,7 @@ class AgentBuilder:
             skills_dir=self._skills_dir,
             runtime_root=self._runtime_dir,
         )
-        self._automation_runtime = automation
+        self._automation_runtime.set(automation)
         await automation.prepare()
         prepared_messages = automation.messages_for(main_agent_id)
         materialized = self._materialize_profile(
@@ -511,7 +548,26 @@ class AgentBuilder:
             scope="main_agent",
             owner_id=main_agent_id,
             owner_name=main_agent_name,
+            workspace=workspace,
         )
+        runtime_tools = list(materialized.tools)
+        if artifact_committer is not None:
+            from langchain_core.tools import StructuredTool
+
+            async def commit(path: str) -> dict[str, Any]:
+                try:
+                    return await artifact_committer.commit(path)
+                except Exception as exc:
+                    code = getattr(exc, "code", "commit_failed")
+                    return {"status": "failed", "code": code, "message": str(exc)}
+
+            runtime_tools.append(
+                StructuredTool.from_function(
+                    coroutine=commit,
+                    name="commit",
+                    description="Commit one virtual text file to the external stream.",
+                )
+            )
         constructor: dict[str, object] = {
             "model": materialized.model,
             "name": str(main_agent["name"]),
@@ -519,8 +575,8 @@ class AgentBuilder:
         }
         if materialized.system_prompt is not None:
             constructor["system_prompt"] = materialized.system_prompt
-        if materialized.tools:
-            constructor["tools"] = list(materialized.tools)
+        if runtime_tools:
+            constructor["tools"] = runtime_tools
         if materialized.response_format is not None:
             constructor["response_format"] = materialized.response_format
         if materialized.backend is not None:
@@ -564,6 +620,7 @@ class AgentBuilder:
                 agent_input_observer=agent_input_observer,
                 has_prepared_messages=automation.has_messages_for,
                 child_context=automation.child_context,
+                workflow_provider=self._workflow_provider,
             ).compile(roots=resolved_subagents, nodes=assembly.subagent_nodes)
             delegation_instruction = selected_blocks["subagent"][
                 "instruction_override"
@@ -627,7 +684,7 @@ class AgentBuilder:
                 getattr(item, "name", None) for item in middleware
             }
             validate_model_visible_tool_names(
-                tools=materialized.tools,
+                tools=tuple(runtime_tools),
                 middleware=middleware,
                 owner="Main Agent",
                 default_tool_names=(
@@ -665,7 +722,7 @@ class AgentBuilder:
             path="capability_refs",
         )
 
-        return BuiltAgent(
+        built = BuiltAgent(
             graph=graph,
             input_state=input_state,
             output_config=output_config,
@@ -673,3 +730,5 @@ class AgentBuilder:
             context=request_context,
             automation=automation,
         )
+        self._automation_runtime.set(None)
+        return built

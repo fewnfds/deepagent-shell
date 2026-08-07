@@ -64,6 +64,19 @@ def _copy_name(payload: dict) -> str:
     return name
 
 
+def _copy_main_agent_request(payload: dict) -> tuple[str, str]:
+    if set(payload) != {"name", "public_id"} or not isinstance(
+        payload.get("public_id"), str
+    ):
+        raise management_error(
+            422,
+            code="invalid_copy_request",
+            message_key="errors.copyRequestInvalid",
+            message="The copy request must contain a name and public_id.",
+        )
+    return _copy_name({"name": payload["name"]}), str(payload["public_id"])
+
+
 def _copy_component_name(payload: dict) -> str:
     if set(payload) != {"component_name"} or not isinstance(
         payload.get("component_name"), str
@@ -152,7 +165,6 @@ def build_agent_config_router(
 
     @router.post("/api/main-agents/{item_id}/copy")
     async def copy_main_agent(item_id: str, payload: dict) -> dict:
-        name = _copy_name(payload)
         source = config_store.get_item(MAIN_AGENT_TABLE, item_id)
         if source is None:
             raise management_error(
@@ -161,8 +173,10 @@ def build_agent_config_router(
                 message_key="errors.mainAgentNotFound",
                 message="The Main Agent configuration does not exist.",
             )
+        name, public_id = _copy_main_agent_request(payload)
         candidate = dict(source)
         candidate["name"] = name
+        candidate["public_id"] = public_id
         report, validated, _ = validation.validate_main_agent(
             candidate,
             stage="main_agent_copy",

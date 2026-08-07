@@ -70,10 +70,28 @@ class AgentConfigStore:
             ).fetchone()
         return self._from_row(row, identity_column) if row else None
 
+    def get_item_by_public_id(self, public_id: str) -> dict | None:
+        """Resolve a Main Agent pseudo-model id from its validated payload."""
+        for item in self.list_items("main_agents"):
+            if item.get("public_id") == public_id:
+                return item
+        return None
+
     def save_item(self, table: str, item_id: str, data: dict) -> None:
         table = self._table(table)
         identity_column = self._identity_column(table)
         name = data[identity_column]
+        if table == "main_agents":
+            public_id = data.get("public_id")
+            with self._database.transaction() as connection:
+                rows = connection.execute(
+                    "SELECT id, payload FROM main_agents WHERE id != ?",
+                    (item_id,),
+                ).fetchall()
+            for row in rows:
+                existing_payload = json.loads(row["payload"])
+                if existing_payload.get("public_id") == public_id:
+                    raise ValueError(f"公开 ID「{public_id}」已存在")
         payload = json.dumps(
             {key: value for key, value in data.items() if key != identity_column},
             ensure_ascii=False,

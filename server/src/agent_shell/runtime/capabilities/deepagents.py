@@ -46,6 +46,16 @@ class DeepAgentsCapabilities:
     workspace: DeepAgentsWorkspace
 
 
+def create_empty_workspace(*, skills_dir: Path) -> DeepAgentsWorkspace:
+    """Create the same request-local state backend used by a default Agent."""
+    return build_deepagents_capabilities(
+        None,
+        None,
+        filesystem_mode="default-shared",
+        skills_dir=skills_dir,
+    ).workspace
+
+
 _READ_ONLY_ERROR = "Permission denied: this filesystem namespace is read-only."
 
 

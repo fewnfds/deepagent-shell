@@ -332,7 +332,11 @@ def test_generic_draft_validation_covers_each_target_without_writing(
         "/api/validation/draft",
         json={
             "target": {"kind": "main_agent"},
-            "payload": {"name": "Draft Main Agent", "capability_refs": []},
+                "payload": {
+                    "public_id": "agent-draft-main-agent",
+                    "name": "Draft Main Agent",
+                    "capability_refs": [],
+                },
         },
     )
     subagent_report = client.post(

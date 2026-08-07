@@ -22,6 +22,8 @@ from agent_shell.runtime.output_stream import (
     V3EventNormalizer,
 )
 from agent_shell.storage.media_outputs import MediaOutputStore
+from agent_shell.workflow.artifacts import ArtifactCommitter
+from agent_shell.runtime.capabilities.deepagents import DeepAgentsWorkspace
 from langgraph.errors import GraphRecursionError
 
 EXECUTION_TIMEOUT_SECONDS = 600
@@ -38,6 +40,7 @@ class AgentExecution:
     media_response: MainAgentMediaResponse
     context: dict[str, Any] = field(default_factory=dict)
     event_observers: tuple[Callable[[OutputEvent], None], ...] = ()
+    artifact_events: list[dict[str, Any]] = field(default_factory=list)
     _started: bool = False
 
     @property
@@ -258,6 +261,9 @@ class AgentRuntime:
         agent_input_observer: Callable[[dict[str, object]], Any] | None = None,
         model_response_observer: Callable[[ModelResponse], None] | None = None,
         event_observer: Callable[[OutputEvent], None] | None = None,
+        artifact_committer: ArtifactCommitter | None = None,
+        artifact_events: list[dict[str, Any]] | None = None,
+        workspace: DeepAgentsWorkspace | None = None,
         request_id: str = "",
         public_model: str = "",
     ) -> AgentExecution:
@@ -269,6 +275,8 @@ class AgentRuntime:
                 model_request_observer=model_request_observer,
                 agent_input_observer=agent_input_observer,
                 model_response_observer=model_response_observer,
+                artifact_committer=artifact_committer,
+                workspace=workspace,
                 request_id=request_id,
             )
         except Exception:
@@ -297,4 +305,11 @@ class AgentRuntime:
                 else (),
             ),
             event_observers=tuple(observers),
+            artifact_events=artifact_events if artifact_events is not None else [],
         )
+
+    def prepare_workspace(self, main_agent_id: str) -> DeepAgentsWorkspace:
+        return self._builder.prepare_workspace(main_agent_id)
+
+    def create_workspace(self) -> DeepAgentsWorkspace:
+        return self._builder.create_workspace()

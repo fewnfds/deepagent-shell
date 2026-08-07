@@ -3,6 +3,110 @@ from __future__ import annotations
 from .support import *
 
 
+def test_workflow_can_run_through_deep_agents_task_contract(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class ParentModel(ToolCallingFakeModel):
+        seen_messages: ClassVar[list[list[object]]] = []
+
+    parent_model = ParentModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[{
+                    "name": "task",
+                    "args": {
+                        "description": "Run the reusable workflow.",
+                        "subagent_type": "workflow_worker",
+                    },
+                    "id": "call-workflow-subagent",
+                    "type": "tool_call",
+                }],
+            ),
+            AIMessage(content="parent completed"),
+        ]
+    )
+    with make_client(tmp_path, monkeypatch) as client:
+        monkeypatch.setattr(
+            "agent_shell.runtime.agent_builder._build_chat_model",
+            lambda *_args: parent_model,
+        )
+        parent = create_main_agent(client)
+        workflow = client.post(
+            "/api/workflows",
+            json={
+                "public_id": "workflow-delegated",
+                "name": "Delegated workflow",
+                "nodes": [
+                    {"id": "input", "type": "builtin.input.messages", "config": {}},
+                    {
+                        "id": "echo",
+                        "type": "builtin.tool.call",
+                        "config": {
+                            "tool_name": "echo",
+                            "arguments": {"text": "workflow child result"},
+                        },
+                    },
+                    {"id": "output", "type": "builtin.output.message", "config": {}},
+                ],
+                "edges": [
+                    {
+                        "id": "e1",
+                        "source": {"node": "input", "port": "messages"},
+                        "target": {"node": "echo", "port": "messages"},
+                    },
+                    {
+                        "id": "e2",
+                        "source": {"node": "echo", "port": "messages"},
+                        "target": {"node": "output", "port": "messages"},
+                    },
+                ],
+            },
+        ).json()
+        subagent = client.post(
+            "/api/subagents",
+            json=subagent_payload(
+                "Workflow profile",
+                name="workflow_worker",
+                implementation="workflow",
+                workflow_id=workflow["id"],
+            ),
+        )
+        assert subagent.status_code == 200, subagent.text
+        delegation = client.post(
+            "/api/blocks/subagent", json={"name": "Workflow delegation"}
+        ).json()
+        updated = client.put(
+            f"/api/main-agents/{parent['id']}",
+            json={
+                "public_id": parent["public_id"],
+                "name": parent["name"],
+                "capability_refs": [
+                    *parent["capability_refs"],
+                    {"type": "subagent", "block_id": delegation["id"]},
+                ],
+                "subagents": [{"subagent_id": subagent.json()["id"]}],
+            },
+        )
+        assert updated.status_code == 200, updated.text
+
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": parent["public_id"],
+                "messages": [{"role": "user", "content": "delegate"}],
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    task_result = next(
+        message
+        for message in ParentModel.seen_messages[1]
+        if isinstance(message, ToolMessage) and message.name == "task"
+    )
+    assert task_result.content == "workflow child result"
+
+
 def test_selected_subagent_applies_effective_overrides_and_returns_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

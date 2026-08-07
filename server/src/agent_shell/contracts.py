@@ -918,6 +918,14 @@ class CapabilityReference(BaseModel):
 
 
 class MainAgentProfile(StrictBlock):
+    public_id: Annotated[
+        str,
+        Field(
+            min_length=7,
+            max_length=120,
+            pattern=r"^agent-[a-z]+(?:-[a-z]+)*$",
+        ),
+    ]
     capability_refs: list[CapabilityReference] = Field(default_factory=list, max_length=100)
     subagents: list[SubagentReference] = Field(default_factory=list, max_length=100)
     automation: MainAgentAutomation = Field(default_factory=MainAgentAutomation)
@@ -963,6 +971,8 @@ class SubagentSettings(BaseModel):
     capability_overrides: list[CapabilityOverride] = Field(
         default_factory=list, max_length=100
     )
+    implementation: Literal["deep-agent", "workflow"] = "deep-agent"
+    workflow_id: str | None = None
     subagents: list[SubagentReference] = Field(default_factory=list, max_length=100)
     automation: SubagentAutomation = Field(default_factory=SubagentAutomation)
 
@@ -973,6 +983,10 @@ class SubagentSettings(BaseModel):
             raise ValueError(
                 "Subagent capability_overrides must contain at most one item per type"
             )
+        if self.implementation == "workflow" and not self.workflow_id:
+            raise ValueError("workflow Subagents require workflow_id")
+        if self.implementation == "deep-agent" and self.workflow_id is not None:
+            raise ValueError("deep-agent Subagents must not include workflow_id")
         return self
 
 

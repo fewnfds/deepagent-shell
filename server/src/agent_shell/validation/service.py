@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from pydantic import ValidationError
 
@@ -58,6 +58,8 @@ class ResolvedSubagent:
     filesystem_mode: FilesystemMode
     automation: dict[str, Any]
     subagents: tuple[ResolvedSubagentEdge, ...]
+    implementation: str = "deep-agent"
+    workflow_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,11 +89,13 @@ class ConfigurationValidationService:
         automation_validation: AutomationValidationService,
         *,
         custom_tools_dir: Path,
+        workflow_lookup: Callable[[str], dict[str, Any] | None] | None = None,
     ) -> None:
         self._blocks = blocks
         self._agent_configs = agent_configs
         self._automation_validation = automation_validation
         self._custom_tools_dir = custom_tools_dir
+        self._workflow_lookup = workflow_lookup
 
     def validate_main_agent(
         self,
@@ -872,6 +876,42 @@ class ConfigurationValidationService:
 
             resolving_nodes.add(profile_id)
             issue_count = len(issues)
+            settings = profile["settings"]
+            if settings.get("implementation") == "workflow":
+                workflow_id = str(settings.get("workflow_id") or "")
+                workflow = (
+                    self._workflow_lookup(workflow_id)
+                    if self._workflow_lookup is not None and workflow_id
+                    else None
+                )
+                if workflow is None:
+                    issues.append(
+                        ValidationIssue(
+                            code="assembly.workflow_subagent_not_found",
+                            scope="subagent",
+                            owner_id=profile_id,
+                            owner_name=str(profile.get("name", "")),
+                            path="settings.workflow_id",
+                            message="The referenced Workflow Subagent does not exist.",
+                            message_key="validation.issue.assembly.workflowSubagentNotFound",
+                        )
+                    )
+                else:
+                    subagent_nodes[profile_id] = ResolvedSubagent(
+                        key=profile_id,
+                        component_name=str(profile["component_name"]),
+                        name=str(profile["name"]),
+                        description=str(profile["description"]),
+                        references={},
+                        blocks={},
+                        filesystem_mode="default-shared",
+                        automation={"hooks": [], "periodic": []},
+                        subagents=(),
+                        implementation="workflow",
+                        workflow_id=workflow_id,
+                    )
+                resolving_nodes.remove(profile_id)
+                return edge if profile_id in subagent_nodes else None
             child_references = {
                 capability_type: block_id
                 for capability_type, block_id in references.items()
@@ -880,7 +920,6 @@ class ConfigurationValidationService:
                     or CAPABILITY_BY_TYPE[capability_type].subagent_policy == "inherit"
                 )
             }
-            settings = profile["settings"]
             for selection in settings["capability_overrides"]:
                 capability_type = selection["type"]
                 if selection["mode"] == "replace":

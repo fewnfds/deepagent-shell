@@ -56,12 +56,14 @@ class SubagentGraphCompiler:
         child_context: Callable[
             [str, Mapping[str, Any], str], dict[str, Any]
         ],
+        workflow_provider: Callable[[str], dict[str, Any]] | None = None,
     ) -> None:
         self._workspace = workspace
         self._materialize_profile = materialize_profile
         self._agent_input_observer = agent_input_observer
         self._has_prepared_messages = has_prepared_messages
         self._child_context = child_context
+        self._workflow_provider = workflow_provider
 
     def compile(
         self,
@@ -86,6 +88,16 @@ class SubagentGraphCompiler:
         runnables: dict[SubagentNodeKey, DeferredSubagentRunnable],
         nodes: dict[SubagentNodeKey, ResolvedSubagent],
     ) -> None:
+        if node.implementation == "workflow":
+            if self._workflow_provider is None or not node.workflow_id:
+                raise AgentRuntimeError(
+                    "workflow_subagent_unavailable",
+                    "The Workflow Subagent implementation is unavailable.",
+                    status_code=422,
+                )
+            target = self._workflow_provider(node.workflow_id)
+            runnable.bind_target(target["runnable"])
+            return
         child = self._materialize_profile(
             node.references,
             node.blocks,

@@ -35,6 +35,9 @@ from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.agent_sessions import AgentRunStatus, AgentSessionStore
 from agent_shell.storage.api_server import ApiServerStore
 from agent_shell.storage.media_outputs import MediaOutputStore
+from agent_shell.storage.workflows import WorkflowStore
+from agent_shell.storage.autos import AutoStore
+from agent_shell.workflow.artifacts import ArtifactCommitter
 from agent_shell.validation.models import validation_failure_detail
 from agent_shell.validation.service import ConfigurationValidationService
 
@@ -235,6 +238,8 @@ def build_api_server_router(
     agent_sessions: AgentSessionStore,
     validation: ConfigurationValidationService,
     media_outputs: MediaOutputStore,
+    workflows: WorkflowStore,
+    autos: AutoStore,
 ) -> APIRouter:
     router = APIRouter()
     history = MessageHistoryRecorder(store, events, diagnostics)
@@ -307,6 +312,20 @@ def build_api_server_router(
                         ],
                     }
                     yield encode(chunk)
+                for artifact in getattr(execution, "artifact_events", []):
+                    yield encode(
+                        {
+                            "id": completion_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": model,
+                            "choices": [],
+                            "agent_shell": {
+                                "event": "artifact_commit",
+                                "data": artifact,
+                            },
+                        }
+                    )
             except AgentRuntimeError as exc:
                 terminal_status = "failed"
                 terminal_error_code = exc.code
@@ -503,11 +522,20 @@ def build_api_server_router(
     async def models() -> JSONResponse:
         if not store.is_enabled():
             return _openai_error(503, "api_server_stopped", "The API server is stopped.")
-        main_agent_models = [
-            _model_object(item["name"])
-            for item in agent_configs.list_items("main_agents")
-        ]
-        return JSONResponse(content={"object": "list", "data": main_agent_models})
+        models: list[dict[str, object]] = []
+        for item in agent_configs.list_items("main_agents"):
+            public_id = item.get("public_id")
+            if isinstance(public_id, str) and public_id:
+                models.append(_model_object(public_id))
+        for item in workflows.list_items():
+            public_id = item.get("public_id")
+            if item.get("enabled", True) and isinstance(public_id, str):
+                models.append(_model_object(public_id))
+        for item in autos.list_items():
+            public_id = item.get("public_id")
+            if item.get("enabled", True) and isinstance(public_id, str):
+                models.append(_model_object(public_id))
+        return JSONResponse(content={"object": "list", "data": models})
 
     @router.post("/v1/chat/completions", response_model=None)
     async def chat_completions(request: Request) -> JSONResponse | StreamingResponse:
@@ -549,15 +577,29 @@ def build_api_server_router(
                 status_code=500,
             )
             return JSONResponse(status_code=500, content=error)
-        main_agent = request_snapshot.main_agent_by_name(model)
-        if main_agent is None:
+        try:
+            target = await request_snapshot.resolve_root_target(
+                model, payload.get("messages")
+            )
+        except AgentRuntimeError as exc:
+            request_snapshot.close()
+            return _openai_error(
+                exc.status_code,
+                exc.code,
+                exc.safe_message,
+                param="model" if exc.code.startswith("auto.") else None,
+            )
+        if target is None:
+            request_snapshot.close()
             return _openai_error(
                 404,
                 "model_not_found",
                 "The requested model does not exist.",
                 param="model",
             )
-        agent_name = str(main_agent["name"])
+        main_agent = target["record"] if target["kind"] == "agent" else None
+        workflow = target["record"] if target["kind"] == "workflow" else None
+        agent_name = str((main_agent or workflow or {}).get("name") or model)
         stream = payload.get("stream", False)
         if not isinstance(stream, bool):
             error = _openai_error_payload(
@@ -601,7 +643,7 @@ def build_api_server_router(
                 error_code="input_messages_too_many",
             )
             return JSONResponse(status_code=422, content=error)
-        if main_agent is not None:
+        if target is not None:
             requested_session_id = request.headers.get("x-agent-session-id", "")
             if requested_session_id and not SESSION_ID_PATTERN.fullmatch(
                 requested_session_id
@@ -630,6 +672,23 @@ def build_api_server_router(
             request_id = getattr(request.state, "request_id", "")
             request_started_clock = time.monotonic()
             capture = AgentRunCapture()
+            files_root = settings.resolved_files_dir().resolve()
+            artifact_events: list[dict[str, object]] = []
+
+            async def read_artifact(path: str) -> bytes:
+                candidate = (files_root / path.lstrip("/")).resolve()
+                if files_root not in candidate.parents:
+                    raise ValueError("artifact path is outside the files root")
+                return await asyncio.to_thread(candidate.read_bytes)
+
+            async def emit_artifact(event: dict[str, object]) -> None:
+                artifact_events.append(event)
+                events.publish_nowait({"type": "artifact_commit", "data": event})
+
+            artifact_committer = ArtifactCommitter(
+                reader=read_artifact,
+                emit=emit_artifact,
+            )
             finalizer = CompletionFinalizer(
                 context=CompletionContext(
                     request_id=request_id,
@@ -675,18 +734,31 @@ def build_api_server_router(
                     )
 
             try:
-                execution = await request_snapshot.start_agent(
-                    str(main_agent["id"]),
-                    payload.get("messages"),
-                    model_request_interceptor=model_request_interceptor,
-                    model_request_observer=capture.model_request,
-                    agent_input_observer=capture.agent_input,
-                    model_response_observer=capture.model_response,
-                    event_observer=capture.output_event,
-                    request_id=request_id,
-                    public_model=model,
-                )
+                if target["kind"] == "agent":
+                    execution = await request_snapshot.start_agent(
+                        str(target["id"]),
+                        payload.get("messages"),
+                        model_request_interceptor=model_request_interceptor,
+                        model_request_observer=capture.model_request,
+                        agent_input_observer=capture.agent_input,
+                        model_response_observer=capture.model_response,
+                        event_observer=capture.output_event,
+                        request_id=request_id,
+                        public_model=model,
+                        artifact_committer=artifact_committer,
+                        artifact_events=artifact_events,
+                    )
+                else:
+                    execution = await request_snapshot.start_workflow(
+                        str(target["id"]),
+                        payload.get("messages"),
+                        request_id=request_id,
+                        invocation_id=request_id,
+                        artifact_committer=artifact_committer,
+                        artifact_events=artifact_events,
+                    )
             except AgentRuntimeError as exc:
+                request_snapshot.close()
                 issue = (
                     exc.validation_report.issues[0]
                     if exc.validation_report is not None
@@ -718,6 +790,7 @@ def build_api_server_router(
                     status_code=exc.status_code, content=error, headers=session_headers
                 )
             except Exception as exc:
+                request_snapshot.close()
                 finalizer.runtime_error(exc, code="internal_error")
                 error = _internal_error_payload(
                     getattr(request.state, "request_id", "")
@@ -822,6 +895,11 @@ def build_api_server_router(
                 execution.finish_reason,
                 execution.finish_reason_source,
             )
+            committed_artifacts = getattr(execution, "artifact_events", [])
+            if committed_artifacts:
+                extension = response_payload.setdefault("agent_shell", {})
+                if isinstance(extension, dict):
+                    extension["artifact_commits"] = committed_artifacts
             await finalizer.finalize(
                 CompletionTerminal(
                     status="completed",

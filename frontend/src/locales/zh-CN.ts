@@ -1107,6 +1107,8 @@ export const zhCN = {
     },
     mainAgent: {
       title: 'Main Agent 装配',
+      publicId: '公开模型 ID',
+      publicIdHint: '使用 agent- 开头，后面只能是小写字母和横杠。',
       capabilitiesTitle: '能力选择板',
       referencesTitle: 'Subagent 引用',
       addReference: '添加 Subagent',

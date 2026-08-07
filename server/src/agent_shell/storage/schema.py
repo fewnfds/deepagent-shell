@@ -32,6 +32,23 @@ CREATE TABLE IF NOT EXISTS subagents (
     payload TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS workflows (
+    id TEXT PRIMARY KEY,
+    public_id TEXT NOT NULL UNIQUE,
+    payload TEXT NOT NULL,
+    revision INTEGER NOT NULL CHECK (revision >= 1),
+    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1))
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflows_enabled_public_id
+    ON workflows(enabled, public_id COLLATE NOCASE);
+
+CREATE TABLE IF NOT EXISTS auto_roots (
+    id TEXT PRIMARY KEY,
+    payload TEXT NOT NULL,
+    revision INTEGER NOT NULL CHECK (revision >= 1)
+);
+
 CREATE TABLE IF NOT EXISTS api_server_settings (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),

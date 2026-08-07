@@ -22,6 +22,8 @@ from agent_shell.api.file_manager import build_file_manager_router
 from agent_shell.api.provider_integrations import build_provider_integrations_router
 from agent_shell.api.system_settings import build_system_settings_router
 from agent_shell.api.validation import build_validation_router
+from agent_shell.api.workflows import build_workflow_router
+from agent_shell.api.autos import build_auto_router
 from agent_shell.provider_http import ProviderHttpClients
 from agent_shell.provider_secrets import ProviderSecretResolver
 from agent_shell.runtime.request_snapshot import RequestSnapshotRuntime
@@ -54,6 +56,8 @@ from agent_shell.storage.runtime_controls import RuntimeControlSettingsStore
 from agent_shell.storage.runtime_diagnostics import RuntimeDiagnosticStore
 from agent_shell.storage.system_log_settings import MIB_BYTES, SystemLogSettingsStore
 from agent_shell.storage.validation_settings import ConfigurationValidationSettingsStore
+from agent_shell.storage.workflows import WorkflowStore
+from agent_shell.storage.autos import AutoStore
 from agent_shell.storage.event_feed import EventFeedStore
 from agent_shell.validation.service import ConfigurationValidationService
 from agent_shell.automation.validation import AutomationValidationService
@@ -114,6 +118,8 @@ def create_app(
     runtime_diagnostic_store = RuntimeDiagnosticStore(database, history_retention)
     block_store = BlockStore(database, event_logger)
     config_store = AgentConfigStore(database, event_logger)
+    workflow_store = WorkflowStore(database, event_logger)
+    auto_store = AutoStore(database, event_logger)
     automation_validation = AutomationValidationService(
         scripts_dir=automation_scripts_dir,
         runtime_root=runtime_dir,
@@ -123,6 +129,7 @@ def create_app(
         config_store,
         automation_validation,
         custom_tools_dir=custom_tools_dir,
+        workflow_lookup=workflow_store.get_item,
     )
     api_server_store = ApiServerStore(
         database, event_logger, history_retention, media_outputs
@@ -441,6 +448,8 @@ def create_app(
             configuration_validation,
         )
     )
+    app.include_router(build_workflow_router(workflow_store, config_store))
+    app.include_router(build_auto_router(auto_store))
     app.include_router(
         build_validation_router(
             configuration_validation,
@@ -478,6 +487,8 @@ def create_app(
             agent_session_store,
             configuration_validation,
             media_outputs,
+            workflow_store,
+            auto_store,
         )
     )
 

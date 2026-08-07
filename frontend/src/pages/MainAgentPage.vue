@@ -282,6 +282,26 @@ watch(
           />
         </div>
 
+        <div class="mb-3">
+          <label class="form-label" for="main-agent-public-id">
+            {{ t('agents.mainAgent.publicId') }}
+          </label>
+          <input
+            id="main-agent-public-id"
+            v-model="form.public_id"
+            class="form-control font-monospace"
+            :aria-describedby="'main-agent-public-id-help'"
+            autocomplete="off"
+            maxlength="120"
+            pattern="agent-[a-z]+(?:-[a-z]+)*"
+            required
+            type="text"
+          >
+          <div id="main-agent-public-id-help" class="form-text">
+            {{ t('agents.mainAgent.publicIdHint') }}
+          </div>
+        </div>
+
         <section
           v-if="obsoleteReferences.length"
           class="card card-danger card-outline mb-3"

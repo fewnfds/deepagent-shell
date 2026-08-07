@@ -176,6 +176,7 @@ def automation_config_schema(
 def create_main_agent(
     client: TestClient,
     *,
+    public_id: str = "agent-published",
     provider_settings: dict[str, object] | None = None,
     model_request_settings: dict[str, object] | None = None,
     include_filesystem: bool = True,
@@ -228,6 +229,7 @@ def create_main_agent(
     response = client.post(
         "/api/main-agents",
         json={
+            "public_id": public_id,
             "name": "Published Main Agent",
             "capability_refs": capability_refs,
             "subagents": [],
@@ -244,12 +246,16 @@ def subagent_payload(
     description: str = "Handles delegated work.",
     capability_overrides: list[dict[str, object]] | None = None,
     subagents: list[dict[str, str]] | None = None,
+    implementation: str = "deep-agent",
+    workflow_id: str | None = None,
 ) -> dict[str, object]:
     return {
         "component_name": component_name,
         "name": name,
         "description": description,
         "settings": {
+            "implementation": implementation,
+            "workflow_id": workflow_id,
             "capability_overrides": capability_overrides or [],
             "subagents": subagents or [],
         },
@@ -305,6 +311,7 @@ def attach_output_mode(
         "/api/blocks/output-mode", json=output_payload
     ).json()
     payload = {
+        "public_id": main_agent["public_id"],
         "name": main_agent["name"],
         "capability_refs": [
             *[

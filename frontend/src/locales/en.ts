@@ -1109,6 +1109,8 @@ export const en: MessageSchema = {
     },
     mainAgent: {
       title: 'Main Agent assembly',
+      publicId: 'Public model id',
+      publicIdHint: 'Use agent- followed by lowercase words separated by hyphens.',
       capabilitiesTitle: 'Capability board',
       referencesTitle: 'Subagent references',
       addReference: 'Add Subagent',

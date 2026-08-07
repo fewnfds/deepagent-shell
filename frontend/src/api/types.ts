@@ -226,6 +226,7 @@ export interface SubagentReference {
 
 export interface MainAgentPayload {
   name: string
+  public_id: string
   capability_refs: CapabilityReference[]
   subagents: SubagentReference[]
   automation: MainAgentAutomation
