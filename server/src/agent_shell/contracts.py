@@ -491,7 +491,7 @@ DEFAULT_EXCEPTION_RETRY_CONDITIONS = (
 class ExceptionRetryBlock(StrictBlock):
     strategy: ExceptionRetryStrategy = "provider_native"
     force_non_streaming: bool = False
-    max_retries: Annotated[int, Field(strict=True, ge=0, le=10)] = 2
+    max_retries: Annotated[int, Field(strict=True, ge=0)] = 2
     retry_on: list[ExceptionRetryCondition] = Field(
         default_factory=lambda: list(DEFAULT_EXCEPTION_RETRY_CONDITIONS),
         max_length=len(EXCEPTION_RETRY_CONDITIONS),

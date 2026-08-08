@@ -15,7 +15,7 @@
 - `provider_native`：把 `max_retries` 交给 Provider integration；
 - `model_retry_middleware`：关闭 Provider 原生重试并使用 LangChain `ModelRetryMiddleware`。
 
-`max_retries` 范围 0–10，表示首次失败后的额外请求次数。可选条件为 transport、timeout、rate limit、
+`max_retries` 为非负整数，表示首次失败后的额外请求次数；具体 Provider 可能另有自身限制。可选条件为 transport、timeout、rate limit、
 server error 和 authentication error；认证错误默认不选。`force_non_streaming` 同时关闭通用与 Provider
 streaming，使失败尝试能在正文公开前重试，但会增加首字延迟。
 

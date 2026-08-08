@@ -198,6 +198,14 @@ pre code {
   min-width: 0;
 }
 
+.filesystem-mapping-input[aria-invalid='true'] {
+  border-color: var(--bs-form-invalid-border-color);
+}
+
+.filesystem-mapping-input[aria-invalid='true'] + .invalid-feedback {
+  display: block;
+}
+
 .filesystem-mapping-arrow {
   color: var(--bs-secondary-color);
   display: flex;

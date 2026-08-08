@@ -522,20 +522,15 @@ export const zhCN = {
     },
     exceptionRetry: {
       strategyTitle: '重试方案',
-      strategyHint: '两种方案互斥，始终只有一个重试 owner；不会改变工具选择、并行调用或 Agent 终止。',
       strategies: {
         provider_native: {
           label: 'Provider 原生重试（偏保守）',
-          hint: '只设置当前 Provider 的 max_retries/retries，由 integration 或 SDK 处理临时故障，不装配模型重试 Middleware。',
         },
         model_retry_middleware: {
           label: 'LangChain Middleware 重试（更可控）',
-          hint: '把 Provider 原生重试设为 0，由官方 ModelRetryMiddleware 按所选异常有限重试。',
         },
       },
       forceNonStreamingLabel: '强制使用完整、非流式模型响应',
-      forceNonStreamingHint: '关闭模型 token 流，失败 attempt 可在公开前重试；这不关闭并行工具调用，但会增加首字等待时间。',
-      maxRetriesHint: '首次失败后的额外 Provider 请求次数，范围 0–10。',
       conditionsTitle: 'Middleware 重试条件',
       conditionsHint: '只选择确实可能通过再次请求恢复的异常。未选择的异常立即向外抛出。',
       conditions: {
@@ -567,11 +562,15 @@ export const zhCN = {
       mappedDirectoriesHint: '把本地目录映射到虚拟路径；保存只提交路径文本。',
       emptyMappedDirectories: '尚未添加磁盘映射。',
       mappingExamples: {
-        localDirectory: '例如：D:/workspace',
-        sourceDirectory: '例如：D:/templates',
-        sourceFile: '例如：D:/config/default.md',
-        virtualDirectory: '例如：/workspace',
-        virtualFile: '例如：/config/default.md',
+        localDirectory: 'H:\\work',
+        sourceDirectory: 'H:\\templates',
+        sourceFile: 'H:\\config\\default.md',
+        virtualDirectory: '/workspace/',
+        virtualFile: '/config/default.md',
+      },
+      mappingValidation: {
+        virtualDirectoryPath: '虚拟文件夹路径必须以 / 开头并以 / 结尾。',
+        virtualFilePath: '虚拟文件路径必须以 / 开头且不能以 / 结尾。',
       },
       virtualDirectoriesTitle: '请求级临时目录',
       virtualDirectoriesHint: '每次请求从来源目录装载到请求级文件空间。',

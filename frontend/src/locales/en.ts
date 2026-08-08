@@ -524,20 +524,15 @@ export const en: MessageSchema = {
     },
     exceptionRetry: {
       strategyTitle: 'Retry strategy',
-      strategyHint: 'The strategies are mutually exclusive, so one retry owner is active without changing tool choice, parallel calls, or Agent termination.',
       strategies: {
         provider_native: {
           label: 'Provider-native retries (conservative)',
-          hint: 'Sets max_retries/retries for the current Provider and lets its integration or SDK handle transient failures without model retry Middleware.',
         },
         model_retry_middleware: {
           label: 'LangChain Middleware retries (controlled)',
-          hint: 'Sets Provider-native retries to 0 and delegates bounded retries to the official ModelRetryMiddleware.',
         },
       },
       forceNonStreamingLabel: 'Force complete, non-streaming model responses',
-      forceNonStreamingHint: 'Disables model token streaming so failed attempts can retry before publication. Parallel tool calls remain enabled, but time to first text increases.',
-      maxRetriesHint: 'Additional Provider requests after the first failure, from 0 to 10.',
       conditionsTitle: 'Middleware retry conditions',
       conditionsHint: 'Select only failures that another request can reasonably recover from. Other exceptions are raised immediately.',
       conditions: {
@@ -569,11 +564,15 @@ export const en: MessageSchema = {
       mappedDirectoriesHint: 'Map a local directory to a virtual path. Saving only submits the path text.',
       emptyMappedDirectories: 'No disk mapping has been added.',
       mappingExamples: {
-        localDirectory: 'For example: D:/workspace',
-        sourceDirectory: 'For example: D:/templates',
-        sourceFile: 'For example: D:/config/default.md',
-        virtualDirectory: 'For example: /workspace',
-        virtualFile: 'For example: /config/default.md',
+        localDirectory: 'H:\\work',
+        sourceDirectory: 'H:\\templates',
+        sourceFile: 'H:\\config\\default.md',
+        virtualDirectory: '/workspace/',
+        virtualFile: '/config/default.md',
+      },
+      mappingValidation: {
+        virtualDirectoryPath: 'A virtual directory path must start and end with /.',
+        virtualFilePath: 'A virtual file path must start with / and must not end with /.',
       },
       virtualDirectoriesTitle: 'Request-scoped directories',
       virtualDirectoriesHint: 'Load a source directory into request-scoped file space for each request.',

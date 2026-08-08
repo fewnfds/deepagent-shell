@@ -23,6 +23,22 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
   const config = draft.tool_configs[tool.name]
   return config ? [{ tool, config }] : []
 }))
+
+function hasMappingValue(virtualPath: string, sourcePath: string): boolean {
+  return Boolean(virtualPath.trim() || sourcePath.trim())
+}
+
+function isVirtualDirectoryPathInvalid(virtualPath: string, sourcePath: string): boolean {
+  if (!hasMappingValue(virtualPath, sourcePath)) return false
+  const value = virtualPath.trim()
+  return !value.startsWith('/') || !value.endsWith('/')
+}
+
+function isVirtualFilePathInvalid(virtualPath: string, sourcePath: string): boolean {
+  if (!hasMappingValue(virtualPath, sourcePath)) return false
+  const value = virtualPath.trim()
+  return !value.startsWith('/') || value.endsWith('/')
+}
 </script>
 
 <template>
@@ -44,7 +60,8 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
             <div class="filesystem-mapping-arrow" aria-hidden="true"><i class="bi bi-arrow-right" /></div>
             <div class="filesystem-mapping-primary">
               <label class="visually-hidden" :for="`mapped-directory-virtual-path-${index}`">{{ t('fields.virtual_path') }}</label>
-              <input :id="`mapped-directory-virtual-path-${index}`" v-model="item.virtual_path" class="form-control" :placeholder="t('editors.filesystem.mappingExamples.virtualDirectory')">
+              <input :id="`mapped-directory-virtual-path-${index}`" v-model="item.virtual_path" class="form-control filesystem-mapping-input" :aria-invalid="isVirtualDirectoryPathInvalid(item.virtual_path, item.local_path)" :placeholder="t('editors.filesystem.mappingExamples.virtualDirectory')">
+              <div v-if="isVirtualDirectoryPathInvalid(item.virtual_path, item.local_path)" class="invalid-feedback">{{ t('editors.filesystem.mappingValidation.virtualDirectoryPath') }}</div>
             </div>
             <div class="filesystem-mapping-actions">
               <LteButton :aria-label="t('editors.common.remove')" :title="t('editors.common.remove')" size="sm" theme="danger" type="button" @click="draft.mapped_directories.splice(index, 1)"><i class="bi bi-trash" aria-hidden="true" /></LteButton>
@@ -75,7 +92,8 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
             <div class="filesystem-mapping-arrow" aria-hidden="true"><i class="bi bi-arrow-right" /></div>
             <div class="filesystem-mapping-primary">
               <label class="visually-hidden" :for="`virtual-directory-virtual-path-${index}`">{{ t('fields.virtual_path') }}</label>
-              <input :id="`virtual-directory-virtual-path-${index}`" v-model="item.virtual_path" class="form-control" :placeholder="t('editors.filesystem.mappingExamples.virtualDirectory')">
+              <input :id="`virtual-directory-virtual-path-${index}`" v-model="item.virtual_path" class="form-control filesystem-mapping-input" :aria-invalid="isVirtualDirectoryPathInvalid(item.virtual_path, item.source_path)" :placeholder="t('editors.filesystem.mappingExamples.virtualDirectory')">
+              <div v-if="isVirtualDirectoryPathInvalid(item.virtual_path, item.source_path)" class="invalid-feedback">{{ t('editors.filesystem.mappingValidation.virtualDirectoryPath') }}</div>
             </div>
             <div class="filesystem-mapping-actions">
               <LteButton :aria-label="t('editors.common.remove')" :title="t('editors.common.remove')" size="sm" theme="danger" type="button" @click="draft.virtual_directories.splice(index, 1)"><i class="bi bi-trash" aria-hidden="true" /></LteButton>
@@ -106,7 +124,8 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
             <div class="filesystem-mapping-arrow" aria-hidden="true"><i class="bi bi-arrow-right" /></div>
             <div class="filesystem-mapping-primary">
               <label class="visually-hidden" :for="`virtual-file-virtual-path-${index}`">{{ t('fields.virtual_path') }}</label>
-              <input :id="`virtual-file-virtual-path-${index}`" v-model="item.virtual_path" class="form-control" :placeholder="t('editors.filesystem.mappingExamples.virtualFile')">
+              <input :id="`virtual-file-virtual-path-${index}`" v-model="item.virtual_path" class="form-control filesystem-mapping-input" :aria-invalid="isVirtualFilePathInvalid(item.virtual_path, item.source_path)" :placeholder="t('editors.filesystem.mappingExamples.virtualFile')">
+              <div v-if="isVirtualFilePathInvalid(item.virtual_path, item.source_path)" class="invalid-feedback">{{ t('editors.filesystem.mappingValidation.virtualFilePath') }}</div>
             </div>
             <div class="filesystem-mapping-actions">
               <LteButton :aria-label="t('editors.common.remove')" :title="t('editors.common.remove')" size="sm" theme="danger" type="button" @click="draft.virtual_files.splice(index, 1)"><i class="bi bi-trash" aria-hidden="true" /></LteButton>
