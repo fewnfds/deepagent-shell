@@ -1,7 +1,7 @@
 import { useI18n } from 'vue-i18n'
 
 import type { JsonPrimitive, ValidationIssue } from '@/api'
-import { fieldLabelKeys } from '@/locales/fieldLabels'
+import { fieldLabelKeys, normalizeFieldPath } from '@/locales/fieldLabels'
 
 const resolutionKeys: Record<string, string> = {
   'assembly.mainAgent_not_found': 'mainAgentNotFound',
@@ -22,6 +22,24 @@ const resolutionKeys: Record<string, string> = {
   'contract.output_template_empty': 'outputTemplateEmpty',
   'contract.output_template_malformed': 'outputTemplateMalformed',
   'contract.output_template_unknown_variables': 'outputTemplateUnknownVariables',
+  'contract.invalid_format': 'invalidFormat',
+  'contract.provider_format_invalid': 'providerFormatInvalid',
+  'contract.provider_unavailable': 'providerUnavailable',
+  'contract.base_url_invalid': 'baseUrlInvalid',
+  'contract.credential_masked': 'credentialMasked',
+  'contract.custom_tool_name_format_invalid': 'customToolNameFormatInvalid',
+  'contract.plugin_id_format_invalid': 'pluginIdFormatInvalid',
+  'contract.output_filter_field_format_invalid': 'outputFilterFieldFormatInvalid',
+  'contract.number_greater_than': 'numberGreaterThan',
+  'contract.number_at_least': 'numberAtLeast',
+  'contract.number_less_than': 'numberLessThan',
+  'contract.number_at_most': 'numberAtMost',
+  'contract.integer_required': 'integerRequired',
+  'contract.number_required': 'numberRequired',
+  'contract.boolean_required': 'booleanRequired',
+  'contract.text_required': 'textRequired',
+  'contract.collection_required': 'collectionRequired',
+  'contract.object_required': 'objectRequired',
   'automation.plugin_not_found': 'pluginNotFound',
   'automation.plugin_invalid': 'pluginInvalid',
   'automation.plugin_dependencies_failed': 'pluginDependenciesFailed',
@@ -71,6 +89,9 @@ export function useValidationIssuePresentation() {
   }
 
   function fieldLabel(issue: ValidationIssue): string {
+    if (issue.scope === 'subagent' && normalizeFieldPath(issue.path) === 'name') {
+      return t('agents.subagent.roleName')
+    }
     const key = fieldLabelKeys(issue.path).find((candidate) => te(candidate))
     return key ? t(key) : fieldName(issue) || t('validation.location.wholeConfiguration')
   }
@@ -130,6 +151,10 @@ export function useValidationIssuePresentation() {
       }
       if (parentPrefix === 'event_templates') {
         labels.push(outputEventLabel(token))
+        continue
+      }
+      if (prefix === issue.path) {
+        labels.push(fieldLabel(issue))
         continue
       }
       const key = fieldLabelKeys(prefix).find((candidate) => te(candidate))

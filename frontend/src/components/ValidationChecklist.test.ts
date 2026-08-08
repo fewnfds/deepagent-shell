@@ -176,8 +176,8 @@ describe('ValidationChecklist', () => {
         code: 'contract.subagent_name_format_invalid',
         path: 'subagents[1].name',
         message_key: 'validation.issue.contract.subagentNameFormatInvalid',
-        reason: 'Subagent 名称格式不正确。',
-        resolution: '名称必须以英文字母或下划线开头',
+        reason: '代理角色名格式不正确：必须以英文字母或下划线开头',
+        resolution: '删除中文、空格或其他特殊字符',
       },
       {
         code: 'contract.subagent_description_required',
@@ -221,6 +221,36 @@ describe('ValidationChecklist', () => {
       expect(cards[index].get('[data-testid="validation-resolution"]').text()).toContain(item.resolution)
     })
     expect(wrapper.text()).not.toContain('整份配置未通过当前配置规则')
+  })
+
+  it('uses the Subagent role-name label for its schema format error', () => {
+    const wrapper = mountChecklist({
+      status: 'invalid',
+      error: '',
+      report: {
+        valid: false,
+        stage: 'draft_validation',
+        issues: [{
+          code: 'contract.subagent_name_format_invalid',
+          scope: 'subagent',
+          owner_id: 'subagent-id',
+          owner_name: 'Worker component',
+          path: 'name',
+          message: 'raw backend detail',
+          message_key: 'validation.issue.contract.subagentNameFormatInvalid',
+          message_args: {},
+        }],
+      },
+    })
+
+    const card = wrapper.get('[data-testid="validation-issue"]')
+    expect(card.get('[data-testid="validation-location"]').text())
+      .toContain('代理角色名')
+    expect(card.get('[data-testid="validation-reason"]').text())
+      .toContain('必须以英文字母或下划线开头')
+    expect(card.get('[data-testid="validation-resolution"]').text())
+      .toContain('删除中文、空格或其他特殊字符')
+    expect(card.text()).not.toContain('raw backend detail')
   })
 
   it('keeps reason and resolution non-empty for unrecognized validation issues', () => {

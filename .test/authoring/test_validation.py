@@ -3,7 +3,13 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from agent_shell.contracts import SystemPromptBlock
+from agent_shell.automation.contracts import MainAgentAutomation
+from agent_shell.contracts import (
+    FilesystemBlock,
+    ModelBlock,
+    SubagentProfile,
+    SystemPromptBlock,
+)
 from agent_shell.validation import ValidationIssue, report_from_validation_error
 
 
@@ -44,7 +50,14 @@ def test_contract_errors_become_safe_structured_validation_issues() -> None:
         "validation.issue.contract.textTooShort",
         "validation.issue.contract.unknownField",
     }
-    assert all(issue["message_args"] == {} for issue in payload["issues"])
+    assert {
+        issue["path"]: issue["message_args"]
+        for issue in payload["issues"]
+    } == {
+        "name": {"min_length": 1},
+        "system_prompt": {"min_length": 1},
+        "legacy_field": {},
+    }
     assert all("private" not in issue["message"] for issue in payload["issues"])
     assert all("legacy.json" not in issue["message"] for issue in payload["issues"])
 
@@ -82,3 +95,140 @@ def test_validation_issue_rejects_non_primitive_message_arguments() -> None:
             message_key="validation.issue.contract.invalidValue",
             message_args={"detail": {"nested": "value"}},  # type: ignore[dict-item]
         )
+
+
+@pytest.mark.parametrize(
+    ("model", "payload", "scope", "owner_type", "expected"),
+    [
+        (
+            SubagentProfile,
+            {
+                "component_name": "Worker",
+                "name": "bad name",
+                "description": "Delegated work.",
+                "settings": {},
+            },
+            "subagent",
+            "",
+            (
+                "contract.subagent_name_format_invalid",
+                "validation.issue.contract.subagentNameFormatInvalid",
+                "name",
+                {},
+            ),
+        ),
+        (
+            ModelBlock,
+            {
+                "name": "Local model",
+                "provider": "OpenAI",
+                "base_url": "http://127.0.0.1:8000/v1",
+                "credential": "secret",
+                "model": "test-model",
+                "provider_settings": {},
+                "tool_choice": None,
+                "response_format": None,
+                "model_settings": {},
+            },
+            "block",
+            "model",
+            (
+                "contract.provider_format_invalid",
+                "validation.issue.contract.providerFormatInvalid",
+                "provider",
+                {},
+            ),
+        ),
+        (
+            ModelBlock,
+            {
+                "name": "Local model",
+                "provider": "unsupported_provider",
+                "base_url": "http://127.0.0.1:8000/v1",
+                "credential": "secret",
+                "model": "test-model",
+                "provider_settings": {},
+                "tool_choice": None,
+                "response_format": None,
+                "model_settings": {},
+            },
+            "block",
+            "model",
+            (
+                "contract.provider_unavailable",
+                "validation.issue.contract.providerUnavailable",
+                "provider",
+                {},
+            ),
+        ),
+        (
+            ModelBlock,
+            {
+                "name": "Local model",
+                "provider": "openai",
+                "base_url": "not-an-url",
+                "credential": "secret",
+                "model": "test-model",
+                "provider_settings": {},
+                "tool_choice": None,
+                "response_format": None,
+                "model_settings": {},
+            },
+            "block",
+            "model",
+            (
+                "contract.base_url_invalid",
+                "validation.issue.contract.baseUrlInvalid",
+                "base_url",
+                {},
+            ),
+        ),
+        (
+            MainAgentAutomation,
+            {"hooks": [{"plugin_id": "Bad Plugin", "config": {}}]},
+            "main_agent",
+            "",
+            (
+                "contract.plugin_id_format_invalid",
+                "validation.issue.contract.pluginIdFormatInvalid",
+                "hooks[0].plugin_id",
+                {},
+            ),
+        ),
+        (
+            FilesystemBlock,
+            {"name": "Workspace", "grep_max_count": 0},
+            "block",
+            "filesystem",
+            (
+                "contract.number_at_least",
+                "validation.issue.contract.numberAtLeast",
+                "grep_max_count",
+                {"ge": 1},
+            ),
+        ),
+    ],
+)
+def test_common_schema_rules_have_specific_safe_issue_identities(
+    model: type,
+    payload: dict[str, object],
+    scope: str,
+    owner_type: str,
+    expected: tuple[str, str, str, dict[str, object]],
+) -> None:
+    with pytest.raises(ValidationError) as caught:
+        model.model_validate(payload)
+
+    issue = report_from_validation_error(
+        caught.value,
+        stage="draft_validation",
+        scope=scope,
+        owner_type=owner_type,
+    ).as_dict()["issues"][0]
+
+    code, message_key, path, message_args = expected
+    assert issue["code"] == code
+    assert issue["message_key"] == message_key
+    assert issue["path"] == path
+    assert issue["message_args"] == message_args
+    assert "pattern" not in str(issue["message"])

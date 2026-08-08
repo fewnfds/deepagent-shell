@@ -14,11 +14,31 @@ _ERROR_CODES = {
     "missing": "contract.field_required",
     "string_too_short": "contract.text_too_short",
     "string_too_long": "contract.text_too_long",
+    "string_pattern_mismatch": "contract.invalid_format",
+    "value_error": "contract.invalid_value",
     "too_short": "contract.collection_too_short",
     "too_long": "contract.collection_too_long",
     "literal_error": "contract.invalid_choice",
     "enum": "contract.invalid_choice",
     "finite_number": "contract.number_not_finite",
+    "greater_than": "contract.number_greater_than",
+    "greater_than_equal": "contract.number_at_least",
+    "less_than": "contract.number_less_than",
+    "less_than_equal": "contract.number_at_most",
+    "int_type": "contract.integer_required",
+    "int_parsing": "contract.integer_required",
+    "float_type": "contract.number_required",
+    "float_parsing": "contract.number_required",
+    "bool_type": "contract.boolean_required",
+    "bool_parsing": "contract.boolean_required",
+    "string_type": "contract.text_required",
+    "list_type": "contract.collection_required",
+    "tuple_type": "contract.collection_required",
+    "set_type": "contract.collection_required",
+    "dict_type": "contract.object_required",
+    "mapping_type": "contract.object_required",
+    "model_type": "contract.object_required",
+    "model_attributes_type": "contract.object_required",
     "output_event_types_invalid": "contract.output_event_types_invalid",
     "output_template_empty": "contract.output_template_empty",
     "output_template_malformed": "contract.output_template_malformed",
@@ -30,11 +50,31 @@ _ERROR_MESSAGE_KEYS = {
     "missing": "validation.issue.contract.fieldRequired",
     "string_too_short": "validation.issue.contract.textTooShort",
     "string_too_long": "validation.issue.contract.textTooLong",
+    "string_pattern_mismatch": "validation.issue.contract.invalidFormat",
+    "value_error": "validation.issue.contract.invalidValue",
     "too_short": "validation.issue.contract.collectionTooShort",
     "too_long": "validation.issue.contract.collectionTooLong",
     "literal_error": "validation.issue.contract.invalidChoice",
     "enum": "validation.issue.contract.invalidChoice",
     "finite_number": "validation.issue.contract.numberNotFinite",
+    "greater_than": "validation.issue.contract.numberGreaterThan",
+    "greater_than_equal": "validation.issue.contract.numberAtLeast",
+    "less_than": "validation.issue.contract.numberLessThan",
+    "less_than_equal": "validation.issue.contract.numberAtMost",
+    "int_type": "validation.issue.contract.integerRequired",
+    "int_parsing": "validation.issue.contract.integerRequired",
+    "float_type": "validation.issue.contract.numberRequired",
+    "float_parsing": "validation.issue.contract.numberRequired",
+    "bool_type": "validation.issue.contract.booleanRequired",
+    "bool_parsing": "validation.issue.contract.booleanRequired",
+    "string_type": "validation.issue.contract.textRequired",
+    "list_type": "validation.issue.contract.collectionRequired",
+    "tuple_type": "validation.issue.contract.collectionRequired",
+    "set_type": "validation.issue.contract.collectionRequired",
+    "dict_type": "validation.issue.contract.objectRequired",
+    "mapping_type": "validation.issue.contract.objectRequired",
+    "model_type": "validation.issue.contract.objectRequired",
+    "model_attributes_type": "validation.issue.contract.objectRequired",
     "output_event_types_invalid": "validation.issue.contract.outputEventTypesInvalid",
     "output_template_empty": "validation.issue.contract.outputTemplateEmpty",
     "output_template_malformed": "validation.issue.contract.outputTemplateMalformed",
@@ -42,22 +82,129 @@ _ERROR_MESSAGE_KEYS = {
 }
 
 _ERROR_ARG_KEYS = {
+    "string_too_short": ("min_length",),
+    "string_too_long": ("max_length",),
+    "too_short": ("min_length",),
+    "too_long": ("max_length",),
+    "greater_than": ("gt",),
+    "greater_than_equal": ("ge",),
+    "less_than": ("lt",),
+    "less_than_equal": ("le",),
+    "literal_error": ("expected",),
+    "enum": ("expected",),
     "output_event_types_invalid": ("details",),
     "output_template_empty": ("event_name",),
     "output_template_malformed": ("event_name",),
     "output_template_unknown_variables": ("event_name", "variables"),
 }
 
+
+def _specific_contract_identity(
+    *,
+    error_type: str,
+    path: str,
+    scope: str,
+    owner_type: str,
+    detail: str,
+) -> tuple[str, str] | None:
+    """Return a stable, user-facing identity for well-known format rules.
+
+    Pydantic reports all regex failures as ``string_pattern_mismatch``.  The
+    pattern itself is an implementation detail, so map the few current
+    contracts with an explicit user-facing rule instead of exposing a regex.
+    """
+    if (
+        error_type == "string_pattern_mismatch"
+        and scope == "subagent"
+        and path == "name"
+    ):
+        return (
+            "contract.subagent_name_format_invalid",
+            "validation.issue.contract.subagentNameFormatInvalid",
+        )
+    if (
+        error_type == "string_pattern_mismatch"
+        and owner_type == "model"
+        and path == "provider"
+    ):
+        return (
+            "contract.provider_format_invalid",
+            "validation.issue.contract.providerFormatInvalid",
+        )
+    if (
+        error_type == "string_pattern_mismatch"
+        and owner_type == "custom-tool"
+        and path.startswith("tools[")
+    ):
+        return (
+            "contract.custom_tool_name_format_invalid",
+            "validation.issue.contract.customToolNameFormatInvalid",
+        )
+    if error_type == "string_pattern_mismatch" and path.endswith(".plugin_id"):
+        return (
+            "contract.plugin_id_format_invalid",
+            "validation.issue.contract.pluginIdFormatInvalid",
+        )
+    if (
+        error_type == "string_pattern_mismatch"
+        and owner_type == "output-mode"
+        and path.startswith("filter_mappings[")
+        and path.endswith(".field")
+    ):
+        return (
+            "contract.output_filter_field_format_invalid",
+            "validation.issue.contract.outputFilterFieldFormatInvalid",
+        )
+    if error_type == "value_error" and owner_type == "model" and path == "provider":
+        if detail == "provider must be bundled with this Agent Shell version":
+            return (
+                "contract.provider_unavailable",
+                "validation.issue.contract.providerUnavailable",
+            )
+    if error_type == "value_error" and owner_type == "model" and path == "base_url":
+        if detail == "base_url must be an HTTP(S) URL":
+            return (
+                "contract.base_url_invalid",
+                "validation.issue.contract.baseUrlInvalid",
+            )
+    if error_type == "value_error" and owner_type == "model" and path == "credential":
+        if detail == "masked secret text cannot replace a credential":
+            return (
+                "contract.credential_masked",
+                "validation.issue.contract.credentialMasked",
+            )
+    return None
+
+
 _ERROR_MESSAGES = {
     "extra_forbidden": "The field is not accepted by the current contract.",
     "missing": "A required field is missing.",
     "string_too_short": "The text is shorter than the allowed range.",
     "string_too_long": "The text is longer than the allowed range.",
+    "string_pattern_mismatch": "The value does not match the allowed format.",
     "too_short": "The collection contains too few items.",
     "too_long": "The collection contains too many items.",
     "literal_error": "The value is not one of the allowed choices.",
     "enum": "The value is not one of the allowed choices.",
     "finite_number": "The value must be a finite number.",
+    "greater_than": "The value is not greater than the required limit.",
+    "greater_than_equal": "The value is below the required minimum.",
+    "less_than": "The value is not less than the required limit.",
+    "less_than_equal": "The value exceeds the allowed maximum.",
+    "int_type": "The value must be an integer.",
+    "int_parsing": "The value must be an integer.",
+    "float_type": "The value must be a number.",
+    "float_parsing": "The value must be a number.",
+    "bool_type": "The value must be true or false.",
+    "bool_parsing": "The value must be true or false.",
+    "string_type": "The value must be text.",
+    "list_type": "The value must be a list.",
+    "tuple_type": "The value must be a list.",
+    "set_type": "The value must be a list.",
+    "dict_type": "The value must be an object.",
+    "mapping_type": "The value must be an object.",
+    "model_type": "The value must be an object.",
+    "model_attributes_type": "The value must be an object.",
 }
 
 
@@ -136,18 +283,34 @@ def report_from_validation_error(
     ):
         error_type = str(error.get("type", ""))
         message_args = _message_args(error_type, error)
+        path = _issue_path(error_type, error, message_args)
+        specific_identity = _specific_contract_identity(
+            error_type=error_type,
+            path=path,
+            scope=scope,
+            owner_type=owner_type,
+            detail=str(error.get("msg", "")).removeprefix("Value error, "),
+        )
         issues.append(
             ValidationIssue(
-                code=_ERROR_CODES.get(error_type, "contract.invalid_value"),
+                code=(
+                    specific_identity[0]
+                    if specific_identity is not None
+                    else _ERROR_CODES.get(error_type, "contract.invalid_value")
+                ),
                 scope=scope,
                 owner_id=owner_id,
                 owner_name=owner_name,
                 owner_type=owner_type,
-                path=_issue_path(error_type, error, message_args),
+                path=path,
                 message=_safe_message(error),
-                message_key=_ERROR_MESSAGE_KEYS.get(
-                    error_type,
-                    "validation.issue.contract.invalidValue",
+                message_key=(
+                    specific_identity[1]
+                    if specific_identity is not None
+                    else _ERROR_MESSAGE_KEYS.get(
+                        error_type,
+                        "validation.issue.contract.invalidValue",
+                    )
                 ),
                 message_args=message_args,
             )
