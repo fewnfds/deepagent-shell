@@ -190,7 +190,7 @@
       },
       {
         "name": "forms-and-actions",
-        "paths": ["src/components/*.vue", "src/components/workflow/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
+        "paths": ["src/components/*.vue", "src/components/workflow/*.vue", "src/components/library/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
         "classes": [
           "btn", "btn-check", "btn-danger", "btn-info", "btn-lg", "btn-outline-primary", "btn-outline-secondary", "btn-outline-danger", "btn-primary", "btn-secondary", "btn-sm", "btn-success", "btn-warning", "form-check",
           "form-check-input", "form-check-label", "form-control", "form-control-sm", "form-label", "form-select",
@@ -201,8 +201,7 @@
         "name": "canvas-workspace",
         "paths": [
           "src/components/workflow/*.vue",
-          "src/pages/GraphWorkspacePage.vue",
-          "src/pages/WorkflowHomePage.vue"
+          "src/pages/GraphWorkspacePage.vue"
         ],
         "classes": [
           "canvas-workspace", "canvas-workspace-host", "canvas-workspace-loading", "canvas-workspace__body", "canvas-workspace__canvas",
@@ -212,12 +211,12 @@
           "workspace-inspector__identity", "workspace-inspector__api", "workspace-error",
           "graph-canvas--workspace", "graph-node__header", "graph-node__ports", "graph-node__port-row", "graph-node__port-row--input", "graph-node__port-row--output", "graph-node__port-name",
           "graph-boundary-node", "graph-boundary-node__eyebrow", "graph-boundary-node__title", "graph-boundary-node__type", "graph-boundary-node__port", "graph-boundary-node__port--input", "graph-boundary-node__port--output", "graph-boundary-node__handle",
-          "graph-edge", "graph-edge--control", "graph-edge--data", "run-dock", "run-dock__summary", "run-dock__identity", "run-dock__actions", "run-dock__eyebrow", "run-dock__body", "run-dock__input", "run-dock__state", "run-dock__meta"
+          "graph-edge", "graph-edge--control", "graph-edge--data", "graph-edge--system", "run-dock", "run-dock__summary", "run-dock__identity", "run-dock__actions", "run-dock__eyebrow", "run-dock__body", "run-dock__input", "run-dock__state", "run-dock__meta"
         ]
       },
       {
         "name": "content-and-data",
-        "paths": ["src/components/*.vue", "src/components/workflow/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
+        "paths": ["src/components/*.vue", "src/components/workflow/*.vue", "src/components/library/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
         "classes": [
           "graph-canvas", "graph-canvas__surface", "graph-node", "graph-node__title", "graph-node__type", "graph-node__status", "graph-node__handle",
           "accordion", "alert", "alert-danger", "align-middle", "badge", "border", "breadcrumb", "breadcrumb-item", "card", "card-body", "card-danger", "card-footer",
@@ -230,10 +229,10 @@
       },
       {
         "name": "approved-utilities",
-        "paths": ["src/components/*.vue", "src/components/workflow/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
+        "paths": ["src/components/*.vue", "src/components/workflow/*.vue", "src/components/library/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
         "classes": [
           "align-items-center", "align-items-end", "align-items-start", "bg-body-tertiary", "col", "col-6", "col-12", "col-lg-3", "col-lg-4", "col-lg-5", "col-lg-6", "col-lg-7", "col-lg-8", "col-lg-9", "col-md-2", "col-md-3", "col-md-4", "col-md-5", "col-md-6", "col-xl-5", "col-xl-7", "col-xxl-4", "d-block", "d-flex", "d-none", "d-sm-inline", "flex-wrap", "font-monospace", "form-text", "fw-semibold", "g-2", "g-3", "gap-1", "gap-2", "gap-3", "h-100", "h4", "h5",
-          "fs-6", "justify-content-between", "justify-content-end", "lh-sm", "mb-0", "mb-1", "mb-2", "mb-3", "me-2", "ms-auto", "mt-1", "mt-2", "mt-3", "overflow-auto", "p-2", "p-3", "small",
+          "fs-6", "justify-content-between", "justify-content-end", "lh-sm", "mb-0", "mb-1", "mb-2", "mb-3", "me-2", "ms-auto", "mt-1", "mt-2", "mt-3", "overflow-auto", "p-2", "p-3", "pb-0", "small",
           "text-body-secondary", "text-break", "text-center", "text-danger", "text-end", "text-start", "text-success", "text-uppercase", "visually-hidden", "w-100", "input-group-sm"
         ]
       },
@@ -384,14 +383,12 @@
           "src/pages/ComponentsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/EventFeedPage.vue",
-          "src/pages/EntryScriptPage.vue",
           "src/pages/FileManagerPage.vue",
           "src/pages/MainAgentPage.vue",
           "src/pages/StyleLabPage.vue",
           "src/pages/SubagentPage.vue",
           "src/pages/SystemSettingsPage.vue",
-          "src/pages/TerminologyPage.vue",
-          "src/pages/WorkflowHomePage.vue"
+          "src/pages/TerminologyPage.vue"
         ]
       },
       {
@@ -401,9 +398,22 @@
         "reason": "Owns the shared component, Agent and plugin navigation rows across configuration repository pages",
         "callers": [
           "src/pages/AutomationPage.vue",
-          "src/pages/ConfigLibraryPage.vue",
-          "src/pages/EntryScriptPage.vue"
+          "src/pages/ConfigLibraryPage.vue"
         ]
+      },
+      {
+        "name": "WorkflowRepositoryView",
+        "path": "src/components/library/WorkflowRepositoryView.vue",
+        "kind": "domain-composition",
+        "reason": "Owns the Workflow resource list while the configuration repository page owns navigation and page framing",
+        "callers": ["src/pages/ConfigLibraryPage.vue"]
+      },
+      {
+        "name": "EntryScriptRepositoryView",
+        "path": "src/components/library/EntryScriptRepositoryView.vue",
+        "kind": "domain-composition",
+        "reason": "Owns Entry Script list and editor behavior inside the configuration repository content region",
+        "callers": ["src/pages/ConfigLibraryPage.vue"]
       },
       {
         "name": "FormField",
@@ -501,7 +511,7 @@
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/EventFeedPage.vue",
           "src/pages/TerminologyPage.vue",
-          "src/pages/WorkflowHomePage.vue"
+          "src/components/library/WorkflowRepositoryView.vue"
         ]
       },
       {

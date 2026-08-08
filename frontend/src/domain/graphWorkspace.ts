@@ -37,7 +37,8 @@ export function catalogItem(catalog: WorkflowNodeCatalogItem[], type: string): W
 }
 
 function nodePosition(layout: Record<string, WorkflowPosition>, id: string, fallback: WorkflowPosition): WorkflowPosition {
-  return layout[id] ?? fallback
+  const value = layout[id]
+  return value ? { x: value.x, y: value.y } : { x: fallback.x, y: fallback.y }
 }
 
 export function toFlowNodes(
@@ -46,9 +47,13 @@ export function toFlowNodes(
   statuses: Record<string, string>,
   entryScript?: EntryScript,
 ): Node<GraphNodeData>[] {
+  const hasCanvasLayout = Object.hasOwn(workflow.layout, API_BOUNDARY_ID)
+    && Object.hasOwn(workflow.layout, ENTRY_BOUNDARY_ID)
   const graphNodes = workflow.nodes.map((node, index) => {
     const definition = catalogItem(catalog, node.type)
-    const position = nodePosition(workflow.layout, node.id, { x: 160 + index * 40, y: 140 + index * 40 })
+    const position = hasCanvasLayout
+      ? nodePosition(workflow.layout, node.id, { x: 620 + index * 260, y: 160 + index * 100 })
+      : { x: 620 + index * 260, y: 160 + index * 100 }
     return {
       id: node.id,
       type: 'graph-node',
@@ -68,8 +73,8 @@ export function toFlowNodes(
     {
       id: API_BOUNDARY_ID,
       type: 'boundary-node',
-      position: { x: 32, y: 150 },
-      draggable: false,
+      position: hasCanvasLayout ? nodePosition(workflow.layout, API_BOUNDARY_ID, { x: 0, y: 160 }) : { x: 0, y: 160 },
+      draggable: true,
       selectable: false,
       data: {
         label: 'OpenAI Chat Completions',
@@ -82,8 +87,8 @@ export function toFlowNodes(
     {
       id: ENTRY_BOUNDARY_ID,
       type: 'boundary-node',
-      position: { x: 32, y: 310 },
-      draggable: false,
+      position: hasCanvasLayout ? nodePosition(workflow.layout, ENTRY_BOUNDARY_ID, { x: 300, y: 160 }) : { x: 300, y: 160 },
+      draggable: true,
       selectable: false,
       data: {
         label: entryScript?.name || 'Entry Script',
@@ -102,6 +107,7 @@ export function toFlowNodes(
 
 export function toFlowEdges(
   workflow: WorkflowDefinition,
+  catalog: WorkflowNodeCatalogItem[],
   statuses: Record<string, string>,
 ): Edge[] {
   const definitionEdges = workflow.edges.map((edge) => ({
@@ -125,20 +131,25 @@ export function toFlowEdges(
       targetHandle: 'messages',
       animated: false,
       selectable: false,
-      data: { id: 'boundary-api-entry', kind: 'control', source: { node: API_BOUNDARY_ID, port: 'messages' }, target: { node: ENTRY_BOUNDARY_ID, port: 'messages' }, condition: null },
+      data: { id: 'boundary-api-entry', kind: 'control', source: { node: API_BOUNDARY_ID, port: 'messages' }, target: { node: ENTRY_BOUNDARY_ID, port: 'messages' }, condition: null, system: true },
     },
   ]
   if (firstNode) {
+    const firstDefinition = workflow.nodes.find((node) => node.id === firstNode)
+    const firstInput = firstDefinition
+      ? catalogItem(catalog, firstDefinition.type)?.input_ports[0]?.name
+      : undefined
+    if (!firstInput) return [...boundaryEdges, ...definitionEdges]
     boundaryEdges.push({
       id: 'boundary-entry-graph',
-      type: 'data-edge',
+      type: 'control-edge',
       source: ENTRY_BOUNDARY_ID,
       target: firstNode,
       sourceHandle: 'state',
-      targetHandle: undefined,
+      targetHandle: firstInput,
       animated: false,
       selectable: false,
-      data: { id: 'boundary-entry-graph', kind: 'data', source: { node: ENTRY_BOUNDARY_ID, port: 'state' }, target: { node: firstNode, port: 'state' }, condition: null },
+      data: { id: 'boundary-entry-graph', kind: 'control', source: { node: ENTRY_BOUNDARY_ID, port: 'state' }, target: { node: firstNode, port: firstInput }, condition: null, system: true },
     })
   }
   return [...boundaryEdges, ...definitionEdges]

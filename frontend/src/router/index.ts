@@ -6,14 +6,12 @@ const AutomationPage = () => import('@/pages/AutomationPage.vue')
 const ComponentsPage = () => import('@/pages/ComponentsPage.vue')
 const ConfigLibraryPage = () => import('@/pages/ConfigLibraryPage.vue')
 const EventFeedPage = () => import('@/pages/EventFeedPage.vue')
-const EntryScriptPage = () => import('@/pages/EntryScriptPage.vue')
 const FileManagerPage = () => import('@/pages/FileManagerPage.vue')
 const MainAgentPage = () => import('@/pages/MainAgentPage.vue')
 const StyleLabPage = () => import('@/pages/StyleLabPage.vue')
 const SystemSettingsPage = () => import('@/pages/SystemSettingsPage.vue')
 const SubagentPage = () => import('@/pages/SubagentPage.vue')
 const TerminologyPage = () => import('@/pages/TerminologyPage.vue')
-const WorkflowHomePage = () => import('@/pages/WorkflowHomePage.vue')
 const GraphWorkspacePage = () => import('@/pages/GraphWorkspacePage.vue')
 
 export const router = createRouter({
@@ -23,15 +21,15 @@ export const router = createRouter({
     { path: '/agents', redirect: '/agents/main' },
     { path: '/agents/main', component: MainAgentPage, meta: { titleKey: 'navigation.agents' } },
     { path: '/agents/subagents', component: SubagentPage, meta: { titleKey: 'navigation.agents' } },
-    { path: '/workflows', component: WorkflowHomePage, meta: { titleKey: 'navigation.workflows' } },
+    { path: '/workflows', redirect: '/library/workflows' },
     { path: '/workflows/new', component: GraphWorkspacePage, meta: { titleKey: 'navigation.workflows', layout: 'canvas' } },
     { path: '/workflows/:workflowId', component: GraphWorkspacePage, meta: { titleKey: 'navigation.workflows', layout: 'canvas' } },
     { path: '/components', redirect: '/components/model' },
     { path: '/components/:type', component: ComponentsPage, meta: { titleKey: 'components.title' } },
     { path: '/library', redirect: '/library/model' },
     { path: '/library/automation', component: AutomationPage, meta: { titleKey: 'library.title' } },
-    { path: '/library/entry-scripts', component: EntryScriptPage, meta: { titleKey: 'workflow.entryScripts' } },
-    { path: '/library/workflows', component: WorkflowHomePage, meta: { titleKey: 'library.title' } },
+    { path: '/library/entry-scripts', component: ConfigLibraryPage, meta: { titleKey: 'library.title' } },
+    { path: '/library/workflows', component: ConfigLibraryPage, meta: { titleKey: 'library.title' } },
     { path: '/library/:type', component: ConfigLibraryPage, meta: { titleKey: 'library.title' } },
     { path: '/system', redirect: '/system/config' },
     {

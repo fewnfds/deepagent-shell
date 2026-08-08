@@ -97,6 +97,27 @@ function onToggleEntryNode(nodeId: string): void {
   commitWorkflow({ ...workflow.value, entry_nodes: entryNodes.length ? entryNodes : workflow.value.nodes.slice(0, 1).map((node) => node.id) })
 }
 
+function ensureCanvasLayout(
+  layout: WorkflowDefinition['layout'],
+  nodes: WorkflowNode[],
+  overrideId: string,
+  overridePosition: XYPosition,
+): WorkflowDefinition['layout'] {
+  const hasBoundaryLayout = Object.hasOwn(layout, 'boundary-api') && Object.hasOwn(layout, 'boundary-entry')
+  if (hasBoundaryLayout) return { ...layout, [overrideId]: overridePosition }
+  const normalized: WorkflowDefinition['layout'] = {
+    ...layout,
+    'boundary-api': { x: 0, y: 160 },
+    'boundary-entry': { x: 300, y: 160 },
+  }
+  nodes.forEach((node, index) => {
+    normalized[node.id] = node.id === overrideId
+      ? overridePosition
+      : { x: 620 + index * 260, y: 160 + index * 100 }
+  })
+  return normalized
+}
+
 function onAddNode(type: string, position: XYPosition): void {
   const definition = nodeCatalogItem(catalog.value, type)
   if (!definition) return
@@ -107,7 +128,12 @@ function onAddNode(type: string, position: XYPosition): void {
   commitWorkflow({
     ...workflow.value,
     nodes: [...workflow.value.nodes, node],
-    layout: { ...workflow.value.layout, [id]: position },
+    layout: ensureCanvasLayout(
+      workflow.value.layout,
+      [...workflow.value.nodes, node],
+      id,
+      { x: Math.max(0, position.x - 110), y: Math.max(0, position.y - 55) },
+    ),
     entry_nodes: workflow.value.entry_nodes.length ? workflow.value.entry_nodes : [id],
   })
   selectedNodeId.value = id
@@ -115,11 +141,14 @@ function onAddNode(type: string, position: XYPosition): void {
 }
 
 function onRemoveNode(nodeId: string): void {
+  const layout = { ...workflow.value.layout }
+  delete layout[nodeId]
   commitWorkflow({
     ...workflow.value,
     nodes: workflow.value.nodes.filter((node) => node.id !== nodeId),
     entry_nodes: workflow.value.entry_nodes.filter((id) => id !== nodeId),
     edges: workflow.value.edges.filter((edge) => edge.source.node !== nodeId && edge.target.node !== nodeId),
+    layout,
   })
   if (selectedNodeId.value === nodeId) selectedNodeId.value = workflow.value.nodes[0]?.id ?? ''
 }
@@ -138,6 +167,13 @@ function onConnect(connection: Connection): void {
   const sourcePort = connection.sourceHandle ?? sourceDefinition?.output_ports[0]?.name
   const targetPort = connection.targetHandle ?? targetDefinition?.input_ports[0]?.name
   if (!sourcePort || !targetPort) return
+  const duplicate = workflow.value.edges.some((edge) => (
+    edge.source.node === connection.source
+    && edge.source.port === sourcePort
+    && edge.target.node === connection.target
+    && edge.target.port === targetPort
+  ))
+  if (duplicate) return
   const edge: WorkflowEdge = { id: edgeId(workflow.value.edges), kind: 'control', source: { node: connection.source, port: sourcePort }, target: { node: connection.target, port: targetPort }, condition: null }
   commitWorkflow({ ...workflow.value, edges: [...workflow.value.edges, edge] })
   selectedEdgeId.value = edge.id
@@ -145,7 +181,10 @@ function onConnect(connection: Connection): void {
 }
 
 function onMoveNode(id: string, x: number, y: number): void {
-  commitWorkflow({ ...workflow.value, layout: { ...workflow.value.layout, [id]: { x, y } } })
+  commitWorkflow({
+    ...workflow.value,
+    layout: ensureCanvasLayout(workflow.value.layout, workflow.value.nodes, id, { x, y }),
+  })
 }
 
 function onUpdateNode(node: WorkflowNode): void {

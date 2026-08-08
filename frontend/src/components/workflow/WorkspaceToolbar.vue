@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
   name: string
@@ -12,6 +13,7 @@ const props = defineProps<{
   canUndo: boolean
   canRedo: boolean
 }>()
+const { t } = useI18n()
 const emit = defineEmits<{
   back: []
   save: []
@@ -56,7 +58,7 @@ const statusLabel = computed(() => {
       <button class="btn btn-sm btn-primary" type="button" :disabled="saving" @click="emit('save')">
         <i class="bi bi-download" aria-hidden="true" /> 保存
       </button>
-      <button class="btn btn-sm btn-success" type="button" :disabled="runActive || isNew" @click="emit('run')">
+      <button class="btn btn-sm btn-success" type="button" :disabled="runActive || isNew || dirty" :title="dirty ? t('workflow.runSaveRequired') : undefined" @click="emit('run')">
         <i class="bi bi-play-fill" aria-hidden="true" /> 运行
       </button>
     </div>

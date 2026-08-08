@@ -17,7 +17,11 @@ export function blankWorkflow(): WorkflowDefinition {
     nodes: [{ id: 'agent-1', type: 'builtin.agent', version: '1.0.0', config: { profile_id: '' } }],
     entry_nodes: ['agent-1'],
     edges: [],
-    layout: { 'agent-1': { x: 240, y: 160 } },
+    layout: {
+      'boundary-api': { x: 0, y: 160 },
+      'boundary-entry': { x: 300, y: 160 },
+      'agent-1': { x: 620, y: 160 },
+    },
     recursion_limit: 100,
   }
 }
@@ -25,6 +29,8 @@ export function blankWorkflow(): WorkflowDefinition {
 export function normalizeWorkflow(value: unknown): Workflow {
   const source = value && typeof value === 'object' ? value as Record<string, any> : {}
   const blank = blankWorkflow()
+  const nodes = Array.isArray(source.nodes) ? source.nodes : blank.nodes
+  const layout = source.layout && typeof source.layout === 'object' ? source.layout : {}
   return {
     ...blank,
     ...source,
@@ -32,10 +38,10 @@ export function normalizeWorkflow(value: unknown): Workflow {
     revision: typeof source.revision === 'number' ? source.revision : 0,
     interface: source.interface && typeof source.interface === 'object' ? source.interface : blank.interface,
     setup: Array.isArray(source.setup) ? source.setup : [],
-    nodes: Array.isArray(source.nodes) ? source.nodes : blank.nodes,
+    nodes,
     entry_nodes: Array.isArray(source.entry_nodes) ? source.entry_nodes : blank.entry_nodes,
     edges: Array.isArray(source.edges) ? source.edges : [],
-    layout: source.layout && typeof source.layout === 'object' ? source.layout : {},
+    layout,
     recursion_limit: typeof source.recursion_limit === 'number' ? source.recursion_limit : blank.recursion_limit,
   }
 }

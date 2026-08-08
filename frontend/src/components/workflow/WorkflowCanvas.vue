@@ -10,13 +10,14 @@ import {
   type EdgeChange,
   type Node,
   type NodeChange,
+  type NodeDragEvent,
   type XYPosition,
 } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
 import '@vue-flow/controls/dist/style.css'
 import '@vue-flow/minimap/dist/style.css'
-import { ref, watch } from 'vue'
+import { computed, markRaw, ref, watch } from 'vue'
 
 import type { EntryScript, WorkflowDefinition, WorkflowNodeCatalogItem } from '@/api'
 import { API_BOUNDARY_ID, ENTRY_BOUNDARY_ID, toFlowEdges, toFlowNodes, type GraphNodeData } from '@/domain/graphWorkspace'
@@ -46,8 +47,8 @@ const emit = defineEmits<{
 
 const nodes = ref<Node<GraphNodeData>[]>([])
 const edges = ref<Edge[]>([])
-const nodeTypes = { 'graph-node': GraphNodeView, 'boundary-node': BoundaryNodeView }
-const edgeTypes = { 'control-edge': ControlEdgeView, 'data-edge': DataEdgeView }
+const nodeTypes = markRaw({ 'graph-node': GraphNodeView, 'boundary-node': BoundaryNodeView })
+const edgeTypes = markRaw({ 'control-edge': ControlEdgeView, 'data-edge': DataEdgeView })
 // The composable lives in this adapter (the parent of <VueFlow>), so bind it
 // explicitly to the same store instead of creating a second, unmounted store.
 // Without the stable id, screenToFlowCoordinate() has no viewport element and
@@ -55,12 +56,49 @@ const edgeTypes = { 'control-edge': ControlEdgeView, 'data-edge': DataEdgeView }
 const flowId = 'workflow-canvas'
 const { screenToFlowCoordinate } = useVueFlow(flowId)
 
+// The graph definition is the persisted source of truth, while Vue Flow owns
+// the in-progress pointer interaction.  Do not deep-watch the whole definition:
+// a layout-only commit emitted at drag-stop must not rebuild the local nodes and
+// make the node jump back under the pointer.
+const definitionSignature = computed(() => JSON.stringify({
+  nodes: props.workflow.nodes,
+  edges: props.workflow.edges,
+  entry_nodes: props.workflow.entry_nodes,
+  catalog: props.catalog,
+  entryScript: props.entryScript
+    ? { id: props.entryScript.id, name: props.entryScript.name, enabled: props.entryScript.enabled }
+    : null,
+}))
+const layoutSignature = computed(() => JSON.stringify(props.workflow.layout))
+const statusSignature = computed(() => JSON.stringify(props.statuses ?? {}))
+let skipNextLayoutRefresh = false
+
 function refreshElements(): void {
   nodes.value = toFlowNodes(props.workflow, props.catalog, props.statuses ?? {}, props.entryScript)
-  edges.value = toFlowEdges(props.workflow, props.statuses ?? {})
+  edges.value = toFlowEdges(props.workflow, props.catalog, props.statuses ?? {})
 }
 
-watch(() => [props.workflow, props.catalog, props.statuses, props.entryScript], refreshElements, { deep: true, immediate: true })
+watch(definitionSignature, refreshElements, { immediate: true })
+
+watch(layoutSignature, () => {
+  if (skipNextLayoutRefresh) {
+    skipNextLayoutRefresh = false
+    return
+  }
+  refreshElements()
+})
+
+watch(statusSignature, () => {
+  const statuses = props.statuses ?? {}
+  nodes.value = nodes.value.map((node) => ({
+    ...node,
+    data: node.data.boundary ? node.data : { ...node.data, status: statuses[node.id] },
+  }))
+  edges.value = edges.value.map((edge) => ({
+    ...edge,
+    animated: edge.data?.system ? false : edge.type === 'control-edge' && Boolean(statuses[edge.source]),
+  }))
+})
 
 function onNodesChange(changes: NodeChange[]): void {
   for (const change of changes) {
@@ -80,14 +118,19 @@ function onConnect(connection: Connection): void {
   emit('connect', connection)
 }
 
-function onNodeDragStop(event: { node: Node }): void {
-  if (event.node.id.startsWith('boundary-')) return
+function onNodeDragStop(event: NodeDragEvent): void {
+  // The next layout change is the one just emitted by this pointer gesture.
+  // Keep Vue Flow's final local position and let the parent persist it without
+  // rebuilding the projection a second time.
+  skipNextLayoutRefresh = true
   emit('moveNode', event.node.id, event.node.position.x, event.node.position.y)
 }
 
 function onDrop(event: DragEvent): void {
   event.preventDefault()
-  const type = event.dataTransfer?.getData('application/x-agent-shell-node')
+  event.stopPropagation()
+  const type = event.dataTransfer?.getData('application/vueflow')
+    || event.dataTransfer?.getData('application/x-agent-shell-node')
     || event.dataTransfer?.getData('text/plain')
   if (!type || event.clientX === undefined || event.clientY === undefined) return
   emit('addNode', type, screenToFlowCoordinate({ x: event.clientX, y: event.clientY }))
@@ -95,6 +138,7 @@ function onDrop(event: DragEvent): void {
 
 function onDragOver(event: DragEvent): void {
   event.preventDefault()
+  event.stopPropagation()
   if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
 }
 
@@ -114,7 +158,7 @@ function onEdgeClick(event: { edge: Edge }): void {
 </script>
 
 <template>
-  <div class="graph-canvas graph-canvas--workspace" @drop.capture="onDrop" @dragover.capture="onDragOver">
+  <div class="graph-canvas graph-canvas--workspace" @drop="onDrop">
     <VueFlow
       :id="flowId"
       v-model:edges="edges"
@@ -127,9 +171,12 @@ function onEdgeClick(event: { edge: Edge }): void {
       :elements-selectable="true"
       :selection-on-drag="true"
       :select-nodes-on-drag="true"
-      :pan-on-drag="[1, 2]"
+      :pan-on-drag="[2, 3]"
+      fit-view-on-init
       :default-viewport="{ x: 0, y: 0, zoom: 1 }"
       class="graph-canvas__surface"
+      @dragover="onDragOver"
+      @drop="onDrop"
       @nodes-change="onNodesChange"
       @edges-change="onEdgesChange"
       @connect="onConnect"

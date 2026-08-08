@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { managementApi, watchManagementEvents, type GraphRun, type ManagementEvent } from '@/api'
 import { useManagementError } from '@/composables/useManagementError'
 
-const props = defineProps<{ graphId: string; entryScriptId?: string; statuses: Record<string, string> }>()
+const props = defineProps<{ graphId: string; entryScriptId?: string; statuses: Record<string, string>; dirty?: boolean }>()
 const emit = defineEmits<{ status: [nodeId: string, value: string]; reset: []; activity: [active: boolean] }>()
 const { t } = useI18n()
 const managementError = useManagementError()
@@ -82,7 +82,7 @@ defineExpose({ start })
       <div class="run-dock__identity"><span class="run-dock__eyebrow">GRAPH RUN</span><strong>{{ status }}</strong><span v-if="run" class="font-monospace">{{ run.id }}</span></div>
       <div class="run-dock__actions">
         <button class="btn btn-sm btn-outline-secondary" type="button" @click="expanded = !expanded">{{ expanded ? '收起' : '展开运行面板' }}</button>
-        <button class="btn btn-sm btn-success" type="button" :disabled="active || !graphId" @click="void start"><i class="bi bi-play-fill" aria-hidden="true" /> {{ t('workflow.run') }}</button>
+        <button class="btn btn-sm btn-success" type="button" :disabled="active || !graphId || dirty" :title="dirty ? t('workflow.runSaveRequired') : undefined" @click="void start"><i class="bi bi-play-fill" aria-hidden="true" /> {{ t('workflow.run') }}</button>
         <button v-if="run?.status === 'running'" class="btn btn-sm btn-warning" type="button" @click="void control('pause')">暂停</button>
         <button v-if="run?.status === 'paused'" class="btn btn-sm btn-primary" type="button" @click="void control('resume')">继续</button>
         <button v-if="active" class="btn btn-sm btn-danger" type="button" @click="void control('cancel')">停止</button>

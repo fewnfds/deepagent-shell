@@ -57,6 +57,16 @@ const emit = defineEmits<{
 const runDockRef = ref<{ start: () => Promise<void> } | null>(null)
 const runActive = ref(false)
 function startRun(): void { void runDockRef.value?.start() }
+
+function palettePosition(): XYPosition {
+  const hasCanvasLayout = Object.hasOwn(props.workflow.layout, 'boundary-api')
+    && Object.hasOwn(props.workflow.layout, 'boundary-entry')
+  const fallback = props.workflow.nodes.reduce((max, _node, index) => Math.max(max, 620 + index * 260), 620)
+  const maxX = props.workflow.nodes.reduce((max, node, index) => (
+    Math.max(max, hasCanvasLayout ? (props.workflow.layout[node.id]?.x ?? 620 + index * 260) : 620 + index * 260)
+  ), 300)
+  return { x: Math.max(fallback, maxX + 320), y: 160 }
+}
 </script>
 
 <template>
@@ -80,7 +90,7 @@ function startRun(): void { void runDockRef.value?.start() }
       @undo="emit('undo')"
     />
     <div class="canvas-workspace__body">
-      <NodePalette :catalog="catalog" @add="(type) => emit('addNode', type, { x: 260, y: 180 })" />
+      <NodePalette :catalog="catalog" @add="(type) => emit('addNode', type, palettePosition())" />
       <main class="canvas-workspace__canvas" aria-label="Workflow graph canvas">
         <WorkflowCanvas
           :catalog="catalog"
@@ -119,6 +129,7 @@ function startRun(): void { void runDockRef.value?.start() }
       ref="runDockRef"
       :entry-script-id="selectedEntryId || undefined"
       :graph-id="graphId"
+      :dirty="dirty"
       :statuses="statuses"
       @reset="emit('resetStatus')"
       @status="emit('status', $event[0], $event[1])"

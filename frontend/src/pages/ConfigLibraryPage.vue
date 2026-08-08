@@ -9,6 +9,8 @@ import ConfigDetail from '@/components/ConfigDetail.vue'
 import ConfigurationLibraryNav from '@/components/ConfigurationLibraryNav.vue'
 import DataTableWorkbench from '@/components/data-table/DataTableWorkbench.vue'
 import type { DataTableConfig } from '@/components/data-table/types'
+import EntryScriptRepositoryView from '@/components/library/EntryScriptRepositoryView.vue'
+import WorkflowRepositoryView from '@/components/library/WorkflowRepositoryView.vue'
 import FormField from '@/components/FormField.vue'
 import ModalHost from '@/components/ModalHost.vue'
 import PageShell from '@/components/PageShell.vue'
@@ -44,6 +46,8 @@ const catalogReady = ref(false)
 const refreshing = ref(false)
 const catalogError = ref('')
 const libraryTable = ref<{ reload: () => Promise<void> } | null>(null)
+const workflowRepository = ref<{ reload: () => Promise<void> } | null>(null)
+const entryScriptRepository = ref<{ reload: () => Promise<void> } | null>(null)
 const detailItem = ref<LibraryItem | null>(null)
 const detailMode = ref<'card' | 'json'>('card')
 const copyItem = ref<LibraryItem | null>(null)
@@ -64,7 +68,15 @@ const {
   ).display,
 })
 
-const activeCategoryId = computed(() => routeCategory(route.params.type))
+const isWorkflowRoute = computed(() => route.path === '/library/workflows')
+const isEntryScriptRoute = computed(() => route.path === '/library/entry-scripts')
+const activeCategoryId = computed(() => (
+  isWorkflowRoute.value
+    ? 'workflows'
+    : isEntryScriptRoute.value
+      ? 'entry-scripts'
+      : routeCategory(route.params.type)
+))
 
 const componentCategoryItems = computed<SectionNavItem[]>(() => (
   manifests.value.map((manifest) => ({
@@ -123,8 +135,18 @@ function libraryItemName(item: LibraryItem): string {
 
 async function refresh(): Promise<void> {
   refreshing.value = true
-  await Promise.all([libraryTable.value?.reload(), refreshRepositoryValidation()])
-  refreshing.value = false
+  try {
+    await Promise.all([
+      isWorkflowRoute.value
+        ? workflowRepository.value?.reload()
+        : isEntryScriptRoute.value
+          ? entryScriptRepository.value?.reload()
+          : libraryTable.value?.reload(),
+      refreshRepositoryValidation(),
+    ])
+  } finally {
+    refreshing.value = false
+  }
 }
 
 function showDetail(item: LibraryItem): void {
@@ -357,8 +379,16 @@ onMounted(async () => {
           {{ catalogError }}
         </LteAlert>
 
+        <WorkflowRepositoryView
+          v-if="isWorkflowRoute"
+          ref="workflowRepository"
+        />
+        <EntryScriptRepositoryView
+          v-else-if="isEntryScriptRoute"
+          ref="entryScriptRepository"
+        />
         <DataTableWorkbench
-          v-if="catalogReady && currentCategory"
+          v-else-if="catalogReady && currentCategory"
           :key="activeCategoryId"
           ref="libraryTable"
           :config="libraryTableConfig"

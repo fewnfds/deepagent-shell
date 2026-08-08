@@ -13,5 +13,6 @@ const [path] = getBezierPath({
 </script>
 
 <template>
-  <BaseEdge :id="id" :path="path" :marker-end="markerEnd" class="graph-edge graph-edge--control" />
+  <BaseEdge v-if="data?.system" :id="id" :path="path" :marker-end="markerEnd" class="graph-edge graph-edge--system" />
+  <BaseEdge v-else :id="id" :path="path" :marker-end="markerEnd" class="graph-edge graph-edge--control" />
 </template>
