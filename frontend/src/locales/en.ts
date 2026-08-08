@@ -568,6 +568,13 @@ export const en: MessageSchema = {
       mappedDirectoriesTitle: 'Disk mappings',
       mappedDirectoriesHint: 'Map a local directory to a virtual path. Saving only submits the path text.',
       emptyMappedDirectories: 'No disk mapping has been added.',
+      mappingExamples: {
+        localDirectory: 'For example: D:/workspace',
+        sourceDirectory: 'For example: D:/templates',
+        sourceFile: 'For example: D:/config/default.md',
+        virtualDirectory: 'For example: /workspace',
+        virtualFile: 'For example: /config/default.md',
+      },
       virtualDirectoriesTitle: 'Request-scoped directories',
       virtualDirectoriesHint: 'Load a source directory into request-scoped file space for each request.',
       emptyVirtualDirectories: 'No request-scoped directory has been added.',

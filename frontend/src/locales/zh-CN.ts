@@ -566,6 +566,13 @@ export const zhCN = {
       mappedDirectoriesTitle: '磁盘映射',
       mappedDirectoriesHint: '把本地目录映射到虚拟路径；保存只提交路径文本。',
       emptyMappedDirectories: '尚未添加磁盘映射。',
+      mappingExamples: {
+        localDirectory: '例如：D:/workspace',
+        sourceDirectory: '例如：D:/templates',
+        sourceFile: '例如：D:/config/default.md',
+        virtualDirectory: '例如：/workspace',
+        virtualFile: '例如：/config/default.md',
+      },
       virtualDirectoriesTitle: '请求级临时目录',
       virtualDirectoriesHint: '每次请求从来源目录装载到请求级文件空间。',
       emptyVirtualDirectories: '尚未添加请求级临时目录。',

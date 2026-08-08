@@ -249,7 +249,9 @@
         "paths": ["src/editors/*.vue"],
         "classes": [
           "simple-mapping-actions", "simple-mapping-footer", "simple-mapping-list",
-          "simple-mapping-primary", "simple-mapping-row", "simple-mapping-secondary"
+          "simple-mapping-primary", "simple-mapping-row", "simple-mapping-secondary",
+          "filesystem-mapping-actions", "filesystem-mapping-arrow", "filesystem-mapping-list",
+          "filesystem-mapping-primary", "filesystem-mapping-row", "filesystem-mapping-secondary"
         ]
       },
       {
@@ -294,7 +296,7 @@
   "icons": {
     "cssImportPaths": ["src/main.ts"],
     "allowed": [
-      "archive", "arrow-clockwise", "arrow-down", "arrow-up", "book", "boxes", "check-circle", "check-lg", "chevron-left", "circle",
+      "archive", "arrow-clockwise", "arrow-down", "arrow-right", "arrow-up", "book", "boxes", "check-circle", "check-lg", "chevron-left", "circle",
       "chevron-right", "circle-half", "copy", "download", "exclamation-triangle", "eye", "eye-slash",
       "file-earmark", "folder", "gear", "hdd-network", "house", "info-circle", "key", "list", "moon-fill", "pencil",
       "play-fill", "plus-lg", "robot", "search", "sliders", "stop-fill", "sun-fill", "three-dots",

@@ -35,17 +35,18 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
         </div>
       </header>
       <div class="card-body">
-        <div v-if="draft.mapped_directories.length" class="simple-mapping-list">
-          <div v-for="(item, index) in draft.mapped_directories" :key="index" class="simple-mapping-row" data-testid="mapped-directory-row">
-            <div class="simple-mapping-primary">
-              <label class="visually-hidden" :for="`mapped-directory-virtual-path-${index}`">{{ t('fields.virtual_path') }}</label>
-              <input :id="`mapped-directory-virtual-path-${index}`" v-model="item.virtual_path" class="form-control">
-            </div>
-            <div class="simple-mapping-secondary">
+        <div v-if="draft.mapped_directories.length" class="filesystem-mapping-list">
+          <div v-for="(item, index) in draft.mapped_directories" :key="index" class="filesystem-mapping-row" data-testid="mapped-directory-row">
+            <div class="filesystem-mapping-secondary">
               <label class="visually-hidden" :for="`mapped-directory-local-path-${index}`">{{ t('fields.local_path') }}</label>
-              <input :id="`mapped-directory-local-path-${index}`" v-model="item.local_path" class="form-control">
+              <input :id="`mapped-directory-local-path-${index}`" v-model="item.local_path" class="form-control" :placeholder="t('editors.filesystem.mappingExamples.localDirectory')">
             </div>
-            <div class="simple-mapping-actions">
+            <div class="filesystem-mapping-arrow" aria-hidden="true"><i class="bi bi-arrow-right" /></div>
+            <div class="filesystem-mapping-primary">
+              <label class="visually-hidden" :for="`mapped-directory-virtual-path-${index}`">{{ t('fields.virtual_path') }}</label>
+              <input :id="`mapped-directory-virtual-path-${index}`" v-model="item.virtual_path" class="form-control" :placeholder="t('editors.filesystem.mappingExamples.virtualDirectory')">
+            </div>
+            <div class="filesystem-mapping-actions">
               <LteButton :aria-label="t('editors.common.remove')" :title="t('editors.common.remove')" size="sm" theme="danger" type="button" @click="draft.mapped_directories.splice(index, 1)"><i class="bi bi-trash" aria-hidden="true" /></LteButton>
             </div>
           </div>
@@ -65,17 +66,18 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
         </div>
       </header>
       <div class="card-body">
-        <div v-if="draft.virtual_directories.length" class="simple-mapping-list">
-          <div v-for="(item, index) in draft.virtual_directories" :key="index" class="simple-mapping-row" data-testid="virtual-directory-row">
-            <div class="simple-mapping-primary">
-              <label class="visually-hidden" :for="`virtual-directory-virtual-path-${index}`">{{ t('fields.virtual_path') }}</label>
-              <input :id="`virtual-directory-virtual-path-${index}`" v-model="item.virtual_path" class="form-control">
-            </div>
-            <div class="simple-mapping-secondary">
+        <div v-if="draft.virtual_directories.length" class="filesystem-mapping-list">
+          <div v-for="(item, index) in draft.virtual_directories" :key="index" class="filesystem-mapping-row" data-testid="virtual-directory-row">
+            <div class="filesystem-mapping-secondary">
               <label class="visually-hidden" :for="`virtual-directory-source-path-${index}`">{{ t('fields.source_path') }}</label>
-              <input :id="`virtual-directory-source-path-${index}`" v-model="item.source_path" class="form-control">
+              <input :id="`virtual-directory-source-path-${index}`" v-model="item.source_path" class="form-control" :placeholder="t('editors.filesystem.mappingExamples.sourceDirectory')">
             </div>
-            <div class="simple-mapping-actions">
+            <div class="filesystem-mapping-arrow" aria-hidden="true"><i class="bi bi-arrow-right" /></div>
+            <div class="filesystem-mapping-primary">
+              <label class="visually-hidden" :for="`virtual-directory-virtual-path-${index}`">{{ t('fields.virtual_path') }}</label>
+              <input :id="`virtual-directory-virtual-path-${index}`" v-model="item.virtual_path" class="form-control" :placeholder="t('editors.filesystem.mappingExamples.virtualDirectory')">
+            </div>
+            <div class="filesystem-mapping-actions">
               <LteButton :aria-label="t('editors.common.remove')" :title="t('editors.common.remove')" size="sm" theme="danger" type="button" @click="draft.virtual_directories.splice(index, 1)"><i class="bi bi-trash" aria-hidden="true" /></LteButton>
             </div>
           </div>
@@ -95,17 +97,18 @@ const toolRows = computed(() => props.defaults.tools.flatMap((tool) => {
         </div>
       </header>
       <div class="card-body">
-        <div v-if="draft.virtual_files.length" class="simple-mapping-list">
-          <div v-for="(item, index) in draft.virtual_files" :key="index" class="simple-mapping-row" data-testid="virtual-file-row">
-            <div class="simple-mapping-primary">
-              <label class="visually-hidden" :for="`virtual-file-virtual-path-${index}`">{{ t('fields.virtual_path') }}</label>
-              <input :id="`virtual-file-virtual-path-${index}`" v-model="item.virtual_path" class="form-control">
-            </div>
-            <div class="simple-mapping-secondary">
+        <div v-if="draft.virtual_files.length" class="filesystem-mapping-list">
+          <div v-for="(item, index) in draft.virtual_files" :key="index" class="filesystem-mapping-row" data-testid="virtual-file-row">
+            <div class="filesystem-mapping-secondary">
               <label class="visually-hidden" :for="`virtual-file-source-path-${index}`">{{ t('fields.source_path') }}</label>
-              <input :id="`virtual-file-source-path-${index}`" v-model="item.source_path" class="form-control">
+              <input :id="`virtual-file-source-path-${index}`" v-model="item.source_path" class="form-control" :placeholder="t('editors.filesystem.mappingExamples.sourceFile')">
             </div>
-            <div class="simple-mapping-actions">
+            <div class="filesystem-mapping-arrow" aria-hidden="true"><i class="bi bi-arrow-right" /></div>
+            <div class="filesystem-mapping-primary">
+              <label class="visually-hidden" :for="`virtual-file-virtual-path-${index}`">{{ t('fields.virtual_path') }}</label>
+              <input :id="`virtual-file-virtual-path-${index}`" v-model="item.virtual_path" class="form-control" :placeholder="t('editors.filesystem.mappingExamples.virtualFile')">
+            </div>
+            <div class="filesystem-mapping-actions">
               <LteButton :aria-label="t('editors.common.remove')" :title="t('editors.common.remove')" size="sm" theme="danger" type="button" @click="draft.virtual_files.splice(index, 1)"><i class="bi bi-trash" aria-hidden="true" /></LteButton>
             </div>
           </div>
