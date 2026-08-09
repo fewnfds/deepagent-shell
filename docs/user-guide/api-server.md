@@ -10,7 +10,7 @@ GET /v1/models
 Authorization: Bearer <API Key>
 ```
 
-返回当前可运行的 Main Agent 名称。
+返回当前启用的 Workflow 名称。Main Agent 名称和内部 UUID 不属于 model ID。
 
 ```http
 POST /v1/chat/completions
@@ -18,18 +18,18 @@ Authorization: Bearer <API Key>
 Content-Type: application/json
 
 {
-  "model": "writer",
+  "model": "writing-workflow",
   "messages": [{"role": "user", "content": "Write a summary."}],
   "stream": false
 }
 ```
 
 支持流式和非流式响应。客户端必须在每次请求中提交完整 `messages[]`；core 只保存和校验这份请求事实，不会在
-没有 automation prepare 的情况下自动交给 Main Agent 或 Subagent。模型组件中的 `tool_choice`、`response_format` 和
+没有自定义 Middleware 的情况下自动交给 Main Agent。模型组件中的 `tool_choice`、`response_format` 和
 `model_settings` 决定 Provider-bound ModelRequest，请求体中的临时生成参数不会覆盖模型组件。
 
-Main Agent 如需把客户端消息交给模型，必须配置返回原生 LangChain `before_agent`/`abefore_agent` Middleware 的
-automation 插件，从只读 `ctx.request.messages` 派生并返回 graph state update；这一步不由 API Server 隐式补回。
+Main Agent 如需把客户端消息交给模型，必须配置返回原生 LangChain `before_agent`/`abefore_agent` 的
+Middleware 包，从只读 `ctx.request.messages` 派生并返回 graph state update；这一步不由 API Server 隐式补回。
 Subagent 默认只接收 Deep Agents 原生 delegated messages，需要额外消息时使用相同的 Middleware 入口。
 
 ### 生命周期输入与装配校验
@@ -38,10 +38,10 @@ Subagent 默认只接收 Deep Agents 原生 delegated messages，需要额外消
 Agent 的固定装配数据，也不复制到每个 Agent 的 graph state。后续灾难恢复功能会在异常生命周期保存 SHA；用户重试
 时再次提交完整 `messages[]`，由服务端计算并校验是否一致。当前版本尚未启用该落盘与 checkpoint 恢复流程。
 
-服务端会在生命周期开始时解析 Main Agent 及其直接 Subagent，并冻结本次请求使用的有效装配信息。Subagent
+服务端先按 Workflow 名称解析固定根图及其 Main Agent，再冻结 Main Agent 和直接 Subagent 的有效装配。Subagent
 不会在运行过程中重新读取数据库装配。冻结装配属于外围只读运行配置，不放入 graph state；恢复校验范围只到
-Agent 装配信息：Agent、Subagent、能力引用、插件引用及其
-装配关系等规范化 JSON。当前不校验插件源码、安装包版本或插件运行时生成的随机数据；后续如有更严格的恢复要求再
+Agent 装配信息：Agent、Subagent、能力引用、Middleware 包引用及其
+装配关系等规范化 JSON。当前不校验包源码、安装包版本或运行时生成的随机数据；后续如有更严格的恢复要求再
 扩展校验范围。
 
 `content` 可以是字符串，或由下列受控 content parts 组成的数组：
@@ -95,7 +95,7 @@ session ID 只用于观察记录，不会从数据库加载消息或拼接上下
 ## API Key 与状态
 
 API Key 是 write-only 设置，用于 `/v1/*`；管理密码用于管理台和 `/api/*`。清除 API Key 后推理 API
-不可用。API Server 启动会执行仓库静态校验；单个 Main Agent 的外部资源和 Provider 状态仍在请求时确认。
+不可用。API Server 启动会执行仓库静态校验；Workflow 指向的 Main Agent 外部资源和 Provider 状态仍在请求时确认。
 
 所有 API 调用都会形成有界历史记录。日志中心的精简预览不显示消息正文；management 鉴权的 RAW 下载
 包含实际请求与响应内容，应按敏感数据处理。

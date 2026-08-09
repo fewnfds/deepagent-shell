@@ -63,14 +63,7 @@ export interface CustomToolResource {
   filename: string
 }
 
-export interface CustomMiddlewareResource {
-  name: string
-  filename: string
-  description: string
-  source: string
-}
-
-export type FileManagerScope = 'files' | 'skills' | 'custom_tools' | 'custom_middlewares' | 'automation_scripts'
+export type FileManagerScope = 'files' | 'skills' | 'custom_tools' | 'custom_middlewares'
 type ManagedFileKind = 'directory' | 'file' | 'unsupported'
 
 export interface ManagedFileScopeCatalog {
@@ -165,24 +158,20 @@ export interface CapabilityReference {
   block_id: string
 }
 
-export interface AutomationPluginBinding {
-  plugin_id: string
+export interface MiddlewarePackageBinding {
+  package_id: string
   enabled: boolean
   config: Record<string, unknown>
 }
 
-export interface PeriodicAutomationPluginBinding extends AutomationPluginBinding {
-  interval_seconds: number
-}
+export type MiddlewareConfigScalar = boolean | number | string
 
-export type AutomationConfigScalar = boolean | number | string
-
-export interface AutomationConfigField {
+export interface MiddlewareConfigField {
   type: 'string' | 'integer' | 'number' | 'boolean'
   title: string
   description: string
-  default?: AutomationConfigScalar
-  enum?: AutomationConfigScalar[]
+  default?: MiddlewareConfigScalar
+  enum?: MiddlewareConfigScalar[]
   minLength?: number
   maxLength?: number
   pattern?: string
@@ -192,20 +181,19 @@ export interface AutomationConfigField {
   format?: 'python'
 }
 
-export interface AutomationConfigSchema {
+export interface MiddlewareConfigSchema {
   type: 'object'
-  properties: Record<string, AutomationConfigField>
+  properties: Record<string, MiddlewareConfigField>
   required: string[]
   additionalProperties: false
 }
 
-export interface AutomationScriptResource {
-  api_version: 3
+export interface MiddlewarePackageResource {
+  api_version: 1
   id: string
   name: string
   description: string
-  entrypoints: ('middleware' | 'prepare' | 'lifecycle' | 'complete')[]
-  config_schema: AutomationConfigSchema
+  config_schema: MiddlewareConfigSchema
   folder: string
   python_requirements: string[]
   requirements_fingerprint: string
@@ -213,12 +201,17 @@ export interface AutomationScriptResource {
   dependency_error_code: string
 }
 
-export interface MainAgentAutomation {
-  hooks: AutomationPluginBinding[]
-  periodic: PeriodicAutomationPluginBinding[]
+export interface WorkflowPayload {
+  name: string
+  description: string
+  main_agent_id: string
+  enabled: boolean
 }
 
-export type SubagentAutomation = MainAgentAutomation
+export interface Workflow extends WorkflowPayload {
+  id: string
+  main_agent_name: string
+}
 
 export interface SubagentReference {
   subagent_id: string
@@ -228,7 +221,6 @@ export interface MainAgentPayload {
   name: string
   capability_refs: CapabilityReference[]
   subagents: SubagentReference[]
-  automation: MainAgentAutomation
 }
 
 export type MainAgent = MainAgentPayload & { id: string }
@@ -241,7 +233,6 @@ export interface CapabilityOverride {
 
 export interface SubagentSettings {
   capability_overrides: CapabilityOverride[]
-  automation: SubagentAutomation
 }
 
 export interface SubagentPayload {

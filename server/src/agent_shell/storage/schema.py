@@ -32,6 +32,17 @@ CREATE TABLE IF NOT EXISTS subagents (
     payload TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS workflows (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT NOT NULL,
+    main_agent_id TEXT NOT NULL REFERENCES main_agents(id) ON DELETE RESTRICT,
+    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1))
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflows_main_agent
+ON workflows(main_agent_id);
+
 CREATE TABLE IF NOT EXISTS api_server_settings (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),

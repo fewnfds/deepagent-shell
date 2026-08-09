@@ -107,7 +107,6 @@ export function service(overrides: Partial<AgentAuthoringService> = {}): AgentAu
     name: 'Shared name',
     capability_refs: [],
     subagents: [],
-    automation: { hooks: [], periodic: [] },
   }
   const subagent: SubagentProfile = {
     id: '00000000-0000-0000-0000-000000000020',
@@ -116,7 +115,6 @@ export function service(overrides: Partial<AgentAuthoringService> = {}): AgentAu
     description: 'Handles delegated work.',
     settings: {
       capability_overrides: [],
-      automation: { hooks: [], periodic: [] },
     },
   }
   return {
@@ -128,7 +126,6 @@ export function service(overrides: Partial<AgentAuthoringService> = {}): AgentAu
       id: `00000000-0000-0000-0000-${type === 'model' ? '000000000001' : '000000000002'}`,
       name: `${type} block`,
     }]),
-    listAutomationPlugins: vi.fn(async () => ({ catalog: [], errors: {} })),
     listMainAgents: vi.fn(async () => [mainAgent]),
     getMainAgent: vi.fn(async () => mainAgent),
     createMainAgent: vi.fn(async (payload) => ({ ...mainAgent, ...payload, id: 'created-mainAgent' })),

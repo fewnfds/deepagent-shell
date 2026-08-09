@@ -27,7 +27,7 @@ def test_real_provider_finish_reason_reaches_both_api_transports(
         return IncompleteExecution()
 
     monkeypatch.setattr(
-        "agent_shell.runtime.agent_runtime.AgentRuntime.start",
+        "agent_shell.runtime.workflow_runtime.WorkflowRuntime.start",
         start_incomplete,
     )
     with make_client(tmp_path, monkeypatch) as client:
@@ -297,7 +297,7 @@ def test_closing_non_stream_request_cancels_execution_and_records_disconnect(
             return execution
 
         monkeypatch.setattr(
-            "agent_shell.runtime.agent_runtime.AgentRuntime.start",
+            "agent_shell.runtime.workflow_runtime.WorkflowRuntime.start",
             start_waiting,
         )
         response = asyncio.run(close_after_body(client, main_agent["name"], execution))

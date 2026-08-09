@@ -229,7 +229,7 @@
         "name": "management-tables",
         "paths": [
           "src/components/data-table/*.vue",
-          "src/pages/AutomationPage.vue",
+          "src/pages/WorkflowsPage.vue",
           "src/pages/FileManagerPage.vue",
           "src/pages/StyleLabPage.vue"
         ],
@@ -344,7 +344,8 @@
           "src/components/AuthGate.vue",
           "src/pages/AgentSessionsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
-          "src/pages/FileManagerPage.vue"
+          "src/pages/FileManagerPage.vue",
+          "src/pages/WorkflowsPage.vue"
         ]
       },
       {
@@ -355,7 +356,6 @@
         "callers": [
           "src/pages/AgentSessionsPage.vue",
           "src/pages/ApiServerSettingsPage.vue",
-          "src/pages/AutomationPage.vue",
           "src/pages/ComponentsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/EventFeedPage.vue",
@@ -364,18 +364,16 @@
           "src/pages/StyleLabPage.vue",
           "src/pages/SubagentPage.vue",
           "src/pages/SystemSettingsPage.vue",
-          "src/pages/TerminologyPage.vue"
+          "src/pages/TerminologyPage.vue",
+          "src/pages/WorkflowsPage.vue"
         ]
       },
       {
         "name": "ConfigurationLibraryNav",
         "path": "src/components/ConfigurationLibraryNav.vue",
         "kind": "layout-composition",
-        "reason": "Owns the shared component, Agent and plugin navigation rows across configuration repository pages",
-        "callers": [
-          "src/pages/AutomationPage.vue",
-          "src/pages/ConfigLibraryPage.vue"
-        ]
+        "reason": "Owns the shared component and Agent navigation rows across configuration repository pages",
+        "callers": ["src/pages/ConfigLibraryPage.vue"]
       },
       {
         "name": "FormField",
@@ -384,32 +382,22 @@
         "reason": "Owns localized backend field labels, technical field names and contextual hints without wrapping controls",
         "callers": [
           "src/components/RecordPicker.vue",
-          "src/editors/CustomMiddlewareEditor.vue",
           "src/editors/ExceptionRetryEditor.vue",
           "src/editors/FilesystemEditor.vue",
           "src/editors/FilesystemPermissionsEditor.vue",
           "src/editors/ModelEditor.vue",
           "src/editors/OtherEditor.vue",
           "src/editors/OutputModeEditor.vue",
-          "src/pages/ConfigLibraryPage.vue"
+          "src/pages/ConfigLibraryPage.vue",
+          "src/pages/WorkflowsPage.vue"
         ]
       },
       {
-        "name": "AutomationPluginBindings",
-        "path": "src/components/AutomationPluginBindings.vue",
+        "name": "MiddlewareConfigForm",
+        "path": "src/components/MiddlewareConfigForm.vue",
         "kind": "domain-composition",
-        "reason": "Owns independently ordered Agent Hook and periodic plugin bindings with per-plugin intervals",
-        "callers": [
-          "src/pages/MainAgentPage.vue",
-          "src/pages/SubagentPage.vue"
-        ]
-      },
-      {
-        "name": "AutomationPluginConfigForm",
-        "path": "src/components/AutomationPluginConfigForm.vue",
-        "kind": "domain-composition",
-        "reason": "Renders the backend-approved flat automation config schema as structured binding fields",
-        "callers": ["src/components/AutomationPluginBindings.vue"]
+        "reason": "Renders the backend-approved flat Middleware package config schema as structured binding fields",
+        "callers": ["src/editors/CustomMiddlewareEditor.vue"]
       },
       {
         "name": "SubagentReferencesEditor",
@@ -471,7 +459,8 @@
           "src/pages/AgentSessionsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/EventFeedPage.vue",
-          "src/pages/TerminologyPage.vue"
+          "src/pages/TerminologyPage.vue",
+          "src/pages/WorkflowsPage.vue"
         ]
       },
       {

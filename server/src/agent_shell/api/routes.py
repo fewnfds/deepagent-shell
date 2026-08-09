@@ -21,7 +21,6 @@ from agent_shell.api.agent_configs import (
     main_agent_block_reference_owner,
 )
 from agent_shell.capability_manifest import CAPABILITY_BY_TYPE
-from agent_shell.registries.custom_middlewares import scan_custom_middlewares
 from agent_shell.registries.custom_tools import scan_custom_tools
 from agent_shell.registries.skills import scan_skills
 from agent_shell.provider_http import ProviderHttpClients
@@ -37,7 +36,6 @@ def build_router(
     block_store: BlockStore,
     config_store: AgentConfigStore,
     custom_tools_dir: Path,
-    custom_middlewares_dir: Path,
     skills_dir: Path,
     secret_resolver: ProviderSecretResolver,
     validation: ConfigurationValidationService,
@@ -215,10 +213,6 @@ def build_router(
     @router.get("/api/tools/custom")
     async def custom_tools() -> dict:
         return scan_custom_tools(custom_tools_dir)
-
-    @router.get("/api/middlewares/custom")
-    async def custom_middlewares() -> dict:
-        return scan_custom_middlewares(custom_middlewares_dir)
 
     @router.get("/api/skills")
     async def skills() -> dict:

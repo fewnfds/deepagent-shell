@@ -1,13 +1,13 @@
 # Agent Shell 用户指南
 
-Agent Shell 通过管理台组合 Deep Agents 配置，并把 Main Agent 暴露为 OpenAI-compatible model。
+Agent Shell 通过管理台组合 Deep Agents 配置，并把启用的 Workflow 暴露为 OpenAI-compatible model。
 
 推荐顺序：
 
 1. [启动并认识管理台](getting-started.md)
 2. [创建组件](capabilities.md)
 3. [装配 Main Agent 与 Subagent](configuration-workflow.md)
-4. [使用自动化插件](automation.md)
+4. [使用自定义 Middleware 包](middleware-packages.md)
 5. [管理配置仓库](configuration-library.md)
 6. [调用 API Server](api-server.md)
 7. [查看最终 ModelRequest](interception-test.md)

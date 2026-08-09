@@ -1,0 +1,21 @@
+{
+  "api_version": 1,
+  "id": "subagent-message-injection",
+  "name": "Subagent message injection",
+  "description": "Edit the current Subagent messages once before each invocation starts.",
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "transform_source": {
+        "type": "string",
+        "title": "Message transform (Python)",
+        "description": "Edit the current messages and return the complete ordered list for this invocation.",
+        "contentMediaType": "text/x-python",
+        "format": "python",
+        "default": "async def transform_messages(messages, ctx, state, runtime):\n    # The final message is the delegated Main Agent task. Insert prompts before it.\n    # messages.insert(-1, {\"role\": \"user\", \"content\": \"Subagent context\"})\n    return messages\n"
+      }
+    },
+    "required": ["transform_source"],
+    "additionalProperties": false
+  }
+}

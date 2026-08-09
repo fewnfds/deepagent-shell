@@ -3,33 +3,6 @@ from __future__ import annotations
 from .support import *
 
 
-def test_named_subagent_cannot_reference_itself(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    with make_client(tmp_path, monkeypatch) as client:
-        subagent = client.post(
-            "/api/subagents",
-            json=subagent_payload(
-                "Recursive profile",
-                name="recursive_worker",
-                description="Continues delegated work.",
-            ),
-        ).json()
-        recursive_profile = client.put(
-            f"/api/subagents/{subagent['id']}",
-            json=subagent_payload(
-                subagent["component_name"],
-                name=subagent["name"],
-                description=subagent["description"],
-                subagents=[{"subagent_id": subagent["id"]}],
-            ),
-        )
-
-    assert recursive_profile.status_code == 422
-    issue = recursive_profile.json()["detail"]["validation"]["issues"][0]
-    assert issue["code"] == "contract.subagent_nested_references_forbidden"
-
-
 def test_subagent_prompt_override_uses_native_delegation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

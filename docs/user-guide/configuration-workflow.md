@@ -1,51 +1,37 @@
-# 装配 Main Agent 与 Subagent
+# 装配 Workflow、Main Agent 与 Subagent
 
-## Main Agent
+## Workflow
 
-在【Agent / Main Agent】填写名称并选择组件。模型和输出模式必选；其他类型各选零或一条。
-保存成功且 API Server 运行时，Main Agent 名称会出现在 `/v1/models`。
+【Workflow】是 OpenAI-compatible `model` 的唯一来源。首版 Workflow 保存名称、说明、启用状态和一个 Main Agent
+引用。请求时服务端把它编译成真实 LangGraph 根图：
 
-需要委派时，先在 Subagent 页面创建实体，再在 Main Agent 中按顺序选择实体引用。Main Agent 只保存
-`subagent_id`；路由名、用途说明和能力策略来自实体。一个父 Agent 不能重复引用同一实体，也不能同时引用
-两个路由名相同的实体。
+```text
+START -> agent -> END
+```
 
-## Subagent 实体
+只有启用的 Workflow 出现在 `/v1/models`。Workflow 名称与 Main Agent 名称相互独立；修改 Main Agent 名称不会
+改变公开 model ID。
 
-在【Agent / Subagent】填写唯一组件配置名、模型可见的路由名、用途说明，并在 settings 中定义能力策略：
+## Main Agent 与直接 Subagent
 
-- 继承：沿用 Main Agent 的组件；
-- 替换：选择同类型组件；
-- 关闭：从 child 移除该可选能力。
+在【Agent / Main Agent】选择模型和输出模式等 capability。需要委派时，先创建 Subagent 实体，再由 Main Agent
+按顺序保存 `subagent_id` 引用并选择委派 capability。
 
-模型不能关闭，文件系统固定共享，输出模式只用于 Main Agent。文件系统权限是独立能力，可以继承、替换或关闭，
-因此 child 可以在同一个 workspace 上使用不同的路径权限和文件工具。委派能力不属于 Subagent，页面不会提供
-child 引用或委派组件覆写。经典模式固定为一层
-`Main -> Subagent`；需要多阶段编排时使用 Workflow graph。
+Subagent settings 只定义身份、说明和 capability 覆写。它没有 child 引用字段。当前固定为一层同步
+`Main -> Subagent`，运行时使用 Deep Agents 官方 dictionary-based SubAgent；多阶段、并行、条件和 join 属于后续
+Workflow 图编辑器。
 
-不同 Agent 可以自由选择模型、提示词、工具和 Middleware；Provider prompt caching 是否命中取决于最终
-请求前缀与 Provider 规则。
+## 自定义 Middleware
 
-## 自动化装配
+Custom Middleware 组件保存有序 Middleware 包引用。Main Agent 选择组件后，直接 Subagent 按 capability 的
+继承/替换/关闭规则得到自己的最终列表。Shell 只负责包加载并把官方 `AgentMiddleware` 实例交给
+`create_deep_agent()`，不存在 prepare、周期循环或结束 Hook。
 
-自动化不是组件。Main Agent 和 Subagent 分别保存自己的有序 Hook bindings 与带独立间隔的周期 bindings；
-Subagent 不继承 Main Agent 插件。同一个直接 Subagent 实体在一次请求中只有一套 request-local runtime owner，
-每个周期 binding 至多一个循环；每次真实委派仍使用新的 LangGraph state。
-
-无插件时，客户端 `messages[]` 不进入 Main Agent 或 Subagent 的活动消息：Main Agent 以空 messages 启动，Subagent 保持
-Deep Agents 原生 delegated input。插件的 Middleware factory 可以从不可变 `ctx.request.messages` 建立注入策略，
-再由其返回的原生 Middleware 显式写入 LangGraph `messages` state；`prepare` 本身没有消息注入缓冲区。只有
-Middleware 产生的消息才会进入 Agent。
-需要每次 invocation 运行的逻辑使用插件返回的 LangChain 原生 Middleware Hook。详细格式见
-[使用自动化插件](automation.md)。
-
-每个请求的 Main Agent 有独立 root invocation；每次真实 Subagent `task` 调用有新的 invocation ID、parent ID 和
-cause tool-call ID。同 profile 构造一次不等于四次调用共享执行身份：四次并发委派仍有四套插件 scratch。该隔离
-只覆盖平台提供的 `runtime/automation/` 临时目录，不拆分整棵 Agent 树共享的 Deep Agents filesystem。
+客户端 `messages[]` 是外围不可变请求事实，不会自动成为 Main Agent 活动消息。需要消息策略时，由 Middleware
+在 `before_agent`/`abefore_agent` 中读取 `ctx.request.messages` 并返回 state update。Subagent 默认保留 Deep Agents
+delegated messages。格式见[自定义 Middleware 包](middleware-packages.md)。
 
 ## 校验与生效
 
-编辑页会把完整草稿提交给后端预校验，保存时后端再次校验。校验通过表示当前结构和静态引用可用，
-不表示外部文件、依赖和 Provider 永远可用。
-
-每个推理请求开始时，服务端在一次 SQLite 读事务中取得组件、Main Agent、Subagent 和凭据快照，再构造
-Agent。保存、重命名或凭据更新不会修改正在执行的请求。
+编辑页提交完整草稿给后端预校验，保存时再次校验。每个推理请求从一次 SQLite 快照解析 Workflow、Main Agent、
+直接 Subagent、组件和 Provider secret；运行中的请求不受后续配置修改影响。

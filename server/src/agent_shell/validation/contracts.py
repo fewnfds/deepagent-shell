@@ -140,10 +140,10 @@ def _specific_contract_identity(
             "contract.custom_tool_name_format_invalid",
             "validation.issue.contract.customToolNameFormatInvalid",
         )
-    if error_type == "string_pattern_mismatch" and path.endswith(".plugin_id"):
+    if error_type == "string_pattern_mismatch" and path.endswith(".package_id"):
         return (
-            "contract.plugin_id_format_invalid",
-            "validation.issue.contract.pluginIdFormatInvalid",
+            "contract.middleware_package_id_format_invalid",
+            "validation.issue.contract.middlewarePackageIdFormatInvalid",
         )
     if (
         error_type == "string_pattern_mismatch"

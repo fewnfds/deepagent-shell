@@ -25,7 +25,7 @@ from agent_shell.registries.custom_tools import (
 )
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.blocks import BlockStore
-from agent_shell.automation.validation import AutomationValidationService
+from agent_shell.middleware_packages.validation import MiddlewarePackageValidationService
 from agent_shell.validation.capability_assembly import (
     CapabilityAssemblySubject,
     FilesystemMode,
@@ -56,7 +56,6 @@ class ResolvedSubagent:
     references: dict[str, str]
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
-    automation: dict[str, Any]
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,7 +64,6 @@ class StaticAssembly:
     references: dict[str, str]
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
-    automation: dict[str, Any]
     subagents: tuple[ResolvedSubagentEdge, ...]
     subagent_nodes: dict[SubagentNodeKey, ResolvedSubagent]
 
@@ -80,36 +78,18 @@ _SUBAGENT_REQUIRED_CAPABILITY_TYPES = frozenset(
 )
 
 
-def _nested_subagent_issue(
-    *,
-    owner_id: str,
-    owner_name: str,
-    path: str = "settings.subagents",
-) -> ValidationIssue:
-    return ValidationIssue(
-        code="contract.subagent_nested_references_forbidden",
-        scope="subagent",
-        owner_id=owner_id,
-        owner_name=owner_name,
-        path=path,
-        message="A Subagent cannot configure child Subagents; only Main Agent may delegate.",
-        message_key="validation.issue.contract.subagentNestedReferencesForbidden",
-        message_args={},
-    )
-
-
 class ConfigurationValidationService:
     def __init__(
         self,
         blocks: BlockStore,
         agent_configs: AgentConfigStore,
-        automation_validation: AutomationValidationService,
+        middleware_package_validation: MiddlewarePackageValidationService,
         *,
         custom_tools_dir: Path,
     ) -> None:
         self._blocks = blocks
         self._agent_configs = agent_configs
-        self._automation_validation = automation_validation
+        self._middleware_package_validation = middleware_package_validation
         self._custom_tools_dir = custom_tools_dir
 
     def validate_main_agent(
@@ -187,18 +167,25 @@ class ConfigurationValidationService:
                 None,
             )
         validated = validated_model.model_dump(mode="json")
+        issues = self._block_resource_issues(
+            block_type,
+            validated,
+            owner_id=owner_id,
+        )
         if not owner_id:
-            return ValidationReport(stage=stage), validated
+            return ValidationReport(stage=stage, issues=tuple(issues)), validated
         current = self._blocks.get_block_internal(block_type, owner_id)
         if current is None:
-            return ValidationReport(stage=stage), validated
+            return ValidationReport(stage=stage, issues=tuple(issues)), validated
         prospective = dict(validated)
         prospective["id"] = owner_id
-        issues = self._impact_issues_for_block(
-            block_type,
-            owner_id,
-            prospective,
-            stage=stage,
+        issues.extend(
+            self._impact_issues_for_block(
+                block_type,
+                owner_id,
+                prospective,
+                stage=stage,
+            )
         )
         return ValidationReport(stage=stage, issues=tuple(issues)), validated
 
@@ -215,7 +202,9 @@ class ConfigurationValidationService:
         if storage_issue is not None:
             return ValidationReport(stage=stage, issues=(storage_issue,))
         try:
-            BLOCK_MODELS[block_type].model_validate(payload)
+            validated = BLOCK_MODELS[block_type].model_validate(payload).model_dump(
+                mode="json"
+            )
         except ValidationError as exc:
             return report_from_validation_error(
                 exc,
@@ -225,7 +214,12 @@ class ConfigurationValidationService:
                 owner_name=name,
                 owner_type=block_type,
             )
-        return ValidationReport(stage=stage)
+        issues = self._block_resource_issues(
+            block_type,
+            validated,
+            owner_id=str(source.get("id", "")),
+        )
+        return ValidationReport(stage=stage, issues=tuple(issues))
 
     def validate_stored_block(
         self,
@@ -238,7 +232,9 @@ class ConfigurationValidationService:
         if storage_issue is not None:
             return ValidationReport(stage=stage, issues=(storage_issue,))
         try:
-            BLOCK_MODELS[block_type].model_validate(payload)
+            validated = BLOCK_MODELS[block_type].model_validate(payload).model_dump(
+                mode="json"
+            )
         except ValidationError as exc:
             return report_from_validation_error(
                 exc,
@@ -248,7 +244,29 @@ class ConfigurationValidationService:
                 owner_name=str(block.get("name", "")),
                 owner_type=block_type,
             )
-        return ValidationReport(stage=stage)
+        issues = self._block_resource_issues(
+            block_type,
+            validated,
+            owner_id=str(block.get("id", "")),
+        )
+        return ValidationReport(stage=stage, issues=tuple(issues))
+
+    def _block_resource_issues(
+        self,
+        block_type: str,
+        payload: dict[str, Any],
+        *,
+        owner_id: str,
+    ) -> list[ValidationIssue]:
+        if block_type != "custom-middleware":
+            return []
+        return self._middleware_package_validation.configuration_issues(
+            payload.get("middlewares", []),
+            scope="block",
+            owner_id=owner_id,
+            owner_name=str(payload.get("name", "")),
+            path_prefix="middlewares",
+        )
 
     def validate_subagent(
         self,
@@ -284,28 +302,22 @@ class ConfigurationValidationService:
             for item in settings["capability_overrides"]
             if item["mode"] == "replace"
         }
-        _, issues = self._load_references(
+        selected, issues = self._load_references(
             references,
             scope="subagent",
             owner_id=owner_id,
             owner_name=validated["component_name"],
             path_prefix="settings.capability_overrides",
         )
-        issues.extend(
-            self._automation_validation.configuration_issues(
-                settings.get("automation", {}),
-                scope="subagent",
-                owner_id=owner_id,
-                owner_name=validated["component_name"],
-                path_prefix="settings.automation",
-            )
-        )
-        child_references = list(settings.get("subagents", []))
-        if child_references:
-            issues.append(
-                _nested_subagent_issue(
+        custom_middleware = selected.get("custom-middleware")
+        if custom_middleware is not None:
+            issues.extend(
+                self._middleware_package_validation.configuration_issues(
+                    custom_middleware.get("middlewares", []),
+                    scope="subagent",
                     owner_id=owner_id,
                     owner_name=validated["component_name"],
+                    path_prefix="settings.capability_overrides.custom-middleware.middlewares",
                 )
             )
         if owner_id and not issues:
@@ -796,16 +808,17 @@ class ConfigurationValidationService:
             owner_name=owner_name,
             block_overrides=block_overrides,
         )
-        main_agent_automation = main_agent.get("automation", {})
-        issues.extend(
-            self._automation_validation.configuration_issues(
-                main_agent_automation,
-                scope="main_agent",
-                owner_id=owner_id,
-                owner_name=owner_name,
-                path_prefix="automation",
+        custom_middleware = selected.get("custom-middleware")
+        if custom_middleware is not None:
+            issues.extend(
+                self._middleware_package_validation.configuration_issues(
+                    custom_middleware.get("middlewares", []),
+                    scope="main_agent",
+                    owner_id=owner_id,
+                    owner_name=owner_name,
+                    path_prefix="capability_refs.custom-middleware.middlewares",
+                )
             )
-        )
 
         delegation_selected = selected.get("subagent") is not None
         root_references = list(main_agent.get("subagents", []))
@@ -859,15 +872,6 @@ class ConfigurationValidationService:
             assert profile is not None
             known_profiles[profile_id] = profile
             settings = profile["settings"]
-            if settings.get("subagents"):
-                issues.append(
-                    _nested_subagent_issue(
-                        owner_id=profile_id,
-                        owner_name=str(profile["component_name"]),
-                    )
-                )
-                continue
-
             child_references = {
                 capability_type: block_id
                 for capability_type, block_id in references.items()
@@ -884,11 +888,6 @@ class ConfigurationValidationService:
                     child_references.pop(capability_type, None)
 
             subagent_name = str(profile["name"])
-            automation_selection = settings.get("automation", {})
-            child_automation = {
-                "hooks": list(automation_selection.get("hooks", [])),
-                "periodic": list(automation_selection.get("periodic", [])),
-            }
             child_blocks, child_issues, child_filesystem_mode = (
                 self._resolve_capability_subject(
                     child_references,
@@ -910,15 +909,17 @@ class ConfigurationValidationService:
             )
             if child_tool_issue is not None:
                 child_issues.append(child_tool_issue)
-            child_issues.extend(
-                self._automation_validation.configuration_issues(
-                    automation_selection,
-                    scope="subagent",
-                    owner_id=profile_id,
-                    owner_name=subagent_name,
-                    path_prefix="settings.automation",
+            child_custom_middleware = child_blocks.get("custom-middleware")
+            if child_custom_middleware is not None:
+                child_issues.extend(
+                    self._middleware_package_validation.configuration_issues(
+                        child_custom_middleware.get("middlewares", []),
+                        scope="subagent",
+                        owner_id=profile_id,
+                        owner_name=subagent_name,
+                        path_prefix="settings.capability_overrides.custom-middleware.middlewares",
+                    )
                 )
-            )
             issues.extend(child_issues)
             if child_issues:
                 continue
@@ -930,7 +931,6 @@ class ConfigurationValidationService:
                 references=child_references,
                 blocks=child_blocks,
                 filesystem_mode=child_filesystem_mode,
-                automation=child_automation,
             )
             resolved_edges.append(ResolvedSubagentEdge(target_key=profile_id))
 
@@ -985,7 +985,6 @@ class ConfigurationValidationService:
             references=references,
             blocks=selected,
             filesystem_mode=filesystem_mode,
-            automation=main_agent_automation,
             subagents=resolved_subagents,
             subagent_nodes=subagent_nodes,
         )

@@ -1,14 +1,15 @@
 <script setup lang="ts">
-import { LteButton, LteInput, LteTextarea } from '@adminlte/vue'
+import { LteButton } from '@adminlte/vue'
 import { useI18n } from 'vue-i18n'
 
 import type { LocalizedMessagePayload } from '@/api'
-import FormField from '@/components/FormField.vue'
+import MiddlewareConfigForm from '@/components/MiddlewareConfigForm.vue'
 import {
   createMiddlewareEntry,
   type CustomMiddlewareCatalogItem,
   type CustomMiddlewareDraft,
 } from '@/domain/blocks'
+import { middlewareConfigDefaults } from '@/domain/middlewareConfigSchema'
 
 import { useEditorModel } from './shared/useEditorModel'
 
@@ -31,19 +32,8 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const draft = useEditorModel(() => props.modelValue, (value) => emit('update:modelValue', value))
 
-function resourceError(error: LocalizedMessagePayload): string {
-  return t(error.message_key, error.message_args)
-}
-
-function addBlank(): void {
+function addPackage(): void {
   draft.middlewares.push(createMiddlewareEntry())
-}
-
-function addTemplate(template: CustomMiddlewareCatalogItem): void {
-  draft.middlewares.push(createMiddlewareEntry({
-    name: template.description ?? template.name ?? '',
-    source: template.source ?? '',
-  }))
 }
 
 function move(index: number, delta: number): void {
@@ -52,80 +42,121 @@ function move(index: number, delta: number): void {
   const moved = draft.middlewares.splice(index, 1)[0]
   if (moved) draft.middlewares.splice(target, 0, moved)
 }
+
+function selectedPackage(packageId: string): CustomMiddlewareCatalogItem | undefined {
+  return props.catalog.find((item) => item.id === packageId)
+}
+
+function selectPackage(index: number, packageId: string): void {
+  const selected = selectedPackage(packageId)
+  const entry = draft.middlewares[index]
+  if (!entry) return
+  entry.package_id = packageId
+  entry.config = selected ? middlewareConfigDefaults(selected.config_schema) : {}
+}
+
+function packageLabel(item: CustomMiddlewareCatalogItem): string {
+  const status = item.dependency_status === 'ready'
+    ? ''
+    : ` - ${t(`editors.customMiddleware.status.${item.dependency_status}`)}`
+  return `${item.name} (${item.id})${status}`
+}
 </script>
 
 <template>
   <div data-editor="custom-middleware">
-    <section class="mb-3">
-      <header class="d-flex align-items-center justify-content-between gap-2 mb-3">
-        <div>
-          <h3 class="h5 fw-semibold mb-0">{{ t('editors.customMiddleware.entriesTitle') }}</h3>
-        </div>
-        <LteButton class="ms-auto" theme="success" @click="addBlank">{{ t('editors.customMiddleware.addBlank') }}</LteButton>
-      </header>
-      <div>
-        <div v-if="draft.middlewares.length">
-          <article v-for="(entry, index) in draft.middlewares" :key="entry._key" class="card mb-3">
-            <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-              <div class="form-check form-switch">
-                <input :id="`middleware-enabled-${entry._key}`" v-model="entry.enabled" class="form-check-input" type="checkbox">
-                <label class="form-check-label" :for="`middleware-enabled-${entry._key}`">{{ t('editors.common.enabled') }}</label>
-              </div>
-              <div class="d-flex flex-wrap gap-2 ms-auto">
-                <LteButton :disabled="index === 0" size="sm" theme="warning" @click="move(index, -1)">{{ t('editors.common.moveUp') }}</LteButton>
-                <LteButton :disabled="index === draft.middlewares.length - 1" size="sm" theme="warning" @click="move(index, 1)">{{ t('editors.common.moveDown') }}</LteButton>
-                <LteButton size="sm" theme="danger" @click="draft.middlewares.splice(index, 1)">{{ t('editors.common.remove') }}</LteButton>
-              </div>
-            </header>
-            <div class="card-body">
-              <FormField :field-path="`middlewares.${index}.name`">
-                <LteInput v-model="entry.name" :placeholder="t('editors.customMiddleware.entryNamePlaceholder')" />
-              </FormField>
-              <FormField :field-path="`middlewares.${index}.source`" :hint="t('editors.customMiddleware.sourceHint')">
-                <LteTextarea
-                  v-model="entry.source"
-                  :placeholder="t('editors.customMiddleware.sourcePlaceholder')"
-                  :rows="12"
-                  spellcheck="false"
-                />
-              </FormField>
-            </div>
-          </article>
-        </div>
-        <p v-else class="text-body-secondary">{{ t('editors.customMiddleware.emptyEntries') }}</p>
-      </div>
-    </section>
-
-    <section class="card mb-3">
-      <header class="card-header d-flex align-items-center justify-content-between gap-2">
-        <div>
-          <h3 class="card-title">{{ t('editors.customMiddleware.catalogTitle') }}</h3>
-        </div>
-        <LteButton class="ms-auto" :disabled="loading" theme="info" @click="emit('refresh')">
-          <span v-if="loading" class="spinner-border spinner-border-sm" aria-hidden="true" />
-          {{ t('editors.common.refresh') }}
+    <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+      <h3 class="h5 fw-semibold mb-0">{{ t('editors.customMiddleware.entriesTitle') }}</h3>
+      <div class="d-flex gap-2 ms-auto">
+        <LteButton
+          :aria-label="t('editors.common.refresh')"
+          :disabled="loading"
+          size="sm"
+          theme="info"
+          type="button"
+          @click="emit('refresh')"
+        >
+          <i class="bi bi-arrow-clockwise" aria-hidden="true" />
         </LteButton>
-      </header>
-      <div v-if="catalog.length" class="list-group list-group-flush">
-        <article v-for="template in catalog" :key="template.filename" class="list-group-item">
-          <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-            <span>
-              <strong class="d-block">{{ template.name ?? template.filename }}</strong>
-              <span v-if="template.description" class="d-block text-body-secondary">{{ template.description }}</span>
-              <span class="font-monospace text-break">{{ template.filename }}</span>
-            </span>
-            <LteButton theme="success" @click="addTemplate(template)">{{ t('editors.customMiddleware.addTemplate') }}</LteButton>
-          </div>
-        </article>
+        <LteButton
+          :aria-label="t('editors.customMiddleware.add')"
+          size="sm"
+          theme="success"
+          type="button"
+          @click="addPackage"
+        >
+          <i class="bi bi-plus-lg" aria-hidden="true" />
+        </LteButton>
       </div>
-      <p v-else class="card-body text-body-secondary mb-0">{{ t('editors.customMiddleware.emptyCatalog') }}</p>
-      <div v-if="Object.keys(errors).length" class="card-body">
-        <div class="alert alert-danger" role="alert">
-          <p v-for="(error, filename) in errors" :key="filename">
-            <strong>{{ filename }}</strong> {{ resourceError(error) }}
-          </p>
+    </div>
+
+    <div v-if="draft.middlewares.length" class="list-group list-group-flush">
+      <div v-for="(entry, index) in draft.middlewares" :key="entry._key" class="list-group-item">
+        <div class="row g-3 align-items-end">
+          <div class="col-12 col-lg-8">
+            <label class="form-label" :for="`middleware-package-${entry._key}`">
+              {{ t('editors.customMiddleware.package') }}
+            </label>
+            <select
+              :id="`middleware-package-${entry._key}`"
+              class="form-select"
+              :value="entry.package_id"
+              @change="selectPackage(index, ($event.target as HTMLSelectElement).value)"
+            >
+              <option value="">{{ t('agents.capability.notAttached') }}</option>
+              <option v-for="item in catalog" :key="item.id" :value="item.id">
+                {{ packageLabel(item) }}
+              </option>
+            </select>
+          </div>
+          <div class="col-12 col-lg-4">
+            <div class="d-flex align-items-center gap-2">
+              <div class="form-check form-switch">
+                <input
+                  :id="`middleware-enabled-${entry._key}`"
+                  v-model="entry.enabled"
+                  class="form-check-input"
+                  type="checkbox"
+                >
+                <label class="visually-hidden" :for="`middleware-enabled-${entry._key}`">
+                  {{ t('editors.common.enabled') }}
+                </label>
+              </div>
+              <LteButton
+                :aria-label="t('editors.common.moveUp')"
+                :disabled="index === 0"
+                size="sm"
+                theme="secondary"
+                type="button"
+                @click="move(index, -1)"
+              ><i class="bi bi-arrow-up" aria-hidden="true" /></LteButton>
+              <LteButton
+                :aria-label="t('editors.common.moveDown')"
+                :disabled="index === draft.middlewares.length - 1"
+                size="sm"
+                theme="secondary"
+                type="button"
+                @click="move(index, 1)"
+              ><i class="bi bi-arrow-down" aria-hidden="true" /></LteButton>
+              <LteButton
+                :aria-label="t('editors.common.remove')"
+                size="sm"
+                theme="danger"
+                type="button"
+                @click="draft.middlewares.splice(index, 1)"
+              ><i class="bi bi-trash" aria-hidden="true" /></LteButton>
+            </div>
+          </div>
+          <div v-if="selectedPackage(entry.package_id)" class="col-12">
+            <MiddlewareConfigForm
+              :id-prefix="`middleware-config-${entry._key}`"
+              v-model="entry.config"
+              :schema="selectedPackage(entry.package_id)!.config_schema"
+            />
+          </div>
         </div>
       </div>
-    </section>
+    </div>
+    <p v-else class="text-body-secondary mb-0">{{ t('editors.customMiddleware.empty') }}</p>
   </div>
 </template>

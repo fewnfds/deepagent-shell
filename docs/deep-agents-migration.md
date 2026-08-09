@@ -1,38 +1,28 @@
 # Deep Agents runtime 基线
 
-Agent Shell 使用锁定版本的 `deepagents.create_deep_agent()` 构造 Main Agent 和每个同步 Subagent。
+Agent Shell 使用锁定版本的 `deepagents.create_deep_agent()` 构造 Main Agent。直接 Subagent 使用 Deep Agents 官方
+dictionary-based `SubAgent` 配置；Shell 不再为 child 编译自定义 graph。
 
 ## 责任边界
 
-Agent Shell 负责：
+Agent Shell 负责解析 Workflow、Main Agent、组件、直接 Subagent 和 Provider secret 快照，准备 constructor 参数，
+加载自定义 Middleware 包，编译外层 `START -> agent -> END` StateGraph，并观察 v3 事件生成
+OpenAI-compatible 输出。
 
-- 解析模型、提示词、文件系统、Skill、工具、Middleware、输出和 Subagent 配置；
-- 为一次请求建立配置与 credential 快照；
-- 在 graph 构造前执行自动化 prepare，物化原生插件 Middleware，并管理请求级 lifecycle/complete；
-- 准备 backend、initial files、skills、tools、middleware 和 subagents 参数；
-- 观察 v3 事件、记录脱敏诊断并生成 OpenAI-compatible 输出。
+Deep Agents/LangGraph 负责模型循环、工具执行、同步委派、summarization、tool-call repair、prompt caching、
+state reducer、Middleware Hook、`Command`、错误传播和 graph 终止。
 
-Deep Agents/LangGraph 负责模型循环、工具执行、同步委派、summarization、tool-call repair、适用模型的
-prompt caching、状态合并、重试 Middleware 的执行和 graph 终止。
-
-Agent Shell 不在 graph 构造前准备 owner 基础消息。Main Agent 与 Subagent 的动态消息注入都由插件通过 constructor
-中的原生 Middleware 表达；Hook 执行归 LangChain。Shell 不判断下一步、替模型补造响应或改变终止条件。输出模式只投影事件；
-拦截测试通过标准 Middleware 在 Provider 前短路。
+用户 Python 扩展只返回官方 `AgentMiddleware`。Shell 不执行 prepare、fixed-delay lifecycle 或 complete，不建立第二套
+model/tool/agent Hook。需要 checkpoint 的业务数据通过官方 state update 写入 `AgentShellState`。
 
 ## 装配
 
+- Workflow 名称是公开 model ID；首版 Workflow 引用一个 Main Agent；
 - Main Agent 必须有模型与输出模式；
-- 同步 child 以持久 Subagent 实体定义；只有 Main 保存实体 UUID 引用，Shell 把实体的 `name`、`description` 和
-  直接编译 runnable 投影为 `CompiledSubAgent`；Subagent 不得再配置 child；
-- 文件 workspace 在同一请求的代理树中共享；最终 Filesystem 与按 Agent 解析的 filesystem-permissions
-  决定提示词、内置文件工具和 `permissions=`，Skill namespace 仍按 Agent 只读隔离；
-- Subagent 的能力按 inherit/replace/disabled 解析，模型必须保留，输出模式只属于 Main Agent；
-- 每个 Agent 身份的 automation bindings 独立物化原生 Middleware；共享业务变量进入公共 custom state schema，
-  插件通过官方 Hook 返回 state update/Command；
-- Shell 额外拥有 prepare、request-local fixed-delay lifecycle 和 graph 外 complete，三者不是 LangChain Hook，
-  也不写可恢复业务 state。
+- 只有 Main Agent 保存直接 Subagent UUID，Subagent contract 没有 child 引用；
+- Subagent 能力按 inherit/replace/disabled 解析，并投影为官方字典 spec；
+- 同一次请求共享 Deep Agents workspace/backend，权限与 Middleware 按 Agent 最终装配；
+- `AgentShellState.shared_vars` 是公共 checkpointed 业务变量，Middleware 实例属性不是。
 
-升级 Deep Agents 时必须重新核对 constructor、Middleware 默认集合、SubAgentMiddleware 替换、backend
-state transfer、v3 事件和 prompt caching 行为，并用最接近的行为测试确认。
-同时重新运行锁定 Provider adapter 的 system 位置、assistant prefill 和多模态 content-block 序列化 probe；只有
-探针行为变化时才调整 Shell 或后续消息接力插件 contract。
+升级 Deep Agents 时重新核对 `create_deep_agent` constructor、dictionary SubAgent 字段、默认 Middleware、backend/state
+transfer、StateGraph subgraph 组合和 v3 事件 namespace，并只为 Shell 自有转换保留行为测试。

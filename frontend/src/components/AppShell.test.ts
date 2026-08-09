@@ -65,6 +65,7 @@ function mediaQuery(query: string) {
 function titleKeyForPath(path: string): string {
   if (path.startsWith('/system/')) return 'navigation.system'
   if (path.startsWith('/agents/')) return 'navigation.agents'
+  if (path === '/workflows') return 'navigation.workflows'
   if (path.startsWith('/components/')) return 'components.title'
   if (path.startsWith('/library/')) return 'library.title'
   if (path === '/terminology') return 'terminology.title'
@@ -77,6 +78,7 @@ async function mountShell(path = '/', api = createShellApi()) {
     history: createMemoryHistory(),
     routes: [
       '/',
+      '/workflows',
       '/system/config',
       '/system/files',
       '/system/events',
@@ -87,7 +89,6 @@ async function mountShell(path = '/', api = createShellApi()) {
       '/components/model',
       '/components/skill',
       '/library/model',
-      '/library/automation',
       '/terminology',
     ].map((routePath) => ({
       path: routePath,
@@ -141,7 +142,7 @@ describe('AppShell', () => {
     expect(shell.find('a[href="/agents/main"]').exists()).toBe(false)
     expect(shell.find('a[href^="/components/"]').exists()).toBe(false)
     expect(shell.get('a[href="/style-lab"] .nav-icon').classes()).toContain('bi-sliders')
-    expect(shell.findAll('.app-sidebar .nav-link')).toHaveLength(7)
+    expect(shell.findAll('.app-sidebar .nav-link')).toHaveLength(8)
   })
 
   it('renders the localized route title beside the navigation toggle', async () => {
@@ -159,10 +160,10 @@ describe('AppShell', () => {
     await nextTick()
     expect(title.text()).toBe('Component configuration')
 
-    await router.push('/library/automation')
+    await router.push('/workflows')
     await nextTick()
-    expect(title.text()).toBe('Configuration library')
-    expect(shell.get('a[href="/library"]').classes()).toContain('active')
+    expect(title.text()).toBe('Workflows')
+    expect(shell.get('a[href="/workflows"]').classes()).toContain('active')
   })
 
   it('uses the official color-mode state and persists user changes', async () => {

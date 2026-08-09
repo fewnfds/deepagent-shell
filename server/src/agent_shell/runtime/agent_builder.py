@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Any, Callable
 
 from langchain.chat_models import init_chat_model
 from pydantic import SecretStr
 
 from agent_shell import __version__
-from agent_shell.automation.runtime import AutomationRuntime
+from agent_shell.middleware_packages.runtime import MiddlewarePackageRuntime
 from agent_shell.capability_manifest import FILESYSTEM_TOOL_NAMES
 from agent_shell.contracts import (
     FilesystemBlock,
@@ -23,9 +23,6 @@ from agent_shell.runtime.capabilities import (
     DeepAgentsCapabilityError,
     DeepAgentsWorkspace,
     build_deepagents_capabilities,
-)
-from agent_shell.runtime.capabilities.custom_middlewares import (
-    materialize_custom_middlewares,
 )
 from agent_shell.runtime.capabilities.custom_tools import materialize_custom_tools
 from agent_shell.runtime.capabilities.exception_retry import (
@@ -44,7 +41,6 @@ from agent_shell.runtime.agent_compilation import (
 )
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.input_messages import validate_client_messages
-from agent_shell.runtime.invocation import AgentInvocationMiddleware
 from agent_shell.runtime.limits import (
     ProviderErrorBoundaryMiddleware,
     ToolErrorBoundaryMiddleware,
@@ -53,7 +49,6 @@ from agent_shell.runtime.model_request_settings import (
     make_model_request_settings_middleware,
 )
 from agent_shell.runtime.model_response import ModelResponse
-from agent_shell.runtime.context import AgentRequestContext
 from agent_shell.runtime.state import AgentShellState
 from agent_shell.validation.capability_assembly import FilesystemMode
 from agent_shell.validation.service import ConfigurationValidationService
@@ -118,8 +113,7 @@ class BuiltAgent:
     input_state: dict[str, Any]
     output_config: dict[str, Any]
     agent_name: str
-    context: AgentRequestContext
-    automation: AutomationRuntime
+    middleware_runtime: MiddlewarePackageRuntime
 
 
 class AgentBuilder:
@@ -128,7 +122,7 @@ class AgentBuilder:
         secrets: ProviderSecretResolver,
         *,
         custom_tools_dir: Path,
-        automation_scripts_dir: Path,
+        middleware_packages_dir: Path,
         runtime_dir: Path,
         skills_dir: Path,
         validation: ConfigurationValidationService,
@@ -136,19 +130,17 @@ class AgentBuilder:
     ) -> None:
         self._secrets = secrets
         self._custom_tools_dir = custom_tools_dir
-        self._automation_scripts_dir = automation_scripts_dir
+        self._middleware_packages_dir = middleware_packages_dir
         self._runtime_dir = runtime_dir
         self._skills_dir = skills_dir
         self._validation = validation
         self._provider_http_clients = provider_http_clients
-        self._automation_runtime: AutomationRuntime | None = None
+        self._middleware_runtime: MiddlewarePackageRuntime | None = None
 
-    async def finish_failed_build(self) -> None:
-        if self._automation_runtime is None:
+    async def close_failed_build(self) -> None:
+        if self._middleware_runtime is None:
             return
-        await self._automation_runtime.finish(
-            {"status": "failed", "error_code": "agent_construction_failed"}
-        )
+        await self._middleware_runtime.close()
 
     def _materialize_profile(
         self,
@@ -286,22 +278,12 @@ class AgentBuilder:
                 if filesystem_permissions is not None
                 else None
             )
-            selected_skill_names = (
-                list(skill_block.skills) if skill_block is not None else []
-            )
-            effective_skills_dir = (
-                self._automation_runtime.effective_skills_dir(
-                    owner_id, selected_skill_names
-                )
-                if self._automation_runtime is not None
-                else self._skills_dir
-            )
             deepagents = build_deepagents_capabilities(
                 filesystem_block,
                 skill_block,
                 filesystem_permissions=filesystem_permissions_block,
                 filesystem_mode=filesystem_mode,
-                skills_dir=effective_skills_dir,
+                skills_dir=self._skills_dir,
                 workspace=workspace,
             )
         except DeepAgentsCapabilityError as exc:
@@ -335,45 +317,16 @@ class AgentBuilder:
         backend = deepagents.backend
         middleware.extend(deepagents.middleware)
         initial_files.update(deepagents.initial_files)
-        if self._automation_runtime is not None:
-            automation_files = self._automation_runtime.initial_files_for(owner_id)
-            if automation_files:
-                from deepagents.backends.utils import create_file_data
-
-                for path, content in automation_files.items():
-                    if not isinstance(path, str) or not path.startswith("/"):
-                        raise AgentRuntimeError(
-                            "automation_initial_file_invalid",
-                            "Automation initial file paths must be absolute virtual paths.",
-                            status_code=422,
-                        )
-                    if isinstance(content, bytes):
-                        import base64
-
-                        value = create_file_data(
-                            base64.b64encode(content).decode("ascii"),
-                            encoding="base64",
-                        )
-                    elif isinstance(content, str):
-                        value = create_file_data(content)
-                    else:
-                        raise AgentRuntimeError(
-                            "automation_initial_file_invalid",
-                            "Automation initial file values must be text or bytes.",
-                            status_code=422,
-                        )
-                    initial_files[path] = value
-                    deepagents.workspace.initial_files[path] = value
         skill_sources = deepagents.skill_sources
 
-        custom_middleware: list[Any] = []
+        extra_middleware: list[Any] = []
         other = selected_blocks.get("other")
         if other is not None:
             try:
                 other_block = OtherBlock.model_validate(
                     {key: value for key, value in other.items() if key != "id"}
                 )
-                custom_middleware.extend(
+                extra_middleware.extend(
                     materialize_other_middlewares(
                         other_block,
                         model=model,
@@ -390,12 +343,10 @@ class AgentBuilder:
                     owner_name=owner_name,
                     path="capability_refs.other",
                 ) from exc
-        custom = selected_blocks.get("custom-middleware")
-        if custom is not None:
+        package_middleware: tuple[Any, ...] = ()
+        if self._middleware_runtime is not None:
             try:
-                custom_middleware.extend(
-                    materialize_custom_middlewares(custom["middlewares"])
-                )
+                package_middleware = self._middleware_runtime.middleware_for(owner_id)
             except AgentRuntimeError as exc:
                 raise reported_error(
                     exc,
@@ -403,19 +354,6 @@ class AgentBuilder:
                     owner_id=owner_id,
                     owner_name=owner_name,
                     path="capability_refs.custom-middleware",
-                ) from exc
-
-        automation_middleware: tuple[Any, ...] = ()
-        if self._automation_runtime is not None:
-            try:
-                automation_middleware = self._automation_runtime.middleware_for(owner_id)
-            except AgentRuntimeError as exc:
-                raise reported_error(
-                    exc,
-                    scope=scope,
-                    owner_id=owner_id,
-                    owner_name=owner_name,
-                    path="automation.plugins",
                 ) from exc
 
         system_prompt = selected_blocks.get("system-prompt")
@@ -437,8 +375,8 @@ class AgentBuilder:
             ),
             tools=tuple(tools),
             middleware=tuple(middleware),
-            automation_middleware=automation_middleware,
-            custom_middleware=tuple(custom_middleware),
+            package_middleware=package_middleware,
+            extra_middleware=tuple(extra_middleware),
             backend=backend,
             initial_files=initial_files,
             skill_sources=skill_sources,
@@ -453,7 +391,6 @@ class AgentBuilder:
         *,
         model_request_interceptor: Callable[[dict[str, Any]], Any] | None = None,
         model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
-        agent_input_observer: Callable[[dict[str, object]], Any] | None = None,
         model_response_observer: Callable[[ModelResponse], Any] | None = None,
         request_id: str = "",
     ) -> BuiltAgent:
@@ -493,17 +430,15 @@ class AgentBuilder:
 
         main_agent_id = str(main_agent.get("id", main_agent_id))
         main_agent_name = str(main_agent["name"])
-        automation = AutomationRuntime.from_assembly(
+        middleware_runtime = MiddlewarePackageRuntime.from_assembly(
             assembly,
             messages,
             main_agent_id=main_agent_id,
             request_id=request_id,
-            plugins_dir=self._automation_scripts_dir,
-            skills_dir=self._skills_dir,
+            packages_dir=self._middleware_packages_dir,
             runtime_root=self._runtime_dir,
         )
-        self._automation_runtime = automation
-        await automation.prepare()
+        self._middleware_runtime = middleware_runtime
         materialized = self._materialize_profile(
             references,
             selected_blocks,
@@ -515,7 +450,6 @@ class AgentBuilder:
         constructor: dict[str, object] = {
             "model": materialized.model,
             "name": str(main_agent["name"]),
-            "context_schema": AgentRequestContext,
             "state_schema": AgentShellState,
         }
         if materialized.system_prompt is not None:
@@ -533,13 +467,8 @@ class AgentBuilder:
 
         middleware = [
             ToolErrorBoundaryMiddleware(),
-            AgentInvocationMiddleware(
-                agent_type="main_agent",
-                agent_name=main_agent_name,
-                observer=agent_input_observer,
-            ),
             *materialized.middleware,
-            *materialized.automation_middleware,
+            *materialized.package_middleware,
         ]
         if materialized.tool_choice is not None or materialized.model_settings:
             middleware.append(
@@ -549,22 +478,18 @@ class AgentBuilder:
                 )
             )
         input_state: dict[str, Any] = {"messages": [], "shared_vars": {}}
-        request_context = cast(
-            AgentRequestContext,
-            automation.root_context(main_agent_id),
-        )
 
         compiled_subagents: list[dict[str, Any]] = []
         task_description_override: str | None = None
         if resolved_subagents:
-            from agent_shell.runtime.subagent_graphs import SubagentGraphCompiler
+            from agent_shell.runtime.subagents import build_subagent_specs
 
-            compiled_subagents = SubagentGraphCompiler(
+            compiled_subagents = build_subagent_specs(
+                roots=resolved_subagents,
+                nodes=assembly.subagent_nodes,
                 workspace=materialized.workspace,
                 materialize_profile=self._materialize_profile,
-                agent_input_observer=agent_input_observer,
-                child_context=automation.child_context,
-            ).compile(roots=resolved_subagents, nodes=assembly.subagent_nodes)
+            )
             delegation_instruction = selected_blocks["subagent"][
                 "instruction_override"
             ]
@@ -578,7 +503,7 @@ class AgentBuilder:
                 )
             constructor["subagents"] = compiled_subagents
 
-        middleware.extend(materialized.custom_middleware)
+        middleware.extend(materialized.extra_middleware)
         if model_request_observer is not None:
             from agent_shell.runtime.interception import (
                 make_model_request_observer_middleware,
@@ -670,6 +595,5 @@ class AgentBuilder:
             input_state=input_state,
             output_config=output_config,
             agent_name=str(main_agent["name"]),
-            context=request_context,
-            automation=automation,
+            middleware_runtime=middleware_runtime,
         )

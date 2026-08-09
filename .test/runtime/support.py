@@ -9,7 +9,7 @@ from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 
 from agent_shell.runtime.agent_builder import _build_chat_model
-from agent_shell.runtime.agent_runtime import AgentExecution
+from agent_shell.runtime.workflow_runtime import WorkflowExecution
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.output_event_pool import OutputEventRectifier
 from agent_shell.runtime.output_projection import OutputProjector
@@ -130,27 +130,13 @@ class EventGraph:
         return EventRun(self._events)
 
 
-class NoopAutomation:
-    @property
-    def graph_stop_requested(self) -> bool:
-        return False
-
-    async def wait_for_graph_stop(self) -> None:
-        await asyncio.Event().wait()
-
-    @staticmethod
-    def graph_stop_error() -> AgentRuntimeError:
-        raise AssertionError("Noop automation cannot request a graph stop")
-
-    async def start(self) -> None:
-        pass
-
-    async def finish(self, _terminal) -> None:
+class NoopMiddlewareRuntime:
+    async def close(self) -> None:
         pass
 
 
-def noop_automation() -> NoopAutomation:
-    return NoopAutomation()
+def noop_middleware_runtime() -> NoopMiddlewareRuntime:
+    return NoopMiddlewareRuntime()
 
 
 class NoopMediaResponse:

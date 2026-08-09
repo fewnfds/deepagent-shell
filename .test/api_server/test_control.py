@@ -79,7 +79,7 @@ def test_api_server_start_gate_rejects_invalid_main_agent_without_dynamic_build(
             raise AssertionError("API start must not build an Agent")
 
         monkeypatch.setattr(
-            "agent_shell.runtime.request_snapshot.RequestRuntimeSnapshot.start_agent",
+            "agent_shell.runtime.request_snapshot.RequestRuntimeSnapshot.start_workflow",
             fail_dynamic_start,
         )
         started = client.post("/api/api-server/start")

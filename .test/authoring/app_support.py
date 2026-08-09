@@ -33,7 +33,6 @@ def subagent_payload(
     name: str = "worker",
     description: str = "Handles delegated work.",
     capability_overrides: list[dict[str, object]] | None = None,
-    subagents: list[dict[str, str]] | None = None,
 ) -> dict[str, object]:
     return {
         "component_name": component_name,
@@ -41,7 +40,6 @@ def subagent_payload(
         "description": description,
         "settings": {
             "capability_overrides": capability_overrides or [],
-            "subagents": subagents or [],
         },
     }
 
@@ -115,21 +113,7 @@ def block_cases(tmp_path: Path) -> list[tuple[str, dict]]:
             "custom-middleware",
             {
                 "name": "Reliability middleware",
-                "middlewares": [
-                    {
-                        "name": "Tool retry",
-                        "enabled": True,
-                        "source": (
-                            "from langchain.agents.middleware import ToolRetryMiddleware\n\n"
-                            "middleware = ToolRetryMiddleware(max_retries=3)"
-                        ),
-                    },
-                    {
-                        "name": "Disabled draft",
-                        "enabled": False,
-                        "source": "middleware = object()",
-                    },
-                ],
+                "middlewares": [],
             },
         ),
         ("output-mode", output_mode_payload()),

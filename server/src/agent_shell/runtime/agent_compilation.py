@@ -22,8 +22,8 @@ class MaterializedAgentProfile:
     system_prompt: str | None
     tools: tuple[Any, ...]
     middleware: tuple[Any, ...]
-    automation_middleware: tuple[Any, ...]
-    custom_middleware: tuple[Any, ...]
+    package_middleware: tuple[Any, ...]
+    extra_middleware: tuple[Any, ...]
     backend: Any | None
     initial_files: dict[str, Any]
     skill_sources: tuple[str, ...]

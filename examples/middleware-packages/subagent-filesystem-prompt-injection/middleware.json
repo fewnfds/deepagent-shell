@@ -1,0 +1,22 @@
+{
+  "api_version": 1,
+  "id": "subagent-filesystem-prompt-injection",
+  "name": "Subagent filesystem prompt injection",
+  "description": "Read grouped filesystem drafts with continuous layer fallback and inject them before the delegated task.",
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "layout": {
+        "type": "string",
+        "title": "Filesystem prompt layout",
+        "description": "Define grouped prompt messages and ordered file layers. All entries in one group fall back together. [system] entries are emitted as user messages for Provider compatibility.",
+        "contentMediaType": "text/plain",
+        "minLength": 1,
+        "maxLength": 65535,
+        "default": "[group: cot]\n[assistant]\n# cot\n[/draft/cot.md][1000]\n\n[group: parts]\n[assistant]\n# part 1\n[/draft/draft-1.md][1000]\n[/output/output-1.md][1000]\n\n[assistant]\n# part 2\n[/draft/draft-2.md][1000]\n[/output/output-2.md][1000]\n\n[assistant]\n# part 3\n[/draft/draft-3.md][1000]\n[/output/output-3.md][1000]\n\n[assistant]\n# part 4\n[/draft/draft-4.md][1000]\n[/output/output-4.md][1000]\n"
+      }
+    },
+    "required": ["layout"],
+    "additionalProperties": false
+  }
+}

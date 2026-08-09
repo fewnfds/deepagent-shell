@@ -1,0 +1,21 @@
+{
+  "api_version": 1,
+  "id": "main-agent-message-injection",
+  "name": "Main Agent message injection",
+  "description": "Transform and inject the original client messages when a Main Agent invocation starts.",
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "transform_source": {
+        "type": "string",
+        "title": "Message transform (Python)",
+        "description": "Edit the function body and return the messages to inject.",
+        "contentMediaType": "text/x-python",
+        "format": "python",
+        "default": "async def transform_messages(messages, ctx, state, runtime):\n    # Replace all client message turns with one user message when needed:\n    # messages = [{\"role\": \"user\", \"content\": \"开始任务吧\"}]\n    return messages\n"
+      }
+    },
+    "required": ["transform_source"],
+    "additionalProperties": false
+  }
+}

@@ -37,7 +37,6 @@ function staticLocaleKeys(): string[] {
         key
         && roots.has(key.split('.')[0])
         && !key.includes('${')
-        && !key.startsWith('automation.plugin_')
         && !nonLocaleDottedLiterals.has(key)
       ) candidates.add(key)
     }

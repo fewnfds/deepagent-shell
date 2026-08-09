@@ -21,7 +21,7 @@ from agent_shell.api.completion_terminal import (
     CompletionTerminal,
     MessageHistoryRecorder,
 )
-from agent_shell.runtime.agent_runtime import AgentExecution
+from agent_shell.runtime.workflow_runtime import WorkflowExecution
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.interception import InterceptionTestController
@@ -31,10 +31,10 @@ from agent_shell.runtime.request_snapshot import RequestSnapshotRuntime
 from agent_shell.runtime.session_recording import AgentRunCapture
 from agent_shell.security import ApiKeyPolicyError, validate_api_key_policy
 from agent_shell.settings import Settings, bearer_token_is_valid
-from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.agent_sessions import AgentRunStatus, AgentSessionStore
 from agent_shell.storage.api_server import ApiServerStore
 from agent_shell.storage.media_outputs import MediaOutputStore
+from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.validation.models import validation_failure_detail
 from agent_shell.validation.service import ConfigurationValidationService
 
@@ -226,7 +226,7 @@ def _main_agent_completion_payload(
 
 def build_api_server_router(
     store: ApiServerStore,
-    agent_configs: AgentConfigStore,
+    workflows: WorkflowStore,
     runtime: RequestSnapshotRuntime,
     settings: Settings,
     events: ApiServerEventHub,
@@ -255,7 +255,7 @@ def build_api_server_router(
 
     async def main_agent_completion_stream(
         *,
-        execution: AgentExecution,
+        execution: WorkflowExecution,
         model: str,
         finalizer: CompletionFinalizer,
     ) -> AsyncIterator[str]:
@@ -401,7 +401,7 @@ def build_api_server_router(
             )
 
     async def run_until_disconnect(
-        execution: AgentExecution,
+        execution: WorkflowExecution,
         request: Request,
     ) -> tuple[str, dict[str, int]]:
         async def wait_for_disconnect() -> None:
@@ -503,11 +503,11 @@ def build_api_server_router(
     async def models() -> JSONResponse:
         if not store.is_enabled():
             return _openai_error(503, "api_server_stopped", "The API server is stopped.")
-        main_agent_models = [
+        workflow_models = [
             _model_object(item["name"])
-            for item in agent_configs.list_items("main_agents")
+            for item in workflows.list_items(enabled_only=True)
         ]
-        return JSONResponse(content={"object": "list", "data": main_agent_models})
+        return JSONResponse(content={"object": "list", "data": workflow_models})
 
     @router.post("/v1/chat/completions", response_model=None)
     async def chat_completions(request: Request) -> JSONResponse | StreamingResponse:
@@ -545,21 +545,23 @@ def build_api_server_router(
             )
             error = _openai_error_payload(
                 "configuration_snapshot_failed",
-                "The current Agent configuration could not be captured.",
+                "The current Workflow configuration could not be captured.",
                 status_code=500,
             )
             return JSONResponse(status_code=500, content=error)
-        main_agent = request_snapshot.main_agent_by_name(model)
-        if main_agent is None:
+        workflow = request_snapshot.workflow_by_name(model)
+        if workflow is None or not workflow["enabled"]:
+            request_snapshot.close()
             return _openai_error(
                 404,
                 "model_not_found",
                 "The requested model does not exist.",
                 param="model",
             )
-        agent_name = str(main_agent["name"])
+        agent_name = str(workflow["main_agent_name"])
         stream = payload.get("stream", False)
         if not isinstance(stream, bool):
+            request_snapshot.close()
             error = _openai_error_payload(
                 "invalid_stream",
                 "stream must be a boolean.",
@@ -582,6 +584,7 @@ def build_api_server_router(
         input_messages = payload.get("messages")
         max_initial_messages = int(server_settings["max_initial_messages"])
         if isinstance(input_messages, list) and len(input_messages) > max_initial_messages:
+            request_snapshot.close()
             error = _openai_error_payload(
                 "input_messages_too_many",
                 f"messages cannot contain more than {max_initial_messages} items.",
@@ -601,11 +604,12 @@ def build_api_server_router(
                 error_code="input_messages_too_many",
             )
             return JSONResponse(status_code=422, content=error)
-        if main_agent is not None:
+        if workflow is not None:
             requested_session_id = request.headers.get("x-agent-session-id", "")
             if requested_session_id and not SESSION_ID_PATTERN.fullmatch(
                 requested_session_id
             ):
+                request_snapshot.close()
                 error = _openai_error_payload(
                     "invalid_agent_session_id",
                     "X-Agent-Session-ID must contain 1-120 letters, digits, dot, colon, underscore, or hyphen.",
@@ -675,12 +679,11 @@ def build_api_server_router(
                     )
 
             try:
-                execution = await request_snapshot.start_agent(
-                    str(main_agent["id"]),
+                execution = await request_snapshot.start_workflow(
+                    workflow,
                     payload.get("messages"),
                     model_request_interceptor=model_request_interceptor,
                     model_request_observer=capture.model_request,
-                    agent_input_observer=capture.agent_input,
                     model_response_observer=capture.model_response,
                     event_observer=capture.output_event,
                     request_id=request_id,

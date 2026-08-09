@@ -36,15 +36,15 @@ def test_source_launcher_refreshes_runtime_and_prepares_production_frontend() ->
     assert "npm run dev" not in launcher
 
 
-def test_windows_launcher_prepares_plugin_dependencies_before_server() -> None:
+def test_windows_launcher_prepares_middleware_dependencies_before_server() -> None:
     launcher = (REPOSITORY_ROOT / "start_server.bat").read_text(encoding="utf-8")
 
-    dependency_command = "-m agent_shell.automation.dependencies --home"
+    dependency_command = "-m agent_shell.middleware_packages.dependencies --home"
     server_command = "-m agent_shell --home"
 
     assert dependency_command in launcher
     assert launcher.index(dependency_command) < launcher.rindex(server_command)
-    assert "goto plugin_dependencies_failed" in launcher
+    assert "goto middleware_dependencies_failed" in launcher
 
 
 def test_windows_runtime_removes_uv_python_aliases_after_pip_install() -> None:

@@ -139,7 +139,8 @@ def test_global_interception_captures_final_prompt_tools_and_raw_request(
         "        return handler(self._mark(request))\n"
         "    async def awrap_model_call(self, request, handler):\n"
         "        return await handler(self._mark(request))\n"
-        "middleware = MarkerMiddleware()\n"
+        "def create_middleware(ctx):\n"
+        "    return MarkerMiddleware()\n"
     )
 
     with make_client(tmp_path, monkeypatch) as client:
@@ -150,11 +151,11 @@ def test_global_interception_captures_final_prompt_tools_and_raw_request(
             ),
         )
         main_agent = create_main_agent(client)
-        write_automation_script(
+        write_middleware_package(
             tmp_path,
             "capture-message-rewrite",
             "from langchain.agents.middleware import AgentMiddleware\n"
-            "from agent_shell.automation.messages import mutable_request_messages\n"
+            "from agent_shell.middleware_packages.messages import mutable_request_messages\n"
             "class RewriteMessages(AgentMiddleware):\n"
             "    def __init__(self, ctx):\n        self.ctx = ctx\n"
             "    async def abefore_agent(self, state, runtime):\n"
@@ -166,25 +167,16 @@ def test_global_interception_captures_final_prompt_tools_and_raw_request(
             "                message['content'] = message['content'].replace(tag, replacement)\n"
             "        return {'messages': messages}\n"
             "def create_middleware(ctx):\n    return RewriteMessages(ctx)\n",
-            entrypoints=("middleware",),
-            config_schema=automation_config_schema(
+            config_schema=middleware_config_schema(
                 {"tag": "string", "replacement": "string"},
                 required=("tag", "replacement"),
             ),
         )
-        automation = {
-            "hooks": [
-                {
-                    "plugin_id": "capture-message-rewrite",
-                    "enabled": True,
-                    "config": {
-                        "tag": "|||agent_prompt|||",
-                        "replacement": "PRESET",
-                    },
-                }
-            ],
-            "periodic": [],
-        }
+        write_middleware_package(
+            tmp_path,
+            "capture-marker",
+            marker_source,
+        )
         prompt = client.post(
             "/api/blocks/system-prompt",
             json={"name": "Captured prompt", "system_prompt": "MAIN AGENT"},
@@ -198,7 +190,19 @@ def test_global_interception_captures_final_prompt_tools_and_raw_request(
             json={
                 "name": "Captured custom Middleware",
                 "middlewares": [
-                    {"name": "Captured marker", "enabled": True, "source": marker_source}
+                    {
+                        "package_id": "capture-message-rewrite",
+                        "enabled": True,
+                        "config": {
+                            "tag": "|||agent_prompt|||",
+                            "replacement": "PRESET",
+                        },
+                    },
+                    {
+                        "package_id": "capture-marker",
+                        "enabled": True,
+                        "config": {},
+                    },
                 ],
             },
         ).json()
@@ -222,7 +226,6 @@ def test_global_interception_captures_final_prompt_tools_and_raw_request(
                     {"type": "output-mode", "block_id": output_mode["id"]},
                 ],
                 "subagents": [],
-                "automation": automation,
             },
         )
         assert updated.status_code == 200, updated.text

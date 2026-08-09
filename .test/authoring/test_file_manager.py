@@ -71,7 +71,6 @@ def test_file_manager_completes_common_file_and_text_workflows(
             "skills",
             "custom_tools",
             "custom_middlewares",
-            "automation_scripts",
         ]
     }
     assert empty.status_code == 200

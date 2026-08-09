@@ -11,10 +11,10 @@
 
 ## 分支
 
-- `dev`：滚动源码与日常集成；每次推送保持可启动；
-- `main`：经实际使用确认的稳定源码；由 `dev` merge/fast-forward 晋升；
+- `workflow`：GitHub 默认分支，承载滚动源码与日常集成；每次推送保持可启动；
+- `main`：经实际使用确认的稳定源码；由 `workflow` merge/fast-forward 晋升；
 - `v<project.version>` tag：从 `main` 创建，标记正式源码版本；
-- `hotfix/*`：从 `main` 修复，合并回 `main` 后同步进 `dev`。
+- `hotfix/*`：从 `main` 修复，合并回 `main` 后同步进 `workflow`。
 
 源码维护目录不作为用户实例运行。滚动用户使用独立 Clone，并保留该 Clone 自己的 `data/`。
 
@@ -40,8 +40,8 @@ git pull --ff-only
 停止服务后可以整体移动 Windows 运行 Clone。启动器根据自身位置重新解析源码、`data/` 和 `runtime/`；
 `runtime/cache` 中的旧下载缓存可按需重建，不是安装位置契约。
 
-自动化插件的 `requirements.txt` 不进入项目 `pyproject.toml`。Windows 启动器在核心 runtime 准备完成后，
-单独按当前实例的插件需求指纹生成 `runtime/automation_plugins/site-packages`；输入未变化时复用。插件层只能
+Middleware 包的 `requirements.txt` 不进入项目 `pyproject.toml`。Windows 启动器在核心 runtime 准备完成后，
+单独按当前实例的包需求指纹生成 `runtime/middleware_packages/site-packages`；输入未变化时复用。扩展层只能
 增加与核心锁兼容的二进制 wheel，不能修改 `runtime/app`。
 
 ## 当前运行时与依赖基线
@@ -96,7 +96,7 @@ uv run python ..\.test\smoke_http.py
 永久测试按职责放入 `.test/api_server/`、`.test/authoring/`、`.test/runtime/` 或 `.test/security/`。
 用户可观察行为、API 和持久化结果是验收证据。
 
-推送 `dev` 或 `main` 时，GitHub Actions 运行一次无凭据的确定性门禁：前端 typecheck、UI policy 与
+推送 `workflow` 或 `main` 时，GitHub Actions 运行一次无凭据的确定性门禁：前端 typecheck、UI policy 与
 Vitest，以及后端 `.test/` 下由 pytest 默认收集的 `test_*.py`。本地需要复现完整门禁时使用：
 
 ```powershell

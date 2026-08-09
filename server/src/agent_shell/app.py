@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from agent_shell.api.routes import build_router
 from agent_shell.api.agent_configs import build_agent_config_router
 from agent_shell.api.agent_sessions import build_agent_session_router
-from agent_shell.api.automation import build_automation_router
+from agent_shell.api.middleware_packages import build_middleware_package_router
 from agent_shell.api.errors import localized_error_detail
 from agent_shell.api.system import build_system_router
 from agent_shell.api.api_server import ApiServerEventHub, build_api_server_router
@@ -22,6 +22,7 @@ from agent_shell.api.file_manager import build_file_manager_router
 from agent_shell.api.provider_integrations import build_provider_integrations_router
 from agent_shell.api.system_settings import build_system_settings_router
 from agent_shell.api.validation import build_validation_router
+from agent_shell.api.workflows import build_workflow_router
 from agent_shell.provider_http import ProviderHttpClients
 from agent_shell.provider_secrets import ProviderSecretResolver
 from agent_shell.runtime.request_snapshot import RequestSnapshotRuntime
@@ -54,9 +55,10 @@ from agent_shell.storage.runtime_controls import RuntimeControlSettingsStore
 from agent_shell.storage.runtime_diagnostics import RuntimeDiagnosticStore
 from agent_shell.storage.system_log_settings import MIB_BYTES, SystemLogSettingsStore
 from agent_shell.storage.validation_settings import ConfigurationValidationSettingsStore
+from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.storage.event_feed import EventFeedStore
 from agent_shell.validation.service import ConfigurationValidationService
-from agent_shell.automation.validation import AutomationValidationService
+from agent_shell.middleware_packages.validation import MiddlewarePackageValidationService
 from agent_shell.file_manager import FileManagerService
 from agent_shell.system_settings import SystemSettingsService
 from agent_shell.storage.permissions import secure_directory, secure_file
@@ -87,7 +89,6 @@ def create_app(
         environment_permissions = (environment_permission,)
     custom_tools_dir = settings.resolved_custom_tools_dir()
     custom_middlewares_dir = settings.resolved_custom_middlewares_dir()
-    automation_scripts_dir = settings.resolved_automation_scripts_dir()
     skills_dir = settings.resolved_skills_dir()
 
     runtime_dir = settings.resolved_runtime_dir()
@@ -114,14 +115,15 @@ def create_app(
     runtime_diagnostic_store = RuntimeDiagnosticStore(database, history_retention)
     block_store = BlockStore(database, event_logger)
     config_store = AgentConfigStore(database, event_logger)
-    automation_validation = AutomationValidationService(
-        scripts_dir=automation_scripts_dir,
+    workflow_store = WorkflowStore(database, event_logger)
+    middleware_package_validation = MiddlewarePackageValidationService(
+        packages_dir=custom_middlewares_dir,
         runtime_root=runtime_dir,
     )
     configuration_validation = ConfigurationValidationService(
         block_store,
         config_store,
-        automation_validation,
+        middleware_package_validation,
         custom_tools_dir=custom_tools_dir,
     )
     api_server_store = ApiServerStore(
@@ -171,15 +173,14 @@ def create_app(
             "skills": skills_dir,
             "custom_tools": custom_tools_dir,
             "custom_middlewares": custom_middlewares_dir,
-            "automation_scripts": automation_scripts_dir,
         },
         settings.resolved_runtime_dir() / "tmp",
     )
     system_settings = SystemSettingsService(settings, api_server_store.api_key)
-    agent_runtime = RequestSnapshotRuntime(
+    workflow_runtime = RequestSnapshotRuntime(
         database,
         custom_tools_dir=custom_tools_dir,
-        automation_scripts_dir=automation_scripts_dir,
+        middleware_packages_dir=custom_middlewares_dir,
         runtime_dir=runtime_dir,
         skills_dir=skills_dir,
         diagnostics=runtime_diagnostics,
@@ -389,7 +390,7 @@ def create_app(
     app.state.settings = settings
     app.state.startup_storage_permissions = startup_permission_statuses
     app.state.security_events = event_logger
-    app.state.agent_runtime = agent_runtime
+    app.state.workflow_runtime = workflow_runtime
     app.state.interception_tests = interception_tests
     app.state.runtime_diagnostics = runtime_diagnostics
     app.state.runtime_diagnostic_store = runtime_diagnostic_store
@@ -428,7 +429,6 @@ def create_app(
             block_store,
             config_store,
             custom_tools_dir,
-            custom_middlewares_dir,
             skills_dir,
             secret_resolver,
             configuration_validation,
@@ -439,8 +439,10 @@ def create_app(
         build_agent_config_router(
             config_store,
             configuration_validation,
+            workflow_store,
         )
     )
+    app.include_router(build_workflow_router(workflow_store))
     app.include_router(
         build_validation_router(
             configuration_validation,
@@ -448,8 +450,8 @@ def create_app(
         )
     )
     app.include_router(
-        build_automation_router(
-            automation_scripts_dir,
+        build_middleware_package_router(
+            custom_middlewares_dir,
             runtime_dir,
         )
     )
@@ -469,8 +471,8 @@ def create_app(
     app.include_router(
         build_api_server_router(
             api_server_store,
-            config_store,
-            agent_runtime,
+            workflow_store,
+            workflow_runtime,
             settings,
             api_server_events,
             interception_tests,

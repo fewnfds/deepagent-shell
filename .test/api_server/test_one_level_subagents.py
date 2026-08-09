@@ -14,16 +14,21 @@ def test_subagent_rejects_every_non_empty_child_reference(
         ).json()
         response = client.post(
             "/api/subagents",
-            json=subagent_payload(
-                "Parent-shaped Subagent",
-                name="parent_shaped_subagent",
-                subagents=[{"subagent_id": child["id"]}],
-            ),
+            json={
+                **subagent_payload(
+                    "Parent-shaped Subagent",
+                    name="parent_shaped_subagent",
+                ),
+                "settings": {
+                    "capability_overrides": [],
+                    "subagents": [{"subagent_id": child["id"]}],
+                },
+            },
         )
 
     assert response.status_code == 422
     issue = response.json()["detail"]["validation"]["issues"][0]
-    assert issue["code"] == "contract.subagent_nested_references_forbidden"
+    assert issue["code"] == "contract.unknown_field"
     assert issue["path"] == "settings.subagents"
 
 

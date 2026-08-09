@@ -226,9 +226,6 @@ class Settings(BaseSettings):
     def resolved_custom_middlewares_dir(self) -> Path:
         return self.data_root / "resources" / "custom_middlewares"
 
-    def resolved_automation_scripts_dir(self) -> Path:
-        return self.data_root / "resources" / "automation_scripts"
-
     def resolved_skills_dir(self) -> Path:
         return self.data_root / "resources" / "skills"
 
@@ -240,7 +237,6 @@ class Settings(BaseSettings):
             self.resolved_media_outputs_dir(),
             self.resolved_custom_tools_dir(),
             self.resolved_custom_middlewares_dir(),
-            self.resolved_automation_scripts_dir(),
             self.resolved_skills_dir(),
             self.resolved_logs_dir(),
             self.resolved_runtime_dir() / "cache",

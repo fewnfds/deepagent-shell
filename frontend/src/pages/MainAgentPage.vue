@@ -3,9 +3,6 @@ import { LteAlert, LteButton } from '@adminlte/vue'
 import { computed, inject, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import type { AutomationScriptResource } from '@/api'
-
-import AutomationPluginBindings from '@/components/AutomationPluginBindings.vue'
 import PageShell from '@/components/PageShell.vue'
 import RecordPicker from '@/components/RecordPicker.vue'
 import SubagentReferencesEditor from '@/components/SubagentReferencesEditor.vue'
@@ -49,7 +46,6 @@ const manifests = ref<CapabilityManifest[]>([])
 const blocks = ref<Record<string, StoredBlock[]>>({})
 const profiles = ref<MainAgentProfile[]>([])
 const subagentProfiles = ref<SubagentProfile[]>([])
-const automationPlugins = ref<AutomationScriptResource[]>([])
 const selectedProfileId = ref('')
 const form = ref(blankMainAgent())
 let profileLoadSequence = 0
@@ -201,16 +197,14 @@ async function loadWorkspace(): Promise<void> {
   }
   loading.value = true
   try {
-    const [catalog, mainAgentItems, subagentItems, pluginCatalog] = await Promise.all([
+    const [catalog, mainAgentItems, subagentItems] = await Promise.all([
       service.value.getCatalog(),
       service.value.listMainAgents(),
       service.value.listSubagents(),
-      service.value.listAutomationPlugins?.() ?? Promise.resolve({ catalog: [], errors: {} }),
     ])
     manifests.value = [...catalog.block_types].sort((left, right) => left.order - right.order)
     profiles.value = mainAgentItems.map(normalizeMainAgent)
     subagentProfiles.value = subagentItems
-    automationPlugins.value = pluginCatalog.catalog
     const entries = await Promise.all(manifests.value.map(async (manifest) => [
       manifest.type,
       await service.value?.listBlocks(manifest.type) ?? [],
@@ -391,12 +385,6 @@ watch(
             </div>
           </div>
         </section>
-
-        <AutomationPluginBindings
-          v-model="form.automation"
-          path-prefix="automation"
-          :plugins="automationPlugins"
-        />
 
         <SubagentReferencesEditor
           v-model:references="form.subagents"

@@ -23,7 +23,7 @@ def test_runtime_diagnostics_exposes_safe_errors_and_optional_lifecycle(
             raise RuntimeError(sensitive_detail)
 
         monkeypatch.setattr(
-            "agent_shell.runtime.request_snapshot.RequestRuntimeSnapshot.start_agent",
+            "agent_shell.runtime.request_snapshot.RequestRuntimeSnapshot.start_workflow",
             fail_start,
         )
         failed = client.post(
@@ -68,7 +68,7 @@ def test_runtime_diagnostics_preserves_safe_provider_stream_code(
             raise RuntimeError("outer-private-detail") from stream_error
 
         monkeypatch.setattr(
-            "agent_shell.runtime.request_snapshot.RequestRuntimeSnapshot.start_agent",
+            "agent_shell.runtime.request_snapshot.RequestRuntimeSnapshot.start_workflow",
             fail_start,
         )
         failed = client.post(
@@ -100,7 +100,7 @@ def test_unexpected_runtime_start_error_is_redacted_and_recorded(
             raise RuntimeError(sensitive_detail)
 
         monkeypatch.setattr(
-            "agent_shell.runtime.request_snapshot.RequestRuntimeSnapshot.start_agent",
+            "agent_shell.runtime.request_snapshot.RequestRuntimeSnapshot.start_workflow",
             fail_start,
         )
         response = client.post(

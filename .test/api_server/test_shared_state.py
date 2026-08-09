@@ -33,7 +33,7 @@ def test_shared_vars_flow_from_main_to_direct_subagent_and_back(
     parent_marker = tmp_path / "parent-shared-state.txt"
 
     with make_client(tmp_path, monkeypatch) as client:
-        write_automation_script(
+        write_middleware_package(
             tmp_path,
             "shared-state-probe",
             "from pathlib import Path\n"
@@ -58,8 +58,7 @@ def test_shared_vars_flow_from_main_to_direct_subagent_and_back(
             "            )\n"
             "        return None\n"
             "def create_middleware(ctx):\n    return SharedStateProbe(ctx)\n",
-            entrypoints=("middleware",),
-            config_schema=automation_config_schema(
+            config_schema=middleware_config_schema(
                 {
                     "child_marker": "string",
                     "parent_marker": "string",
@@ -91,7 +90,7 @@ def test_shared_vars_flow_from_main_to_direct_subagent_and_back(
             },
         ).json()
         binding = {
-            "plugin_id": "shared-state-probe",
+            "package_id": "shared-state-probe",
             "enabled": True,
             "config": {
                 "child_marker": str(child_marker),
@@ -107,16 +106,19 @@ def test_shared_vars_flow_from_main_to_direct_subagent_and_back(
                 "block_id": child_model_block["id"],
             }],
         )
-        child_payload["settings"]["automation"] = {
-            "hooks": [binding],
-            "periodic": [],
-        }
         child_response = client.post("/api/subagents", json=child_payload)
         assert child_response.status_code == 200, child_response.text
         child = child_response.json()
         delegation = client.post(
             "/api/blocks/subagent",
             json={"name": "Shared-state delegation"},
+        ).json()
+        middleware_block = client.post(
+            "/api/blocks/custom-middleware",
+            json={
+                "name": "Shared-state Middleware",
+                "middlewares": [binding],
+            },
         ).json()
         updated = client.put(
             f"/api/main-agents/{main_agent['id']}",
@@ -125,9 +127,9 @@ def test_shared_vars_flow_from_main_to_direct_subagent_and_back(
                 "capability_refs": [
                     *main_agent["capability_refs"],
                     {"type": "subagent", "block_id": delegation["id"]},
+                    {"type": "custom-middleware", "block_id": middleware_block["id"]},
                 ],
                 "subagents": [{"subagent_id": child["id"]}],
-                "automation": {"hooks": [binding], "periodic": []},
             },
         )
         assert updated.status_code == 200, updated.text

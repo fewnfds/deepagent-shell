@@ -377,12 +377,12 @@ def test_non_streaming_model_messages_use_the_same_tool_pairing_cycle() -> None:
                 AIMessage(content="done"), run_id="nonstream-2", timestamp=4
             ),
         ]
-        execution = AgentExecution(
+        execution = WorkflowExecution(
             graph=EventGraph(events),
             input_state={"messages": []},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
             normalizer=V3EventNormalizer("Main Agent"),
-            automation=noop_automation(),
+            middleware_runtime=noop_middleware_runtime(),
             media_response=noop_media_response(),
         )
         return [part async for part in execution.stream_text()]
@@ -514,12 +514,12 @@ def test_next_model_start_drains_compat_bridge_order_before_the_new_call() -> No
                 {"event": "message-finish", "usage": {}}, run_id="run-next"
             ),
         ]
-        execution = AgentExecution(
+        execution = WorkflowExecution(
             graph=EventGraph(events),
             input_state={"messages": []},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
             normalizer=V3EventNormalizer("Main Agent"),
-            automation=noop_automation(),
+            middleware_runtime=noop_middleware_runtime(),
             media_response=noop_media_response(),
         )
         return [part async for part in execution.stream_text()]

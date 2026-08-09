@@ -12,7 +12,7 @@ from pathlib import Path
 
 import uvicorn
 
-from agent_shell.automation.dependencies import activate_plugin_site
+from agent_shell.middleware_packages.dependencies import activate_package_site
 from agent_shell.app import create_app
 from agent_shell.settings import (
     SettingsError,
@@ -235,7 +235,7 @@ def main(
             file=sys.stderr,
         )
 
-    activate_plugin_site(settings.resolved_runtime_dir())
+    activate_package_site(settings.resolved_runtime_dir())
     app = create_app(settings=settings, serve_frontend=serve_frontend)
     uvicorn.run(
         app,

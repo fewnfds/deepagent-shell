@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from agent_shell.automation.contracts import MainAgentAutomation
 from agent_shell.contracts import (
+    CustomMiddlewareBlock,
     FilesystemBlock,
     ModelBlock,
     SubagentProfile,
@@ -184,14 +184,19 @@ def test_validation_issue_rejects_non_primitive_message_arguments() -> None:
             ),
         ),
         (
-            MainAgentAutomation,
-            {"hooks": [{"plugin_id": "Bad Plugin", "config": {}}]},
-            "main_agent",
-            "",
+            CustomMiddlewareBlock,
+            {
+                "name": "Invalid package",
+                "middlewares": [
+                    {"package_id": "Bad Package", "enabled": True, "config": {}}
+                ],
+            },
+            "block",
+            "custom-middleware",
             (
-                "contract.plugin_id_format_invalid",
-                "validation.issue.contract.pluginIdFormatInvalid",
-                "hooks[0].plugin_id",
+                "contract.middleware_package_id_format_invalid",
+                "validation.issue.contract.middlewarePackageIdFormatInvalid",
+                "middlewares[0].package_id",
                 {},
             ),
         ),

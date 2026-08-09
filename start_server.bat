@@ -97,12 +97,12 @@ if defined PORT_FOUND (
 )
 
 :after_port_prompt
-echo Preparing automation plugin dependencies...
+echo Preparing custom Middleware dependencies...
 pushd "%SCRIPT_DIR%"
-"!PYTHON_EXE!" !PYTHON_FLAGS! -m agent_shell.automation.dependencies --home "%SCRIPT_DIR%."
-set "PLUGIN_DEPENDENCY_EXIT=%ERRORLEVEL%"
+"!PYTHON_EXE!" !PYTHON_FLAGS! -m agent_shell.middleware_packages.dependencies --home "%SCRIPT_DIR%."
+set "MIDDLEWARE_DEPENDENCY_EXIT=%ERRORLEVEL%"
 popd
-if not "!PLUGIN_DEPENDENCY_EXIT!"=="0" goto plugin_dependencies_failed
+if not "!MIDDLEWARE_DEPENDENCY_EXIT!"=="0" goto middleware_dependencies_failed
 
 echo Starting Agent Shell...
 echo   !MANAGEMENT_URL!
@@ -115,9 +115,9 @@ popd
 if not "%EXIT_CODE%"=="0" pause
 goto end
 
-:plugin_dependencies_failed
+:middleware_dependencies_failed
 echo.
-echo Automation plugin dependencies could not be prepared safely.
+echo Custom Middleware dependencies could not be prepared safely.
 echo The existing Agent Shell runtime was not modified.
 pause
 exit /b 2

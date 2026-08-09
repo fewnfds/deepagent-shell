@@ -172,12 +172,17 @@ def test_subagent_nested_references_are_rejected_before_storage(
     ).json()
     nested = client.post(
         "/api/subagents",
-        json=subagent_payload(
-            "Invalid nested owner",
-            name="invalid_nested_owner",
-            subagents=[{"subagent_id": target["id"]}],
-        ),
+        json={
+            **subagent_payload(
+                "Invalid nested owner",
+                name="invalid_nested_owner",
+            ),
+            "settings": {
+                "capability_overrides": [],
+                "subagents": [{"subagent_id": target["id"]}],
+            },
+        },
     )
     assert nested.status_code == 422
     issue = nested.json()["detail"]["validation"]["issues"][0]
-    assert issue["code"] == "contract.subagent_nested_references_forbidden"
+    assert issue["code"] == "contract.unknown_field"

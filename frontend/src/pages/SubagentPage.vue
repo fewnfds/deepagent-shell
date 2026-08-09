@@ -3,9 +3,6 @@ import { LteAlert, LteButton } from '@adminlte/vue'
 import { computed, inject, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import type { AutomationScriptResource } from '@/api'
-
-import AutomationPluginBindings from '@/components/AutomationPluginBindings.vue'
 import PageShell from '@/components/PageShell.vue'
 import RecordPicker from '@/components/RecordPicker.vue'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
@@ -50,7 +47,6 @@ const feedbackDetail = ref('')
 const manifests = ref<CapabilityManifest[]>([])
 const blocks = ref<Record<string, StoredBlock[]>>({})
 const profiles = ref<SubagentProfile[]>([])
-const automationPlugins = ref<AutomationScriptResource[]>([])
 const selectedProfileId = ref('')
 const form = ref(blankSubagent())
 const recordOptions = computed(() => profiles.value.map((profile) => ({
@@ -235,14 +231,12 @@ async function loadWorkspace(): Promise<void> {
   }
   loading.value = true
   try {
-    const [catalog, profileItems, pluginCatalog] = await Promise.all([
+    const [catalog, profileItems] = await Promise.all([
       service.value.getCatalog(),
       service.value.listSubagents(),
-      service.value.listAutomationPlugins?.() ?? Promise.resolve({ catalog: [], errors: {} }),
     ])
     manifests.value = [...catalog.block_types].sort((left, right) => left.order - right.order)
     profiles.value = profileItems.map(normalizeSubagent)
-    automationPlugins.value = pluginCatalog.catalog
     const entries = await Promise.all(manifests.value
       .filter((manifest) => manifest.subagent_overrideable)
       .map(async (manifest) => [
@@ -480,11 +474,6 @@ watch(
             </div>
           </div>
         </section>
-        <AutomationPluginBindings
-          v-model="form.settings.automation"
-          path-prefix="settings-automation"
-          :plugins="automationPlugins"
-        />
       </section>
 
       <aside class="col-lg-3 validation-sidebar">

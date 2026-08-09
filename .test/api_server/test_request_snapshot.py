@@ -19,12 +19,12 @@ class SnapshotEchoModel(ToolCompatibleFakeListChatModel):
             yield chunk
 
 
-def test_snapshot_keeps_model_resolution_and_assembly_on_one_committed_view(
+def test_snapshot_keeps_workflow_resolution_and_agent_assembly_on_one_committed_view(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
         main_agent = create_main_agent(client)
-        snapshot = client.app.state.agent_runtime.capture()
+        snapshot = client.app.state.workflow_runtime.capture()
         renamed = client.put(
             f"/api/main-agents/{main_agent['id']}",
             json={
@@ -35,15 +35,23 @@ def test_snapshot_keeps_model_resolution_and_assembly_on_one_committed_view(
         )
         assert renamed.status_code == 200, renamed.text
 
-        assert snapshot.main_agent_by_name(main_agent["name"])["id"] == main_agent["id"]
-        assert snapshot.main_agent_by_name("Renamed after capture") is None
+        captured = snapshot.workflow_by_name(main_agent["name"])
+        assert captured is not None
+        assert captured["main_agent_id"] == main_agent["id"]
+        assert captured["main_agent_name"] == main_agent["name"]
+        assert snapshot.workflow_by_name("Renamed after capture") is None
 
-        next_snapshot = client.app.state.agent_runtime.capture()
-        assert next_snapshot.main_agent_by_name(main_agent["name"]) is None
-        assert next_snapshot.main_agent_by_name("Renamed after capture")["id"] == main_agent["id"]
+        next_snapshot = client.app.state.workflow_runtime.capture()
+        current = next_snapshot.workflow_by_name(main_agent["name"])
+        assert current is not None
+        assert current["main_agent_id"] == main_agent["id"]
+        assert current["main_agent_name"] == "Renamed after capture"
+        assert next_snapshot.workflow_by_name("Renamed after capture") is None
+        snapshot.close()
+        next_snapshot.close()
 
 
-def test_running_models_and_later_requests_use_the_latest_main_agent_name(
+def test_main_agent_rename_does_not_change_the_workflow_model_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
@@ -65,7 +73,7 @@ def test_running_models_and_later_requests_use_the_latest_main_agent_name(
                 "messages": [{"role": "user", "content": "old name"}],
             },
         )
-        current = client.post(
+        renamed_agent_name = client.post(
             "/v1/chat/completions",
             json={
                 "model": "Live renamed Main Agent",
@@ -73,12 +81,10 @@ def test_running_models_and_later_requests_use_the_latest_main_agent_name(
             },
         )
 
-    assert [item["id"] for item in models.json()["data"]] == [
-        "Live renamed Main Agent"
-    ]
-    assert old.status_code == 404
-    assert old.json()["error"]["code"] == "model_not_found"
-    assert current.status_code == 200, current.text
+    assert [item["id"] for item in models.json()["data"]] == [main_agent["name"]]
+    assert old.status_code == 200, old.text
+    assert renamed_agent_name.status_code == 404
+    assert renamed_agent_name.json()["error"]["code"] == "model_not_found"
 
 
 def test_captured_agent_build_never_falls_back_to_live_configuration_database(
@@ -87,16 +93,19 @@ def test_captured_agent_build_never_falls_back_to_live_configuration_database(
     database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
     with make_client(tmp_path, monkeypatch) as client:
         main_agent = create_main_agent(client)
-        snapshot = client.app.state.agent_runtime.capture()
+        snapshot = client.app.state.workflow_runtime.capture()
+        workflow = snapshot.workflow_by_name(main_agent["name"])
+        assert workflow is not None
         with closing(sqlite3.connect(database_path)) as connection, connection:
+            connection.execute("DELETE FROM workflows")
             connection.execute("DELETE FROM main_agents")
             connection.execute("DELETE FROM subagents")
             connection.execute("DELETE FROM blocks")
             connection.execute("DELETE FROM provider_secrets")
 
         async def run_captured_agent() -> tuple[str, dict[str, int]]:
-            execution = await snapshot.start_agent(
-                main_agent["id"],
+            execution = await snapshot.start_workflow(
+                workflow,
                 [
                     {
                         "role": "user",
@@ -244,7 +253,7 @@ def test_snapshot_capture_failure_is_safe_without_persisting_the_request_body(
         def fail_capture():
             raise OSError(private_detail)
 
-        monkeypatch.setattr(client.app.state.agent_runtime, "capture", fail_capture)
+        monkeypatch.setattr(client.app.state.workflow_runtime, "capture", fail_capture)
         response = client.post(
             "/v1/chat/completions",
             json={

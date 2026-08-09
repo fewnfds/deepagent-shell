@@ -68,12 +68,12 @@ def test_execution_yields_each_completed_semantic_event_once() -> None:
                 }
             ),
         ]
-        execution = AgentExecution(
+        execution = WorkflowExecution(
             graph=EventGraph(events),
             input_state={"messages": []},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
             normalizer=V3EventNormalizer("Main Agent"),
-            automation=noop_automation(),
+            middleware_runtime=noop_middleware_runtime(),
             media_response=noop_media_response(),
         )
         parts = [part async for part in execution.stream_text()]

@@ -116,9 +116,6 @@ const messages = {
     'main-agent': { label: 'Main Agent' },
     'subagent-profile': { label: 'Subagent' },
   },
-  navigation: {
-    automation: 'Automation',
-  },
   validation: {
     status: {
       unavailable: 'Unavailable',
@@ -309,11 +306,6 @@ describe('ConfigLibraryPage', () => {
       .get('[data-testid="library-agent-group"] [data-testid="section-nav"]')
       .findAll('button')
       .map((item) => item.text())).toEqual(['Main Agent', 'Subagent'])
-    expect(wrapper.get('[data-testid="library-plugin-group"] > span').text()).toBe('Plugins')
-    expect(wrapper
-      .get('[data-testid="library-plugin-group"] [data-testid="section-nav"]')
-      .findAll('button')
-      .map((item) => item.text())).toEqual(['Automation'])
     expect(wrapper.get('[data-testid="data-table-row"]').text()).not.toContain('block-uuid')
   })
 

@@ -103,14 +103,14 @@ describe('block adapters', () => {
       id: 'middleware-id',
       name: 'Middleware',
       middlewares: [
-        { name: 'First', enabled: true, source: ' middleware = First() ' },
-        { name: 'Second', enabled: false, source: ' middleware = Second() ' },
+        { package_id: 'first', enabled: true, config: { mode: 'strict' } },
+        { package_id: 'second', enabled: false, config: {} },
       ],
     })
     const payload = customMiddlewareAdapter.toPayload(middlewareDraft)
-    expect(payload.middlewares.map((entry) => entry.name)).toEqual(['First', 'Second'])
+    expect(payload.middlewares.map((entry) => entry.package_id)).toEqual(['first', 'second'])
     expect(payload.middlewares[0]).not.toHaveProperty('_key')
-    expect(payload.middlewares[0]?.source).toBe('middleware = First()')
+    expect(payload.middlewares[0]?.config).toEqual({ mode: 'strict' })
   })
 
   it('creates output drafts from an independent copy of the catalog default', () => {
@@ -169,12 +169,12 @@ describe('block adapters', () => {
     const middleware = customMiddlewareAdapter.fromApi({
       id: 'middleware', name: 'Middleware',
       middlewares: [
-        { name: 'kept', enabled: 'invalid', source: 'middleware = Kept()' },
+        { package_id: 'kept', enabled: 'invalid', config: ['invalid'] },
         'discarded',
       ],
     } as never)
     expect(middleware.middlewares).toMatchObject([
-      { name: 'kept', enabled: true, source: 'middleware = Kept()' },
+      { package_id: 'kept', enabled: true, config: {} },
     ])
 
     const output = outputModeAdapter.fromApi({

@@ -28,10 +28,6 @@ from agent_shell.capability_manifest import (
 )
 from agent_shell.model_provider_contracts import validate_provider_settings
 from agent_shell.provider_integrations import bundled_provider_ids
-from agent_shell.registries.custom_middlewares import (
-    MAX_MIDDLEWARE_SOURCE_LENGTH,
-    validate_middleware_source,
-)
 from agent_shell.registries.custom_tools import (
     CUSTOM_TOOL_RESOURCE_NAME_MAX_LENGTH,
     CUSTOM_TOOL_RESOURCE_NAME_PATTERN,
@@ -44,7 +40,7 @@ SKILL_PROMPT_FIELDS = (
     "skills_load_warnings",
     "skills_list",
 )
-from agent_shell.automation.contracts import MainAgentAutomation, SubagentAutomation
+from agent_shell.middleware_packages.contracts import MiddlewarePackageBinding
 TASK_DESCRIPTION_FIELDS = ("available_agents",)
 
 
@@ -324,25 +320,8 @@ class CustomToolBlock(StrictBlock):
         return list(dict.fromkeys(values))
 
 
-class CustomMiddlewareEntry(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    name: BlockName
-    enabled: bool = True
-    source: Annotated[
-        str,
-        Field(min_length=1, max_length=MAX_MIDDLEWARE_SOURCE_LENGTH),
-    ]
-
-    @field_validator("source")
-    @classmethod
-    def validate_source(cls, value: str) -> str:
-        validate_middleware_source(value)
-        return value
-
-
 class CustomMiddlewareBlock(StrictBlock):
-    middlewares: list[CustomMiddlewareEntry] = Field(
+    middlewares: list[MiddlewarePackageBinding] = Field(
         default_factory=list,
         max_length=100,
     )
@@ -920,7 +899,6 @@ class CapabilityReference(BaseModel):
 class MainAgentProfile(StrictBlock):
     capability_refs: list[CapabilityReference] = Field(default_factory=list, max_length=100)
     subagents: list[SubagentReference] = Field(default_factory=list, max_length=100)
-    automation: MainAgentAutomation = Field(default_factory=MainAgentAutomation)
 
     @model_validator(mode="after")
     def validate_profile(self) -> "MainAgentProfile":
@@ -963,9 +941,6 @@ class SubagentSettings(BaseModel):
     capability_overrides: list[CapabilityOverride] = Field(
         default_factory=list, max_length=100
     )
-    subagents: list[SubagentReference] = Field(default_factory=list, max_length=100)
-    automation: SubagentAutomation = Field(default_factory=SubagentAutomation)
-
     @model_validator(mode="after")
     def validate_overrides(self) -> "SubagentSettings":
         capability_types = [item.type for item in self.capability_overrides]

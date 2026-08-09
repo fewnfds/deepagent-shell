@@ -12,12 +12,11 @@ import type {
   AgentSessionSummary,
   ApiServerSettings,
   ApiServerSettingsUpdate,
-  AutomationScriptResource,
   BlockPayload,
   BlockType,
   CatalogResponse,
   ConfigurationValidationSettings,
-  CustomMiddlewareResource,
+  MiddlewarePackageResource,
   CustomToolResource,
   DraftValidationRequest,
   EventFeedFilters,
@@ -26,6 +25,8 @@ import type {
   EventSource,
   HealthResponse,
   ManagementEvent,
+  Workflow,
+  WorkflowPayload,
   ManagedArchivePreview,
   ManagedDirectory,
   ManagedFileScopeCatalog,
@@ -106,7 +107,7 @@ export const managementApi = {
     return managementRequest('/api/tools/custom')
   },
 
-  listCustomMiddlewares(): Promise<ResourceCatalog<CustomMiddlewareResource>> {
+  listCustomMiddlewares(): Promise<ResourceCatalog<MiddlewarePackageResource>> {
     return managementRequest('/api/middlewares/custom')
   },
 
@@ -114,8 +115,23 @@ export const managementApi = {
     return managementRequest('/api/skills')
   },
 
-  listAutomationPlugins(): Promise<ResourceCatalog<AutomationScriptResource>> {
-    return managementRequest('/api/automation/plugins')
+  listWorkflows(): Promise<Workflow[]> {
+    return managementRequest('/api/workflows')
+  },
+
+  createWorkflow(payload: WorkflowPayload): Promise<Workflow> {
+    return managementRequest('/api/workflows', jsonBody(payload))
+  },
+
+  updateWorkflow(id: string, payload: WorkflowPayload): Promise<Workflow> {
+    return managementRequest(`/api/workflows/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  deleteWorkflow(id: string): Promise<{ ok: boolean }> {
+    return managementRequest(`/api/workflows/${id}`, { method: 'DELETE' })
   },
 
   getSystemSettings(): Promise<SystemSettings> {

@@ -11,15 +11,18 @@ from typing import Any
 from agent_shell.provider_http import ProviderHttpClients
 from agent_shell.provider_secrets import ProviderSecretResolver
 from agent_shell.runtime.agent_builder import AgentBuilder
-from agent_shell.runtime.agent_runtime import AgentExecution, AgentRuntime
+from agent_shell.runtime.workflow_runtime import WorkflowExecution, WorkflowRuntime
+from agent_shell.runtime.state import AgentShellState
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.database import SQLiteDatabase
 from agent_shell.storage.media_outputs import MediaOutputStore
+from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.storage.schema import SCHEMA_SQL
-from agent_shell.automation.validation import AutomationValidationService
+from agent_shell.middleware_packages.validation import MiddlewarePackageValidationService
 from agent_shell.validation.service import ConfigurationValidationService
+from langgraph.graph import END, START, StateGraph
 
 
 class _SnapshotDatabase:
@@ -30,6 +33,10 @@ class _SnapshotDatabase:
         ("blocks", ("id", "block_type", "name", "payload")),
         ("main_agents", ("id", "name", "payload")),
         ("subagents", ("id", "component_name", "payload")),
+        (
+            "workflows",
+            ("id", "name", "description", "main_agent_id", "enabled"),
+        ),
     )
 
     def __init__(self, source: SQLiteDatabase) -> None:
@@ -81,25 +88,39 @@ class _SnapshotDatabase:
 class RequestRuntimeSnapshot:
     """Resolve a model and build exactly one request from one database image."""
 
-    _configs: AgentConfigStore
-    _runtime: AgentRuntime
+    _workflows: WorkflowStore
+    _runtime: WorkflowRuntime
     _database: _SnapshotDatabase
 
-    def main_agent_by_name(self, name: str) -> dict[str, Any] | None:
-        return self._configs.get_item_by_name("main_agents", name)
+    def workflow_by_name(self, name: str) -> dict[str, Any] | None:
+        return self._workflows.get_item_by_name(name)
 
-    async def start_agent(
+    def close(self) -> None:
+        self._database.close()
+
+    async def start_workflow(
         self,
-        main_agent_id: str,
+        workflow: dict[str, Any],
         raw_messages: object,
         **kwargs: Any,
-    ) -> AgentExecution:
+    ) -> WorkflowExecution:
         try:
-            return await self._runtime.start(main_agent_id, raw_messages, **kwargs)
+            execution = await self._runtime.start(
+                str(workflow["main_agent_id"]), raw_messages, **kwargs
+            )
+            workflow_graph = (
+                StateGraph(AgentShellState)
+                .add_node("agent", execution.graph)
+                .add_edge(START, "agent")
+                .add_edge("agent", END)
+                .compile()
+            )
+            execution.graph = workflow_graph
+            return execution
         finally:
             # Agent construction has materialized every database-backed dependency.
             # Closing here makes any accidental lazy configuration read fail.
-            self._database.close()
+            self.close()
 
 
 class RequestSnapshotRuntime:
@@ -110,7 +131,7 @@ class RequestSnapshotRuntime:
         database: SQLiteDatabase,
         *,
         custom_tools_dir: Path,
-        automation_scripts_dir: Path,
+        middleware_packages_dir: Path,
         runtime_dir: Path,
         skills_dir: Path,
         diagnostics: RuntimeDiagnostics,
@@ -119,7 +140,7 @@ class RequestSnapshotRuntime:
     ) -> None:
         self._database = database
         self._custom_tools_dir = custom_tools_dir
-        self._automation_scripts_dir = automation_scripts_dir
+        self._middleware_packages_dir = middleware_packages_dir
         self._runtime_dir = runtime_dir
         self._skills_dir = skills_dir
         self._diagnostics = diagnostics
@@ -131,22 +152,23 @@ class RequestSnapshotRuntime:
         try:
             blocks = BlockStore(database)  # type: ignore[arg-type]
             configs = AgentConfigStore(database)  # type: ignore[arg-type]
+            workflows = WorkflowStore(database)  # type: ignore[arg-type]
             secrets = ProviderSecretResolver(database)  # type: ignore[arg-type]
-            automation_validation = AutomationValidationService(
-                scripts_dir=self._automation_scripts_dir,
+            middleware_package_validation = MiddlewarePackageValidationService(
+                packages_dir=self._middleware_packages_dir,
                 runtime_root=self._runtime_dir,
             )
             validation = ConfigurationValidationService(
                 blocks,
                 configs,
-                automation_validation,
+                middleware_package_validation,
                 custom_tools_dir=self._custom_tools_dir,
             )
-            runtime = AgentRuntime(
+            runtime = WorkflowRuntime(
                 AgentBuilder(
                     secrets,
                     custom_tools_dir=self._custom_tools_dir,
-                    automation_scripts_dir=self._automation_scripts_dir,
+                    middleware_packages_dir=self._middleware_packages_dir,
                     runtime_dir=self._runtime_dir,
                     skills_dir=self._skills_dir,
                     validation=validation,
@@ -156,7 +178,7 @@ class RequestSnapshotRuntime:
                 self._diagnostics,
             )
             return RequestRuntimeSnapshot(
-                _configs=configs,
+                _workflows=workflows,
                 _runtime=runtime,
                 _database=database,
             )

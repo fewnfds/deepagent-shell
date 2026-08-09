@@ -140,7 +140,6 @@ describe('Subagent authoring page', () => {
           { type: 'model', mode: 'replace', block_id: '00000000-0000-0000-0000-000000000001' },
           { type: 'system-prompt', mode: 'disabled', block_id: '' },
         ],
-        automation: { hooks: [], periodic: [] },
       },
     })
     wrapper.unmount()

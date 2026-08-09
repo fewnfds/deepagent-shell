@@ -125,26 +125,25 @@ def make_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     return ScopedAuthTestClient(create_app())
 
 
-def write_automation_script(
+def write_middleware_package(
     tmp_path: Path,
-    plugin_id: str,
+    package_id: str,
     source: str,
     *,
-    entrypoints: tuple[str, ...] = ("prepare",),
     config_schema: dict[str, object] | None = None,
+    requirements: tuple[str, ...] = (),
 ) -> None:
-    script_dir = (
-        tmp_path / "data" / "resources" / "automation_scripts" / plugin_id
+    package_dir = (
+        tmp_path / "data" / "resources" / "custom_middlewares" / package_id
     )
-    script_dir.mkdir(parents=True, exist_ok=True)
-    (script_dir / "script.json").write_text(
+    package_dir.mkdir(parents=True, exist_ok=True)
+    (package_dir / "middleware.json").write_text(
         json.dumps(
             {
-                "api_version": 3,
-                "id": plugin_id,
-                "name": plugin_id,
-                "description": "Test automation plugin.",
-                "entrypoints": list(entrypoints),
+                "api_version": 1,
+                "id": package_id,
+                "name": package_id,
+                "description": "Test custom Middleware package.",
                 "config_schema": {
                     "type": "object",
                     "properties": {},
@@ -154,10 +153,15 @@ def write_automation_script(
         ),
         encoding="utf-8",
     )
-    (script_dir / "main.py").write_text(source, encoding="utf-8")
+    (package_dir / "main.py").write_text(source, encoding="utf-8")
+    if requirements:
+        (package_dir / "requirements.txt").write_text(
+            "\n".join(requirements) + "\n",
+            encoding="utf-8",
+        )
 
 
-def automation_config_schema(
+def middleware_config_schema(
     fields: dict[str, str],
     *,
     required: tuple[str, ...] = (),
@@ -179,6 +183,7 @@ def create_main_agent(
     provider_settings: dict[str, object] | None = None,
     model_request_settings: dict[str, object] | None = None,
     include_filesystem: bool = True,
+    create_workflow: bool = True,
 ) -> dict:
     model_payload = {
         "name": "Published model",
@@ -234,6 +239,29 @@ def create_main_agent(
         },
     )
     assert response.status_code == 200, response.text
+    main_agent = response.json()
+    if create_workflow:
+        create_workflow_for_agent(client, main_agent)
+    return main_agent
+
+
+def create_workflow_for_agent(
+    client: TestClient,
+    main_agent: dict,
+    *,
+    name: str | None = None,
+    enabled: bool = True,
+) -> dict:
+    response = client.post(
+        "/api/workflows",
+        json={
+            "name": name or main_agent["name"],
+            "description": "Test Workflow.",
+            "main_agent_id": main_agent["id"],
+            "enabled": enabled,
+        },
+    )
+    assert response.status_code == 200, response.text
     return response.json()
 
 
@@ -243,7 +271,6 @@ def subagent_payload(
     name: str = "worker",
     description: str = "Handles delegated work.",
     capability_overrides: list[dict[str, object]] | None = None,
-    subagents: list[dict[str, str]] | None = None,
 ) -> dict[str, object]:
     return {
         "component_name": component_name,
@@ -251,7 +278,6 @@ def subagent_payload(
         "description": description,
         "settings": {
             "capability_overrides": capability_overrides or [],
-            "subagents": subagents or [],
         },
     }
 

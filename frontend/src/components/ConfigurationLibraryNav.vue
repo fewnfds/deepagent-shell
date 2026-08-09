@@ -16,9 +16,7 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
-const activeCategoryId = computed(() => (
-  route.path === '/library/automation' ? 'automation' : routeCategory(route.params.type)
-))
+const activeCategoryId = computed(() => routeCategory(route.params.type))
 const componentItems = computed<SectionNavItem[]>(() => props.manifests.map((manifest) => ({
   id: manifest.type,
   label: t(`capabilities.${manifest.type}.label`),
@@ -27,10 +25,6 @@ const agentItems = computed<SectionNavItem[]>(() => agentLibraryCategories.map((
   id,
   label: t(`capabilities.${id}.label`),
 })))
-const pluginItems = computed<SectionNavItem[]>(() => [{
-  id: 'automation',
-  label: t('navigation.automation'),
-}])
 
 function selectCategory(id: string): void {
   if (id === activeCategoryId.value) return
@@ -59,16 +53,6 @@ function selectCategory(id: string): void {
       :active-id="activeCategoryId"
       :aria-label="t('library.groups.agents')"
       :items="agentItems"
-      layout="inline"
-      @select="selectCategory"
-    />
-  </div>
-  <div class="d-flex flex-wrap align-items-center gap-2 mb-3" data-testid="library-plugin-group">
-    <span class="fw-semibold">{{ t('library.groups.plugins') }}</span>
-    <SectionNav
-      :active-id="activeCategoryId"
-      :aria-label="t('library.groups.plugins')"
-      :items="pluginItems"
       layout="inline"
       @select="selectCategory"
     />

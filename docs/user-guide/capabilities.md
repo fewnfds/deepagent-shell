@@ -23,5 +23,5 @@
 详细字段见[组件说明](../wizard-pages/README.md)。Agent 组合方式见
 [装配 Main Agent 与 Subagent](configuration-workflow.md)。
 
-自定义的启动前消息处理、LangChain Hook 和生命周期文件更新不属于组件，按 Agent 身份挂载自动化插件。见
-[使用自动化插件](automation.md)。
+自定义 Middleware 组件只保存有序包引用；包返回官方 LangChain `AgentMiddleware`。格式、安全边界和依赖管理见
+[自定义 Middleware 包](middleware-packages.md)。

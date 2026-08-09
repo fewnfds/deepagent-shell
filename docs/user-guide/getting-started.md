@@ -8,35 +8,25 @@ Windows 源码 Clone 从项目根运行：
 .\start_server.bat
 ```
 
-首次启动输入两次管理密码。配置写入 `data/config/agent-shell.env`，后续启动直接读取。
-默认管理台地址是 <http://127.0.0.1:19100/admin>。
-
-管理密码用于 `/admin` 与 `/api/*`；首页单独设置的 API Key 用于 `/v1/*`。两项可以填写相同值，
-但由不同设置管理。
+首次启动输入两次管理密码。默认管理台地址是 <http://127.0.0.1:19100/admin>。管理密码用于 `/admin` 与
+`/api/*`；首页的 API Key 用于 `/v1/*`。
 
 ## 管理台入口
 
-- 【首页】：API Server 地址、API Key、消息上限、启动/停止与配置告警；
+- 【Workflow】：管理公开 model 与 Main Agent 的根图入口；
 - 【系统】：系统配置、文件管理、日志中心和历史会话；
-- 【Agent】：Main Agent 与可复用 Subagent 实体；
-- 【组件】：十二类可复用能力；
-- 【自动化】：查看已安装 Python 自动化插件、入口和第三方依赖状态；
-- 【配置仓库】：查看、复制、编辑和删除全部配置；
-- 【词库】：中英文词条；
-- 【样式实验室】：只操作前端示例状态的 UI 样式页。
+- 【Agent】：Main Agent 与一层可复用 Subagent；
+- 【组件】：十二类可复用能力，包括 Middleware 包装配；
+- 【配置仓库】：查看、复制、编辑和删除配置；
+- 【词库】与【样式实验室】：术语查询和 UI 样式实验。
 
-顶部语言按钮依次切换中文、English 和变量名视图。变量名视图用于调试：普通界面文案显示完整 locale key，
-表单字段显示实际 payload 字段路径；日期和数字继续使用英文格式。
-
-## 第一份可调用 Agent
+## 第一份可调用 Workflow
 
 1. 在【组件 / 模型】保存一个可用模型。
 2. 在【组件 / 输出模式】保存一套输出模板。
-3. 在【Agent / Main Agent】填写名称并选择这两个必选组件。
-4. 需要提示词、文件、工具或其他能力时再选择相应可选组件。
-5. 保存 Main Agent；名称会出现在 `/v1/models`。
-6. 在首页设置 API Key 并启动 API Server。
+3. 在【Agent / Main Agent】选择这两个必选组件并保存。
+4. 在【Workflow】新建记录，选择刚才的 Main Agent 并启用。
+5. 在首页设置 API Key 并启动 API Server。
+6. 使用 Workflow 名称调用 `/v1/chat/completions`。
 
-页面草稿会提交给服务端校验，保存时服务端再次验证完整引用。删除操作集中在【配置仓库】；删除可选组件或
-Subagent 时会同步摘除 Agent 引用，仍被 Main Agent 使用的必选模型和输出模式需要先替换。自动化插件 binding
-直接在 Main Agent/Subagent 页面配置，插件文件在【系统 / 文件管理】维护。
+需要把客户端消息传给 Agent 时，配置一个自定义 Middleware 包；Shell 不隐式把完整聊天正文塞入活动 messages。

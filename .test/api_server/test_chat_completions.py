@@ -7,18 +7,24 @@ from agent_shell.api import api_server
 from .support import *
 
 
-def test_models_publish_only_main_agents_and_each_runs_the_minimal_runtime(
+def test_models_publish_only_enabled_workflows_and_each_runs_the_root_graph(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
         main_agent = create_main_agent(client)
+        create_workflow_for_agent(
+            client,
+            main_agent,
+            name="Disabled Workflow",
+            enabled=False,
+        )
 
         models = client.get("/v1/models")
         test_reply = client.post(
             "/v1/chat/completions",
             json={"model": "test", "messages": [{"role": "user", "content": "hello"}]},
         )
-        main_agent_reply = client.post(
+        workflow_reply = client.post(
             "/v1/chat/completions",
             json={"model": main_agent["name"], "messages": [{"role": "user", "content": "run"}]},
         )
@@ -33,14 +39,14 @@ def test_models_publish_only_main_agents_and_each_runs_the_minimal_runtime(
     assert test_reply.json()["error"]["code"] == "model_not_found"
     assert internal_uuid_reply.status_code == 404
     assert internal_uuid_reply.json()["error"]["code"] == "model_not_found"
-    assert main_agent_reply.status_code == 200, main_agent_reply.text
-    assert main_agent_reply.json()["choices"][0]["message"] == {
+    assert workflow_reply.status_code == 200, workflow_reply.text
+    assert workflow_reply.json()["choices"][0]["message"] == {
         "role": "assistant",
         "content": "runtime reply",
     }
 
 
-def test_main_agent_without_plugins_does_not_receive_client_messages(
+def test_main_agent_without_input_middleware_does_not_receive_client_messages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     model = RecordingFakeListChatModel(responses=["no relay"])
@@ -202,7 +208,7 @@ def test_initial_message_limit_is_configurable_and_rejects_before_agent_start(
             raise AssertionError("an oversized request must not enter the Agent")
 
         monkeypatch.setattr(
-            "agent_shell.runtime.request_snapshot.RequestRuntimeSnapshot.start_agent",
+            "agent_shell.runtime.request_snapshot.RequestRuntimeSnapshot.start_workflow",
             fail_start,
         )
         rejected = client.post(

@@ -3,7 +3,7 @@ name: Deterministic verification
 on:
   push:
     branches:
-      - dev
+      - workflow
       - main
   workflow_dispatch:
 

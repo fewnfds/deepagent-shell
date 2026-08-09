@@ -77,15 +77,15 @@ export interface CustomToolCatalogItem {
 
 interface MiddlewareDraftEntry {
   _key: string
-  name: string
+  package_id: string
   enabled: boolean
-  source: string
+  config: Record<string, unknown>
 }
 
 interface MiddlewareApiEntry {
-  name: string
+  package_id: string
   enabled: boolean
-  source: string
+  config: Record<string, unknown>
 }
 
 export interface CustomMiddlewareDraft extends BlockDraftBase {
@@ -101,10 +101,11 @@ interface CustomMiddlewarePayload extends BlockPayloadBase {
 }
 
 export interface CustomMiddlewareCatalogItem {
-  filename: string
-  name?: string
-  description?: string
-  source?: string
+  id: string
+  name: string
+  description: string
+  config_schema: MiddlewareConfigSchema
+  dependency_status: 'ready' | 'restart_required' | 'failed'
 }
 
 type OutputFilterMode = 'allowlist' | 'blocklist'
@@ -559,9 +560,9 @@ export const customToolAdapter = {
 export function createMiddlewareEntry(value: Partial<MiddlewareApiEntry> = {}): MiddlewareDraftEntry {
   return {
     _key: nextMiddlewareKey(),
-    name: value.name ?? '',
+    package_id: value.package_id ?? '',
     enabled: value.enabled ?? true,
-    source: value.source ?? '',
+    config: { ...(value.config ?? {}) },
   }
 }
 
@@ -575,9 +576,9 @@ export const customMiddlewareAdapter = {
       middlewares: Array.isArray(value.middlewares)
         ? value.middlewares.flatMap((entry) => isRecord(entry)
           ? [createMiddlewareEntry({
-              name: stringValue(entry.name),
+              package_id: stringValue(entry.package_id),
               enabled: typeof entry.enabled === 'boolean' ? entry.enabled : true,
-              source: stringValue(entry.source),
+              config: isRecord(entry.config) ? { ...entry.config } : {},
             })]
           : [])
         : [],
@@ -587,9 +588,9 @@ export const customMiddlewareAdapter = {
     return {
       name: cleanName(value.name),
       middlewares: value.middlewares.map((entry) => ({
-        name: entry.name.trim(),
+        package_id: entry.package_id.trim(),
         enabled: entry.enabled,
-        source: entry.source.trim(),
+        config: { ...entry.config },
       })),
     }
   },
@@ -1132,3 +1133,4 @@ export const blockAdapters = {
   'todo-list': todoListAdapter,
   other: otherAdapter,
 } as const
+import type { MiddlewareConfigSchema } from '@/api'

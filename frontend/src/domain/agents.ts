@@ -7,21 +7,14 @@ import type {
   CapabilityOverride as ApiCapabilityOverride,
   CatalogResponse,
   DraftValidationRequest as ApiDraftValidationRequest,
-  AutomationScriptResource,
   MainAgent,
   MainAgentPayload as ApiMainAgentPayload,
-  ResourceCatalog,
   SavedBlock,
   Subagent,
   SubagentPayload as ApiSubagentPayload,
   SubagentReference as ApiSubagentReference,
   ValidationReport as ApiValidationReport,
 } from '@/api'
-import {
-  automationPayload,
-  normalizeAutomation,
-  type AutomationConfigurationDraft,
-} from '@/domain/automation'
 
 export type CapabilityType = BlockType
 type OverrideMode = 'inherit' | 'replace' | 'disabled'
@@ -32,10 +25,9 @@ type AgentCatalog = CatalogResponse
 export type StoredBlock = SavedBlock
 export type SubagentReference = ApiSubagentReference
 
-export interface MainAgentProfile extends Omit<MainAgent, 'subagents' | 'automation'> {
+export interface MainAgentProfile extends Omit<MainAgent, 'subagents'> {
   id: string
   subagents: SubagentReference[]
-  automation: AutomationConfigurationDraft
 }
 
 type MainAgentPayload = ApiMainAgentPayload
@@ -48,9 +40,7 @@ interface OverrideSelection {
 }
 
 export interface SubagentProfile extends Omit<Subagent, 'settings'> {
-  settings: Omit<Subagent['settings'], 'automation'> & {
-    automation: AutomationConfigurationDraft
-  }
+  settings: Subagent['settings']
 }
 type SubagentPayload = ApiSubagentPayload
 export type ValidationReport = ApiValidationReport
@@ -59,7 +49,6 @@ export type DraftValidationRequest = ApiDraftValidationRequest
 export interface AgentAuthoringService {
   getCatalog(): Promise<AgentCatalog>
   listBlocks(type: CapabilityType): Promise<StoredBlock[]>
-  listAutomationPlugins?(): Promise<ResourceCatalog<AutomationScriptResource>>
   listMainAgents(): Promise<MainAgent[]>
   getMainAgent(id: string): Promise<MainAgent>
   createMainAgent(payload: MainAgentPayload): Promise<MainAgent>
@@ -76,7 +65,6 @@ export const agentAuthoringServiceKey: InjectionKey<AgentAuthoringService> = Sym
 export const managementAgentAuthoringService: AgentAuthoringService = {
   getCatalog: () => managementApi.getCatalog(),
   listBlocks: (type) => managementApi.listBlocks(type),
-  listAutomationPlugins: () => managementApi.listAutomationPlugins(),
   listMainAgents: () => managementApi.listMainAgents(),
   getMainAgent: (id) => managementApi.getMainAgent(id),
   createMainAgent: (payload) => managementApi.saveMainAgent(payload),
@@ -111,7 +99,6 @@ export function blankMainAgent(): MainAgentProfile {
     name: '',
     capability_refs: [],
     subagents: [],
-    automation: { hooks: [], periodic: [] },
   }
 }
 
@@ -127,7 +114,6 @@ export function normalizeMainAgent(value: unknown): MainAgentProfile {
       return { type: text(reference.type), block_id: text(reference.block_id) }
     }),
     subagents: subagents.map(normalizeSubagentReference),
-    automation: normalizeAutomation(source.automation),
   }
 }
 
@@ -139,7 +125,6 @@ export function mainAgentPayload(value: MainAgentProfile): MainAgentPayload {
     subagents: value.subagents.map((reference) => ({
       subagent_id: reference.subagent_id,
     })),
-    automation: automationPayload(value.automation),
   }
 }
 
@@ -160,7 +145,6 @@ export function blankSubagent(): SubagentProfile {
     description: '',
     settings: {
       capability_overrides: [],
-      automation: { hooks: [], periodic: [] },
     },
   }
 }
@@ -185,7 +169,6 @@ export function normalizeSubagent(value: unknown): SubagentProfile {
           block_id: text(override.block_id),
         }
       }),
-      automation: normalizeAutomation(settings.automation),
     },
   }
 }
@@ -220,7 +203,6 @@ export function subagentPayload(value: SubagentProfile): SubagentPayload {
     settings: {
       capability_overrides: value.settings.capability_overrides
         .map((selection) => ({ ...selection })),
-      automation: automationPayload(value.settings.automation),
     },
   }
 }

@@ -1,6 +1,7 @@
 # Agent Shell
 
-Agent Shell 是本地管理台，用于配置和运行 Deep Agents，并提供 OpenAI 兼容接口。
+Agent Shell 是本地 Workflow 与 Deep Agents 管理台。启用的 Workflow 作为 OpenAI-compatible model，当前根图固定为
+`START -> Main Agent -> END`，Main Agent 可同步委派一层 direct Subagent。
 
 ## 开始
 

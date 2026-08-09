@@ -2,7 +2,6 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 
 const AgentSessionsPage = () => import('@/pages/AgentSessionsPage.vue')
 const ApiServerSettingsPage = () => import('@/pages/ApiServerSettingsPage.vue')
-const AutomationPage = () => import('@/pages/AutomationPage.vue')
 const ComponentsPage = () => import('@/pages/ComponentsPage.vue')
 const ConfigLibraryPage = () => import('@/pages/ConfigLibraryPage.vue')
 const EventFeedPage = () => import('@/pages/EventFeedPage.vue')
@@ -12,18 +11,19 @@ const StyleLabPage = () => import('@/pages/StyleLabPage.vue')
 const SystemSettingsPage = () => import('@/pages/SystemSettingsPage.vue')
 const SubagentPage = () => import('@/pages/SubagentPage.vue')
 const TerminologyPage = () => import('@/pages/TerminologyPage.vue')
+const WorkflowsPage = () => import('@/pages/WorkflowsPage.vue')
 
 export const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', component: ApiServerSettingsPage, meta: { titleKey: 'apiServer.homeTitle' } },
+    { path: '/workflows', component: WorkflowsPage, meta: { titleKey: 'workflows.title' } },
     { path: '/agents', redirect: '/agents/main' },
     { path: '/agents/main', component: MainAgentPage, meta: { titleKey: 'navigation.agents' } },
     { path: '/agents/subagents', component: SubagentPage, meta: { titleKey: 'navigation.agents' } },
     { path: '/components', redirect: '/components/model' },
     { path: '/components/:type', component: ComponentsPage, meta: { titleKey: 'components.title' } },
     { path: '/library', redirect: '/library/model' },
-    { path: '/library/automation', component: AutomationPage, meta: { titleKey: 'library.title' } },
     { path: '/library/:type', component: ConfigLibraryPage, meta: { titleKey: 'library.title' } },
     { path: '/system', redirect: '/system/config' },
     {

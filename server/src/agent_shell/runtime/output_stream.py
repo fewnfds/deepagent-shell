@@ -298,7 +298,7 @@ class V3EventNormalizer:
         agent_name = str(metadata.get("lc_agent_name") or self._main_agent_name)
         run_id = str(metadata.get("run_id") or "")
         run_key = run_id or f"{namespace}:{agent_name}"
-        is_main_agent = agent_name == self._main_agent_name and namespace == "root"
+        is_main_agent = agent_name == self._main_agent_name
 
         if not isinstance(payload, dict):
             if not is_main_agent:
