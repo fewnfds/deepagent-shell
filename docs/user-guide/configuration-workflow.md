@@ -18,21 +18,23 @@
 - 关闭：从 child 移除该可选能力。
 
 模型不能关闭，文件系统固定共享，输出模式只用于 Main Agent。文件系统权限是独立能力，可以继承、替换或关闭，
-因此 child 可以在同一个 workspace 上使用不同的路径权限和文件工具。Subagent 页面还可选择 child 自己的
-有序实体引用，形成多层同步委派。允许显式循环；同一个实体在一次请求中只构造一次，不会因递归层级重复构造。
+因此 child 可以在同一个 workspace 上使用不同的路径权限和文件工具。委派能力不属于 Subagent，页面不会提供
+child 引用或委派组件覆写。经典模式固定为一层
+`Main -> Subagent`；需要多阶段编排时使用 Workflow graph。
 
 不同 Agent 可以自由选择模型、提示词、工具和 Middleware；Provider prompt caching 是否命中取决于最终
 请求前缀与 Provider 规则。
 
 ## 自动化装配
 
-自动化不是组件。Main Agent 分别保存有序 Hook bindings 和带独立间隔的周期 bindings；Subagent 对两类插件分别
-选择继承 Main Agent、使用自己的插件或关闭。同一个 Subagent 实体在一次请求中只有一套 request-local ctx，每个
-周期 binding 至多一个循环，即使被多条路径或递归调用；每次真实委派仍使用新的 LangGraph state。
+自动化不是组件。Main Agent 和 Subagent 分别保存自己的有序 Hook bindings 与带独立间隔的周期 bindings；
+Subagent 不继承 Main Agent 插件。同一个直接 Subagent 实体在一次请求中只有一套 request-local runtime owner，
+每个周期 binding 至多一个循环；每次真实委派仍使用新的 LangGraph state。
 
 无插件时，客户端 `messages[]` 不进入 Main Agent 或 Subagent 的活动消息：Main Agent 以空 messages 启动，Subagent 保持
-Deep Agents 原生 delegated input。插件 `prepare` 可以在任何 Agent 图构造前从不可变
-`ctx.request.messages` 读取原始事实，并显式写入对应身份的空 `ctx.messages`；只有这样产生的消息才会进入 Agent。
+Deep Agents 原生 delegated input。插件的 Middleware factory 可以从不可变 `ctx.request.messages` 建立注入策略，
+再由其返回的原生 Middleware 显式写入 LangGraph `messages` state；`prepare` 本身没有消息注入缓冲区。只有
+Middleware 产生的消息才会进入 Agent。
 需要每次 invocation 运行的逻辑使用插件返回的 LangChain 原生 Middleware Hook。详细格式见
 [使用自动化插件](automation.md)。
 

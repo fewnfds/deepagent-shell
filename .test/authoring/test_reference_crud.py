@@ -162,47 +162,22 @@ def test_subagent_delete_detaches_entity_references(
 
     assert client.delete(f"/api/main-agents/{owner['id']}").status_code == 200
 
-def test_subagent_delete_detaches_self_and_external_references(
+def test_subagent_nested_references_are_rejected_before_storage(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
     target = client.post(
         "/api/subagents",
-        json=subagent_payload("Recursive target", name="recursive_worker"),
+        json=subagent_payload("Direct target", name="direct_worker"),
     ).json()
-    self_reference = {"subagent_id": target["id"]}
-    recursive = client.put(
-        f"/api/subagents/{target['id']}",
-        json=subagent_payload(
-            target["component_name"],
-            name=target["name"],
-            description=target["description"],
-            subagents=[self_reference],
-        ),
-    )
-    assert recursive.status_code == 200, recursive.text
-    assert recursive.json()["settings"]["subagents"] == [self_reference]
-
-    external = client.post(
+    nested = client.post(
         "/api/subagents",
         json=subagent_payload(
-            "External owner",
-            name="external_owner",
-            subagents=[self_reference],
+            "Invalid nested owner",
+            name="invalid_nested_owner",
+            subagents=[{"subagent_id": target["id"]}],
         ),
     )
-    assert external.status_code == 200, external.text
-
-    deleted = client.delete(f"/api/subagents/{target['id']}")
-    assert deleted.status_code == 200, deleted.text
-    stored_external = client.get(
-        f"/api/subagents/{external.json()['id']}"
-    ).json()
-    assert stored_external["settings"]["subagents"] == []
-
-    released = client.post(
-        "/api/subagents/delete",
-        json={"ids": [external.json()["id"]]},
-    )
-    assert released.status_code == 200, released.text
-    assert released.json() == {"deleted": 1}
+    assert nested.status_code == 422
+    issue = nested.json()["detail"]["validation"]["issues"][0]
+    assert issue["code"] == "contract.subagent_nested_references_forbidden"

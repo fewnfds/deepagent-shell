@@ -111,39 +111,27 @@ class AgentConfigStore:
         connection: sqlite3.Connection,
         target_ids: set[str],
     ) -> None:
-        for table in ("main_agents", "subagents"):
-            rows = connection.execute(f"SELECT id, payload FROM {table}").fetchall()
-            for row in rows:
-                payload = json.loads(row["payload"])
-                if table == "main_agents":
-                    references = payload.get("subagents")
-                else:
-                    settings = payload.get("settings")
-                    references = (
-                        settings.get("subagents")
-                        if isinstance(settings, dict)
-                        else None
-                    )
-                if not isinstance(references, list):
-                    continue
-                retained = [
-                    reference
-                    for reference in references
-                    if not (
-                        isinstance(reference, dict)
-                        and reference.get("subagent_id") in target_ids
-                    )
-                ]
-                if len(retained) == len(references):
-                    continue
-                if table == "main_agents":
-                    payload["subagents"] = retained
-                else:
-                    settings["subagents"] = retained
-                connection.execute(
-                    f"UPDATE {table} SET payload = ? WHERE id = ?",
-                    (json.dumps(payload, ensure_ascii=False), row["id"]),
+        rows = connection.execute("SELECT id, payload FROM main_agents").fetchall()
+        for row in rows:
+            payload = json.loads(row["payload"])
+            references = payload.get("subagents")
+            if not isinstance(references, list):
+                continue
+            retained = [
+                reference
+                for reference in references
+                if not (
+                    isinstance(reference, dict)
+                    and reference.get("subagent_id") in target_ids
                 )
+            ]
+            if len(retained) == len(references):
+                continue
+            payload["subagents"] = retained
+            connection.execute(
+                "UPDATE main_agents SET payload = ? WHERE id = ?",
+                (json.dumps(payload, ensure_ascii=False), row["id"]),
+            )
 
     def delete_items(
         self,

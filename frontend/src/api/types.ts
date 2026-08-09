@@ -241,7 +241,6 @@ export interface CapabilityOverride {
 
 export interface SubagentSettings {
   capability_overrides: CapabilityOverride[]
-  subagents: SubagentReference[]
   automation: SubagentAutomation
 }
 

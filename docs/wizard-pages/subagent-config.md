@@ -16,4 +16,5 @@
 - 具体 child 路由名、说明和能力策略在 Subagent 实体页面维护。
 
 Agent 选择该组件且拥有至少一条有效 Subagent 实体引用时获得 `task`。每个唯一实体 graph 由
-`create_deep_agent()` 构造并同步执行。Subagent 可继承、替换或关闭委派能力，并定义自己的下级实体引用。
+`create_deep_agent()` 构造并同步执行。委派能力只属于 Main Agent；经典模式的 Subagent 不能覆写该组件，也不能
+定义下级实体引用。

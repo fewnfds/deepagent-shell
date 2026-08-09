@@ -28,8 +28,21 @@ Content-Type: application/json
 没有 automation prepare 的情况下自动交给 Main Agent 或 Subagent。模型组件中的 `tool_choice`、`response_format` 和
 `model_settings` 决定 Provider-bound ModelRequest，请求体中的临时生成参数不会覆盖模型组件。
 
-如果当前 Agent 确实需要把客户端消息交给模型，必须显式配置 automation `prepare`，从只读的
-`ctx.request.messages` 派生并写入 `ctx.messages`；这一步是产品配置行为，不由 API Server 隐式补回历史或会话记忆。
+Main Agent 如需把客户端消息交给模型，必须配置返回原生 LangChain `before_agent`/`abefore_agent` Middleware 的
+automation 插件，从只读 `ctx.request.messages` 派生并返回 graph state update；这一步不由 API Server 隐式补回。
+Subagent 默认只接收 Deep Agents 原生 delegated messages，需要额外消息时使用相同的 Middleware 入口。
+
+### 生命周期输入与装配校验
+
+请求进入后，服务端会在本次生命周期外围保留规范化后的完整 `messages[]`，并计算其 SHA。用户输入正文不作为每个
+Agent 的固定装配数据，也不复制到每个 Agent 的 graph state。后续灾难恢复功能会在异常生命周期保存 SHA；用户重试
+时再次提交完整 `messages[]`，由服务端计算并校验是否一致。当前版本尚未启用该落盘与 checkpoint 恢复流程。
+
+服务端会在生命周期开始时解析 Main Agent 及其直接 Subagent，并冻结本次请求使用的有效装配信息。Subagent
+不会在运行过程中重新读取数据库装配。冻结装配属于外围只读运行配置，不放入 graph state；恢复校验范围只到
+Agent 装配信息：Agent、Subagent、能力引用、插件引用及其
+装配关系等规范化 JSON。当前不校验插件源码、安装包版本或插件运行时生成的随机数据；后续如有更严格的恢复要求再
+扩展校验范围。
 
 `content` 可以是字符串，或由下列受控 content parts 组成的数组：
 

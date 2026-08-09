@@ -39,7 +39,7 @@ def test_plugin_catalog_direct_binding_and_old_workflow_routes_are_removed(
         write_automation_script(
             tmp_path,
             "open-plugin",
-            "async def prepare(ctx):\n    ctx.vars['seen'] = True\n"
+            "async def prepare(ctx):\n    return None\n"
             "async def lifecycle(ctx):\n    return None\n",
             entrypoints=("prepare", "lifecycle"),
         )
@@ -181,7 +181,7 @@ def test_binding_requires_current_plugin_dependency_state(
     assert ready.status_code == 200, ready.text
 
 
-def test_native_middleware_hook_shares_prepare_context_and_original_messages(
+def test_native_middleware_reads_original_request_and_checkpointed_shared_vars(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     marker = tmp_path / "native-hook.txt"
@@ -193,15 +193,15 @@ def test_native_middleware_hook_shares_prepare_context_and_original_messages(
             "from langchain.agents.middleware import AgentMiddleware\n"
             "class NativeHook(AgentMiddleware):\n"
             "    def __init__(self, ctx):\n        self.ctx = ctx\n"
-            "    async def awrap_model_call(self, request, handler):\n"
+            "    async def abefore_agent(self, state, runtime):\n"
+            "        return {'shared_vars': {'prepared': True}}\n"
+            "    async def abefore_model(self, state, runtime):\n"
             "        original = self.ctx.request.messages[0]['content']\n"
-            "        shared = self.ctx.vars.get('prepared')\n"
+            "        shared = state.get('shared_vars', {}).get('prepared')\n"
             "        Path(self.ctx.config['marker']).write_text(f'{original}|{shared}')\n"
-            "        return await handler(request)\n"
-            "def create_middleware(ctx):\n    return NativeHook(ctx)\n"
-            "async def prepare(ctx):\n"
-            "    ctx.vars['prepared'] = True\n",
-            entrypoints=("middleware", "prepare"),
+            "        return None\n"
+            "def create_middleware(ctx):\n    return NativeHook(ctx)\n",
+            entrypoints=("middleware",),
             config_schema=automation_config_schema(
                 {"marker": "string"}, required=("marker",)
             ),
@@ -321,7 +321,7 @@ def test_python_plugin_config_must_parse_before_save(
     }
 
 
-def test_prepare_can_relay_normalized_multimodal_message_to_langchain(
+def test_middleware_can_relay_normalized_multimodal_message_to_langchain(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     model = RecordingFakeListChatModel(responses=["multimodal accepted"])
@@ -335,7 +335,14 @@ def test_prepare_can_relay_normalized_multimodal_message_to_langchain(
         write_automation_script(
             tmp_path,
             "relay-for-test",
-            "async def prepare(ctx):\n    ctx.messages.extend(ctx.request.messages)\n",
+            "from langchain.agents.middleware import AgentMiddleware\n"
+            "from agent_shell.automation.messages import mutable_request_messages\n"
+            "class RelayMessages(AgentMiddleware):\n"
+            "    def __init__(self, ctx):\n        self.ctx = ctx\n"
+            "    async def abefore_agent(self, state, runtime):\n"
+            "        return {'messages': mutable_request_messages(self.ctx.request.messages)}\n"
+            "def create_middleware(ctx):\n    return RelayMessages(ctx)\n",
+            entrypoints=("middleware",),
         )
         main_agent = create_main_agent(client, include_filesystem=False)
         attached = client.put(

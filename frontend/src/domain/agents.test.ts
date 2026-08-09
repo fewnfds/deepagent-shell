@@ -38,27 +38,21 @@ describe('agent profile adapters', () => {
     expect(overrideSelection(draft, 'model').mode).toBe('inherit')
     expect(subagentPayload(draft).settings).toEqual({
       capability_overrides: [],
-      subagents: [],
       automation: { hooks: [], periodic: [] },
     })
   })
 
-  it('projects component identity and ordered Subagent entity references', () => {
+  it('projects component identity without nested Subagent references', () => {
     const draft = blankSubagent()
     draft.component_name = ' Research component '
     draft.name = ' researcher '
     draft.description = 'Research delegated topics.'
-    draft.settings.subagents.push({
-      subagent_id: '00000000-0000-0000-0000-000000000020',
-    })
-
     expect(subagentPayload(draft)).toEqual({
       component_name: 'Research component',
       name: 'researcher',
       description: 'Research delegated topics.',
       settings: {
         capability_overrides: [],
-        subagents: [{ subagent_id: '00000000-0000-0000-0000-000000000020' }],
         automation: { hooks: [], periodic: [] },
       },
     })

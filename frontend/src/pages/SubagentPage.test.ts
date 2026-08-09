@@ -63,7 +63,7 @@ describe('Subagent authoring page', () => {
     wrapper.unmount()
   })
 
-  it('shows fixed filesystem and output-mode values and the full Subagent capability choices', async () => {
+  it('shows fixed inherited values without exposing delegation to Subagents', async () => {
     const api = service({
       getCatalog: vi.fn(async () => ({
         block_types: [
@@ -79,7 +79,7 @@ describe('Subagent authoring page', () => {
     })
     const { wrapper } = await mountSubagentPage(api)
 
-    expect(wrapper.findAll('[data-capability]')).toHaveLength(4)
+    expect(wrapper.findAll('[data-capability]')).toHaveLength(3)
     const filesystem = wrapper.get('[data-testid="subagent-capability-filesystem"]')
     expect(filesystem.attributes('disabled')).toBeDefined()
     expect((filesystem.element as HTMLSelectElement).value).toBe('__inherit__')
@@ -96,14 +96,7 @@ describe('Subagent authoring page', () => {
     expect((outputMode.element as HTMLSelectElement).value).toBe('__invalid__')
     expect(outputMode.text()).toContain('agents.override.mode.invalid')
 
-    const subagent = wrapper.get('[data-testid="subagent-capability-subagent"]')
-    expect(subagent.attributes('disabled')).toBeUndefined()
-    expect((subagent.element as HTMLSelectElement).value).toBe('__inherit__')
-    expect(subagent.find('option[value="__inherit__"]').exists()).toBe(true)
-    expect(subagent.find('option[value="__disabled__"]').exists()).toBe(true)
-    expect(subagent.findAll('option')).toHaveLength(3)
-    await subagent.setValue('00000000-0000-0000-0000-000000000002')
-    expect((subagent.element as HTMLSelectElement).value).toBe('00000000-0000-0000-0000-000000000002')
+    expect(wrapper.find('[data-testid="subagent-capability-subagent"]').exists()).toBe(false)
     await buttonByText(wrapper, 'common.save').trigger('click')
     await flushPromises()
     expect(api.createSubagent).toHaveBeenCalledWith(expect.objectContaining({
@@ -114,16 +107,9 @@ describe('Subagent authoring page', () => {
             mode: 'replace',
             block_id: '00000000-0000-0000-0000-000000000002',
           },
-          {
-            type: 'subagent',
-            mode: 'replace',
-            block_id: '00000000-0000-0000-0000-000000000002',
-          },
         ]),
       }),
     }))
-    await subagent.setValue('__disabled__')
-    expect((subagent.element as HTMLSelectElement).value).toBe('__disabled__')
 
     wrapper.unmount()
   })
@@ -154,7 +140,6 @@ describe('Subagent authoring page', () => {
           { type: 'model', mode: 'replace', block_id: '00000000-0000-0000-0000-000000000001' },
           { type: 'system-prompt', mode: 'disabled', block_id: '' },
         ],
-        subagents: [],
         automation: { hooks: [], periodic: [] },
       },
     })
@@ -177,28 +162,6 @@ describe('Subagent authoring page', () => {
       expect.objectContaining({
         component_name: 'Worker component',
         name: 'worker',
-      }),
-    )
-    wrapper.unmount()
-  })
-
-  it('adds an entity child to a Subagent and can reference itself', async () => {
-    const api = service()
-    const id = '00000000-0000-0000-0000-000000000020'
-    const { wrapper } = await mountSubagentPage(api, `/agents/subagents?id=${id}`)
-
-    await wrapper.get('[data-action="add-subagent-reference"]').trigger('click')
-    const reference = wrapper.get('[data-testid="subagent-reference-row"]')
-    await reference.get('[data-testid="subagent-reference"]').setValue(id)
-    await buttonByText(wrapper, 'common.save').trigger('click')
-    await flushPromises()
-
-    expect(api.updateSubagent).toHaveBeenCalledWith(
-      id,
-      expect.objectContaining({
-        settings: expect.objectContaining({
-          subagents: [{ subagent_id: id }],
-        }),
       }),
     )
     wrapper.unmount()

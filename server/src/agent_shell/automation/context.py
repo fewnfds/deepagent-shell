@@ -28,6 +28,18 @@ class AutomationRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class LifecycleSnapshot:
+    """Immutable Shell-owned data shared for one request lifecycle."""
+
+    request_id: str
+    messages: tuple[Mapping[str, Any], ...]
+    assembly: Mapping[str, Any]
+    input_sha: str
+    agent_shas: Mapping[str, str]
+    assembly_sha: str
+
+
+@dataclass(frozen=True, slots=True)
 class AutomationPaths:
     plugin_dir: Path
     runtime_dir: Path
@@ -56,9 +68,7 @@ class AutomationContext:
         runtime_dir: Path,
         mapped_paths: Mapping[str, Path],
         config: dict[str, Any],
-        variables: dict[Any, Any],
         stage: str,
-        messages: list[dict[str, Any]] | None = None,
         initial_files: dict[str, str | bytes] | None = None,
         tick: int | None = None,
         terminal: Mapping[str, Any] | None = None,
@@ -75,9 +85,7 @@ class AutomationContext:
             }
         )
         self.config = freeze(deepcopy(config))
-        self.vars = variables
         self.stage = stage
-        self.messages = messages
         self.initial_files = initial_files
         self.tick = tick
         self.terminal = freeze(dict(terminal)) if terminal is not None else None

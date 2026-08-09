@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from agent_shell.runtime import subagent_graphs
 from agent_shell.runtime.subagent_graphs import SubagentGraphCompiler
+from agent_shell.runtime.state import AgentShellState
 from agent_shell.validation.service import ResolvedSubagent, ResolvedSubagentEdge
 
 
@@ -62,7 +63,6 @@ def test_subagent_compiler_passes_distinct_permissions_over_shared_workspace(
             blocks={},
             filesystem_mode="configured-shared",
             automation={"hooks": [], "periodic": []},
-            subagents=(),
         ),
         "writer-id": ResolvedSubagent(
             key="writer-id",
@@ -73,7 +73,6 @@ def test_subagent_compiler_passes_distinct_permissions_over_shared_workspace(
             blocks={},
             filesystem_mode="configured-shared",
             automation={"hooks": [], "periodic": []},
-            subagents=(),
         ),
     }
 
@@ -81,7 +80,6 @@ def test_subagent_compiler_passes_distinct_permissions_over_shared_workspace(
         workspace=workspace,
         materialize_profile=materialize,
         agent_input_observer=None,
-        has_prepared_messages=lambda _owner_id: False,
         child_context=lambda _owner_id, _parent, _cause: {},
     ).compile(
         roots=(
@@ -95,5 +93,7 @@ def test_subagent_compiler_passes_distinct_permissions_over_shared_workspace(
     assert materialized_workspaces == [workspace, workspace]
     assert constructors["reader"]["backend"] is workspace
     assert constructors["writer"]["backend"] is workspace
+    assert constructors["reader"]["state_schema"] is AgentShellState
+    assert constructors["writer"]["state_schema"] is AgentShellState
     assert constructors["reader"]["permissions"] == ["reader-permission"]
     assert constructors["writer"]["permissions"] == ["writer-permission"]

@@ -160,7 +160,6 @@ export function blankSubagent(): SubagentProfile {
     description: '',
     settings: {
       capability_overrides: [],
-      subagents: [],
       automation: { hooks: [], periodic: [] },
     },
   }
@@ -172,7 +171,6 @@ export function normalizeSubagent(value: unknown): SubagentProfile {
   const overrides = Array.isArray(settings.capability_overrides)
     ? settings.capability_overrides
     : []
-  const subagents = Array.isArray(settings.subagents) ? settings.subagents : []
   return {
     id: text(source.id),
     component_name: text(source.component_name),
@@ -187,7 +185,6 @@ export function normalizeSubagent(value: unknown): SubagentProfile {
           block_id: text(override.block_id),
         }
       }),
-      subagents: subagents.map(normalizeSubagentReference),
       automation: normalizeAutomation(settings.automation),
     },
   }
@@ -223,9 +220,6 @@ export function subagentPayload(value: SubagentProfile): SubagentPayload {
     settings: {
       capability_overrides: value.settings.capability_overrides
         .map((selection) => ({ ...selection })),
-      subagents: value.settings.subagents.map((reference) => ({
-        subagent_id: reference.subagent_id,
-      })),
       automation: automationPayload(value.settings.automation),
     },
   }

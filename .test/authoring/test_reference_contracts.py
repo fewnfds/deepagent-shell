@@ -64,6 +64,7 @@ def test_reference_contracts_reject_unknown_duplicate_wrong_type_and_force_remov
         [{"type": "model", "mode": "unsupported", "block_id": ""}],
         [{"type": "model", "mode": "replace", "block_id": ""}],
         [{"type": "model", "mode": "disabled", "block_id": ""}],
+        [{"type": "subagent", "mode": "disabled", "block_id": ""}],
         [
             {"type": "model", "mode": "inherit", "block_id": ""},
             {"type": "model", "mode": "disabled", "block_id": ""},

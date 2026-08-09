@@ -415,10 +415,9 @@
         "name": "SubagentReferencesEditor",
         "path": "src/components/SubagentReferencesEditor.vue",
         "kind": "domain-composition",
-        "reason": "Owns the shared ordered Subagent entity references for Main Agent and Subagent configurations",
+        "reason": "Owns the ordered direct Subagent entity references for Main Agent configurations",
         "callers": [
-          "src/pages/MainAgentPage.vue",
-          "src/pages/SubagentPage.vue"
+          "src/pages/MainAgentPage.vue"
         ]
       },
       {

@@ -3,155 +3,34 @@ from __future__ import annotations
 from .support import *
 
 
-def test_named_subagent_can_reference_itself_with_matching_task_schema(
+def test_named_subagent_cannot_reference_itself(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    class ParentModel(ToolCallingFakeModel):
-        seen_messages: ClassVar[list[list[object]]] = []
-        tool_signatures: ClassVar[list[tuple[str, str, dict]]] = []
-
-        def bind_tools(self, tools, **kwargs):
-            type(self).tool_signatures = [
-                (tool.name, tool.description, tool.args_schema.model_json_schema())
-                for tool in tools
-            ]
-            return super().bind_tools(tools, **kwargs)
-
-    class ChildModel(ParentModel):
-        seen_messages: ClassVar[list[list[object]]] = []
-        tool_signatures: ClassVar[list[tuple[str, str, dict]]] = []
-
-    parent_model = ParentModel(
-        responses=[
-            AIMessage(
-                content="",
-                tool_calls=[{
-                    "name": "task",
-                    "args": {
-                        "description": "Run the recursive worker.",
-                        "subagent_type": "recursive_worker",
-                    },
-                    "id": "call-recursive-root",
-                    "type": "tool_call",
-                }],
-            ),
-            AIMessage(content="recursive parent completed"),
-        ]
-    )
-    child_model = ChildModel(
-        responses=[
-            AIMessage(
-                content="",
-                tool_calls=[{
-                    "name": "task",
-                    "args": {
-                        "description": "Run one nested step.",
-                        "subagent_type": "recursive_worker",
-                    },
-                    "id": "call-recursive-child",
-                    "type": "tool_call",
-                }],
-            ),
-            AIMessage(content="nested result"),
-            AIMessage(content="outer child result"),
-        ]
-    )
-    models = iter([parent_model, child_model])
-    recursive_description = "Continues the recursive task."
-
     with make_client(tmp_path, monkeypatch) as client:
-        monkeypatch.setattr(
-            "agent_shell.runtime.agent_builder._build_chat_model",
-            lambda _block, _credential, _http_clients: next(models),
-        )
-        main_agent = create_main_agent(client)
         subagent = client.post(
             "/api/subagents",
             json=subagent_payload(
                 "Recursive profile",
                 name="recursive_worker",
-                description=recursive_description,
+                description="Continues delegated work.",
             ),
-        ).json()
-        custom_task_description = (
-            "Delegate one complete task to this catalog:\n"
-            "{available_agents}\n"
-            "Return one final report."
-        )
-        child_task_description = (
-            "Delegate recursively with this child catalog:\n"
-            "{available_agents}"
-        )
-        delegation = client.post(
-            "/api/blocks/subagent",
-            json={
-                "name": "Recursive delegation",
-                "task_description_override": custom_task_description,
-            },
-        ).json()
-        child_delegation = client.post(
-            "/api/blocks/subagent",
-            json={
-                "name": "Child recursive delegation",
-                "task_description_override": child_task_description,
-            },
         ).json()
         recursive_profile = client.put(
             f"/api/subagents/{subagent['id']}",
             json=subagent_payload(
                 subagent["component_name"],
                 name=subagent["name"],
-                description=recursive_description,
-                capability_overrides=[{
-                    "type": "subagent",
-                    "mode": "replace",
-                    "block_id": child_delegation["id"],
-                }],
+                description=subagent["description"],
                 subagents=[{"subagent_id": subagent["id"]}],
             ),
         )
-        assert recursive_profile.status_code == 200, recursive_profile.text
-        updated = client.put(
-            f"/api/main-agents/{main_agent['id']}",
-            json={
-                "name": main_agent["name"],
-                "capability_refs": [
-                    *main_agent["capability_refs"],
-                    {"type": "subagent", "block_id": delegation["id"]},
-                ],
-                "subagents": [{"subagent_id": subagent["id"]}],
-            },
-        )
-        assert updated.status_code == 200, updated.text
-        response = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": main_agent["name"],
-                "messages": [{"role": "user", "content": "Run recursion."}],
-            },
-        )
 
-    assert response.status_code == 200, response.text
-    assert response.json()["choices"][0]["message"]["content"].endswith(
-        "recursive parent completed"
-    )
-    parent_task = next(item for item in ParentModel.tool_signatures if item[0] == "task")
-    child_task = next(item for item in ChildModel.tool_signatures if item[0] == "task")
-    assert parent_task[1] == custom_task_description.format(
-        available_agents="- recursive_worker: Continues the recursive task."
-    )
-    assert child_task[1] == child_task_description.format(
-        available_agents="- recursive_worker: Continues the recursive task."
-    )
-    assert len(ChildModel.seen_messages) == 3
-    assert all(
-        message.text != "Run recursion."
-        for invocation in ChildModel.seen_messages
-        for message in invocation
-    )
+    assert recursive_profile.status_code == 422
+    issue = recursive_profile.json()["detail"]["validation"]["issues"][0]
+    assert issue["code"] == "contract.subagent_nested_references_forbidden"
 
 
-def test_subagent_prompt_override_uses_only_plugin_messages_and_delegation(
+def test_subagent_prompt_override_uses_native_delegation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     class ParentModel(ToolCallingFakeModel):
@@ -210,32 +89,11 @@ def test_subagent_prompt_override_uses_only_plugin_messages_and_delegation(
             return response.json()
 
         override_model = create_model("Override child model")
-        write_automation_script(
-            tmp_path,
-            "append-subagent-startup",
-            "async def prepare(ctx):\n"
-            "    ctx.messages.extend([\n"
-            "        {'role': 'user', 'content': 'Delegated work.'},\n"
-            "        {'role': 'assistant', 'content': 'Ready for delegated work.'},\n"
-            "    ])\n",
-        )
-        startup_automation = {
-            "hooks": [
-                {
-                    "plugin_id": "append-subagent-startup",
-                    "enabled": True,
-                    "config": {},
-                }
-            ],
-            "periodic": [],
-        }
-
         def create_subagent(
             component_name: str,
             routing_name: str,
             description: str,
             model: dict,
-            automation: dict[str, object] | None = None,
         ) -> dict:
             capability_overrides = [{
                 "type": "model",
@@ -248,8 +106,6 @@ def test_subagent_prompt_override_uses_only_plugin_messages_and_delegation(
                 description=description,
                 capability_overrides=capability_overrides,
             )
-            if automation is not None:
-                payload["settings"]["automation"] = automation
             response = client.post(
                 "/api/subagents",
                 json=payload,
@@ -260,9 +116,8 @@ def test_subagent_prompt_override_uses_only_plugin_messages_and_delegation(
         prompt_subagent = create_subagent(
             "Override prompt child",
             "override_worker",
-            "Uses child-only startup automation.",
+            "Uses the delegated task as its invocation input.",
             override_model,
-            startup_automation,
         )
         delegation_response = client.post(
             "/api/blocks/subagent",
@@ -319,8 +174,4 @@ def test_subagent_prompt_override_uses_only_plugin_messages_and_delegation(
     assert ("human", "Earlier request") not in child_messages
     assert ("ai", "Earlier response") not in child_messages
     assert ("human", "Current request") not in child_messages
-    assert child_messages[-3:] == [
-        ("human", "Delegated work."),
-        ("ai", "Ready for delegated work."),
-        ("human", "Run the override prompt."),
-    ]
+    assert child_messages[-1] == ("human", "Run the override prompt.")

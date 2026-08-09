@@ -6,7 +6,10 @@ import pytest
 
 from agent_shell.runtime import input_messages
 from agent_shell.runtime.errors import AgentRuntimeError
-from agent_shell.runtime.input_messages import validate_client_messages
+from agent_shell.runtime.input_messages import (
+    client_messages_sha,
+    validate_client_messages,
+)
 
 
 def encoded(value: bytes) -> str:
@@ -112,3 +115,11 @@ def test_system_media_and_oversized_decoded_media_are_rejected(
     with pytest.raises(AgentRuntimeError) as size_error:
         validate_client_messages([{"role": "user", "content": [image_part]}])
     assert size_error.value.code == "input_content_block_too_large"
+
+
+def test_client_messages_sha_is_stable_for_normalized_mapping_order() -> None:
+    left = [{"role": "user", "content": "hello", "name": "client"}]
+    right = [{"name": "client", "content": "hello", "role": "user"}]
+
+    assert client_messages_sha(left) == client_messages_sha(right)
+    assert len(client_messages_sha(left)) == 64

@@ -153,12 +153,20 @@ def test_global_interception_captures_final_prompt_tools_and_raw_request(
         write_automation_script(
             tmp_path,
             "capture-message-rewrite",
-            "async def prepare(ctx):\n"
-            "    tag = str(ctx.config.get('tag', ''))\n"
-            "    replacement = str(ctx.config.get('replacement', ''))\n"
-            "    for message in ctx.messages:\n"
-            "        if message.get('role') == 'user':\n"
-            "            message['content'] = message['content'].replace(tag, replacement)\n",
+            "from langchain.agents.middleware import AgentMiddleware\n"
+            "from agent_shell.automation.messages import mutable_request_messages\n"
+            "class RewriteMessages(AgentMiddleware):\n"
+            "    def __init__(self, ctx):\n        self.ctx = ctx\n"
+            "    async def abefore_agent(self, state, runtime):\n"
+            "        messages = mutable_request_messages(self.ctx.request.messages)\n"
+            "        tag = str(self.ctx.config.get('tag', ''))\n"
+            "        replacement = str(self.ctx.config.get('replacement', ''))\n"
+            "        for message in messages:\n"
+            "            if message.get('role') == 'user':\n"
+            "                message['content'] = message['content'].replace(tag, replacement)\n"
+            "        return {'messages': messages}\n"
+            "def create_middleware(ctx):\n    return RewriteMessages(ctx)\n",
+            entrypoints=("middleware",),
             config_schema=automation_config_schema(
                 {"tag": "string", "replacement": "string"},
                 required=("tag", "replacement"),
@@ -263,10 +271,18 @@ def test_global_interception_captures_final_prompt_tools_and_raw_request(
     assert {"request_body", "response_body"}.isdisjoint(history["items"][0])
     assert detail["request_raw_json"] == raw_json
     captured = json.loads(detail["model_request_raw_json"])
-    assert [message["role"] for message in captured["messages"]] == ["system"]
+    assert [message["role"] for message in captured["messages"]] == [
+        "system",
+        "system",
+        "user",
+    ]
     prompt_blocks = captured["messages"][0]["content"]
     prompt_text = "".join(block["text"] for block in prompt_blocks)
     assert prompt_text == "MAIN AGENT\n\nTODO\n\nCUSTOM"
+    assert "CLIENT HEAD" in json.dumps(captured["messages"][1], ensure_ascii=False)
+    assert "beforePRESETafter" in json.dumps(
+        captured["messages"][2], ensure_ascii=False
+    )
     tool_names = [item["function"]["name"] for item in captured["tools"]]
     assert "write_todos" in tool_names
     assert captured["model"]["type"].endswith("RecordingFakeListChatModel")

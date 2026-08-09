@@ -4,6 +4,8 @@ import asyncio
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
+import hashlib
+import json
 import logging
 import os
 from pathlib import Path
@@ -18,10 +20,13 @@ from langchain.agents.middleware import AgentMiddleware
 from agent_shell.automation.context import (
     AutomationContext,
     AutomationRequest,
+    LifecycleSnapshot,
+    freeze,
     immutable_request,
 )
 from agent_shell.automation.loader import AutomationPluginLoader
 from agent_shell.runtime.errors import AgentRuntimeError
+from agent_shell.runtime.input_messages import client_messages_sha
 from agent_shell.validation.service import StaticAssembly
 
 
@@ -134,6 +139,81 @@ class AutomationOwner:
     mapped_paths: Mapping[str, Path]
 
 
+def _automation_references(automation: Mapping[str, Any]) -> dict[str, Any]:
+    def references(kind: str) -> list[dict[str, Any]]:
+        values: list[dict[str, Any]] = []
+        for binding in automation.get(kind, []):
+            item = {
+                "plugin_id": str(binding["plugin_id"]),
+                "enabled": bool(binding.get("enabled", True)),
+            }
+            if kind == "periodic":
+                item["interval_seconds"] = binding.get("interval_seconds")
+            values.append(item)
+        return values
+
+    return {
+        "hooks": references("hooks"),
+        "periodic": references("periodic"),
+    }
+
+
+def _assembly_snapshot(
+    assembly: StaticAssembly,
+    *,
+    main_agent_id: str,
+) -> dict[str, Any]:
+    nodes = []
+    for key in sorted(assembly.subagent_nodes):
+        node = assembly.subagent_nodes[key]
+        nodes.append(
+            {
+                "id": node.key,
+                "component_name": node.component_name,
+                "name": node.name,
+                "description": node.description,
+                "references": deepcopy(node.references),
+                "blocks": deepcopy(node.blocks),
+                "filesystem_mode": node.filesystem_mode,
+                "automation": _automation_references(node.automation),
+            }
+        )
+    return {
+        "main_agent": {
+            "id": main_agent_id,
+            "component_name": str(assembly.main_agent.get("component_name", "")),
+            "name": str(assembly.main_agent.get("name", "")),
+            "references": deepcopy(assembly.references),
+            "blocks": deepcopy(assembly.blocks),
+            "filesystem_mode": assembly.filesystem_mode,
+            "automation": _automation_references(assembly.automation),
+            "subagents": [edge.target_key for edge in assembly.subagents],
+        },
+        "subagent_nodes": nodes,
+    }
+
+
+def _stable_sha(value: object) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _agent_shas(snapshot: Mapping[str, Any]) -> dict[str, str]:
+    values: dict[str, str] = {}
+    main_agent = snapshot.get("main_agent")
+    if isinstance(main_agent, Mapping):
+        values[str(main_agent.get("id", ""))] = _stable_sha(main_agent)
+    for node in snapshot.get("subagent_nodes", []):
+        if isinstance(node, Mapping):
+            values[str(node.get("id", ""))] = _stable_sha(node)
+    return values
+
+
 def _is_link(path: Path) -> bool:
     metadata = path.lstat()
     reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
@@ -166,6 +246,7 @@ class AutomationRuntime:
         request_id: str,
         owners: list[AutomationOwner],
         client_messages: list[dict[str, Any]],
+        assembly_snapshot: dict[str, Any] | None = None,
         plugins_dir: Path,
         skills_dir: Path,
         runtime_root: Path,
@@ -175,15 +256,20 @@ class AutomationRuntime:
             self.request_id,
             client_messages,
         )
+        snapshot = deepcopy(assembly_snapshot or {})
+        self._lifecycle = LifecycleSnapshot(
+            request_id=self.request_id,
+            messages=self._request.messages,
+            assembly=freeze(snapshot),
+            input_sha=client_messages_sha(client_messages),
+            agent_shas=MappingProxyType(_agent_shas(snapshot)),
+            assembly_sha=_stable_sha(snapshot),
+        )
         self._owners = owners
         self._owner_by_id = {owner.id: owner for owner in owners}
-        self._messages: dict[str, list[dict[str, Any]]] = {
-            owner.id: [] for owner in owners
-        }
         self._initial_files: dict[str, dict[str, str | bytes]] = {
             owner.id: {} for owner in owners
         }
-        self._variables: dict[Any, Any] = {}
         self._skills_dir = skills_dir
         self._request_runtime_dir = (
             runtime_root / "automation" / self.request_id
@@ -231,13 +317,8 @@ class AutomationRuntime:
                 mapped_paths=mapped_paths(assembly.blocks),
             )
         )
-        seen: set[str] = set()
-
-        def visit(edge: Any) -> None:
+        for edge in assembly.subagents:
             key = str(edge.target_key)
-            if key in seen:
-                return
-            seen.add(key)
             node = assembly.subagent_nodes[key]
             owners.append(
                 AutomationOwner(
@@ -248,15 +329,14 @@ class AutomationRuntime:
                     mapped_paths=mapped_paths(node.blocks),
                 )
             )
-            for child in node.subagents:
-                visit(child)
-
-        for root in assembly.subagents:
-            visit(root)
         return cls(
             request_id=request_id,
             owners=owners,
             client_messages=client_messages,
+            assembly_snapshot=_assembly_snapshot(
+                assembly,
+                main_agent_id=main_agent_id,
+            ),
             plugins_dir=plugins_dir,
             skills_dir=skills_dir,
             runtime_root=runtime_root,
@@ -265,6 +345,10 @@ class AutomationRuntime:
     @property
     def request(self) -> AutomationRequest:
         return self._request
+
+    @property
+    def lifecycle(self) -> LifecycleSnapshot:
+        return self._lifecycle
 
     def owner_runtime_dir(self, owner_id: str) -> Path:
         path = self._request_runtime_dir / "owners" / owner_id
@@ -374,15 +458,6 @@ class AutomationRuntime:
                 _copy_plain_tree(self._skills_dir / name, overlay)
         return overlay_root
 
-    def messages_for(self, owner_id: str) -> list[dict[str, Any]]:
-        return deepcopy(self._messages[owner_id])
-
-    def has_messages_for(self, owner_id: str) -> bool:
-        return bool(self._messages[owner_id])
-
-    def input_for(self, owner_id: str, delegated_messages: list[Any]) -> list[Any]:
-        return [*self.messages_for(owner_id), *delegated_messages]
-
     def initial_files_for(self, owner_id: str) -> dict[str, str | bytes]:
         return dict(self._initial_files[owner_id])
 
@@ -395,7 +470,6 @@ class AutomationRuntime:
         plugin_dir: Path,
         *,
         stage: str,
-        messages: list[dict[str, Any]] | None = None,
         initial_files: dict[str, str | bytes] | None = None,
         tick: int | None = None,
         terminal: Mapping[str, Any] | None = None,
@@ -415,9 +489,7 @@ class AutomationRuntime:
             ),
             mapped_paths=owner.mapped_paths,
             config=dict(binding.get("config", {})),
-            variables=self._variables,
             stage=stage,
-            messages=messages,
             initial_files=initial_files,
             tick=tick,
             terminal=terminal,
@@ -431,7 +503,6 @@ class AutomationRuntime:
         binding: dict[str, Any],
         entrypoint: str,
         *,
-        messages: list[dict[str, Any]] | None = None,
         initial_files: dict[str, str | bytes] | None = None,
         tick: int | None = None,
         terminal: Mapping[str, Any] | None = None,
@@ -453,7 +524,6 @@ class AutomationRuntime:
             binding,
             plugin_dir,
             stage=entrypoint,
-            messages=messages,
             initial_files=initial_files,
             tick=tick,
             terminal=terminal,
@@ -470,8 +540,6 @@ class AutomationRuntime:
             ) from exc
 
     async def prepare(self) -> None:
-        from agent_shell.runtime.input_messages import validate_prepared_messages
-
         for owner in self._owners:
             for binding_index, binding in enumerate(owner.automation.get("hooks", [])):
                 if not binding.get("enabled", True):
@@ -482,12 +550,8 @@ class AutomationRuntime:
                     binding_index,
                     binding,
                     "prepare",
-                    messages=self._messages[owner.id],
                     initial_files=self._initial_files[owner.id],
                 )
-            self._messages[owner.id] = validate_prepared_messages(
-                self._messages[owner.id]
-            )
 
     def middleware_for(self, owner_id: str) -> tuple[AgentMiddleware, ...]:
         cached = self._middleware.get(owner_id)

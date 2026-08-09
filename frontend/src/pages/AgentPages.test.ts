@@ -127,7 +127,7 @@ describe('agent authoring pages', () => {
       component_name: 'Latest Subagent',
       name: 'latest_worker',
       description: 'Latest worker.',
-      settings: { capability_overrides: [], subagents: [] },
+      settings: { capability_overrides: [] },
     })
     await flushPromises()
     expect(subagentSurface.attributes('data-loading')).toBe('false')
@@ -137,7 +137,7 @@ describe('agent authoring pages', () => {
       component_name: 'Late Subagent',
       name: 'late_worker',
       description: 'Late worker.',
-      settings: { capability_overrides: [], subagents: [] },
+      settings: { capability_overrides: [] },
     })
     await flushPromises()
     await buttonByText(subagentPage.wrapper, 'common.save').trigger('click')

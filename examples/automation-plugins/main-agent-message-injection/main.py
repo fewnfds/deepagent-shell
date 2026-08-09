@@ -3,6 +3,10 @@ from __future__ import annotations
 import inspect
 from typing import Any, Awaitable, Callable
 
+from langchain.agents.middleware import AgentMiddleware
+from langchain_core.messages import RemoveMessage
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
+
 from agent_shell.automation.messages import (
     mutable_request_messages,
     prepared_transformed_messages,
@@ -40,17 +44,39 @@ def _compile_transform(source: object) -> Transform | None:
     return transform
 
 
-async def prepare(ctx: Any) -> None:
-    if ctx.agent["type"] != "main_agent":
-        return
-    try:
-        messages = mutable_request_messages(ctx.request.messages)
-        transform = _compile_transform(ctx.config.get("transform_source"))
-        transformed = (
-            await transform(messages, ctx, None, None)
-            if transform is not None
-            else messages
-        )
-        ctx.messages.extend(prepared_transformed_messages(transformed))
-    except Exception:
-        raise RuntimeError("Main Agent message transform failed") from None
+class MainAgentMessageInjectionMiddleware(AgentMiddleware):
+    def __init__(self, ctx: Any) -> None:
+        super().__init__()
+        self._ctx = ctx
+        try:
+            self._transform = _compile_transform(ctx.config.get("transform_source"))
+        except Exception:
+            raise RuntimeError("Main Agent message transform is invalid") from None
+
+    async def abefore_agent(
+        self,
+        state: dict[str, Any],
+        runtime: Any,
+    ) -> dict[str, Any] | None:
+        if self._ctx.agent["type"] != "main_agent":
+            return None
+        try:
+            messages = mutable_request_messages(self._ctx.request.messages)
+            transformed = (
+                await self._transform(messages, self._ctx, state, runtime)
+                if self._transform is not None
+                else messages
+            )
+            prepared = prepared_transformed_messages(transformed)
+        except Exception:
+            raise RuntimeError("Main Agent message transform failed") from None
+        return {
+            "messages": [
+                RemoveMessage(id=REMOVE_ALL_MESSAGES),
+                *prepared,
+            ]
+        }
+
+
+def create_middleware(ctx: Any) -> AgentMiddleware:
+    return MainAgentMessageInjectionMiddleware(ctx)

@@ -5,6 +5,8 @@ import binascii
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
+import hashlib
+import json
 import re
 from typing import Any
 from urllib.parse import urlsplit
@@ -427,3 +429,15 @@ def validate_client_messages(value: object) -> list[dict[str, Any]]:
 
 def validate_prepared_messages(value: object) -> list[dict[str, Any]]:
     return _validate_messages(value, require_non_empty=False, enforce_limits=False)
+
+
+def client_messages_sha(messages: list[dict[str, Any]]) -> str:
+    """Return a stable SHA-256 for already-normalized client messages."""
+
+    payload = json.dumps(
+        messages,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()

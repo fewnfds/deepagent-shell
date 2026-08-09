@@ -8,7 +8,6 @@ import type { AutomationScriptResource } from '@/api'
 import AutomationPluginBindings from '@/components/AutomationPluginBindings.vue'
 import PageShell from '@/components/PageShell.vue'
 import RecordPicker from '@/components/RecordPicker.vue'
-import SubagentReferencesEditor from '@/components/SubagentReferencesEditor.vue'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
 import { useConfigurationValidation } from '@/composables/useConfigurationValidation'
 import { useManagementError } from '@/composables/useManagementError'
@@ -66,12 +65,13 @@ const obsoleteOverrides = computed(() => {
     .map((override, index) => ({ index, override }))
     .filter(({ override }) => !supported.has(override.type))
 })
-const workspaceCapabilityTypes = new Set<CapabilityType>([
+const nonGeneralCapabilityTypes = new Set<CapabilityType>([
   'filesystem',
   'filesystem-permissions',
+  'subagent',
 ])
 const generalManifests = computed(() => manifests.value.filter(
-  (manifest) => !workspaceCapabilityTypes.has(manifest.type),
+  (manifest) => !nonGeneralCapabilityTypes.has(manifest.type),
 ))
 const filesystemManifest = computed(() => manifests.value.find(
   (manifest) => manifest.type === 'filesystem',
@@ -484,11 +484,6 @@ watch(
           v-model="form.settings.automation"
           path-prefix="settings-automation"
           :plugins="automationPlugins"
-        />
-        <SubagentReferencesEditor
-          v-model:references="form.settings.subagents"
-          :profiles="profiles"
-          path-prefix="settings.subagents"
         />
       </section>
 

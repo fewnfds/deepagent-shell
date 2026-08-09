@@ -12,7 +12,6 @@ from agent_shell.runtime.agent_compilation import (
     validate_model_visible_tool_names,
 )
 from agent_shell.runtime.capabilities import DeepAgentsWorkspace
-from agent_shell.runtime.deferred_subagent import DeferredSubagentRunnable
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.limits import (
     ProviderErrorBoundaryMiddleware,
@@ -22,7 +21,9 @@ from agent_shell.runtime.invocation import AgentInvocationMiddleware
 from agent_shell.runtime.model_request_settings import (
     make_model_request_settings_middleware,
 )
-from agent_shell.runtime.subagent_input import AgentRequestContext, SubagentInputMiddleware
+from agent_shell.runtime.context import AgentRequestContext
+from agent_shell.runtime.subagent_runnable import SubagentInvocationRunnable
+from agent_shell.runtime.state import AgentShellState
 from agent_shell.validation.service import (
     ResolvedSubagent,
     ResolvedSubagentEdge,
@@ -32,7 +33,7 @@ from agent_shell.validation.service import (
 
 def _compiled_spec(
     edge: ResolvedSubagentEdge,
-    runnables: dict[SubagentNodeKey, DeferredSubagentRunnable],
+    runnables: dict[SubagentNodeKey, SubagentInvocationRunnable],
     nodes: dict[SubagentNodeKey, ResolvedSubagent],
 ) -> dict[str, Any]:
     node = nodes[edge.target_key]
@@ -44,7 +45,7 @@ def _compiled_spec(
 
 
 class SubagentGraphCompiler:
-    """Compile reachable named Subagents against one request-local workspace."""
+    """Compile Main Agent's direct Subagents against one request-local workspace."""
 
     def __init__(
         self,
@@ -52,7 +53,6 @@ class SubagentGraphCompiler:
         workspace: DeepAgentsWorkspace,
         materialize_profile: ProfileMaterializer,
         agent_input_observer: Callable[[dict[str, object]], Any] | None,
-        has_prepared_messages: Callable[[str], bool],
         child_context: Callable[
             [str, Mapping[str, Any], str], dict[str, Any]
         ],
@@ -60,7 +60,6 @@ class SubagentGraphCompiler:
         self._workspace = workspace
         self._materialize_profile = materialize_profile
         self._agent_input_observer = agent_input_observer
-        self._has_prepared_messages = has_prepared_messages
         self._child_context = child_context
 
     def compile(
@@ -70,22 +69,15 @@ class SubagentGraphCompiler:
         nodes: dict[SubagentNodeKey, ResolvedSubagent],
     ) -> list[dict[str, Any]]:
         runnables = {
-            key: DeferredSubagentRunnable(
-                node.name, key, self._child_context
-            )
-            for key, node in nodes.items()
+            edge.target_key: self._compile_node(nodes[edge.target_key])
+            for edge in roots
         }
-        for key, node in nodes.items():
-            self._compile_node(node, runnables[key], runnables, nodes)
         return [_compiled_spec(edge, runnables, nodes) for edge in roots]
 
     def _compile_node(
         self,
         node: ResolvedSubagent,
-        runnable: DeferredSubagentRunnable,
-        runnables: dict[SubagentNodeKey, DeferredSubagentRunnable],
-        nodes: dict[SubagentNodeKey, ResolvedSubagent],
-    ) -> None:
+    ) -> SubagentInvocationRunnable:
         child = self._materialize_profile(
             node.references,
             node.blocks,
@@ -96,10 +88,6 @@ class SubagentGraphCompiler:
             workspace=self._workspace,
         )
         middleware = [ToolErrorBoundaryMiddleware()]
-        if self._has_prepared_messages(node.key):
-            middleware.append(
-                SubagentInputMiddleware(owner_id=node.key)
-            )
         middleware.extend(
             (
                 AgentInvocationMiddleware(
@@ -123,29 +111,7 @@ class SubagentGraphCompiler:
         if child.exception_retry is not None:
             middleware.extend(child.exception_retry.after_provider_boundary)
 
-        compiled_children = [
-            _compiled_spec(edge, runnables, nodes) for edge in node.subagents
-        ]
-        delegation = node.blocks.get("subagent")
-        task_description_override = (
-            delegation.get("task_description_override")
-            if delegation is not None
-            else None
-        )
         try:
-            if compiled_children and task_description_override is not None:
-                from agent_shell.runtime.subagent_middleware import (
-                    make_subagent_middleware_override,
-                )
-
-                replacement = make_subagent_middleware_override(
-                    backend=child.backend,
-                    subagents=compiled_children,
-                    task_description=task_description_override,
-                    middleware=middleware,
-                )
-                if replacement is not None:
-                    middleware.append(replacement)
             validate_middleware_names(
                 middleware,
                 owner=f"Subagent {node.name}",
@@ -161,11 +127,6 @@ class SubagentGraphCompiler:
                     ()
                     if "FilesystemMiddleware" in middleware_names
                     else FILESYSTEM_TOOL_NAMES
-                )
-                + (
-                    ("task",)
-                    if node.subagents and "SubAgentMiddleware" not in middleware_names
-                    else ()
                 ),
             )
         except AgentRuntimeError as exc:
@@ -182,18 +143,10 @@ class SubagentGraphCompiler:
             "name": node.name,
             "middleware": middleware,
             "context_schema": AgentRequestContext,
+            "state_schema": AgentShellState,
         }
         if child.system_prompt is not None:
             constructor["system_prompt"] = child.system_prompt
-        if compiled_children and delegation is not None:
-            delegation_instruction = delegation.get("instruction_override")
-            if delegation_instruction is not None:
-                existing_prompt = str(constructor.get("system_prompt") or "")
-                constructor["system_prompt"] = "\n\n".join(
-                    part
-                    for part in (existing_prompt, delegation_instruction)
-                    if part
-                )
         if child.tools:
             constructor["tools"] = list(child.tools)
         if child.response_format is not None:
@@ -204,9 +157,6 @@ class SubagentGraphCompiler:
             constructor["permissions"] = list(child.permissions)
         if child.skill_sources:
             constructor["skills"] = list(child.skill_sources)
-        if compiled_children:
-            constructor["subagents"] = compiled_children
-
         graph = construct_deep_agent(
             constructor,
             model_provider=child.model_provider,
@@ -217,4 +167,9 @@ class SubagentGraphCompiler:
             subject=f"Subagent {node.name}",
             path="capability_refs",
         )
-        runnable.bind_target(graph)
+        return SubagentInvocationRunnable(
+            node.name,
+            node.key,
+            graph,
+            self._child_context,
+        )

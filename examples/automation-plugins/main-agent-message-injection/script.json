@@ -2,8 +2,8 @@
   "api_version": 3,
   "id": "main-agent-message-injection",
   "name": "Main Agent message injection",
-  "description": "Transform and inject the original client messages once when a Main Agent request starts.",
-  "entrypoints": ["prepare"],
+  "description": "Transform and inject the original client messages when a Main Agent invocation starts.",
+  "entrypoints": ["middleware"],
   "config_schema": {
     "type": "object",
     "properties": {

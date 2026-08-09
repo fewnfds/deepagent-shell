@@ -14,32 +14,20 @@ ChildContextFactory = Callable[
 ]
 
 
-class DeferredSubagentRunnable(Runnable[dict[str, Any], dict[str, Any]]):
-    """Resolve a cyclic CompiledSubAgent reference after graph construction."""
+class SubagentInvocationRunnable(Runnable[dict[str, Any], dict[str, Any]]):
+    """Attach one Shell child invocation context to a compiled Subagent graph."""
 
     def __init__(
         self,
         agent_name: str,
         owner_id: str,
+        target: Runnable[dict[str, Any], dict[str, Any]],
         child_context: ChildContextFactory,
     ) -> None:
         self._agent_name = agent_name
         self._owner_id = owner_id
-        self._child_context = child_context
-        self._target: Runnable[dict[str, Any], dict[str, Any]] | None = None
-
-    def bind_target(
-        self,
-        target: Runnable[dict[str, Any], dict[str, Any]],
-    ) -> None:
-        if self._target is not None:
-            raise RuntimeError("Deferred Subagent runnable is already bound.")
         self._target = target
-
-    def _resolved(self) -> Runnable[dict[str, Any], dict[str, Any]]:
-        if self._target is None:
-            raise RuntimeError("Deferred Subagent runnable is not bound.")
-        return self._target
+        self._child_context = child_context
 
     def _child_config(self, config: RunnableConfig | None) -> RunnableConfig:
         child_config = dict(config or {})
@@ -60,7 +48,7 @@ class DeferredSubagentRunnable(Runnable[dict[str, Any], dict[str, Any]]):
         if cause is None:
             raise RuntimeError("The Subagent invocation cause is unavailable")
         parent, tool_call_id = cause
-        return self._resolved().invoke(
+        return self._target.invoke(
             input,
             self._child_config(config),
             context=self._child_context(self._owner_id, parent, tool_call_id),
@@ -77,7 +65,7 @@ class DeferredSubagentRunnable(Runnable[dict[str, Any], dict[str, Any]]):
         if cause is None:
             raise RuntimeError("The Subagent invocation cause is unavailable")
         parent, tool_call_id = cause
-        return await self._resolved().ainvoke(
+        return await self._target.ainvoke(
             input,
             self._child_config(config),
             context=self._child_context(self._owner_id, parent, tool_call_id),

@@ -1258,6 +1258,7 @@ export const zhCN = {
         subagentDescriptionRequired: 'Subagent 必须填写说明。',
         subagentNameDuplicate: '这个 Subagent 名称已被另一个 Subagent 使用。',
         subagentReferenceDuplicate: '当前 Agent 重复引用了同一个 Subagent 实体。',
+        subagentNestedReferencesForbidden: '只有 Main Agent 可以引用 Subagent；Subagent 不能再配置子代理。',
         outputEventTypesInvalid: '输出模式的事件模板集合缺少当前必需项目，或仍包含旧项目。',
         outputTemplateEmpty: '已启用的{event_name_label}模板不能为空。',
         outputTemplateMalformed: '{event_name_label}模板包含未闭合或缺少一侧的双花括号。',

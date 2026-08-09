@@ -4,8 +4,8 @@ Each child folder is a complete `api_version: 3` automation plugin. Copy one chi
 folder into the instance `data/resources/automation_scripts/` directory, or upload it
 with the management file tool, then bind it to an Agent.
 
-- `main-agent-message-injection` injects transformed client messages into each Main Agent
-  request during `prepare`.
+- `main-agent-message-injection` injects transformed client messages at the start of each
+  Main Agent invocation through `AgentMiddleware.abefore_agent`.
 - `subagent-message-injection` edits the current Subagent message list at the start
   of every real invocation through `AgentMiddleware.abefore_agent`.
 - `subagent-filesystem-prompt-injection` reads grouped files from the current
@@ -18,18 +18,18 @@ Subagent function receives a deep copy of the current LangGraph `state["messages
 its final item is normally the delegated task. Insert a new message at index `-1` to
 place it before that task. Each function must return the complete ordered message
 list. Images, audio, video, and files remain in their original content blocks; Agent
-Shell does not unload them into `ctx.vars` and does not rehydrate resource references.
+Shell does not unload them into `state["shared_vars"]` and does not rehydrate resource references.
 
 The configured Python runs in the Agent Shell process with the same host permissions
 as the plugin. It is not sandboxed. Import standard-library or declared plugin
 requirements inside the function as needed. Coordinate writes outside the provided
 invocation scratch directory yourself.
 
-The Subagent function can obtain the current invocation identity from
+Both functions receive the current LangGraph `state` and `runtime`. The Subagent
+function can obtain the current invocation identity from
 `runtime.context["agent_shell_invocation"]`. Its binding-specific scratch directory is
 available in that mapping's `workspaces` entry under
-`f"hook:{ctx.plugin['binding_index']}"`. Main Agent `prepare` runs before the root graph
-invocation exists, so its `state` and `runtime` arguments are `None`.
+`f"hook:{ctx.plugin['binding_index']}"`.
 
 Returning `[]` from the Main Agent transform skips client-message injection. Returning
 `[]` from the Subagent transform intentionally clears the current invocation input.

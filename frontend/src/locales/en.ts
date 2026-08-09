@@ -1260,6 +1260,7 @@ export const en: MessageSchema = {
         subagentDescriptionRequired: 'A Subagent must have a description.',
         subagentNameDuplicate: 'This Subagent name is already used by another Subagent.',
         subagentReferenceDuplicate: 'The same Subagent entity is referenced more than once by this Agent.',
+        subagentNestedReferencesForbidden: 'Only a Main Agent may reference Subagents. A Subagent cannot configure child Subagents.',
         outputEventTypesInvalid: 'The output mode event template set is missing required current entries or still contains obsolete entries.',
         outputTemplateEmpty: 'The enabled {event_name_label} template cannot be empty.',
         outputTemplateMalformed: 'The {event_name_label} template has unclosed double braces or is missing one side of them.',

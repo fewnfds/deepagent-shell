@@ -96,9 +96,9 @@ export const subagentManifest: CapabilityManifest = {
   type: 'subagent',
   terminology_key: 'delegation',
   order: 10,
-  subagent_overrideable: true,
+  subagent_overrideable: false,
   required: false,
-  subagent_policy: 'inherit',
+  subagent_policy: 'top-level-only',
 }
 
 export function service(overrides: Partial<AgentAuthoringService> = {}): AgentAuthoringService {
@@ -116,7 +116,6 @@ export function service(overrides: Partial<AgentAuthoringService> = {}): AgentAu
     description: 'Handles delegated work.',
     settings: {
       capability_overrides: [],
-      subagents: [],
       automation: { hooks: [], periodic: [] },
     },
   }

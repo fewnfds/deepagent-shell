@@ -38,15 +38,14 @@ Main Agent 是 `/v1/models` 中公开的 model。每条记录包含名称、组�
 每条引用只保存 `subagent_id`。路由 `name`、委派 `description` 和能力 settings 都来自被引用的 Subagent
 实体，不在 Main Agent 中重复填写。同一父级不能重复引用同一实体，也不能引用两个具有相同路由 name 的实体。
 
-父 Agent 只获得当前记录显式引用的 Subagent。启用委派能力组件且至少有一条有效引用时，
-Deep Agents 提供 `task` 工具。当前支持同步 Subagent；允许显式自引用或循环引用，执行与终止由
-Deep Agents/LangGraph 管理。
+父 Agent 只获得当前记录显式引用的 Subagent。启用委派能力组件且至少有一条有效引用时，Deep Agents 提供
+`task` 工具。经典模式只支持同步的一层 `Main -> Subagent`；Subagent 不能再配置 child，多阶段编排留给 Workflow。
 
 保存时服务端检查必选项、UUID、组件结构、实体引用、同父路由名冲突、可静态确定的工具名冲突和完整
 Subagent 组合。
 
 `automation` 不属于 `capability_refs`。Hook bindings 负责 prepare、LangChain 原生 Middleware 和 complete；
 周期 bindings 各自保存 interval，在本次请求期间独立运行 lifecycle，并在终态 complete。两类列表、配置与
-模块实例相互独立，但 `ctx.vars` 是本请求全部 binding 共享的普通 dict。原始客户端消息通过插件只读的
+模块实例相互独立；需要 checkpoint 的共享业务数据使用公共 LangGraph state。原始客户端消息通过插件只读的
 `ctx.request.messages` 保持不变；无插件时不会进入 Main Agent 活动消息。
 磁盘资源、Python import 和 Provider 连接在真实请求中再次检查。配置变更只影响之后开始的请求。

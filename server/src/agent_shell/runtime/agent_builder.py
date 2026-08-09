@@ -53,7 +53,8 @@ from agent_shell.runtime.model_request_settings import (
     make_model_request_settings_middleware,
 )
 from agent_shell.runtime.model_response import ModelResponse
-from agent_shell.runtime.subagent_input import AgentRequestContext
+from agent_shell.runtime.context import AgentRequestContext
+from agent_shell.runtime.state import AgentShellState
 from agent_shell.validation.capability_assembly import FilesystemMode
 from agent_shell.validation.service import ConfigurationValidationService
 
@@ -503,7 +504,6 @@ class AgentBuilder:
         )
         self._automation_runtime = automation
         await automation.prepare()
-        prepared_messages = automation.messages_for(main_agent_id)
         materialized = self._materialize_profile(
             references,
             selected_blocks,
@@ -516,6 +516,7 @@ class AgentBuilder:
             "model": materialized.model,
             "name": str(main_agent["name"]),
             "context_schema": AgentRequestContext,
+            "state_schema": AgentShellState,
         }
         if materialized.system_prompt is not None:
             constructor["system_prompt"] = materialized.system_prompt
@@ -547,7 +548,7 @@ class AgentBuilder:
                     model_settings=materialized.model_settings,
                 )
             )
-        input_state: dict[str, Any] = {"messages": prepared_messages}
+        input_state: dict[str, Any] = {"messages": [], "shared_vars": {}}
         request_context = cast(
             AgentRequestContext,
             automation.root_context(main_agent_id),
@@ -562,7 +563,6 @@ class AgentBuilder:
                 workspace=materialized.workspace,
                 materialize_profile=self._materialize_profile,
                 agent_input_observer=agent_input_observer,
-                has_prepared_messages=automation.has_messages_for,
                 child_context=automation.child_context,
             ).compile(roots=resolved_subagents, nodes=assembly.subagent_nodes)
             delegation_instruction = selected_blocks["subagent"][

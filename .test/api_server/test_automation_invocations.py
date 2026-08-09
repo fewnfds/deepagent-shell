@@ -53,7 +53,6 @@ def test_parallel_same_profile_invocations_have_isolated_plugin_workspaces(
         write_automation_script(
             tmp_path,
             "invocation-workspace",
-            "import asyncio\n"
             "import json\n"
             "from langchain.agents.middleware import AgentMiddleware\n"
             "class CaptureInvocation(AgentMiddleware):\n"
@@ -64,23 +63,24 @@ def test_parallel_same_profile_invocations_have_isolated_plugin_workspaces(
             "        scratch = invocation['workspaces'][key]\n"
             "        fixed = scratch / 'fixed.txt'\n"
             "        fixed.write_text(invocation['id'], encoding='utf-8')\n"
-            "        async with self.ctx.vars['lock']:\n"
-            "            self.ctx.vars['records'].append({\n"
+            "        record = {\n"
             "                'id': invocation['id'],\n"
             "                'parent_id': invocation['parent_id'],\n"
             "                'cause': invocation['cause_tool_call_id'],\n"
             "                'agent_id': invocation['agent_id'],\n"
             "                'workspace': str(scratch),\n"
             "                'content': fixed.read_text(encoding='utf-8'),\n"
-            "            })\n"
+            "        }\n"
+            "        (scratch / 'record.json').write_text(json.dumps(record), encoding='utf-8')\n"
             "def create_middleware(ctx):\n    return CaptureInvocation(ctx)\n"
-            "async def prepare(ctx):\n"
-            "    ctx.vars.setdefault('lock', asyncio.Lock())\n"
-            "    ctx.vars.setdefault('records', [])\n"
             "async def complete(ctx):\n"
+            "    records = [\n"
+            "        json.loads(path.read_text(encoding='utf-8'))\n"
+            "        for path in ctx.paths.runtime_dir.rglob('record.json')\n"
+            "    ]\n"
             "    target = ctx.paths.plugin_dir / 'observed.json'\n"
-            "    target.write_text(json.dumps(ctx.vars['records']), encoding='utf-8')\n",
-            entrypoints=("prepare", "middleware", "complete"),
+            "    target.write_text(json.dumps(records), encoding='utf-8')\n",
+            entrypoints=("middleware", "complete"),
         )
         monkeypatch.setattr(
             "agent_shell.runtime.agent_builder._build_chat_model",

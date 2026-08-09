@@ -57,7 +57,6 @@ class ResolvedSubagent:
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
     automation: dict[str, Any]
-    subagents: tuple[ResolvedSubagentEdge, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +78,26 @@ _SUBAGENT_REQUIRED_CAPABILITY_TYPES = frozenset(
     for manifest in CAPABILITY_MANIFESTS
     if manifest.required and manifest.subagent_policy == "inherit"
 )
+
+
+def _nested_subagent_issue(
+    *,
+    owner_id: str,
+    owner_name: str,
+    path: str = "settings.subagents",
+) -> ValidationIssue:
+    return ValidationIssue(
+        code="contract.subagent_nested_references_forbidden",
+        scope="subagent",
+        owner_id=owner_id,
+        owner_name=owner_name,
+        path=path,
+        message="A Subagent cannot configure child Subagents; only Main Agent may delegate.",
+        message_key="validation.issue.contract.subagentNestedReferencesForbidden",
+        message_args={},
+    )
+
+
 class ConfigurationValidationService:
     def __init__(
         self,
@@ -282,32 +301,13 @@ class ConfigurationValidationService:
             )
         )
         child_references = list(settings.get("subagents", []))
-        child_profiles: dict[str, dict[str, Any]] = {}
-        for index, reference in enumerate(child_references):
-            target_id = str(reference.get("subagent_id", ""))
-            if target_id == owner_id:
-                child_profiles[target_id] = validated
-                continue
-            target, target_issue = self._subagent_profile(
-                target_id,
-                owner_id=owner_id,
-                owner_name=validated["component_name"],
-                path=f"settings.subagents[{index}].subagent_id",
+        if child_references:
+            issues.append(
+                _nested_subagent_issue(
+                    owner_id=owner_id,
+                    owner_name=validated["component_name"],
+                )
             )
-            if target_issue is not None:
-                issues.append(target_issue)
-            elif target is not None:
-                child_profiles[target_id] = target
-        issues.extend(
-            subagent_reference_issues(
-                child_references,
-                profiles=child_profiles,
-                scope="subagent",
-                owner_id=owner_id,
-                owner_name=validated["component_name"],
-                path_prefix="settings.subagents",
-            )
-        )
         if owner_id and not issues:
             prospective = dict(validated)
             prospective["id"] = owner_id
@@ -842,36 +842,32 @@ class ConfigurationValidationService:
             issues.append(tool_issue)
 
         subagent_nodes: dict[SubagentNodeKey, ResolvedSubagent] = {}
-        resolving_nodes: set[SubagentNodeKey] = set()
         known_profiles: dict[str, dict[str, Any]] = {}
-
-        def resolve_reference(
-            reference: dict[str, Any],
-            *,
-            parent_id: str,
-            parent_name: str,
-            path: str,
-        ) -> ResolvedSubagentEdge | None:
+        resolved_edges: list[ResolvedSubagentEdge] = []
+        for index, reference in enumerate(active_roots):
             profile_id = str(reference.get("subagent_id", ""))
-            edge = ResolvedSubagentEdge(target_key=profile_id)
-            if profile_id in subagent_nodes or profile_id in resolving_nodes:
-                return edge
-
             profile, profile_issue = self._subagent_profile(
                 profile_id,
-                owner_id=parent_id,
-                owner_name=parent_name,
-                path=path,
+                owner_id=owner_id,
+                owner_name=owner_name,
+                path=f"subagents[{index}].subagent_id",
                 profile_overrides=profile_overrides,
             )
             if profile_issue is not None:
                 issues.append(profile_issue)
-                return None
+                continue
             assert profile is not None
             known_profiles[profile_id] = profile
+            settings = profile["settings"]
+            if settings.get("subagents"):
+                issues.append(
+                    _nested_subagent_issue(
+                        owner_id=profile_id,
+                        owner_name=str(profile["component_name"]),
+                    )
+                )
+                continue
 
-            resolving_nodes.add(profile_id)
-            issue_count = len(issues)
             child_references = {
                 capability_type: block_id
                 for capability_type, block_id in references.items()
@@ -880,42 +876,33 @@ class ConfigurationValidationService:
                     or CAPABILITY_BY_TYPE[capability_type].subagent_policy == "inherit"
                 )
             }
-            settings = profile["settings"]
             for selection in settings["capability_overrides"]:
                 capability_type = selection["type"]
                 if selection["mode"] == "replace":
                     child_references[capability_type] = selection["block_id"]
                 elif selection["mode"] == "disabled":
                     child_references.pop(capability_type, None)
-            child_profile_references = (
-                list(settings.get("subagents", []))
-                if "subagent" in child_references
-                else []
-            )
-            subagent_name = str(profile["name"])
 
+            subagent_name = str(profile["name"])
             automation_selection = settings.get("automation", {})
             child_automation = {
                 "hooks": list(automation_selection.get("hooks", [])),
                 "periodic": list(automation_selection.get("periodic", [])),
             }
-
-            (
-                child_blocks,
-                child_issues,
-                child_filesystem_mode,
-            ) = self._resolve_capability_subject(
-                child_references,
-                required_types=_SUBAGENT_REQUIRED_CAPABILITY_TYPES,
-                scope="subagent",
-                owner_id=profile_id,
-                owner_name=subagent_name,
-                block_overrides=block_overrides,
+            child_blocks, child_issues, child_filesystem_mode = (
+                self._resolve_capability_subject(
+                    child_references,
+                    required_types=_SUBAGENT_REQUIRED_CAPABILITY_TYPES,
+                    scope="subagent",
+                    owner_id=profile_id,
+                    owner_name=subagent_name,
+                    block_overrides=block_overrides,
+                )
             )
             child_tool_issue = self._static_tool_issue(
                 child_references,
                 child_blocks,
-                has_subagents=bool(child_profile_references),
+                has_subagents=False,
                 filesystem_mode=child_filesystem_mode,
                 scope="subagent",
                 owner_id=profile_id,
@@ -933,56 +920,21 @@ class ConfigurationValidationService:
                 )
             )
             issues.extend(child_issues)
-            child_edges: list[ResolvedSubagentEdge] = []
-            if len(issues) == issue_count:
-                for index, child_reference in enumerate(child_profile_references):
-                    child_edge = resolve_reference(
-                        child_reference,
-                        parent_id=profile_id,
-                        parent_name=str(profile["component_name"]),
-                        path=f"settings.subagents[{index}].subagent_id",
-                    )
-                    if child_edge is not None:
-                        child_edges.append(child_edge)
-                issues.extend(
-                    subagent_reference_issues(
-                        child_profile_references,
-                        profiles=known_profiles,
-                        scope="subagent",
-                        owner_id=profile_id,
-                        owner_name=str(profile["component_name"]),
-                        path_prefix="settings.subagents",
-                    )
-                )
-
-            if len(issues) == issue_count:
-                subagent_nodes[profile_id] = ResolvedSubagent(
-                    key=profile_id,
-                    component_name=str(profile["component_name"]),
-                    name=subagent_name,
-                    description=str(profile["description"]),
-                    references=child_references,
-                    blocks=child_blocks,
-                    filesystem_mode=child_filesystem_mode,
-                    automation=child_automation,
-                    subagents=tuple(child_edges),
-                )
-            resolving_nodes.remove(profile_id)
-            return edge if profile_id in subagent_nodes else None
-
-        resolved_subagents = tuple(
-            edge
-            for index, reference in enumerate(active_roots)
-            if (
-                edge := resolve_reference(
-                    reference,
-                    parent_id=owner_id,
-                    parent_name=owner_name,
-                    path=f"subagents[{index}].subagent_id",
-                )
+            if child_issues:
+                continue
+            subagent_nodes[profile_id] = ResolvedSubagent(
+                key=profile_id,
+                component_name=str(profile["component_name"]),
+                name=subagent_name,
+                description=str(profile["description"]),
+                references=child_references,
+                blocks=child_blocks,
+                filesystem_mode=child_filesystem_mode,
+                automation=child_automation,
             )
-            is not None
-        )
+            resolved_edges.append(ResolvedSubagentEdge(target_key=profile_id))
+
+        resolved_subagents = tuple(resolved_edges)
         if not delegation_selected:
             for index, reference in enumerate(root_references):
                 profile_id = str(reference.get("subagent_id", ""))
@@ -1101,7 +1053,7 @@ class ConfigurationValidationService:
             subagent_references = main_agent.get("subagents", [])
             if not isinstance(subagent_references, list):
                 subagent_references = []
-            indirect = self._subagents_reach_block(
+            indirect = self._direct_subagents_reference_block(
                 subagent_references, block_type, block_id
             )
             if direct or indirect:
@@ -1126,7 +1078,7 @@ class ConfigurationValidationService:
             subagent_references = main_agent.get("subagents", [])
             if not isinstance(subagent_references, list):
                 continue
-            if not self._references_reach_subagent(
+            if not self._references_include_subagent(
                 subagent_references, profile_id
             ):
                 continue
@@ -1139,22 +1091,18 @@ class ConfigurationValidationService:
             )
         return issues
 
-    def _subagents_reach_block(
+    def _direct_subagents_reference_block(
         self,
         references: list[Any],
         block_type: str,
         block_id: str,
-        *,
-        visited: set[str] | None = None,
     ) -> bool:
-        visited = set() if visited is None else visited
         for reference in references:
             if not isinstance(reference, dict):
                 continue
             profile_id = str(reference.get("subagent_id", ""))
-            if not profile_id or profile_id in visited:
+            if not profile_id:
                 continue
-            visited.add(profile_id)
             profile = self._agent_configs.get_item("subagents", profile_id)
             if not profile:
                 continue
@@ -1170,42 +1118,15 @@ class ConfigurationValidationService:
                 for item in selections
             ):
                 return True
-            nested = settings.get("subagents", [])
-            if isinstance(nested, list) and self._subagents_reach_block(
-                nested,
-                block_type,
-                block_id,
-                visited=visited,
-            ):
-                return True
         return False
 
-    def _references_reach_subagent(
-        self,
+    @staticmethod
+    def _references_include_subagent(
         references: list[Any],
         target_id: str,
-        *,
-        visited: set[str] | None = None,
     ) -> bool:
-        visited = set() if visited is None else visited
-        for reference in references:
-            if not isinstance(reference, dict):
-                continue
-            profile_id = str(reference.get("subagent_id", ""))
-            if not profile_id:
-                continue
-            if profile_id == target_id:
-                return True
-            if profile_id in visited:
-                continue
-            visited.add(profile_id)
-            profile = self._agent_configs.get_item("subagents", profile_id)
-            settings = profile.get("settings", {}) if profile else {}
-            nested = settings.get("subagents", []) if isinstance(settings, dict) else []
-            if isinstance(nested, list) and self._references_reach_subagent(
-                nested,
-                target_id,
-                visited=visited,
-            ):
-                return True
-        return False
+        return any(
+            isinstance(reference, dict)
+            and str(reference.get("subagent_id", "")) == target_id
+            for reference in references
+        )

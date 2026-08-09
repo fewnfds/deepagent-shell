@@ -3,8 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
-from types import SimpleNamespace
-
 import pytest
 
 from agent_shell.automation.runtime import AutomationOwner, AutomationRuntime
@@ -102,7 +100,7 @@ def test_plugin_scan_rejects_unrenderable_config_schema(
 
 
 @pytest.mark.anyio
-async def test_prepare_middleware_and_immutable_request_share_request_local_ctx(
+async def test_prepare_and_middleware_share_only_immutable_request_context(
     tmp_path: Path,
 ) -> None:
     plugins = tmp_path / "plugins"
@@ -118,8 +116,7 @@ async def test_prepare_middleware_and_immutable_request_share_request_local_ctx(
         "    def __init__(self, ctx):\n        self.ctx = ctx\n"
         "    def before_agent(self, state, runtime):\n        return None\n"
         "    async def abefore_agent(self, state, runtime):\n"
-        "        self.ctx.vars['hook_seen'] = True\n"
-        "        return None\n"
+        "        return {'shared_vars': {'hook_seen': True}}\n"
         "    def before_model(self, state, runtime):\n        return None\n"
         "    async def abefore_model(self, state, runtime):\n        return None\n"
         "    def wrap_model_call(self, request, handler):\n        return handler(request)\n"
@@ -132,12 +129,7 @@ async def test_prepare_middleware_and_immutable_request_share_request_local_ctx(
         "    async def aafter_agent(self, state, runtime):\n        return None\n"
         "def create_middleware(ctx):\n    return PluginMiddleware(ctx)\n"
         "async def prepare(ctx):\n"
-        "    assert ctx.request.messages[0]['content'] == 'original'\n"
-        "    ctx.messages.append({'role': 'assistant', 'content': EXTRA})\n"
-        "    ctx.vars['shared'] = {'value': 1}\n"
-        "    ctx.vars['prepared'] = True\n"
-        "    ctx.vars['non_json'] = object()\n"
-        "    ctx.vars['large'] = 'x' * (256 * 1024 + 1)\n",
+        "    assert ctx.request.messages[0]['content'] == 'original'\n",
         entrypoints=("middleware", "prepare"),
     )
     (folder / "helper.py").write_text("EXTRA = 'prepared'\n", encoding="utf-8")
@@ -146,23 +138,18 @@ async def test_prepare_middleware_and_immutable_request_share_request_local_ctx(
     await runtime.prepare()
     middleware = runtime.middleware_for("owner")
 
-    assert runtime.messages_for("owner") == [
-        {"role": "assistant", "content": "prepared"},
-    ]
     assert len(middleware) == 1
     item = middleware[0]
     assert type(item).__name__ == "PluginMiddleware"
     assert item.ctx.request is runtime.request
-    assert item.ctx.vars["shared"] == {"value": 1}
-    assert item.ctx.vars["prepared"] is True
-    assert type(item.ctx.vars["non_json"]) is object
-    assert len(item.ctx.vars["large"]) == 256 * 1024 + 1
+    assert not hasattr(item.ctx, "vars")
     with pytest.raises(TypeError):
         item.ctx.request.messages[0]["content"] = "changed"
     with pytest.raises(AttributeError):
         item.ctx.request.messages.append({"role": "user", "content": "changed"})
-    await item.abefore_agent({}, None)
-    assert item.ctx.vars["hook_seen"] is True
+    assert await item.abefore_agent({}, None) == {
+        "shared_vars": {"hook_seen": True}
+    }
     for hook in (
         "before_agent",
         "abefore_agent",
@@ -215,13 +202,11 @@ async def test_no_binding_keeps_client_messages_out_of_owner_activity(
     await runtime.prepare()
 
     assert runtime.request.messages[0]["content"] == "original"
-    assert runtime.messages_for("main_agent") == []
-    assert runtime.messages_for("child") == []
     await runtime.finish({"status": "completed"})
 
 
 @pytest.mark.anyio
-async def test_vars_is_one_request_local_mapping_shared_by_all_bindings(
+async def test_middleware_bindings_write_shared_vars_through_state_updates(
     tmp_path: Path,
 ) -> None:
     write_plugin(
@@ -231,7 +216,8 @@ async def test_vars_is_one_request_local_mapping_shared_by_all_bindings(
         "class Capture(AgentMiddleware):\n"
         "    def __init__(self, ctx):\n        self.ctx = ctx\n"
         "    async def abefore_agent(self, state, runtime):\n"
-        "        self.ctx.vars['second_called'] = True\n"
+        "        previous = state.get('shared_vars', {}).get('first_called', False)\n"
+        "        return {'shared_vars': {'second_saw_first': previous}}\n"
         "def create_middleware(ctx):\n    return Capture(ctx)\n",
         entrypoints=("middleware",),
     )
@@ -258,14 +244,11 @@ async def test_vars_is_one_request_local_mapping_shared_by_all_bindings(
     )
 
     first, second = runtime.middleware_for("owner")
-    value = object()
-    first.ctx.vars[("owner", "value")] = value
-    await second.abefore_agent({}, None)
-
     assert first.name != second.name
-    assert first.ctx.vars is second.ctx.vars
-    assert second.ctx.vars[("owner", "value")] is value
-    assert first.ctx.vars["second_called"] is True
+    assert not hasattr(first.ctx, "vars")
+    assert await second.abefore_agent(
+        {"shared_vars": {"first_called": True}}, None
+    ) == {"shared_vars": {"second_saw_first": True}}
 
 
 @pytest.mark.anyio
@@ -284,7 +267,6 @@ async def test_lifecycle_drains_then_complete_runs_and_modules_are_cleaned(
         "async def lifecycle(ctx):\n"
         "    Path(ctx.config['started']).touch()\n"
         "    while not Path(ctx.config['release']).exists():\n        await asyncio.sleep(0)\n"
-        "    ctx.vars['tick'] = ctx.tick\n"
         "    Path(ctx.config['completed']).touch()\n"
         "async def complete(ctx):\n"
         "    Path(ctx.config['terminal']).write_text(str(dict(ctx.terminal)))\n",
@@ -393,41 +375,64 @@ async def test_periodic_bindings_have_independent_tasks_and_failure_boundaries(
 
 
 @pytest.mark.anyio
-async def test_prepare_validates_every_owner_message_view_before_construction(
+async def test_prepare_does_not_expose_a_message_injection_buffer(
     tmp_path: Path,
 ) -> None:
     write_plugin(
         tmp_path / "plugins",
-        "invalid-message-plugin",
+        "legacy-message-plugin",
         "async def prepare(ctx):\n"
-        "    ctx.messages.append({'role': 'tool', 'content': 'invalid'})\n",
+        "    ctx.messages.append({'role': 'user', 'content': 'legacy'})\n",
         entrypoints=("prepare",),
     )
-    runtime = runtime_for(tmp_path, "invalid-message-plugin")
+    runtime = runtime_for(tmp_path, "legacy-message-plugin")
 
     with pytest.raises(AgentRuntimeError) as error:
         await runtime.prepare()
-    assert error.value.code == "input_message_role_unsupported"
+    assert error.value.code == "automation_plugin_failed"
     await runtime.finish({"status": "failed"})
 
 
-def test_from_assembly_keeps_one_owner_per_recursive_subagent_profile(
+def test_from_assembly_keeps_main_and_direct_subagent_owners(
     tmp_path: Path,
 ) -> None:
     empty = {"hooks": [], "periodic": []}
-    edge_b = SimpleNamespace(target_key="B")
-    edge_c = SimpleNamespace(target_key="C")
-    node_b = SimpleNamespace(
-        key="B", name="B", blocks={}, automation=empty, subagents=(edge_c,)
+    from agent_shell.validation.service import (
+        ResolvedSubagent,
+        ResolvedSubagentEdge,
+        StaticAssembly,
     )
-    node_c = SimpleNamespace(
-        key="C", name="C", blocks={}, automation=empty, subagents=(edge_b,)
-    )
-    assembly = SimpleNamespace(
-        main_agent={"name": "A"},
+
+    node_b = ResolvedSubagent(
+        key="B",
+        component_name="B",
+        name="B",
+        description="B",
+        references={},
         blocks={},
+        filesystem_mode="default-shared",
         automation=empty,
-        subagents=(edge_b, edge_c),
+    )
+    node_c = ResolvedSubagent(
+        key="C",
+        component_name="C",
+        name="C",
+        description="C",
+        references={},
+        blocks={},
+        filesystem_mode="default-shared",
+        automation=empty,
+    )
+    assembly = StaticAssembly(
+        main_agent={"component_name": "A", "name": "A"},
+        references={},
+        blocks={},
+        filesystem_mode="default-shared",
+        automation=empty,
+        subagents=(
+            ResolvedSubagentEdge(target_key="B"),
+            ResolvedSubagentEdge(target_key="C"),
+        ),
         subagent_nodes={"B": node_b, "C": node_c},
     )
 
