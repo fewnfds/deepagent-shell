@@ -5,12 +5,14 @@
 【Workflow】是 OpenAI-compatible `model` 的唯一来源。当前 CRUD 保存名称、说明、启用状态和一个共享 Filesystem，
 以及一份当前 Graph definition/layout。只有启用的 Workflow 出现在 `/v1/models`。
 
-【编辑 Flow】进入独立全屏 Vue Flow 页面。当前只支持一个 Agent 节点：添加节点、选择现有 Main Agent、连接
-`Start -> Agent -> End`、移动或删除并保存。保存直接覆盖当前图，重新打开时恢复节点、边、位置和 viewport；没有
+【编辑 Flow】进入独立全屏 Vue Flow 页面。左侧组件库当前只有 Agent，可以点击或拖到画布；右侧属性栏编辑所选
+Agent 的 Main Agent 引用，也可以查看或删除所选 Edge。两侧均可独立收起。当前只允许一个 Agent 和 normal edge，形成
+`Start -> Agent -> End` 后移动、删除并保存。保存直接覆盖当前图，重新打开时恢复节点、边、位置和 viewport；没有
 draft/published revision、自动保存、并发编辑或恢复层。
 
 画布 Start/End 分别映射 LangGraph 官方虚拟 `START/END`，不编译成 Shell 函数节点。Agent 节点引用的
-`main_agent_id` 只保存在 Graph definition 中，不是 Workflow metadata 外键。
+`main_agent_id` 只保存在 Graph definition 中，不是 Workflow metadata 外键。normal 端口和 normal edge 只表达执行顺序；
+共享 State 是 Workflow 级后端 contract，不作为画布变量节点或数据端口编辑。
 
 ## Main Agent 与直接 Subagent
 

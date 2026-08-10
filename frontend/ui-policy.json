@@ -279,12 +279,20 @@
       },
       {
         "name": "workflow-editor",
-        "paths": ["src/pages/WorkflowEditorPage.vue"],
+        "paths": ["src/pages/WorkflowEditorPage.vue", "src/components/workflow/*.vue"],
         "classes": [
-          "nodrag", "workflow-editor-canvas", "workflow-editor-error", "workflow-editor-flow",
-          "workflow-editor-shell", "workflow-editor-toolbar", "workflow-node",
-          "workflow-node--agent", "workflow-node--terminal", "workflow-node-header",
-          "workflow-node-remove", "workflow-node-select", "workflow-node-title"
+          "workflow-editor-canvas", "workflow-editor-error", "workflow-editor-flow",
+          "workflow-editor-shell", "workflow-editor-toolbar", "workflow-editor-workspace",
+          "workflow-inspector-context", "workflow-inspector-delete", "workflow-inspector-field",
+          "workflow-inspector-label", "workflow-inspector-note", "workflow-inspector-select",
+          "workflow-inspector-value", "workflow-node", "workflow-node--agent",
+          "workflow-node--terminal", "workflow-node-header", "workflow-node-icon",
+          "workflow-node-library-copy", "workflow-node-library-icon", "workflow-node-library-item",
+          "workflow-node-library-meta", "workflow-node-library-title", "workflow-node-summary",
+          "workflow-node-title", "workflow-port", "workflow-port--normal", "workflow-sidebar",
+          "workflow-sidebar--inspector", "workflow-sidebar--library", "workflow-sidebar-body",
+          "workflow-sidebar-header", "workflow-sidebar-section-title", "workflow-sidebar-title",
+          "workflow-sidebar-toggle", "form-select"
         ]
       },
       {
@@ -401,9 +409,24 @@
           "src/editors/OutputModeEditor.vue",
           "src/editors/PromptCachingEditor.vue",
           "src/editors/SummarizationEditor.vue",
+          "src/components/workflow/WorkflowInspector.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/WorkflowsPage.vue"
         ]
+      },
+      {
+        "name": "WorkflowNodeLibrary",
+        "path": "src/components/workflow/WorkflowNodeLibrary.vue",
+        "kind": "domain-composition",
+        "reason": "Projects backend-supported Workflow node types into the collapsible drag source without defining runtime behavior",
+        "callers": ["src/pages/WorkflowEditorPage.vue"]
+      },
+      {
+        "name": "WorkflowInspector",
+        "path": "src/components/workflow/WorkflowInspector.vue",
+        "kind": "domain-composition",
+        "reason": "Owns the selected Workflow node or edge property surface and emits mechanical configuration changes",
+        "callers": ["src/pages/WorkflowEditorPage.vue"]
       },
       {
         "name": "MiddlewareConfigForm",

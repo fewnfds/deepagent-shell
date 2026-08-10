@@ -215,6 +215,23 @@ export interface Workflow extends WorkflowPayload {
 
 export type WorkflowNodeType = 'start' | 'agent' | 'end'
 
+export interface WorkflowNodeHandleSpec {
+  id: string
+  kind: 'control'
+  max_connections: number
+}
+
+export interface WorkflowNodeCatalogItem {
+  type: WorkflowNodeType
+  type_version: 1
+  runtime_kind: 'graph_entry' | 'graph_exit' | 'compiled_subgraph'
+  title_key: string
+  description_key: string
+  config_schema: Record<string, unknown>
+  input_handles: WorkflowNodeHandleSpec[]
+  output_handles: WorkflowNodeHandleSpec[]
+}
+
 export interface WorkflowGraphNode {
   id: string
   type: WorkflowNodeType

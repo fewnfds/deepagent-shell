@@ -1,21 +1,31 @@
 <script setup lang="ts">
 import {
+  ConnectionMode,
   Handle,
   Position,
   VueFlow,
   type Connection,
   type VueFlowStore,
   type ViewportTransform,
+  type XYPosition,
 } from '@vue-flow/core'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
-import { managementApi, type MainAgent, type Workflow } from '@/api'
+import {
+  managementApi,
+  type MainAgent,
+  type Workflow,
+  type WorkflowNodeCatalogItem,
+} from '@/api'
+import WorkflowInspector from '@/components/workflow/WorkflowInspector.vue'
+import WorkflowNodeLibrary from '@/components/workflow/WorkflowNodeLibrary.vue'
 import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
 import {
   newAgentCanvasNode,
+  WORKFLOW_NODE_DRAG_MIME,
   workflowCanvasToDocument,
   workflowDocumentToCanvas,
   type WorkflowCanvasEdge,
@@ -29,20 +39,36 @@ const managementError = useManagementError()
 const { notify } = useToasts()
 const workflow = ref<Workflow | null>(null)
 const mainAgents = ref<MainAgent[]>([])
+const nodeCatalog = ref<WorkflowNodeCatalogItem[]>([])
 const nodes = ref<WorkflowCanvasNode[]>([])
 const edges = ref<WorkflowCanvasEdge[]>([])
 const flow = ref<VueFlowStore | null>(null)
+const stateContract = ref('agent-shell.workflow.messages.v1')
 const savedViewport = ref<ViewportTransform>({ x: 0, y: 0, zoom: 1 })
+const leftCollapsed = ref(false)
+const rightCollapsed = ref(false)
 const loaded = ref(false)
 const saving = ref(false)
 const loadError = ref('')
 const workflowId = computed(() => String(route.params.id ?? ''))
 const hasAgent = computed(() => nodes.value.some((node) => node.data.nodeType === 'agent'))
-const canAddAgent = computed(() => loaded.value && !hasAgent.value && mainAgents.value.length > 0)
+const agentCatalogItem = computed(() => (
+  nodeCatalog.value.find((item) => item.type === 'agent') ?? null
+))
+const canAddAgent = computed(() => (
+  loaded.value
+  && !hasAgent.value
+  && mainAgents.value.length > 0
+  && agentCatalogItem.value !== null
+))
 const canSave = computed(() => (
   loaded.value
   && !saving.value
   && !nodes.value.some((node) => node.data.nodeType === 'agent' && !node.data.mainAgentId)
+))
+const selectedNode = computed(() => nodes.value.find((node) => node.selected) ?? null)
+const selectedEdge = computed(() => (
+  selectedNode.value ? null : edges.value.find((edge) => edge.selected) ?? null
 ))
 
 function isValidConnection(connection: Connection): boolean {
@@ -59,19 +85,50 @@ function isValidConnection(connection: Connection): boolean {
 
 function connect(connection: Connection): void {
   if (!isValidConnection(connection)) return
-  edges.value.push({
-    id: `edge-${connection.source}-${connection.target}`,
-    source: connection.source,
-    sourceHandle: connection.sourceHandle,
-    target: connection.target,
-    targetHandle: connection.targetHandle,
-  })
+  nodes.value = nodes.value.map((node) => ({ ...node, selected: false }))
+  edges.value = [
+    ...edges.value.map((edge) => ({ ...edge, selected: false })),
+    {
+      id: `edge-${connection.source}-${connection.target}`,
+      source: connection.source,
+      sourceHandle: connection.sourceHandle,
+      target: connection.target,
+      targetHandle: connection.targetHandle,
+      type: 'smoothstep',
+      selected: true,
+      data: { edgeType: 'normal' },
+    },
+  ]
+  rightCollapsed.value = false
 }
 
-function addAgent(): void {
+function addAgent(position?: XYPosition): void {
   const firstAgent = mainAgents.value[0]
   if (!canAddAgent.value || !firstAgent) return
-  nodes.value.push(newAgentCanvasNode(firstAgent.id))
+  const node = newAgentCanvasNode(firstAgent.id, position)
+  node.selected = true
+  nodes.value = [
+    ...nodes.value.map((item) => ({ ...item, selected: false })),
+    node,
+  ]
+  edges.value = edges.value.map((edge) => ({ ...edge, selected: false }))
+  rightCollapsed.value = false
+}
+
+function dragOver(event: DragEvent): void {
+  if (!canAddAgent.value || !event.dataTransfer?.types.includes(WORKFLOW_NODE_DRAG_MIME)) return
+  event.preventDefault()
+  event.dataTransfer.dropEffect = 'copy'
+}
+
+function dropNode(event: DragEvent): void {
+  if (
+    !canAddAgent.value
+    || !flow.value
+    || event.dataTransfer?.getData(WORKFLOW_NODE_DRAG_MIME) !== 'agent'
+  ) return
+  event.preventDefault()
+  addAgent(flow.value.screenToFlowCoordinate({ x: event.clientX, y: event.clientY }))
 }
 
 function removeAgent(nodeId: string): void {
@@ -79,13 +136,30 @@ function removeAgent(nodeId: string): void {
   edges.value = edges.value.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
 }
 
-function selectAgent(nodeId: string, event: Event): void {
-  const mainAgentId = (event.target as HTMLSelectElement).value
+function removeEdge(edgeId: string): void {
+  edges.value = edges.value.filter((edge) => edge.id !== edgeId)
+}
+
+function selectAgent(nodeId: string, mainAgentId: string): void {
   nodes.value = nodes.value.map((node) => (
     node.id === nodeId
       ? { ...node, data: { ...node.data, mainAgentId } }
       : node
   ))
+}
+
+function clearSelection(): void {
+  nodes.value = nodes.value.map((node) => ({ ...node, selected: false }))
+  edges.value = edges.value.map((edge) => ({ ...edge, selected: false }))
+}
+
+function showInspector(): void {
+  rightCollapsed.value = false
+}
+
+function mainAgentName(mainAgentId: string): string {
+  return mainAgents.value.find((agent) => agent.id === mainAgentId)?.name
+    ?? t('workflows.editor.noMainAgentSelected')
 }
 
 async function initializeFlow(instance: VueFlowStore): Promise<void> {
@@ -120,13 +194,16 @@ async function save(): Promise<void> {
 
 onMounted(async () => {
   try {
-    const [metadata, graph, agents] = await Promise.all([
+    const [metadata, graph, agents, catalog] = await Promise.all([
       managementApi.getWorkflow(workflowId.value),
       managementApi.getWorkflowGraph(workflowId.value),
       managementApi.listMainAgents(),
+      managementApi.listWorkflowNodeCatalog(),
     ])
     workflow.value = metadata
     mainAgents.value = agents
+    nodeCatalog.value = catalog
+    stateContract.value = graph.definition.state_contract
     const canvas = workflowDocumentToCanvas(graph)
     nodes.value = canvas.nodes
     edges.value = canvas.edges
@@ -147,74 +224,117 @@ onMounted(async () => {
         <i class="bi bi-chevron-left" aria-hidden="true" />
       </button>
       <h1>{{ workflow?.name ?? t('workflows.editor.title') }}</h1>
-      <button
-        :aria-label="t('workflows.editor.addAgent')"
-        :disabled="!canAddAgent"
-        :title="t('workflows.editor.addAgent')"
-        type="button"
-        @click="addAgent"
-      >
-        <i class="bi bi-plus-lg" aria-hidden="true" />
-      </button>
       <button :aria-label="t('common.save')" :disabled="!canSave" :title="t('common.save')" type="button" @click="save">
         <i class="bi bi-floppy" aria-hidden="true" />
       </button>
     </header>
-    <main class="workflow-editor-canvas" :aria-label="t('workflows.editor.canvas')">
-      <p v-if="loadError" class="workflow-editor-error" role="alert">{{ loadError }}</p>
-      <VueFlow
-        v-else
-        v-model:nodes="nodes"
-        v-model:edges="edges"
-        class="workflow-editor-flow"
-        :delete-key-code="['Backspace', 'Delete']"
-        :is-valid-connection="isValidConnection"
-        :max-zoom="2"
-        :min-zoom="0.25"
-        @connect="connect"
-        @init="initializeFlow"
+
+    <div
+      class="workflow-editor-workspace"
+      :data-left-collapsed="leftCollapsed"
+      :data-right-collapsed="rightCollapsed"
+    >
+      <WorkflowNodeLibrary
+        :agent="agentCatalogItem"
+        :collapsed="leftCollapsed"
+        :disabled="!canAddAgent"
+        @add-agent="addAgent()"
+        @toggle="leftCollapsed = !leftCollapsed"
+      />
+
+      <main
+        class="workflow-editor-canvas"
+        :aria-label="t('workflows.editor.canvas')"
+        @dragover="dragOver"
+        @drop="dropNode"
       >
-        <template #node-start>
-          <div class="workflow-node workflow-node--terminal">
-            <span class="workflow-node-title">{{ t('workflows.editor.start') }}</span>
-            <Handle id="next" type="source" :position="Position.Right" />
-          </div>
-        </template>
-        <template #node-agent="{ id, data }">
-          <div class="workflow-node workflow-node--agent">
-            <Handle id="in" type="target" :position="Position.Left" />
-            <div class="workflow-node-header">
-              <span class="workflow-node-title">{{ t('workflows.editor.agent') }}</span>
-              <button
-                class="nodrag workflow-node-remove"
-                :aria-label="t('workflows.editor.removeAgent')"
-                :title="t('workflows.editor.removeAgent')"
-                type="button"
-                @click="removeAgent(id)"
-              >
-                <i class="bi bi-trash" aria-hidden="true" />
-              </button>
+        <p v-if="loadError" class="workflow-editor-error" role="alert">{{ loadError }}</p>
+        <VueFlow
+          v-else
+          v-model:nodes="nodes"
+          v-model:edges="edges"
+          class="workflow-editor-flow"
+          :connection-mode="ConnectionMode.Strict"
+          :delete-key-code="['Backspace', 'Delete']"
+          :is-valid-connection="isValidConnection"
+          :max-zoom="2"
+          :min-zoom="0.25"
+          @connect="connect"
+          @edge-click="showInspector"
+          @init="initializeFlow"
+          @node-click="showInspector"
+          @pane-click="clearSelection"
+        >
+          <template #node-start>
+            <div class="workflow-node workflow-node--terminal">
+              <span class="workflow-node-icon" aria-hidden="true"><i class="bi bi-play-fill" /></span>
+              <span class="workflow-node-title">{{ t('workflows.editor.start') }}</span>
+              <Handle
+                id="next"
+                class="workflow-port workflow-port--normal"
+                type="source"
+                :aria-label="t('workflows.editor.normalOutput')"
+                :connectable="1"
+                :position="Position.Right"
+              />
             </div>
-            <select
-              class="nodrag workflow-node-select"
-              :aria-label="t('workflows.editor.selectAgent')"
-              :value="data.mainAgentId"
-              @change="selectAgent(id, $event)"
-            >
-              <option v-for="agent in mainAgents" :key="agent.id" :value="agent.id">
-                {{ agent.name }}
-              </option>
-            </select>
-            <Handle id="next" type="source" :position="Position.Right" />
-          </div>
-        </template>
-        <template #node-end>
-          <div class="workflow-node workflow-node--terminal">
-            <Handle id="in" type="target" :position="Position.Left" />
-            <span class="workflow-node-title">{{ t('workflows.editor.end') }}</span>
-          </div>
-        </template>
-      </VueFlow>
-    </main>
+          </template>
+
+          <template #node-agent="{ data }">
+            <div class="workflow-node workflow-node--agent">
+              <Handle
+                id="in"
+                class="workflow-port workflow-port--normal"
+                type="target"
+                :aria-label="t('workflows.editor.normalInput')"
+                :connectable="1"
+                :position="Position.Left"
+              />
+              <div class="workflow-node-header">
+                <span class="workflow-node-icon" aria-hidden="true"><i class="bi bi-robot" /></span>
+                <span class="workflow-node-title">{{ t('workflows.editor.agent') }}</span>
+              </div>
+              <span class="workflow-node-summary">{{ mainAgentName(data.mainAgentId) }}</span>
+              <Handle
+                id="next"
+                class="workflow-port workflow-port--normal"
+                type="source"
+                :aria-label="t('workflows.editor.normalOutput')"
+                :connectable="1"
+                :position="Position.Right"
+              />
+            </div>
+          </template>
+
+          <template #node-end>
+            <div class="workflow-node workflow-node--terminal">
+              <Handle
+                id="in"
+                class="workflow-port workflow-port--normal"
+                type="target"
+                :aria-label="t('workflows.editor.normalInput')"
+                :connectable="1"
+                :position="Position.Left"
+              />
+              <span class="workflow-node-icon" aria-hidden="true"><i class="bi bi-stop-fill" /></span>
+              <span class="workflow-node-title">{{ t('workflows.editor.end') }}</span>
+            </div>
+          </template>
+        </VueFlow>
+      </main>
+
+      <WorkflowInspector
+        :collapsed="rightCollapsed"
+        :edge="selectedEdge"
+        :main-agents="mainAgents"
+        :node="selectedNode"
+        :state-contract="stateContract"
+        :workflow-name="workflow?.name ?? ''"
+        @remove-edge="removeEdge"
+        @remove-node="removeAgent"
+        @toggle="rightCollapsed = !rightCollapsed"
+        @update-agent="selectAgent"
+      />
+    </div>
   </div>
 </template>

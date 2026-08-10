@@ -27,6 +27,7 @@ import type {
   ManagementEvent,
   Workflow,
   WorkflowGraphDocument,
+  WorkflowNodeCatalogItem,
   WorkflowPayload,
   ManagedArchivePreview,
   ManagedDirectory,
@@ -118,6 +119,10 @@ export const managementApi = {
 
   listWorkflows(): Promise<Workflow[]> {
     return managementRequest('/api/workflows')
+  },
+
+  listWorkflowNodeCatalog(): Promise<WorkflowNodeCatalogItem[]> {
+    return managementRequest('/api/workflow-node-catalog')
   },
 
   getWorkflow(id: string): Promise<Workflow> {

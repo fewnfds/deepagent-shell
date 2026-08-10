@@ -1,4 +1,4 @@
-import type { Edge, Node, ViewportTransform } from '@vue-flow/core'
+import type { Edge, Node, ViewportTransform, XYPosition } from '@vue-flow/core'
 
 import type {
   WorkflowGraphDocument,
@@ -12,7 +12,14 @@ export interface WorkflowCanvasNodeData {
 }
 
 export type WorkflowCanvasNode = Node<WorkflowCanvasNodeData>
-export type WorkflowCanvasEdge = Edge
+
+export interface WorkflowCanvasEdgeData {
+  edgeType: 'normal'
+}
+
+export type WorkflowCanvasEdge = Edge<WorkflowCanvasEdgeData>
+
+export const WORKFLOW_NODE_DRAG_MIME = 'application/x-agent-shell-workflow-node'
 
 export interface WorkflowCanvasState {
   nodes: WorkflowCanvasNode[]
@@ -55,6 +62,8 @@ export function workflowDocumentToCanvas(document: WorkflowGraphDocument): Workf
       sourceHandle: edge.source_handle,
       target: edge.target,
       targetHandle: edge.target_handle,
+      type: 'smoothstep',
+      data: { edgeType: 'normal' },
     })),
     viewport: { ...document.layout.viewport },
   }
@@ -94,11 +103,14 @@ export function workflowCanvasToDocument(
   }
 }
 
-export function newAgentCanvasNode(mainAgentId: string): WorkflowCanvasNode {
+export function newAgentCanvasNode(
+  mainAgentId: string,
+  position: XYPosition = defaultPositions.agent,
+): WorkflowCanvasNode {
   return {
     id: 'agent',
     type: 'agent',
-    position: { ...defaultPositions.agent },
+    position: { ...position },
     deletable: true,
     data: { nodeType: 'agent', mainAgentId },
   }
