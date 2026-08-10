@@ -6,15 +6,16 @@
 以及一份当前 Graph definition/layout。只有启用的 Workflow 出现在 `/v1/models`。
 
 【编辑 Flow】进入独立全屏 Vue Flow 页面。左侧组件库当前只有 Agent，可以点击或拖到画布；右侧属性栏编辑所选
-Agent 的 Main Agent 引用，也可以查看或删除所选连线。两侧均可独立收起。Agent 数量不限，同一个 Main Agent 可以被
+Agent 的 Main Agent 引用并列出该 Node 声明的输入/输出端点。选中连线后，可以选择两端共同支持的 Edge 类型和具体
+source/target endpoint，也可以删除连线；当前唯一选项是 Normal Edge。两侧均可独立收起。Agent 数量不限，同一个 Main Agent 可以被
 多个 Agent node 重复引用；normal 端点可以连接 `Start -> Agent`、`Agent -> Agent` 和 `Agent -> End`，并允许一个
 端点连接多个激活方向。保存直接覆盖当前图，重新打开时恢复节点、边、位置和 viewport；没有
 draft/published revision、自动保存、并发编辑或恢复层。
 
 画布 Start/End 分别映射 LangGraph 官方虚拟 `START/END`，不编译成 Shell 函数节点。Agent 节点引用的
 `main_agent_id` 只保存在 Graph definition 中，不是 Workflow metadata 外键。`normal` 是节点端点类型；从 normal 输出
-端点画到 normal 输入端点的线是一条具体连接，只表达后继节点的激活方向。多条 normal 出边按 LangGraph 官方 Graph API
-激活多个后继节点；
+端点画到 normal 输入端点的线是一条具体连接，只表达后继节点的激活方向。Node 端点来自后端 Catalog 的 input/output
+arrays，保存时仍只记录 `source_handle`/`target_handle`。多条 normal 出边按 LangGraph 官方 Graph API 激活多个后继节点；
 共享 State 是 Workflow 级后端 contract，不作为画布变量节点或数据端口编辑。
 
 ## Main Agent 与直接 Subagent

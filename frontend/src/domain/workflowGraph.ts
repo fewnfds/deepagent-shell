@@ -32,6 +32,10 @@ export type WorkflowCanvasEdge = Edge<WorkflowCanvasEdgeData>
 export const WORKFLOW_NODE_DRAG_MIME = 'application/x-agent-shell-workflow-node'
 export const WORKFLOW_NORMAL_EDGE_MARKER = MarkerType.ArrowClosed
 
+export const WORKFLOW_CANVAS_EDGE_TYPES = ['normal'] as const
+export type WorkflowCanvasEdgeType = (typeof WORKFLOW_CANVAS_EDGE_TYPES)[number]
+export type WorkflowEndpointDirection = 'input' | 'output'
+
 export interface WorkflowCanvasState {
   nodes: WorkflowCanvasNode[]
   edges: WorkflowCanvasEdge[]
@@ -57,16 +61,32 @@ function canvasNode(node: WorkflowGraphNode, document: WorkflowGraphDocument): W
   }
 }
 
+function isWorkflowCanvasEdgeType(value: string): value is WorkflowCanvasEdgeType {
+  return WORKFLOW_CANVAS_EDGE_TYPES.some((edgeType) => edgeType === value)
+}
+
+export function workflowCanvasNodeEndpoints(
+  catalog: WorkflowNodeCatalogItem[],
+  nodeType: WorkflowNodeType,
+  direction: WorkflowEndpointDirection,
+): WorkflowNodeHandleSpec[] {
+  const nodeTypeSpec = catalog.find((item) => item.type === nodeType)
+  if (!nodeTypeSpec) return []
+  const endpoints = direction === 'output'
+    ? nodeTypeSpec.output_handles
+    : nodeTypeSpec.input_handles
+  return endpoints.filter((endpoint) => isWorkflowCanvasEdgeType(endpoint.edge_type))
+}
+
 function catalogHandle(
   catalog: WorkflowNodeCatalogItem[],
   nodeType: WorkflowNodeType,
   handleId: string | null | undefined,
-  output: boolean,
+  direction: WorkflowEndpointDirection,
 ): WorkflowNodeHandleSpec | null {
-  const nodeTypeSpec = catalog.find((item) => item.type === nodeType)
-  if (!nodeTypeSpec || !handleId) return null
-  const handles = output ? nodeTypeSpec.output_handles : nodeTypeSpec.input_handles
-  return handles.find((handle) => handle.id === handleId) ?? null
+  if (!handleId) return null
+  return workflowCanvasNodeEndpoints(catalog, nodeType, direction)
+    .find((endpoint) => endpoint.id === handleId) ?? null
 }
 
 function documentEdgeType(
@@ -77,8 +97,8 @@ function documentEdgeType(
   const source = document.definition.nodes.find((node) => node.id === edge.source)
   const target = document.definition.nodes.find((node) => node.id === edge.target)
   if (!source || !target) return ''
-  const sourceHandle = catalogHandle(catalog, source.type, edge.source_handle, true)
-  const targetHandle = catalogHandle(catalog, target.type, edge.target_handle, false)
+  const sourceHandle = catalogHandle(catalog, source.type, edge.source_handle, 'output')
+  const targetHandle = catalogHandle(catalog, target.type, edge.target_handle, 'input')
   if (!sourceHandle || !targetHandle) return ''
   return sourceHandle.edge_type === targetHandle.edge_type ? sourceHandle.edge_type : ''
 }
@@ -158,12 +178,18 @@ export function newAgentCanvasNode(
   }
 }
 
+export function nextWorkflowCanvasEdgeId(edges: WorkflowCanvasEdge[]): string {
+  let index = 1
+  while (edges.some((edge) => edge.id === `edge-${index}`)) index += 1
+  return `edge-${index}`
+}
+
 export function workflowConnectionEdgeType(
   connection: Connection,
   nodes: WorkflowCanvasNode[],
   edges: WorkflowCanvasEdge[],
   catalog: WorkflowNodeCatalogItem[],
-): 'normal' | null {
+): WorkflowCanvasEdgeType | null {
   const source = nodes.find((node) => node.id === connection.source)
   const target = nodes.find((node) => node.id === connection.target)
   if (!source || !target || source.id === target.id) return null
@@ -172,18 +198,18 @@ export function workflowConnectionEdgeType(
     catalog,
     source.data.nodeType,
     connection.sourceHandle,
-    true,
+    'output',
   )
   const targetHandle = catalogHandle(
     catalog,
     target.data.nodeType,
     connection.targetHandle,
-    false,
+    'input',
   )
   if (
     !sourceHandle
     || !targetHandle
-    || sourceHandle.edge_type !== 'normal'
+    || !isWorkflowCanvasEdgeType(sourceHandle.edge_type)
     || targetHandle.edge_type !== sourceHandle.edge_type
   ) return null
 
@@ -193,5 +219,22 @@ export function workflowConnectionEdgeType(
     && edge.target === connection.target
     && edge.targetHandle === connection.targetHandle
   ))
-  return duplicate ? null : 'normal'
+  return duplicate ? null : sourceHandle.edge_type
+}
+
+export function workflowCanvasEdgeTypesBetween(
+  source: WorkflowCanvasNode | null,
+  target: WorkflowCanvasNode | null,
+  catalog: WorkflowNodeCatalogItem[],
+): WorkflowCanvasEdgeType[] {
+  if (!source || !target) return []
+  const sourceTypes = new Set(
+    workflowCanvasNodeEndpoints(catalog, source.data.nodeType, 'output')
+      .map((endpoint) => endpoint.edge_type),
+  )
+  return WORKFLOW_CANVAS_EDGE_TYPES.filter((edgeType) => (
+    sourceTypes.has(edgeType)
+    && workflowCanvasNodeEndpoints(catalog, target.data.nodeType, 'input')
+      .some((endpoint) => endpoint.edge_type === edgeType)
+  ))
 }

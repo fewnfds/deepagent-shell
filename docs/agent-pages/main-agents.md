@@ -1,7 +1,7 @@
 # Main Agent
 
-Main Agent 是完整、可复用的 Deep Agents 装配。它当前不直接映射为 OpenAI `model`，也不被 TBD Workflow 记录
-引用；后续画布的 Agent node 将引用完整 Main Agent 装配。
+Main Agent 是完整、可复用的 Deep Agents 装配。它不直接映射为 OpenAI `model`；Workflow 画布的 Agent node
+通过 `main_agent_id` 引用完整 Main Agent 装配，同一 Main Agent 可以被多个 Node 重复引用。
 
 每条 Main Agent 记录保存：
 

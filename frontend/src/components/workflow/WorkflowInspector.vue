@@ -2,15 +2,24 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type { MainAgent } from '@/api'
+import type { MainAgent, WorkflowNodeHandleSpec } from '@/api'
 import FormField from '@/components/FormField.vue'
-import type { WorkflowCanvasEdge, WorkflowCanvasNode } from '@/domain/workflowGraph'
+import type {
+  WorkflowCanvasEdge,
+  WorkflowCanvasEdgeType,
+  WorkflowCanvasNode,
+} from '@/domain/workflowGraph'
 
 const props = defineProps<{
   collapsed: boolean
   edge: WorkflowCanvasEdge | null
+  edgeSourceEndpoints: WorkflowNodeHandleSpec[]
+  edgeTargetEndpoints: WorkflowNodeHandleSpec[]
+  edgeTypeOptions: WorkflowCanvasEdgeType[]
+  inputEndpoints: WorkflowNodeHandleSpec[]
   mainAgents: MainAgent[]
   node: WorkflowCanvasNode | null
+  outputEndpoints: WorkflowNodeHandleSpec[]
   stateContract: string
   workflowName: string
 }>()
@@ -18,6 +27,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   removeEdge: [edgeId: string]
   removeNode: [nodeId: string]
+  selectEdgeSourceEndpoint: [edgeId: string, endpointId: string]
+  selectEdgeTargetEndpoint: [edgeId: string, endpointId: string]
+  selectEdgeType: [edgeId: string, edgeType: WorkflowCanvasEdgeType]
   toggle: []
   updateAgent: [nodeId: string, mainAgentId: string]
 }>()
@@ -26,13 +38,44 @@ const { t } = useI18n()
 
 const contextTitle = computed(() => {
   if (props.node) return t(`workflows.editor.${props.node.data.nodeType}`)
-  if (props.edge) return t('workflows.editor.normalEdge')
+  if (props.edge) return edgeTypeLabel(props.edge.data?.edgeType ?? '')
   return t('workflows.editor.workflowProperties')
 })
+const edgeSourceOptions = computed(() => props.edgeSourceEndpoints.filter((endpoint) => (
+  endpoint.edge_type === props.edge?.data?.edgeType
+)))
+const edgeTargetOptions = computed(() => props.edgeTargetEndpoints.filter((endpoint) => (
+  endpoint.edge_type === props.edge?.data?.edgeType
+)))
+
+function edgeTypeLabel(edgeType: string): string {
+  return edgeType === 'normal' ? t('workflows.editor.normalEdge') : edgeType
+}
+
+function endpointLabel(endpoint: WorkflowNodeHandleSpec): string {
+  return `${edgeTypeLabel(endpoint.edge_type)} · ${endpoint.id}`
+}
 
 function updateAgent(event: Event): void {
   if (!props.node || props.node.data.nodeType !== 'agent') return
   emit('updateAgent', props.node.id, (event.target as HTMLSelectElement).value)
+}
+
+function selectEdgeType(event: Event): void {
+  if (!props.edge) return
+  const edgeType = (event.target as HTMLSelectElement).value as WorkflowCanvasEdgeType
+  if (!props.edgeTypeOptions.includes(edgeType)) return
+  emit('selectEdgeType', props.edge.id, edgeType)
+}
+
+function selectEdgeSourceEndpoint(event: Event): void {
+  if (!props.edge) return
+  emit('selectEdgeSourceEndpoint', props.edge.id, (event.target as HTMLSelectElement).value)
+}
+
+function selectEdgeTargetEndpoint(event: Event): void {
+  if (!props.edge) return
+  emit('selectEdgeTargetEndpoint', props.edge.id, (event.target as HTMLSelectElement).value)
 }
 </script>
 
@@ -70,6 +113,22 @@ function updateAgent(event: Event): void {
           <span class="workflow-inspector-label">{{ $t('workflows.editor.typeVersion') }}</span>
           <span class="workflow-inspector-value">1</span>
         </div>
+        <div
+          v-for="endpoint in inputEndpoints"
+          :key="`input-${endpoint.id}`"
+          class="workflow-inspector-field"
+        >
+          <span class="workflow-inspector-label">{{ $t('workflows.editor.inputEndpoint') }}</span>
+          <span class="workflow-inspector-value">{{ endpointLabel(endpoint) }}</span>
+        </div>
+        <div
+          v-for="endpoint in outputEndpoints"
+          :key="`output-${endpoint.id}`"
+          class="workflow-inspector-field"
+        >
+          <span class="workflow-inspector-label">{{ $t('workflows.editor.outputEndpoint') }}</span>
+          <span class="workflow-inspector-value">{{ endpointLabel(endpoint) }}</span>
+        </div>
 
         <template v-if="node.data.nodeType === 'agent'">
           <FormField
@@ -100,16 +159,52 @@ function updateAgent(event: Event): void {
 
       <template v-else-if="edge">
         <div class="workflow-inspector-field">
-          <span class="workflow-inspector-label">{{ $t('workflows.editor.edgeType') }}</span>
-          <span class="workflow-inspector-value">{{ edge.data?.edgeType }}</span>
+          <label class="workflow-inspector-label" for="workflow-edge-type">
+            {{ $t('workflows.editor.edgeType') }}
+          </label>
+          <select
+            id="workflow-edge-type"
+            class="form-select workflow-inspector-select"
+            name="edge-type"
+            :value="edge.data?.edgeType"
+            @change="selectEdgeType"
+          >
+            <option v-for="edgeType in edgeTypeOptions" :key="edgeType" :value="edgeType">
+              {{ edgeTypeLabel(edgeType) }}
+            </option>
+          </select>
         </div>
         <div class="workflow-inspector-field">
-          <span class="workflow-inspector-label">{{ $t('workflows.editor.source') }}</span>
-          <span class="workflow-inspector-value">{{ edge.source }} · {{ edge.sourceHandle }}</span>
+          <label class="workflow-inspector-label" for="workflow-edge-source-endpoint">
+            {{ $t('workflows.editor.source') }}
+          </label>
+          <select
+            id="workflow-edge-source-endpoint"
+            class="form-select workflow-inspector-select"
+            name="source-endpoint"
+            :value="edge.sourceHandle"
+            @change="selectEdgeSourceEndpoint"
+          >
+            <option v-for="endpoint in edgeSourceOptions" :key="endpoint.id" :value="endpoint.id">
+              {{ edge.source }} · {{ endpointLabel(endpoint) }}
+            </option>
+          </select>
         </div>
         <div class="workflow-inspector-field">
-          <span class="workflow-inspector-label">{{ $t('workflows.editor.target') }}</span>
-          <span class="workflow-inspector-value">{{ edge.target }} · {{ edge.targetHandle }}</span>
+          <label class="workflow-inspector-label" for="workflow-edge-target-endpoint">
+            {{ $t('workflows.editor.target') }}
+          </label>
+          <select
+            id="workflow-edge-target-endpoint"
+            class="form-select workflow-inspector-select"
+            name="target-endpoint"
+            :value="edge.targetHandle"
+            @change="selectEdgeTargetEndpoint"
+          >
+            <option v-for="endpoint in edgeTargetOptions" :key="endpoint.id" :value="endpoint.id">
+              {{ edge.target }} · {{ endpointLabel(endpoint) }}
+            </option>
+          </select>
         </div>
         <button class="workflow-inspector-delete" type="button" @click="emit('removeEdge', edge.id)">
           <i class="bi bi-trash" aria-hidden="true" />

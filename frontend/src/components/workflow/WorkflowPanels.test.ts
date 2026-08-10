@@ -5,7 +5,10 @@ import { describe, expect, it, vi } from 'vitest'
 import type { MainAgent, WorkflowNodeCatalogItem } from '@/api'
 import {
   newAgentCanvasNode,
+  nextWorkflowCanvasEdgeId,
   WORKFLOW_NODE_DRAG_MIME,
+  workflowCanvasEdgeTypesBetween,
+  workflowCanvasNodeEndpoints,
   workflowConnectionEdgeType,
   type WorkflowCanvasEdge,
   type WorkflowCanvasNode,
@@ -81,8 +84,13 @@ describe('Workflow canvas panels', () => {
       props: {
         collapsed: false,
         edge: null,
+        edgeSourceEndpoints: [],
+        edgeTargetEndpoints: [],
+        edgeTypeOptions: [],
+        inputEndpoints: agentCatalog.input_handles,
         mainAgents: agents,
         node,
+        outputEndpoints: agentCatalog.output_handles,
         stateContract: 'agent-shell.workflow.messages.v1',
         workflowName: 'Research Workflow',
       },
@@ -93,6 +101,43 @@ describe('Workflow canvas panels', () => {
 
     expect(wrapper.emitted('updateAgent')).toEqual([[node.id, agents[1]!.id]])
     expect(wrapper.text()).toContain('Main Agent')
+    expect(wrapper.text()).toContain('Input endpoint')
+    expect(wrapper.text()).toContain('Normal Edge · in')
+  })
+
+  it('selects the semantic Edge class and its declared endpoint identities', async () => {
+    const edge: WorkflowCanvasEdge = {
+      id: 'edge-agent-end',
+      source: 'agent-1',
+      sourceHandle: 'next',
+      target: 'end',
+      targetHandle: 'in',
+      data: { edgeType: 'normal' },
+    }
+    const wrapper = mount(WorkflowInspector, {
+      props: {
+        collapsed: false,
+        edge,
+        edgeSourceEndpoints: agentCatalog.output_handles,
+        edgeTargetEndpoints: endCatalog.input_handles,
+        edgeTypeOptions: ['normal'],
+        inputEndpoints: [],
+        mainAgents: agents,
+        node: null,
+        outputEndpoints: [],
+        stateContract: 'agent-shell.workflow.messages.v1',
+        workflowName: 'Research Workflow',
+      },
+      global: { plugins: [i18n()] },
+    })
+
+    await wrapper.get('select[name="edge-type"]').setValue('normal')
+    await wrapper.get('select[name="source-endpoint"]').setValue('next')
+    await wrapper.get('select[name="target-endpoint"]').setValue('in')
+
+    expect(wrapper.emitted('selectEdgeType')).toEqual([[edge.id, 'normal']])
+    expect(wrapper.emitted('selectEdgeSourceEndpoint')).toEqual([[edge.id, 'next']])
+    expect(wrapper.emitted('selectEdgeTargetEndpoint')).toEqual([[edge.id, 'in']])
   })
 
   it('allows repeated Agent nodes and multiple normal activation directions', () => {
@@ -120,6 +165,15 @@ describe('Workflow canvas panels', () => {
     }
     const catalog = [startCatalog, agentCatalog, endCatalog]
     const nodes = [start, first, second, end]
+
+    expect(workflowCanvasNodeEndpoints(catalog, 'agent', 'output')).toEqual(
+      agentCatalog.output_handles,
+    )
+    expect(workflowCanvasEdgeTypesBetween(first, end, catalog)).toEqual(['normal'])
+    expect(nextWorkflowCanvasEdgeId([
+      existing,
+      { ...existing, id: 'edge-1' },
+    ])).toBe('edge-2')
 
     expect(workflowConnectionEdgeType({
       source: first.id,

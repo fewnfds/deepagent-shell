@@ -692,6 +692,35 @@ pre code {
   font-size: 12px;
 }
 
+.workflow-node-endpoints {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  pointer-events: none;
+}
+
+.workflow-node-endpoints[data-direction='input'] {
+  left: 0;
+}
+
+.workflow-node-endpoints[data-direction='output'] {
+  right: 0;
+}
+
+.workflow-node-endpoint {
+  position: relative;
+  width: 1px;
+  height: 12px;
+  pointer-events: auto;
+}
+
+.workflow-node-endpoint .workflow-port {
+  top: 50%;
+}
+
 .workflow-port.workflow-port--normal {
   width: 12px;
   height: 12px;

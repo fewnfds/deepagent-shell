@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import {
   ConnectionMode,
-  Handle,
-  Position,
   VueFlow,
   type Connection,
   type VueFlowStore,
@@ -22,17 +20,23 @@ import {
 } from '@/api'
 import WorkflowInspector from '@/components/workflow/WorkflowInspector.vue'
 import WorkflowNodeLibrary from '@/components/workflow/WorkflowNodeLibrary.vue'
+import WorkflowNodeEndpoints from '@/components/workflow/WorkflowNodeEndpoints.vue'
 import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
 import {
   newAgentCanvasNode,
+  nextWorkflowCanvasEdgeId,
   WORKFLOW_NODE_DRAG_MIME,
   WORKFLOW_NORMAL_EDGE_MARKER,
+  workflowCanvasEdgeTypesBetween,
+  workflowCanvasNodeEndpoints,
   workflowCanvasToDocument,
   workflowConnectionEdgeType,
   workflowDocumentToCanvas,
   type WorkflowCanvasEdge,
+  type WorkflowCanvasEdgeType,
   type WorkflowCanvasNode,
+  type WorkflowEndpointDirection,
 } from '@/domain/workflowGraph'
 
 const { t } = useI18n()
@@ -71,12 +75,41 @@ const selectedNode = computed(() => nodes.value.find((node) => node.selected) ??
 const selectedEdge = computed(() => (
   selectedNode.value ? null : edges.value.find((edge) => edge.selected) ?? null
 ))
+const selectedNodeInputEndpoints = computed(() => nodeEndpoints(
+  selectedNode.value?.data.nodeType,
+  'input',
+))
+const selectedNodeOutputEndpoints = computed(() => nodeEndpoints(
+  selectedNode.value?.data.nodeType,
+  'output',
+))
+const selectedEdgeSourceNode = computed(() => (
+  nodes.value.find((node) => node.id === selectedEdge.value?.source) ?? null
+))
+const selectedEdgeTargetNode = computed(() => (
+  nodes.value.find((node) => node.id === selectedEdge.value?.target) ?? null
+))
+const selectedEdgeSourceEndpoints = computed(() => nodeEndpoints(
+  selectedEdgeSourceNode.value?.data.nodeType,
+  'output',
+))
+const selectedEdgeTargetEndpoints = computed(() => nodeEndpoints(
+  selectedEdgeTargetNode.value?.data.nodeType,
+  'input',
+))
+const selectedEdgeTypeOptions = computed(() => workflowCanvasEdgeTypesBetween(
+  selectedEdgeSourceNode.value,
+  selectedEdgeTargetNode.value,
+  nodeCatalog.value,
+))
 
-function normalHandleId(nodeType: WorkflowNodeType, output: boolean): string {
-  const catalog = nodeCatalog.value.find((item) => item.type === nodeType)
-  if (!catalog) return ''
-  const handles = output ? catalog.output_handles : catalog.input_handles
-  return handles.find((handle) => handle.edge_type === 'normal')?.id ?? ''
+function nodeEndpoints(
+  nodeType: WorkflowNodeType | undefined,
+  direction: WorkflowEndpointDirection,
+) {
+  return nodeType
+    ? workflowCanvasNodeEndpoints(nodeCatalog.value, nodeType, direction)
+    : []
 }
 
 function isValidConnection(connection: Connection): boolean {
@@ -100,7 +133,7 @@ function connect(connection: Connection): void {
   edges.value = [
     ...edges.value.map((edge) => ({ ...edge, selected: false })),
     {
-      id: `edge-${connection.source}-${connection.sourceHandle}-${connection.target}-${connection.targetHandle}`,
+      id: nextWorkflowCanvasEdgeId(edges.value),
       source: connection.source,
       sourceHandle: connection.sourceHandle,
       target: connection.target,
@@ -165,6 +198,63 @@ function removeAgent(nodeId: string): void {
 
 function removeEdge(edgeId: string): void {
   edges.value = edges.value.filter((edge) => edge.id !== edgeId)
+}
+
+function replaceEdgeEndpoints(
+  edgeId: string,
+  sourceHandle: string,
+  targetHandle: string,
+): void {
+  const edge = edges.value.find((item) => item.id === edgeId)
+  if (!edge) return
+  const edgeType = workflowConnectionEdgeType(
+    {
+      source: edge.source,
+      sourceHandle,
+      target: edge.target,
+      targetHandle,
+    },
+    nodes.value,
+    edges.value.filter((item) => item.id !== edgeId),
+    nodeCatalog.value,
+  )
+  if (!edgeType) return
+  edges.value = edges.value.map((item) => (
+    item.id === edgeId
+      ? {
+          ...item,
+          sourceHandle,
+          targetHandle,
+          data: { ...item.data, edgeType },
+        }
+      : item
+  ))
+}
+
+function selectEdgeType(edgeId: string, edgeType: WorkflowCanvasEdgeType): void {
+  const edge = edges.value.find((item) => item.id === edgeId)
+  if (!edge) return
+  const source = nodes.value.find((node) => node.id === edge.source)
+  const target = nodes.value.find((node) => node.id === edge.target)
+  if (!source || !target) return
+  const sourceEndpoint = nodeEndpoints(source.data.nodeType, 'output')
+    .find((endpoint) => endpoint.edge_type === edgeType)
+  const targetEndpoint = nodeEndpoints(target.data.nodeType, 'input')
+    .find((endpoint) => endpoint.edge_type === edgeType)
+  if (!sourceEndpoint || !targetEndpoint) return
+  replaceEdgeEndpoints(edgeId, sourceEndpoint.id, targetEndpoint.id)
+}
+
+function selectEdgeSourceEndpoint(edgeId: string, sourceHandle: string): void {
+  const edge = edges.value.find((item) => item.id === edgeId)
+  if (!edge || !edge.targetHandle) return
+  replaceEdgeEndpoints(edgeId, sourceHandle, edge.targetHandle)
+}
+
+function selectEdgeTargetEndpoint(edgeId: string, targetHandle: string): void {
+  const edge = edges.value.find((item) => item.id === edgeId)
+  if (!edge || !edge.sourceHandle) return
+  replaceEdgeEndpoints(edgeId, edge.sourceHandle, targetHandle)
 }
 
 function selectAgent(nodeId: string, mainAgentId: string): void {
@@ -297,52 +387,36 @@ onMounted(async () => {
             <div class="workflow-node workflow-node--terminal">
               <span class="workflow-node-icon" aria-hidden="true"><i class="bi bi-play-fill" /></span>
               <span class="workflow-node-title">{{ t('workflows.editor.start') }}</span>
-              <Handle
-                :id="normalHandleId('start', true)"
-                class="workflow-port workflow-port--normal"
-                type="source"
-                :aria-label="t('workflows.editor.normalOutput')"
-                :connectable="true"
-                :position="Position.Right"
+              <WorkflowNodeEndpoints
+                direction="output"
+                :endpoints="nodeEndpoints('start', 'output')"
               />
             </div>
           </template>
 
           <template #node-agent="{ data }">
             <div class="workflow-node workflow-node--agent">
-              <Handle
-                :id="normalHandleId('agent', false)"
-                class="workflow-port workflow-port--normal"
-                type="target"
-                :aria-label="t('workflows.editor.normalInput')"
-                :connectable="true"
-                :position="Position.Left"
+              <WorkflowNodeEndpoints
+                direction="input"
+                :endpoints="nodeEndpoints('agent', 'input')"
               />
               <div class="workflow-node-header">
                 <span class="workflow-node-icon" aria-hidden="true"><i class="bi bi-robot" /></span>
                 <span class="workflow-node-title">{{ t('workflows.editor.agent') }}</span>
               </div>
               <span class="workflow-node-summary">{{ mainAgentName(data.mainAgentId) }}</span>
-              <Handle
-                :id="normalHandleId('agent', true)"
-                class="workflow-port workflow-port--normal"
-                type="source"
-                :aria-label="t('workflows.editor.normalOutput')"
-                :connectable="true"
-                :position="Position.Right"
+              <WorkflowNodeEndpoints
+                direction="output"
+                :endpoints="nodeEndpoints('agent', 'output')"
               />
             </div>
           </template>
 
           <template #node-end>
             <div class="workflow-node workflow-node--terminal">
-              <Handle
-                :id="normalHandleId('end', false)"
-                class="workflow-port workflow-port--normal"
-                type="target"
-                :aria-label="t('workflows.editor.normalInput')"
-                :connectable="true"
-                :position="Position.Left"
+              <WorkflowNodeEndpoints
+                direction="input"
+                :endpoints="nodeEndpoints('end', 'input')"
               />
               <span class="workflow-node-icon" aria-hidden="true"><i class="bi bi-stop-fill" /></span>
               <span class="workflow-node-title">{{ t('workflows.editor.end') }}</span>
@@ -354,12 +428,20 @@ onMounted(async () => {
       <WorkflowInspector
         :collapsed="rightCollapsed"
         :edge="selectedEdge"
+        :edge-source-endpoints="selectedEdgeSourceEndpoints"
+        :edge-target-endpoints="selectedEdgeTargetEndpoints"
+        :edge-type-options="selectedEdgeTypeOptions"
+        :input-endpoints="selectedNodeInputEndpoints"
         :main-agents="mainAgents"
         :node="selectedNode"
+        :output-endpoints="selectedNodeOutputEndpoints"
         :state-contract="stateContract"
         :workflow-name="workflow?.name ?? ''"
         @remove-edge="removeEdge"
         @remove-node="removeAgent"
+        @select-edge-source-endpoint="selectEdgeSourceEndpoint"
+        @select-edge-target-endpoint="selectEdgeTargetEndpoint"
+        @select-edge-type="selectEdgeType"
         @toggle="rightCollapsed = !rightCollapsed"
         @update-agent="selectAgent"
       />

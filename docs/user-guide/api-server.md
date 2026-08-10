@@ -28,8 +28,9 @@ Content-Type: application/json
 构造该 Main Agent 的 Subagent、权限、Middleware、组件和 Provider secret view。构造完成后关闭配置数据库快照，
 运行中的图不再回读配置。
 
-当前可执行范式只有 `Start -> Agent -> End`，且只能包含一个 Agent。画布 Start/End 直接映射 LangGraph 官方
-`START/END`；Start 不注入客户端消息。规范化后的 `messages[]` 保存在请求级不可变 Middleware context 中，只有已
+当前可执行 Node class 为 Start、Agent 和 End，Edge class 为 normal；一张图可以包含多个 Agent node，并可串联、
+fan-out、fan-in 或形成 LangGraph 支持的循环。画布 Start/End 直接映射 LangGraph 官方 `START/END`，normal edge 映射
+`StateGraph.add_edge()`；Start 不注入客户端消息。规范化后的 `messages[]` 保存在请求级不可变 Middleware context 中，只有已
 装配的 `before_agent`/`abefore_agent` Middleware 决定如何切割并写入 Agent state。
 
 `stream=false` 返回标准 `chat.completion` JSON。`stream=true` 返回 `chat.completion.chunk` SSE，并以
@@ -40,7 +41,8 @@ Content-Type: application/json
 
 - Workflow 只有一份当前图，没有 draft/published revision、发布审核或历史回滚；
 - 每次请求是一次新的完整运行，尚未接入 thread/checkpointer/resume；
-- 当前不支持多 Agent、条件边、并行、脚本节点或 Subworkflow；
+- 当前不支持 conditional edge、可编程路由 Node、动态 worker、Interrupt 或 Subworkflow；多个 normal 出边会按
+  LangGraph super-step 语义并行激活目标；
 - 图不完整、引用失效、Agent 装配失败或 Provider 失败时，本次请求直接返回错误；
 - session/history、拦截和其他观察能力只有在重新接入 Workflow 生命周期后才会写入，不提供旧 Main Agent 直连兼容。
 
