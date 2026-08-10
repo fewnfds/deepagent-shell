@@ -112,8 +112,13 @@ CAPABILITY_MANIFESTS = (
         subagent_overrideable=False, required=False, subagent_policy="top-level-only",
     ),
     CapabilityManifest(
-        "other", "other", "其他配置", 12,
-        "sliders", "other",
+        "summarization", "summarization", "上下文摘要", 12,
+        "file-text", "summarization",
+        subagent_overrideable=True, required=False, subagent_policy="inherit",
+    ),
+    CapabilityManifest(
+        "prompt-caching", "prompt-caching", "Prompt 缓存", 13,
+        "database", "prompt_caching",
         subagent_overrideable=True, required=False, subagent_policy="inherit",
     ),
 )

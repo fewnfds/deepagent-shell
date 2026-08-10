@@ -13,7 +13,9 @@
 | 9 | [输出模式](output-mode-config.md) | `output-mode` |
 | 10 | [异常重试](exception-retry-config.md) | `exception-retry` |
 | 11 | [委派能力](subagent-config.md) | `subagent` |
-| 12 | [其他配置](other-config.md) | `other` |
+| 12 | [上下文摘要](summarization-config.md) | `summarization` |
+| 13 | [Prompt 缓存](prompt-caching-config.md) | `prompt-caching` |
 
-模型和输出模式是 Main Agent 必选组件。其余组件按需引用。组件使用 UUID 建立引用；名称用于显示。
+模型和输出模式是 Main Agent 必选组件；Filesystem 由 Workflow 必选，Main/Sub 只显示锁定继承。其余组件按需引用。
+组件使用 UUID 建立引用；名称用于显示。
 编辑页提供草稿校验、新建、重置和保存，删除集中在配置仓库。

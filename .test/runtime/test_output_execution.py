@@ -68,7 +68,7 @@ def test_execution_yields_each_completed_semantic_event_once() -> None:
                 }
             ),
         ]
-        execution = WorkflowExecution(
+        execution = AgentExecution(
             graph=EventGraph(events),
             input_state={"messages": []},
             rectifier=OutputEventRectifier(OutputProjector(settings)),

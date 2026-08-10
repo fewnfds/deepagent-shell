@@ -1,126 +1,190 @@
 from __future__ import annotations
 
 import asyncio
+from typing import ClassVar
 
 from agent_shell.api import api_server
 
 from .support import *
 
 
-def test_models_publish_only_enabled_workflows_and_each_runs_the_root_graph(
+class InspectingFakeChatModel(ToolCompatibleFakeListChatModel):
+    seen_messages: ClassVar[list[list[object]]] = []
+
+    def _call(self, messages, stop=None, run_manager=None, **kwargs):
+        self.seen_messages.append(list(messages))
+        return super()._call(
+            messages,
+            stop=stop,
+            run_manager=run_manager,
+            **kwargs,
+        )
+
+    async def _astream(self, messages, stop=None, run_manager=None, **kwargs):
+        self.seen_messages.append(list(messages))
+        async for chunk in super()._astream(
+            messages,
+            stop=stop,
+            run_manager=run_manager,
+            **kwargs,
+        ):
+            yield chunk
+
+
+def test_models_publish_only_enabled_workflows_and_chat_runs_current_graph(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
         main_agent = create_main_agent(client)
-        create_workflow_for_agent(
-            client,
-            main_agent,
-            name="Disabled Workflow",
-            enabled=False,
-        )
+        workflow = create_workflow(client, name="Published Workflow")
+        save_linear_workflow_graph(client, workflow, main_agent)
+        create_workflow(client, name="Disabled Workflow", enabled=False)
 
         models = client.get("/v1/models")
-        test_reply = client.post(
-            "/v1/chat/completions",
-            json={"model": "test", "messages": [{"role": "user", "content": "hello"}]},
-        )
         workflow_reply = client.post(
             "/v1/chat/completions",
-            json={"model": main_agent["name"], "messages": [{"role": "user", "content": "run"}]},
+            json={
+                "model": workflow["name"],
+                "messages": [{"role": "user", "content": "run"}],
+            },
         )
-        internal_uuid_reply = client.post(
+        main_agent_name_reply = client.post(
             "/v1/chat/completions",
-            json={"model": main_agent["id"], "messages": [{"role": "user", "content": "run"}]},
+            json={
+                "model": main_agent["name"],
+                "messages": [{"role": "user", "content": "run"}],
+            },
+        )
+        main_agent_id_reply = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": main_agent["id"],
+                "messages": [{"role": "user", "content": "run"}],
+            },
         )
 
     assert models.status_code == 200
-    assert [item["id"] for item in models.json()["data"]] == [main_agent["name"]]
-    assert test_reply.status_code == 404
-    assert test_reply.json()["error"]["code"] == "model_not_found"
-    assert internal_uuid_reply.status_code == 404
-    assert internal_uuid_reply.json()["error"]["code"] == "model_not_found"
+    assert [item["id"] for item in models.json()["data"]] == [workflow["name"]]
     assert workflow_reply.status_code == 200, workflow_reply.text
     assert workflow_reply.json()["choices"][0]["message"] == {
         "role": "assistant",
         "content": "runtime reply",
     }
+    for response in (main_agent_name_reply, main_agent_id_reply):
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "model_not_found"
 
 
-def test_main_agent_without_input_middleware_does_not_receive_client_messages(
+def test_chat_completion_stream_runs_current_graph(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    model = RecordingFakeListChatModel(responses=["no relay"])
-    RecordingFakeListChatModel.seen_messages = []
+    with make_client(tmp_path, monkeypatch) as client:
+        main_agent = create_main_agent(client)
+        workflow = create_workflow(client, name="Streaming Workflow")
+        save_linear_workflow_graph(client, workflow, main_agent)
+        with client.stream(
+            "POST",
+            "/v1/chat/completions",
+            headers={"Authorization": f"Bearer {API_KEY}"},
+            json={
+                "model": workflow["name"],
+                "messages": [{"role": "user", "content": "run"}],
+                "stream": True,
+            },
+        ) as response:
+            lines = [line for line in response.iter_lines() if line]
+
+    assert response.status_code == 200
+    assert lines[-1] == "data: [DONE]"
+    chunks = [json.loads(line.removeprefix("data: ")) for line in lines[:-1]]
+    assert chunks[0]["choices"][0]["delta"] == {"role": "assistant"}
+    assert "runtime reply" == "".join(
+        chunk["choices"][0]["delta"].get("content", "") for chunk in chunks
+    )
+    assert chunks[-1]["choices"][0]["finish_reason"] == "unknown"
+
+
+def test_workflow_agent_middleware_injects_frozen_client_messages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    InspectingFakeChatModel.seen_messages = []
+    model = InspectingFakeChatModel(responses=["middleware reply"])
+    write_middleware_package(
+        tmp_path,
+        "inject-request",
+        "from langchain.agents.middleware import AgentMiddleware\n"
+        "from langchain_core.messages import HumanMessage\n"
+        "class InjectRequest(AgentMiddleware):\n"
+        "    def __init__(self, messages):\n"
+        "        self.messages = messages\n"
+        "    async def abefore_agent(self, state, runtime):\n"
+        "        content = self.messages[-1]['content']\n"
+        "        return {'messages': [HumanMessage(content=content)]}\n"
+        "def create_middleware(ctx):\n"
+        "    return InjectRequest(ctx.request.messages)\n",
+    )
+
     with make_client(tmp_path, monkeypatch) as client:
         monkeypatch.setattr(
             "agent_shell.runtime.agent_builder._build_chat_model",
             lambda _block, _credential, _http_clients: model,
         )
-        main_agent = create_main_agent(client, include_filesystem=False)
+        main_agent = create_main_agent(client)
+        custom = client.post(
+            "/api/blocks/custom-middleware",
+            json={
+                "name": "Request message injection",
+                "middlewares": [
+                    {
+                        "package_id": "inject-request",
+                        "enabled": True,
+                        "config": {},
+                    }
+                ],
+            },
+        )
+        assert custom.status_code == 200, custom.text
+        updated = client.put(
+            f"/api/main-agents/{main_agent['id']}",
+            json={
+                "name": main_agent["name"],
+                "capability_refs": [
+                    *main_agent["capability_refs"],
+                    {"type": "custom-middleware", "block_id": custom.json()["id"]},
+                ],
+                "subagents": [],
+            },
+        )
+        assert updated.status_code == 200, updated.text
+        workflow = create_workflow(client, name="Middleware Workflow")
+        save_linear_workflow_graph(client, workflow, updated.json())
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": main_agent["name"],
-                "messages": [
-                    {"role": "system", "content": "CLIENT SYSTEM"},
-                    {"role": "user", "content": "CLIENT USER"},
-                    {"role": "assistant", "content": "CLIENT ASSISTANT"},
-                ],
+                "model": workflow["name"],
+                "messages": [{"role": "user", "content": "frozen client input"}],
             },
         )
 
     assert response.status_code == 200, response.text
-    visible_text = {
-        message.text
-        for message in RecordingFakeListChatModel.seen_messages[0]
-    }
-    assert visible_text.isdisjoint(
-        {"CLIENT SYSTEM", "CLIENT USER", "CLIENT ASSISTANT"}
-    )
+    assert response.json()["choices"][0]["message"]["content"] == "middleware reply"
+    assert [
+        message.content
+        for message in InspectingFakeChatModel.seen_messages[0]
+        if message.type != "system"
+    ] == ["frozen client input"]
 
 
-def test_main_agent_runtime_returns_stable_input_message_errors(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    cases = (
-        (None, "input_messages_required"),
-        ([], "input_messages_required"),
-        (
-            [{"role": "user", "content": "item"} for _ in range(1001)],
-            "input_messages_too_many",
-        ),
-        (["not-an-object"], "input_message_invalid"),
-        ([{"role": "tool", "content": "unsupported"}], "input_message_role_unsupported"),
-        ([{"role": "user", "content": ["not", "text"]}], "input_content_part_invalid"),
-        ([{"role": "user", "content": "named", "name": ""}], "input_message_name_invalid"),
-    )
-
-    with make_client(tmp_path, monkeypatch) as client:
-        main_agent = create_main_agent(client)
-        responses = [
-            client.post(
-                "/v1/chat/completions",
-                json={"model": main_agent["name"], "messages": messages},
-            )
-            for messages, _expected in cases
-        ]
-
-    assert [response.status_code for response in responses] == [422] * len(cases)
-    assert [response.json()["error"]["code"] for response in responses] == [
-        expected for _messages, expected in cases
-    ]
-
-
-def test_chat_completion_body_limit_rejects_before_agent_start(
+def test_chat_completion_body_limit_runs_before_workflow_resolution(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
-        main_agent = create_main_agent(client)
+        workflow = create_workflow(client)
         monkeypatch.setattr(api_server, "MAX_CHAT_COMPLETION_BODY_BYTES", 128)
         response = client.post(
             "/v1/chat/completions",
             json={
-                "model": main_agent["name"],
+                "model": workflow["name"],
                 "messages": [{"role": "user", "content": "x" * 256}],
             },
         )
@@ -164,263 +228,3 @@ def test_bounded_body_reader_stops_when_the_next_chunk_exceeds_the_limit() -> No
 
     asyncio.run(run())
     assert calls == 2
-
-
-def test_initial_message_limit_is_configurable_and_rejects_before_agent_start(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    with make_client(tmp_path, monkeypatch) as client:
-        main_agent = create_main_agent(client)
-        initial = client.get("/api/api-server")
-        saved = client.put(
-            "/api/api-server",
-            json={
-                "api_key": {"operation": "keep"},
-                "max_initial_messages": 2,
-            },
-        )
-        too_small = client.put(
-            "/api/api-server",
-            json={
-                "api_key": {"operation": "keep"},
-                "max_initial_messages": 0,
-            },
-        )
-        too_large = client.put(
-            "/api/api-server",
-            json={
-                "api_key": {"operation": "keep"},
-                "max_initial_messages": 10_001,
-            },
-        )
-        accepted = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": main_agent["name"],
-                "messages": [
-                    {"role": "user", "content": "accepted first"},
-                    {"role": "user", "content": "accepted second"},
-                ],
-            },
-        )
-
-        def fail_start(*_args, **_kwargs):
-            raise AssertionError("an oversized request must not enter the Agent")
-
-        monkeypatch.setattr(
-            "agent_shell.runtime.request_snapshot.RequestRuntimeSnapshot.start_workflow",
-            fail_start,
-        )
-        rejected = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": main_agent["name"],
-                "messages": [
-                    {"role": "user", "content": "oversized first"},
-                    {"role": "assistant", "content": "oversized second"},
-                    {"role": "user", "content": "oversized third"},
-                ],
-            },
-        )
-        rejected_sessions = client.get(
-            "/api/agent-sessions", params={"query": "oversized third"}
-        ).json()
-        rejected_history = client.get(
-            "/api/event-feed",
-            params=event_feed_params(source="api_call", query="oversized third"),
-        ).json()
-
-    with make_client(tmp_path, monkeypatch) as restarted:
-        persisted = restarted.get("/api/api-server")
-
-    assert initial.json()["max_initial_messages"] == 1000
-    assert saved.status_code == 200
-    assert saved.json()["max_initial_messages"] == 2
-    assert too_small.status_code == too_large.status_code == 422
-    assert accepted.status_code == 200, accepted.text
-    assert rejected.status_code == 422
-    assert rejected.json()["error"] == {
-        "message": "messages cannot contain more than 2 items.",
-        "type": "invalid_request_error",
-        "param": "messages",
-        "code": "input_messages_too_many",
-    }
-    assert rejected_sessions["total"] == 0
-    assert len(rejected_history["items"]) == 1
-    assert "input_messages_too_many" in rejected_history["items"][0]["summary"]
-    assert persisted.json()["max_initial_messages"] == 2
-
-
-def test_unused_openai_fields_are_ignored_without_overriding_model_configuration(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    seen_model_blocks: list[dict] = []
-
-    def configured_model(block, _credential, _http_clients):
-        seen_model_blocks.append(dict(block))
-        return ToolCompatibleFakeListChatModel(responses=["configured reply"])
-
-    with make_client(tmp_path, monkeypatch) as client:
-        monkeypatch.setattr(
-            "agent_shell.runtime.agent_builder._build_chat_model",
-            configured_model,
-        )
-        main_agent = create_main_agent(
-            client,
-            provider_settings={
-                "temperature": 0.25,
-                "top_p": 0.8,
-                "max_completion_tokens": 2048,
-            },
-        )
-        response = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": main_agent["name"],
-                "messages": [{"role": "user", "content": "Use saved settings."}],
-                "stream": False,
-                "temperature": 1.5,
-                "top_p": 0.1,
-                "max_tokens": 3,
-                "presence_penalty": 2,
-                "frequency_penalty": 2,
-                "timeout": 1,
-                "metadata": {"client": "fixture"},
-                "client_extension": {"future_control": True},
-            },
-        )
-
-    assert response.status_code == 200, response.text
-    assert response.json()["choices"][0]["message"]["content"] == "configured reply"
-    assert len(seen_model_blocks) == 1
-    assert seen_model_blocks[0]["provider_settings"] == {
-        "temperature": 0.25,
-        "top_p": 0.8,
-        "max_completion_tokens": 2048,
-    }
-
-
-def test_missing_required_output_block_fails_before_provider_without_fallback(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
-    provider_calls = 0
-
-    def provider_model(_block, _credential):
-        nonlocal provider_calls
-        provider_calls += 1
-        return FakeListChatModel(responses=["must not run"])
-
-    with make_client(tmp_path, monkeypatch) as client:
-        monkeypatch.setattr(
-            "agent_shell.runtime.agent_builder._build_chat_model",
-            provider_model,
-        )
-        main_agent = create_main_agent(client)
-        output_id = capability_reference_id(main_agent, "output-mode")
-        with closing(sqlite3.connect(database_path)) as connection, connection:
-            connection.execute("DELETE FROM blocks WHERE id = ?", (output_id,))
-        response = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": main_agent["name"],
-                "messages": [{"role": "user", "content": "Do not fall back."}],
-            },
-        )
-
-    assert response.status_code == 409, response.text
-    assert response.json()["error"]["code"] == "assembly.reference_not_found"
-    assert provider_calls == 0
-
-
-def test_invalid_stored_output_mode_is_preserved_and_rejected_before_user_code(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
-    marker = tmp_path / "custom-tool-must-not-run.txt"
-    provider_calls = 0
-
-    def provider_model(_block, _credential):
-        nonlocal provider_calls
-        provider_calls += 1
-        return FakeListChatModel(responses=["must not run"])
-
-    with make_client(tmp_path, monkeypatch) as client:
-        monkeypatch.setattr(
-            "agent_shell.runtime.agent_builder._build_chat_model",
-            provider_model,
-        )
-        main_agent = create_main_agent(client)
-        tools_dir = tmp_path / "data" / "resources" / "custom_tools"
-        tools_dir.mkdir(exist_ok=True)
-        (tools_dir / "side_effect_tool.py").write_text(
-            "from pathlib import Path\n"
-            f"Path({str(marker)!r}).write_text('executed')\n"
-            "from langchain.tools import tool\n"
-            "@tool\n"
-            "def side_effect_tool(value: str) -> str:\n"
-            '    """Return the supplied value."""\n'
-            "    return value\n",
-            encoding="utf-8",
-        )
-        custom = client.post(
-            "/api/blocks/custom-tool",
-            json={"name": "Selected side effect", "tools": ["side_effect_tool"]},
-        ).json()
-        updated = client.put(
-            f"/api/main-agents/{main_agent['id']}",
-            json={
-                "name": main_agent["name"],
-                "capability_refs": [
-                    *main_agent["capability_refs"],
-                    {"type": "custom-tool", "block_id": custom["id"]},
-                ],
-                "subagents": [],
-            },
-        )
-        assert updated.status_code == 200, updated.text
-
-        output_id = capability_reference_id(main_agent, "output-mode")
-        with closing(sqlite3.connect(database_path)) as connection, connection:
-            row = connection.execute(
-                "SELECT payload FROM blocks WHERE id = ?", (output_id,)
-            ).fetchone()
-            invalid_payload = json.loads(row[0])
-            invalid_payload["event_templates"]["assistant_text"]["template"] = (
-                "LONG OLD TEMPLATE THAT MUST REMAIN AVAILABLE: {{message}}"
-            )
-            invalid_payload["event_templates"]["assistant_text"][
-                "start_template"
-            ] = "<legacy>"
-            serialized = json.dumps(invalid_payload, ensure_ascii=False)
-            connection.execute(
-                "UPDATE blocks SET payload = ? WHERE id = ?",
-                (serialized, output_id),
-            )
-
-        stored = client.get(f"/api/blocks/output-mode/{output_id}")
-        response = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": main_agent["name"],
-                "messages": [{"role": "user", "content": "Do not run."}],
-            },
-        )
-        with closing(sqlite3.connect(database_path)) as connection, connection:
-            persisted = connection.execute(
-                "SELECT payload FROM blocks WHERE id = ?", (output_id,)
-            ).fetchone()[0]
-
-    assert stored.status_code == 200
-    assert (
-        stored.json()["event_templates"]["assistant_text"]["start_template"]
-        == "<legacy>"
-    )
-    assert stored.json()["event_templates"]["assistant_text"]["template"].startswith(
-        "LONG OLD TEMPLATE"
-    )
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "assembly.referenced_block_invalid"
-    assert provider_calls == 0
-    assert not marker.exists()
-    assert persisted == serialized

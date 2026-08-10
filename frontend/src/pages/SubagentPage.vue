@@ -69,9 +69,6 @@ const nonGeneralCapabilityTypes = new Set<CapabilityType>([
 const generalManifests = computed(() => manifests.value.filter(
   (manifest) => !nonGeneralCapabilityTypes.has(manifest.type),
 ))
-const filesystemManifest = computed(() => manifests.value.find(
-  (manifest) => manifest.type === 'filesystem',
-))
 const filesystemPermissionsManifest = computed(() => manifests.value.find(
   (manifest) => manifest.type === 'filesystem-permissions',
 ))
@@ -390,7 +387,7 @@ watch(
                 </header>
                 <div class="card-body">
                   <select id="subagent-capability-filesystem" class="form-select" data-testid="subagent-capability-filesystem" disabled>
-                    <option :value="filesystemManifest?.subagent_policy === 'inherit' ? INHERIT_VALUE : INVALID_VALUE">{{ filesystemManifest?.subagent_policy === 'inherit' ? t('agents.override.mode.inherit') : t('agents.override.mode.invalid') }}</option>
+                    <option>{{ t('agents.override.mode.inherit') }}</option>
                   </select>
                 </div>
               </section>

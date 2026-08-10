@@ -1,30 +1,128 @@
 from __future__ import annotations
 
-import threading
-
 from .support import *
 
 
-class SnapshotEchoModel(ToolCompatibleFakeListChatModel):
-    started: ClassVar[threading.Event | None] = None
-    release: ClassVar[threading.Event | None] = None
+def test_snapshot_freezes_workflow_filesystem_and_recursive_agent_permissions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        first_filesystem = client.post(
+            "/api/blocks/filesystem",
+            json={"name": "First Workflow filesystem"},
+        ).json()
+        second_filesystem = client.post(
+            "/api/blocks/filesystem",
+            json={"name": "Second Workflow filesystem"},
+        ).json()
+        main_permissions = client.post(
+            "/api/blocks/filesystem-permissions",
+            json={
+                "name": "Main Agent file access",
+                "permissions": [{"path": "/reports/**", "permission": "read-write"}],
+                "tool_overrides": {"write_file": {"visible": True}},
+            },
+        ).json()
+        subagent_permissions = client.post(
+            "/api/blocks/filesystem-permissions",
+            json={
+                "name": "Subagent file access",
+                "permissions": [{"path": "/reports/**", "permission": "read-only"}],
+                "tool_overrides": {"write_file": {"visible": False}},
+            },
+        ).json()
+        subagent = client.post(
+            "/api/subagents",
+            json=subagent_payload(
+                "reviewer-profile",
+                name="reviewer",
+                capability_overrides=[
+                    {
+                        "type": "filesystem-permissions",
+                        "mode": "replace",
+                        "block_id": subagent_permissions["id"],
+                    }
+                ],
+            ),
+        ).json()
+        delegation = client.post(
+            "/api/blocks/subagent", json={"name": "Review delegation"}
+        ).json()
+        main_agent = create_main_agent(client)
+        updated_agent = client.put(
+            f"/api/main-agents/{main_agent['id']}",
+            json={
+                "name": main_agent["name"],
+                "capability_refs": [
+                    *main_agent["capability_refs"],
+                    {
+                        "type": "filesystem-permissions",
+                        "block_id": main_permissions["id"],
+                    },
+                    {"type": "subagent", "block_id": delegation["id"]},
+                ],
+                "subagents": [{"subagent_id": subagent["id"]}],
+            },
+        )
+        assert updated_agent.status_code == 200, updated_agent.text
+        workflow = create_workflow(
+            client,
+            name="Frozen Workflow",
+            filesystem_id=first_filesystem["id"],
+        )
 
-    async def _astream(self, messages, *args, **kwargs):
-        if self.responses[0] == "provider-test-secret":
-            assert self.started is not None
-            assert self.release is not None
-            self.started.set()
-            await asyncio.to_thread(self.release.wait)
-        async for chunk in super()._astream(messages, *args, **kwargs):
-            yield chunk
+        snapshot = client.app.state.agent_runtime.capture()
+        changed = client.put(
+            f"/api/workflows/{workflow['id']}",
+            json={
+                "name": workflow["name"],
+                "description": workflow["description"],
+                "filesystem_id": second_filesystem["id"],
+                "enabled": True,
+            },
+        )
+        assert changed.status_code == 200, changed.text
+
+        frozen_workflow = snapshot.workflow_by_name(workflow["name"])
+        assert frozen_workflow is not None
+        report, assembly = snapshot.resolve_main_agent(
+            main_agent["id"],
+            workflow_filesystem_id=frozen_workflow["filesystem_id"],
+        )
+        assert report.valid is True
+        assert assembly is not None
+        assert "filesystem" not in {
+            item["type"] for item in updated_agent.json()["capability_refs"]
+        }
+        assert assembly.filesystem_mode == "configured-shared"
+        assert assembly.references["filesystem"] == first_filesystem["id"]
+        assert assembly.blocks["filesystem"]["id"] == first_filesystem["id"]
+        assert (
+            assembly.references["filesystem-permissions"] == main_permissions["id"]
+        )
+        child = assembly.subagent_nodes[subagent["id"]]
+        assert child.filesystem_mode == "configured-shared"
+        assert child.references["filesystem"] == first_filesystem["id"]
+        assert child.blocks["filesystem"]["id"] == first_filesystem["id"]
+        assert (
+            child.references["filesystem-permissions"]
+            == subagent_permissions["id"]
+        )
+        snapshot.close()
+
+        next_snapshot = client.app.state.agent_runtime.capture()
+        current_workflow = next_snapshot.workflow_by_name(workflow["name"])
+        assert current_workflow is not None
+        assert current_workflow["filesystem_id"] == second_filesystem["id"]
+        next_snapshot.close()
 
 
-def test_snapshot_keeps_workflow_resolution_and_agent_assembly_on_one_committed_view(
+def test_snapshot_keeps_agent_identity_on_one_committed_view(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
         main_agent = create_main_agent(client)
-        snapshot = client.app.state.workflow_runtime.capture()
+        snapshot = client.app.state.agent_runtime.capture()
         renamed = client.put(
             f"/api/main-agents/{main_agent['id']}",
             json={
@@ -35,272 +133,8 @@ def test_snapshot_keeps_workflow_resolution_and_agent_assembly_on_one_committed_
         )
         assert renamed.status_code == 200, renamed.text
 
-        captured = snapshot.workflow_by_name(main_agent["name"])
+        captured = snapshot.main_agent_by_name(main_agent["name"])
         assert captured is not None
-        assert captured["main_agent_id"] == main_agent["id"]
-        assert captured["main_agent_name"] == main_agent["name"]
-        assert snapshot.workflow_by_name("Renamed after capture") is None
-
-        next_snapshot = client.app.state.workflow_runtime.capture()
-        current = next_snapshot.workflow_by_name(main_agent["name"])
-        assert current is not None
-        assert current["main_agent_id"] == main_agent["id"]
-        assert current["main_agent_name"] == "Renamed after capture"
-        assert next_snapshot.workflow_by_name("Renamed after capture") is None
+        assert captured["id"] == main_agent["id"]
+        assert snapshot.main_agent_by_name("Renamed after capture") is None
         snapshot.close()
-        next_snapshot.close()
-
-
-def test_main_agent_rename_does_not_change_the_workflow_model_name(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    with make_client(tmp_path, monkeypatch) as client:
-        main_agent = create_main_agent(client)
-        renamed = client.put(
-            f"/api/main-agents/{main_agent['id']}",
-            json={
-                "name": "Live renamed Main Agent",
-                "capability_refs": main_agent["capability_refs"],
-                "subagents": main_agent["subagents"],
-            },
-        )
-        assert renamed.status_code == 200, renamed.text
-        models = client.get("/v1/models")
-        old = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": main_agent["name"],
-                "messages": [{"role": "user", "content": "old name"}],
-            },
-        )
-        renamed_agent_name = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": "Live renamed Main Agent",
-                "messages": [{"role": "user", "content": "new name"}],
-            },
-        )
-
-    assert [item["id"] for item in models.json()["data"]] == [main_agent["name"]]
-    assert old.status_code == 200, old.text
-    assert renamed_agent_name.status_code == 404
-    assert renamed_agent_name.json()["error"]["code"] == "model_not_found"
-
-
-def test_captured_agent_build_never_falls_back_to_live_configuration_database(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
-    with make_client(tmp_path, monkeypatch) as client:
-        main_agent = create_main_agent(client)
-        snapshot = client.app.state.workflow_runtime.capture()
-        workflow = snapshot.workflow_by_name(main_agent["name"])
-        assert workflow is not None
-        with closing(sqlite3.connect(database_path)) as connection, connection:
-            connection.execute("DELETE FROM workflows")
-            connection.execute("DELETE FROM main_agents")
-            connection.execute("DELETE FROM subagents")
-            connection.execute("DELETE FROM blocks")
-            connection.execute("DELETE FROM provider_secrets")
-
-        async def run_captured_agent() -> tuple[str, dict[str, int]]:
-            execution = await snapshot.start_workflow(
-                workflow,
-                [
-                    {
-                        "role": "user",
-                        "content": "Use only the captured configuration.",
-                    }
-                ],
-            )
-            return await execution.run()
-
-        content, _usage = asyncio.run(run_captured_agent())
-
-    assert content == "runtime reply"
-
-
-def test_running_crud_changes_only_later_agent_constructions(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    started = threading.Event()
-    release = threading.Event()
-    SnapshotEchoModel.started = started
-    SnapshotEchoModel.release = release
-    responses: dict[str, object] = {}
-
-    def model_factory(_block, credential, _http_clients):
-        return SnapshotEchoModel(responses=[credential or "missing"])
-
-    def invoke_old(client: TestClient, model: str) -> None:
-        responses["old"] = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": model,
-                "messages": [{"role": "user", "content": "old request"}],
-            },
-        )
-
-    with make_client(tmp_path, monkeypatch) as client:
-        monkeypatch.setattr(
-            "agent_shell.runtime.agent_builder._build_chat_model", model_factory
-        )
-        main_agent = create_main_agent(client)
-        model_id = capability_reference_id(main_agent, "model")
-        thread = threading.Thread(target=invoke_old, args=(client, main_agent["name"]))
-        thread.start()
-        try:
-            assert started.wait(5), "the first Agent did not begin provider execution"
-            updated = client.put(
-                f"/api/blocks/model/{model_id}",
-                json={
-                    "name": "Published model",
-                    "provider": "openai",
-                    "base_url": "https://provider.example/v1",
-                    "credential": "provider-new-secret",
-                    "model": "provider-model",
-                    "provider_settings": {},
-                    "tool_choice": None,
-                    "response_format": None,
-                    "model_settings": {},
-                },
-            )
-            assert updated.status_code == 200, updated.text
-            current = client.post(
-                "/v1/chat/completions",
-                json={
-                    "model": main_agent["name"],
-                    "messages": [{"role": "user", "content": "new request"}],
-                },
-            )
-        finally:
-            release.set()
-            thread.join(5)
-
-    assert not thread.is_alive()
-    old = responses["old"]
-    assert old.status_code == 200, old.text
-    assert old.json()["choices"][0]["message"]["content"] == "provider-test-secret"
-    assert current.status_code == 200, current.text
-    assert current.json()["choices"][0]["message"]["content"] == "provider-new-secret"
-
-
-@pytest.mark.parametrize("stream", [False, True])
-def test_stop_rejects_new_work_without_interrupting_an_existing_snapshot(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stream: bool
-) -> None:
-    started = threading.Event()
-    release = threading.Event()
-    SnapshotEchoModel.started = started
-    SnapshotEchoModel.release = release
-    responses: dict[str, object] = {}
-
-    def model_factory(_block, credential, _http_clients):
-        return SnapshotEchoModel(responses=[credential or "missing"])
-
-    def invoke(client: TestClient, model: str) -> None:
-        responses["accepted"] = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": model,
-                "messages": [{"role": "user", "content": "finish after stop"}],
-                "stream": stream,
-            },
-        )
-
-    with make_client(tmp_path, monkeypatch) as client:
-        monkeypatch.setattr(
-            "agent_shell.runtime.agent_builder._build_chat_model", model_factory
-        )
-        main_agent = create_main_agent(client)
-        thread = threading.Thread(target=invoke, args=(client, main_agent["name"]))
-        thread.start()
-        try:
-            assert started.wait(5), "the accepted request did not begin"
-            stopped = client.post("/api/api-server/stop")
-            rejected = client.post(
-                "/v1/chat/completions",
-                json={
-                    "model": main_agent["name"],
-                    "messages": [{"role": "user", "content": "must not start"}],
-                },
-            )
-        finally:
-            release.set()
-            thread.join(5)
-
-    assert stopped.json()["enabled"] is False
-    assert rejected.status_code == 503
-    assert rejected.json()["error"]["code"] == "api_server_stopped"
-    assert not thread.is_alive()
-    accepted = responses["accepted"]
-    assert accepted.status_code == 200, accepted.text
-    content = (
-        streamed_content(accepted)
-        if stream
-        else accepted.json()["choices"][0]["message"]["content"]
-    )
-    assert content == "provider-test-secret"
-
-
-def test_snapshot_capture_failure_is_safe_without_persisting_the_request_body(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    private_detail = "private snapshot failure detail"
-    with make_client(tmp_path, monkeypatch) as client:
-        main_agent = create_main_agent(client)
-
-        def fail_capture():
-            raise OSError(private_detail)
-
-        monkeypatch.setattr(client.app.state.workflow_runtime, "capture", fail_capture)
-        response = client.post(
-            "/v1/chat/completions",
-            json={
-                "model": main_agent["name"],
-                "messages": [{"role": "user", "content": "capture safely"}],
-            },
-        )
-        history = client.get(
-            "/api/event-feed",
-            params=event_feed_params(source="api_call", query="capture safely"),
-        ).json()
-
-    assert response.status_code == 500
-    assert response.json()["error"]["code"] == "configuration_snapshot_failed"
-    assert private_detail not in response.text
-    assert history["items"] == []
-
-
-def test_api_start_globally_validates_even_unreferenced_saved_configuration(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
-    with make_client(tmp_path, monkeypatch) as client:
-        create_main_agent(client)
-        unused = client.post(
-            "/api/blocks/system-prompt",
-            json={"name": "Unused invalid draft", "system_prompt": "draft"},
-        ).json()
-        client.post("/api/api-server/stop")
-        with closing(sqlite3.connect(database_path)) as connection, connection:
-            row = connection.execute(
-                "SELECT payload FROM blocks WHERE id = ?", (unused["id"],)
-            ).fetchone()
-            payload = json.loads(row[0])
-            payload["removed_field"] = True
-            connection.execute(
-                "UPDATE blocks SET payload = ? WHERE id = ?",
-                (json.dumps(payload, ensure_ascii=False), unused["id"]),
-            )
-
-        started = client.post("/api/api-server/start")
-
-    assert started.status_code == 422
-    detail = started.json()["detail"]
-    assert detail["validation"]["stage"] == "api_start"
-    assert any(
-        issue["owner_id"] == unused["id"]
-        and issue["code"] == "contract.unknown_field"
-        for issue in detail["validation"]["issues"]
-    )

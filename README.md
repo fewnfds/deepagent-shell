@@ -1,7 +1,8 @@
 # Agent Shell
 
-Agent Shell 是本地 Workflow 与 Deep Agents 管理台。启用的 Workflow 作为 OpenAI-compatible model，当前根图固定为
-`START -> Main Agent -> END`，Main Agent 可同步委派一层 direct Subagent。
+Agent Shell 是本地 Workflow 与 Deep Agents 管理台。启用的 Workflow 作为 OpenAI-compatible model；每个 Workflow
+保存一份当前 Vue Flow 图和共享 Filesystem。当前第一种可运行图为 `Start -> Agent -> End`，其中 Agent 节点引用完整
+Main Agent 装配，并可通过官方 `SubAgentMiddleware` 同步委派 Subagent。
 
 ## 开始
 

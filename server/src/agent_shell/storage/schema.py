@@ -36,12 +36,13 @@ CREATE TABLE IF NOT EXISTS workflows (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
     description TEXT NOT NULL,
-    main_agent_id TEXT NOT NULL REFERENCES main_agents(id) ON DELETE RESTRICT,
-    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1))
+    filesystem_id TEXT NOT NULL REFERENCES blocks(id) ON DELETE RESTRICT,
+    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+    definition_json TEXT NOT NULL,
+    layout_json TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_workflows_main_agent
-ON workflows(main_agent_id);
+CREATE INDEX IF NOT EXISTS idx_workflows_filesystem ON workflows(filesystem_id);
 
 CREATE TABLE IF NOT EXISTS api_server_settings (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),

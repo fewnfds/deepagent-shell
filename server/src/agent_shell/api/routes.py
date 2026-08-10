@@ -28,6 +28,7 @@ from agent_shell.provider_integrations import bundled_provider_ids
 from agent_shell.provider_secrets import ProviderCredentialError, ProviderSecretResolver
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.blocks import BlockStore
+from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.validation.models import validation_failure_detail
 from agent_shell.validation.service import ConfigurationValidationService
 
@@ -40,6 +41,7 @@ def build_router(
     secret_resolver: ProviderSecretResolver,
     validation: ConfigurationValidationService,
     provider_http_clients: ProviderHttpClients,
+    workflow_store: WorkflowStore,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -69,6 +71,23 @@ def build_router(
             )
         assert validated is not None
         return validated
+
+    def reject_workflow_filesystem_reference(
+        block_type: str,
+        block_id: str,
+    ) -> None:
+        if block_type != "filesystem":
+            return
+        owner = workflow_store.get_item_by_filesystem(block_id)
+        if owner is None:
+            return
+        raise management_error(
+            409,
+            code="configuration_referenced",
+            message_key="errors.configurationReferencedByWorkflow",
+            message="The configuration is still referenced by a Workflow.",
+            message_args={"owner": owner["name"]},
+        )
 
     @router.get("/api/catalog")
     async def catalog() -> dict:
@@ -262,6 +281,7 @@ def build_router(
                     message_key="errors.blockNotFound",
                     message="A component configuration does not exist.",
                 )
+            reject_workflow_filesystem_reference(block_type, block_id)
             if CAPABILITY_BY_TYPE[block_type].required:
                 owner = main_agent_block_reference_owner(
                     config_store,
@@ -393,6 +413,7 @@ def build_router(
     @router.delete("/api/blocks/{block_type}/{block_id}")
     async def delete_block(block_type: str, block_id: str) -> dict[str, bool]:
         check_type(block_type)
+        reject_workflow_filesystem_reference(block_type, block_id)
         if CAPABILITY_BY_TYPE[block_type].required:
             owner = main_agent_block_reference_owner(config_store, block_type, block_id)
             if owner is not None:

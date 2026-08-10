@@ -8,15 +8,17 @@ import {
   filesystemAdapter,
   filesystemPermissionsAdapter,
   modelAdapter,
-  otherAdapter,
   outputModeAdapter,
+  promptCachingAdapter,
   skillAdapter,
+  summarizationAdapter,
   systemPromptAdapter,
   type FilesystemDefaults,
   type FilesystemPermissionsDefaults,
-  type OtherDefaults,
   type OutputModeDefaults,
+  type PromptCachingDefaults,
   type SkillDefaults,
+  type SummarizationDefaults,
 } from '@/domain/blocks'
 import { zhCN } from '@/locales/zh-CN'
 
@@ -25,9 +27,10 @@ import {
   FilesystemEditor,
   FilesystemPermissionsEditor,
   ModelEditor,
-  OtherEditor,
   OutputModeEditor,
+  PromptCachingEditor,
   SkillEditor,
+  SummarizationEditor,
   SystemPromptEditor,
 } from './index'
 
@@ -65,26 +68,24 @@ const skillDefaults: SkillDefaults = {
   system_prompt: 'skill default',
   required_placeholders: ['{skills_locations}', '{skills_load_warnings}', '{skills_list}'],
 }
-const otherDefaults: OtherDefaults = {
+const summarizationDefaults: SummarizationDefaults = {
   summary_prompt_default: '<role>default summary</role>',
-  summarization: {
-    enabled: true,
-    trigger: { type: 'auto', value: null },
-    keep: { type: 'auto', value: null },
-    truncate_args_enabled: true,
-    truncate_args_trigger: { type: 'auto', value: null },
-    truncate_args_keep: { type: 'auto', value: null },
-    truncate_args_max_length: 2_000,
-    truncate_args_text: '...(argument truncated)',
-    trim_tokens_to_summarize: 4_000,
-    summary_prompt_override: '',
-  },
-  prompt_caching: {
-    enabled: true,
-    type: 'ephemeral',
-    ttl: '5m',
-    min_messages_to_cache: 0,
-  },
+  enabled: true,
+  trigger: { type: 'auto', value: null },
+  keep: { type: 'auto', value: null },
+  truncate_args_enabled: true,
+  truncate_args_trigger: { type: 'auto', value: null },
+  truncate_args_keep: { type: 'auto', value: null },
+  truncate_args_max_length: 2_000,
+  truncate_args_text: '...(argument truncated)',
+  trim_tokens_to_summarize: 4_000,
+  summary_prompt_override: '',
+}
+const promptCachingDefaults: PromptCachingDefaults = {
+  enabled: true,
+  type: 'ephemeral',
+  ttl: '5m',
+  min_messages_to_cache: 0,
 }
 const i18n = createI18n({
   legacy: false,
@@ -348,17 +349,17 @@ describe('dedicated block editors', () => {
   })
 
   it('switches all summarization threshold units without carrying incompatible values', async () => {
-    const editor = mountEditor(OtherEditor, {
-      modelValue: otherAdapter.blank(otherDefaults),
-      defaults: otherDefaults,
+    const editor = mountEditor(SummarizationEditor, {
+      modelValue: summarizationAdapter.blank(summarizationDefaults),
+      defaults: summarizationDefaults,
     })
-    const selects = editor.findAll('[data-editor="other"] select')
-    const valueInputs = editor.findAll('[data-editor="other"] input[type="number"]')
+    const selects = editor.findAll('[data-editor="summarization"] select')
+    const valueInputs = editor.findAll('[data-editor="summarization"] input[type="number"]')
     const summaryPrompt = editor.findAll('textarea').at(-1)
 
-    expect(selects).toHaveLength(6)
-    expect(valueInputs).toHaveLength(7)
-    expect(summaryPrompt?.element).toHaveProperty('value', otherDefaults.summary_prompt_default)
+    expect(selects).toHaveLength(4)
+    expect(valueInputs).toHaveLength(6)
+    expect(summaryPrompt?.element).toHaveProperty('value', summarizationDefaults.summary_prompt_default)
     for (const [index, select] of [selects[0], selects[1], selects[2], selects[3]].entries()) {
       await select?.setValue('tokens')
       expect(valueInputs[index]?.element).toHaveProperty('value', '')
@@ -366,7 +367,18 @@ describe('dedicated block editors', () => {
     }
     await summaryPrompt?.setValue('custom summary prompt')
     await editor.get('[data-action="restore-summary-prompt"]').trigger('click')
-    expect(summaryPrompt?.element).toHaveProperty('value', otherDefaults.summary_prompt_default)
+    expect(summaryPrompt?.element).toHaveProperty('value', summarizationDefaults.summary_prompt_default)
+  })
+
+  it('edits Prompt Caching independently from summarization', async () => {
+    const editor = mountEditor(PromptCachingEditor, {
+      modelValue: promptCachingAdapter.blank(promptCachingDefaults),
+      defaults: promptCachingDefaults,
+    })
+
+    expect(editor.find('[data-editor="summarization"]').exists()).toBe(false)
+    await editor.findAll('select')[1]!.setValue('1h')
+    expect(editor.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({ ttl: '1h' })
   })
 
   it('labels every custom tool identifier explicitly', () => {

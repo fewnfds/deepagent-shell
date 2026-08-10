@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from typing import TYPE_CHECKING
 
 from agent_shell.security_events import SecurityEventLogger, emit_configuration_events
+from agent_shell.workflow.contracts import (
+    WorkflowGraphDefinitionV1,
+    WorkflowGraphDocumentV1,
+    WorkflowLayoutV1,
+)
 
 if TYPE_CHECKING:
     from agent_shell.storage.database import SQLiteDatabase
@@ -24,43 +30,49 @@ class WorkflowStore:
             "id": str(row["id"]),
             "name": str(row["name"]),
             "description": str(row["description"]),
-            "main_agent_id": str(row["main_agent_id"]),
-            "main_agent_name": str(row["main_agent_name"]),
+            "filesystem_id": str(row["filesystem_id"]),
             "enabled": bool(row["enabled"]),
         }
 
     @staticmethod
     def _select(where: str = "") -> str:
         return (
-            "SELECT w.id, w.name, w.description, w.main_agent_id, w.enabled, "
-            "m.name AS main_agent_name FROM workflows AS w "
-            "JOIN main_agents AS m ON m.id = w.main_agent_id "
-            f"{where}"
+            "SELECT id, name, description, filesystem_id, enabled "
+            f"FROM workflows {where}"
         )
 
     def list_items(self, *, enabled_only: bool = False) -> list[dict]:
-        where = "WHERE w.enabled = 1 " if enabled_only else ""
+        where = "WHERE enabled = 1 " if enabled_only else ""
         with self._database.transaction() as connection:
             rows = connection.execute(
-                self._select(where) + "ORDER BY w.name COLLATE NOCASE, w.id"
+                self._select(where) + "ORDER BY name COLLATE NOCASE, id"
             ).fetchall()
         return [self._from_row(row) for row in rows]
 
     def get_item(self, item_id: str) -> dict | None:
         with self._database.transaction() as connection:
             row = connection.execute(
-                self._select("WHERE w.id = ?"), (item_id,)
+                self._select("WHERE id = ?"), (item_id,)
             ).fetchone()
         return self._from_row(row) if row else None
 
     def get_item_by_name(self, name: str) -> dict | None:
         with self._database.transaction() as connection:
             row = connection.execute(
-                self._select("WHERE w.name = ?"), (name,)
+                self._select("WHERE name = ?"), (name,)
+            ).fetchone()
+        return self._from_row(row) if row else None
+
+    def get_item_by_filesystem(self, filesystem_id: str) -> dict | None:
+        with self._database.transaction() as connection:
+            row = connection.execute(
+                self._select("WHERE filesystem_id = ?"), (filesystem_id,)
             ).fetchone()
         return self._from_row(row) if row else None
 
     def save_item(self, item_id: str, data: dict) -> None:
+        empty_definition = WorkflowGraphDefinitionV1().model_dump_json()
+        empty_layout = WorkflowLayoutV1().model_dump_json()
         with self._database.transaction() as connection:
             existing = connection.execute(
                 "SELECT 1 FROM workflows WHERE id = ?", (item_id,)
@@ -71,22 +83,22 @@ class WorkflowStore:
             ).fetchone()
             if duplicate:
                 raise ValueError("workflow name already exists")
-            if connection.execute(
-                "SELECT 1 FROM main_agents WHERE id = ?", (data["main_agent_id"],)
-            ).fetchone() is None:
-                raise LookupError("main agent does not exist")
             connection.execute(
                 "INSERT INTO workflows "
-                "(id, name, description, main_agent_id, enabled) VALUES (?, ?, ?, ?, ?) "
+                "(id, name, description, filesystem_id, enabled, "
+                "definition_json, layout_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(id) DO UPDATE SET "
                 "name = excluded.name, description = excluded.description, "
-                "main_agent_id = excluded.main_agent_id, enabled = excluded.enabled",
+                "filesystem_id = excluded.filesystem_id, enabled = excluded.enabled",
                 (
                     item_id,
                     data["name"],
                     data["description"],
-                    data["main_agent_id"],
+                    data["filesystem_id"],
                     int(data["enabled"]),
+                    empty_definition,
+                    empty_layout,
                 ),
             )
             connection.commit()
@@ -96,6 +108,47 @@ class WorkflowStore:
             entity="workflow",
             entity_id=item_id,
         )
+
+    def get_graph(self, item_id: str) -> WorkflowGraphDocumentV1 | None:
+        with self._database.transaction() as connection:
+            row = connection.execute(
+                "SELECT definition_json, layout_json FROM workflows WHERE id = ?",
+                (item_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return WorkflowGraphDocumentV1.model_validate(
+            {
+                "definition": json.loads(str(row["definition_json"])),
+                "layout": json.loads(str(row["layout_json"])),
+            }
+        )
+
+    def save_graph(
+        self,
+        item_id: str,
+        document: WorkflowGraphDocumentV1,
+    ) -> bool:
+        with self._database.transaction() as connection:
+            cursor = connection.execute(
+                "UPDATE workflows SET definition_json = ?, layout_json = ? "
+                "WHERE id = ?",
+                (
+                    document.definition.model_dump_json(),
+                    document.layout.model_dump_json(),
+                    item_id,
+                ),
+            )
+            connection.commit()
+        if cursor.rowcount != 1:
+            return False
+        emit_configuration_events(
+            self._events,
+            action="updated",
+            entity="workflow",
+            entity_id=item_id,
+        )
+        return True
 
     def delete_items(self, item_ids: list[str]) -> int:
         unique_ids = list(dict.fromkeys(item_ids))
@@ -125,12 +178,3 @@ class WorkflowStore:
 
     def delete_item(self, item_id: str) -> bool:
         return self.delete_items([item_id]) == 1
-
-    def referencing_main_agent(self, main_agent_id: str) -> dict | None:
-        with self._database.transaction() as connection:
-            row = connection.execute(
-                self._select("WHERE w.main_agent_id = ? ORDER BY w.name COLLATE NOCASE LIMIT 1"),
-                (main_agent_id,),
-            ).fetchone()
-        return self._from_row(row) if row else None
-

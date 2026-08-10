@@ -12,12 +12,18 @@ const SystemSettingsPage = () => import('@/pages/SystemSettingsPage.vue')
 const SubagentPage = () => import('@/pages/SubagentPage.vue')
 const TerminologyPage = () => import('@/pages/TerminologyPage.vue')
 const WorkflowsPage = () => import('@/pages/WorkflowsPage.vue')
+const WorkflowEditorPage = () => import('@/pages/WorkflowEditorPage.vue')
 
 export const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', component: ApiServerSettingsPage, meta: { titleKey: 'apiServer.homeTitle' } },
     { path: '/workflows', component: WorkflowsPage, meta: { titleKey: 'workflows.title' } },
+    {
+      path: '/workflows/:id/editor',
+      component: WorkflowEditorPage,
+      meta: { layout: 'workflow', titleKey: 'workflows.editor.title' },
+    },
     { path: '/agents', redirect: '/agents/main' },
     { path: '/agents/main', component: MainAgentPage, meta: { titleKey: 'navigation.agents' } },
     { path: '/agents/subagents', component: SubagentPage, meta: { titleKey: 'navigation.agents' } },

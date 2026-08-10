@@ -10,11 +10,12 @@ from agent_shell.contracts import (
     ExceptionRetryBlock,
     FilesystemBlock,
     FilesystemToolConfigs,
-    OtherBlock,
     OUTPUT_COMMON_TEMPLATE_VARIABLES,
     OUTPUT_EVENT_NAMES,
     OUTPUT_EVENT_TEMPLATE_VARIABLES,
+    PromptCachingBlock,
     SKILL_PROMPT_FIELDS,
+    SummarizationBlock,
 )
 
 
@@ -480,13 +481,17 @@ _EDITOR_DEFAULTS = {
             "retry_on": list(DEFAULT_EXCEPTION_RETRY_CONDITIONS),
         },
     },
-    "other": {
-        **OtherBlock(name="Other").model_dump(
+    "summarization": {
+        **SummarizationBlock(name="Summarization").model_dump(
             mode="json",
             exclude={"name"},
         ),
         "summary_prompt_default": DEEPAGENTS_SUMMARY_PROMPT,
     },
+    "prompt_caching": PromptCachingBlock(name="Prompt caching").model_dump(
+        mode="json",
+        exclude={"name"},
+    ),
 }
 
 

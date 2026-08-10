@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from agent_shell.runtime.output_stream import OutputEvent
@@ -57,7 +58,7 @@ class OutputProjector:
         template = str(setting.get("template") or "")
         return self._render_template(template, event) if template else ""
 
-    def encode_message(self, value: str) -> str:
+    def encode_message(self, value: str, event: OutputEvent | None = None) -> str:
         return self._encode_text(value)
 
     def _setting(self, event: OutputEvent) -> dict[str, object] | None:
@@ -111,4 +112,37 @@ class OutputProjector:
         return field_name in values and values[field_name] == expected_value
 
 
-__all__ = ["OutputProjector", "StreamProjection"]
+class WorkflowOutputProjector:
+    """Select a frozen Main Agent output policy by stable Workflow node ID."""
+
+    def __init__(self, configs_by_node: Mapping[str, dict[str, object]]) -> None:
+        self._projectors = {
+            node_id: OutputProjector(config)
+            for node_id, config in configs_by_node.items()
+        }
+
+    def _for(self, event: OutputEvent) -> OutputProjector | None:
+        if not event.workflow_node_id:
+            return None
+        return self._projectors.get(event.workflow_node_id)
+
+    def enabled(self, event: OutputEvent) -> bool:
+        projector = self._for(event)
+        return projector.enabled(event) if projector is not None else False
+
+    def stream_projection(self, event: OutputEvent) -> StreamProjection | None:
+        projector = self._for(event)
+        return projector.stream_projection(event) if projector is not None else None
+
+    def render(self, event: OutputEvent) -> str:
+        projector = self._for(event)
+        return projector.render(event) if projector is not None else ""
+
+    def encode_message(self, value: str, event: OutputEvent | None = None) -> str:
+        if event is None:
+            return ""
+        projector = self._for(event)
+        return projector.encode_message(value, event) if projector is not None else ""
+
+
+__all__ = ["OutputProjector", "StreamProjection", "WorkflowOutputProjector"]

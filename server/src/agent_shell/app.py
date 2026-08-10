@@ -129,10 +129,6 @@ def create_app(
     api_server_store = ApiServerStore(
         database, event_logger, history_retention, media_outputs
     )
-    if api_server_store.is_enabled():
-        api_start_report = configuration_validation.validate_api_start()
-        if not api_start_report.valid:
-            api_server_store.set_enabled(False)
     try:
         validate_api_key_policy(settings, api_server_store.api_key())
     except ApiKeyPolicyError as exc:
@@ -177,7 +173,7 @@ def create_app(
         settings.resolved_runtime_dir() / "tmp",
     )
     system_settings = SystemSettingsService(settings, api_server_store.api_key)
-    workflow_runtime = RequestSnapshotRuntime(
+    agent_runtime = RequestSnapshotRuntime(
         database,
         custom_tools_dir=custom_tools_dir,
         middleware_packages_dir=custom_middlewares_dir,
@@ -390,7 +386,7 @@ def create_app(
     app.state.settings = settings
     app.state.startup_storage_permissions = startup_permission_statuses
     app.state.security_events = event_logger
-    app.state.workflow_runtime = workflow_runtime
+    app.state.agent_runtime = agent_runtime
     app.state.interception_tests = interception_tests
     app.state.runtime_diagnostics = runtime_diagnostics
     app.state.runtime_diagnostic_store = runtime_diagnostic_store
@@ -433,16 +429,16 @@ def create_app(
             secret_resolver,
             configuration_validation,
             provider_http_clients,
+            workflow_store,
         )
     )
     app.include_router(
         build_agent_config_router(
             config_store,
             configuration_validation,
-            workflow_store,
         )
     )
-    app.include_router(build_workflow_router(workflow_store))
+    app.include_router(build_workflow_router(workflow_store, block_store))
     app.include_router(
         build_validation_router(
             configuration_validation,
@@ -472,14 +468,9 @@ def create_app(
         build_api_server_router(
             api_server_store,
             workflow_store,
-            workflow_runtime,
+            agent_runtime,
             settings,
             api_server_events,
-            interception_tests,
-            runtime_diagnostics,
-            agent_session_store,
-            configuration_validation,
-            media_outputs,
         )
     )
 

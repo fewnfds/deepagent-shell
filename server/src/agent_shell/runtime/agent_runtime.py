@@ -2,19 +2,19 @@ from __future__ import annotations
 
 import asyncio
 import warnings
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
 
-from agent_shell.runtime.agent_builder import AgentBuilder
+from agent_shell.runtime.agent_builder import AgentBuilder, BuiltAgent
 from agent_shell.middleware_packages.runtime import MiddlewarePackageRuntime
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.model_response import ModelResponse
 from agent_shell.runtime.media_response import MainAgentMediaResponse
 from agent_shell.runtime.output_event_pool import OutputEventRectifier
-from agent_shell.runtime.output_projection import OutputProjector
+from agent_shell.runtime.output_projection import OutputProjector, WorkflowOutputProjector
 from agent_shell.runtime.output_stream import (
     ModelCallBoundary,
     OutputEvent,
@@ -22,6 +22,7 @@ from agent_shell.runtime.output_stream import (
     V3EventNormalizer,
 )
 from agent_shell.storage.media_outputs import MediaOutputStore
+from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
 from langgraph.errors import GraphRecursionError
 
 EXECUTION_TIMEOUT_SECONDS = 600
@@ -29,7 +30,7 @@ GRAPH_RECURSION_LIMIT = 100
 
 
 @dataclass(slots=True)
-class WorkflowExecution:
+class AgentExecution:
     graph: Any
     input_state: dict[str, Any]
     rectifier: OutputEventRectifier
@@ -37,6 +38,7 @@ class WorkflowExecution:
     middleware_runtime: MiddlewarePackageRuntime
     media_response: MainAgentMediaResponse
     event_observers: tuple[Callable[[OutputEvent], None], ...] = ()
+    final_state: dict[str, Any] | None = None
     _started: bool = False
 
     @property
@@ -63,7 +65,7 @@ class WorkflowExecution:
 
     async def stream_text(self) -> AsyncIterator[str]:
         if self._started:
-            raise RuntimeError("WorkflowExecution can only be consumed once")
+            raise RuntimeError("AgentExecution can only be consumed once")
         self._started = True
         try:
             async for part in self._stream_text_inner():
@@ -165,7 +167,8 @@ class WorkflowExecution:
                             next_envelope.cancel()
                             with suppress(asyncio.CancelledError):
                                 await next_envelope
-                    await stream.output()
+                    output = await stream.output()
+                    self.final_state = dict(output) if isinstance(output, Mapping) else None
                     self.normalizer.close_main_agent_messages()
                     for rendered in self.rectifier.flush():
                         if rendered:
@@ -216,7 +219,7 @@ class WorkflowExecution:
         return "".join(parts), self.usage
 
 
-class WorkflowRuntime:
+class AgentRuntime:
     def __init__(
         self,
         builder: AgentBuilder,
@@ -226,6 +229,84 @@ class WorkflowRuntime:
         self._builder = builder
         self._media_outputs = media_outputs
         self._diagnostics = diagnostics
+
+    async def build_agent(
+        self,
+        main_agent_id: str,
+        raw_messages: object,
+        *,
+        model_request_interceptor: Callable[[dict[str, Any]], Any] | None = None,
+        model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
+        model_response_observer: Callable[[ModelResponse], None] | None = None,
+        request_id: str = "",
+        workflow_filesystem_id: str | None = None,
+    ) -> BuiltAgent:
+        try:
+            return await self._builder.build(
+                main_agent_id,
+                raw_messages,
+                model_request_interceptor=model_request_interceptor,
+                model_request_observer=model_request_observer,
+                model_response_observer=model_response_observer,
+                request_id=request_id,
+                workflow_filesystem_id=workflow_filesystem_id,
+            )
+        except Exception:
+            await self._builder.close_failed_build()
+            raise
+
+    def _execution(
+        self,
+        built: BuiltAgent,
+        *,
+        graph: Any | None = None,
+        workflow_node_id: str = "",
+        event_observer: Callable[[OutputEvent], None] | None = None,
+        model_response_observer: Callable[[ModelResponse], None] | None = None,
+        request_id: str = "",
+        public_model: str = "",
+    ) -> AgentExecution:
+        observers = []
+        if event_observer is not None:
+            observers.append(event_observer)
+        if self._diagnostics is not None:
+            observers.append(
+                lambda event: self._diagnostics.runtime_event(
+                    event, request_id=request_id, model=public_model
+                )
+            )
+        if workflow_node_id:
+            from agent_shell.workflow.events import WorkflowEventSourceV1
+
+            workflow_sources = {
+                workflow_node_id: WorkflowEventSourceV1(
+                    source_type="agent",
+                    workflow_node_id=workflow_node_id,
+                    agent_profile_id=built.agent_id,
+                )
+            }
+            projector = WorkflowOutputProjector(
+                {workflow_node_id: built.output_config}
+            )
+        else:
+            workflow_sources = None
+            projector = OutputProjector(built.output_config)
+        return AgentExecution(
+            graph=graph if graph is not None else built.graph,
+            input_state=built.input_state,
+            middleware_runtime=built.middleware_runtime,
+            media_response=MainAgentMediaResponse(self._media_outputs, request_id),
+            rectifier=OutputEventRectifier(projector),
+            normalizer=V3EventNormalizer(
+                built.agent_name,
+                model_response_observers=(model_response_observer,)
+                if model_response_observer is not None
+                else (),
+                workflow_sources=workflow_sources,
+                subagent_profile_ids=built.subagent_profile_ids,
+            ),
+            event_observers=tuple(observers),
+        )
 
     async def start(
         self,
@@ -238,39 +319,77 @@ class WorkflowRuntime:
         event_observer: Callable[[OutputEvent], None] | None = None,
         request_id: str = "",
         public_model: str = "",
-    ) -> WorkflowExecution:
+        workflow_filesystem_id: str | None = None,
+    ) -> AgentExecution:
+        built = await self.build_agent(
+            main_agent_id,
+            raw_messages,
+            model_request_interceptor=model_request_interceptor,
+            model_request_observer=model_request_observer,
+            model_response_observer=model_response_observer,
+            request_id=request_id,
+            workflow_filesystem_id=workflow_filesystem_id,
+        )
+        return self._execution(
+            built,
+            event_observer=event_observer,
+            model_response_observer=model_response_observer,
+            request_id=request_id,
+            public_model=public_model,
+        )
+
+    async def start_workflow(
+        self,
+        document: WorkflowGraphDocumentV1,
+        raw_messages: object,
+        *,
+        workflow_filesystem_id: str,
+        model_request_interceptor: Callable[[dict[str, Any]], Any] | None = None,
+        model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
+        model_response_observer: Callable[[ModelResponse], None] | None = None,
+        event_observer: Callable[[OutputEvent], None] | None = None,
+        request_id: str = "",
+        public_model: str = "",
+    ) -> AgentExecution:
+        from agent_shell.workflow.catalog import AgentNodeConfig
+        from agent_shell.workflow.compiler import compile_workflow
+
+        agent_nodes = [
+            node for node in document.definition.nodes if node.type == "agent"
+        ]
+        if len(agent_nodes) != 1:
+            raise AgentRuntimeError(
+                "workflow.agent_count_unsupported",
+                "The first Workflow runtime requires exactly one Agent node.",
+                status_code=422,
+            )
+        agent_node = agent_nodes[0]
+        main_agent_id = str(
+            AgentNodeConfig.model_validate(agent_node.config).main_agent_id
+        )
+        built = await self.build_agent(
+            main_agent_id,
+            raw_messages,
+            model_request_interceptor=model_request_interceptor,
+            model_request_observer=model_request_observer,
+            model_response_observer=model_response_observer,
+            request_id=request_id,
+            workflow_filesystem_id=workflow_filesystem_id,
+        )
         try:
-            built = await self._builder.build(
-                main_agent_id,
-                raw_messages,
-                model_request_interceptor=model_request_interceptor,
-                model_request_observer=model_request_observer,
-                model_response_observer=model_response_observer,
-                request_id=request_id,
+            graph = compile_workflow(
+                document,
+                agent_graphs={agent_node.id: built.graph},
             )
         except Exception:
-            await self._builder.close_failed_build()
+            await built.middleware_runtime.close()
             raise
-        observers = []
-        if event_observer is not None:
-            observers.append(event_observer)
-        if self._diagnostics is not None:
-            observers.append(
-                lambda event: self._diagnostics.runtime_event(
-                    event, request_id=request_id, model=public_model
-                )
-            )
-        return WorkflowExecution(
-            graph=built.graph,
-            input_state=built.input_state,
-            middleware_runtime=built.middleware_runtime,
-            media_response=MainAgentMediaResponse(self._media_outputs, request_id),
-            rectifier=OutputEventRectifier(OutputProjector(built.output_config)),
-            normalizer=V3EventNormalizer(
-                built.agent_name,
-                model_response_observers=(model_response_observer,)
-                if model_response_observer is not None
-                else (),
-            ),
-            event_observers=tuple(observers),
+        return self._execution(
+            built,
+            graph=graph,
+            workflow_node_id=agent_node.id,
+            event_observer=event_observer,
+            model_response_observer=model_response_observer,
+            request_id=request_id,
+            public_model=public_model,
         )

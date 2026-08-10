@@ -11,6 +11,7 @@
   "dependencies": {
     "requiredExact": {
       "@adminlte/vue": "0.3.0",
+      "@vue-flow/core": "1.48.2",
       "bootstrap": "5.3.8",
       "bootstrap-icons": "1.13.1",
       "vue": "3.5.41",
@@ -19,6 +20,7 @@
     },
     "approvedRuntime": [
       "@adminlte/vue",
+      "@vue-flow/core",
       "bootstrap",
       "bootstrap-icons",
       "vue",
@@ -276,6 +278,16 @@
         "classes": ["session-timeline-json"]
       },
       {
+        "name": "workflow-editor",
+        "paths": ["src/pages/WorkflowEditorPage.vue"],
+        "classes": [
+          "nodrag", "workflow-editor-canvas", "workflow-editor-error", "workflow-editor-flow",
+          "workflow-editor-shell", "workflow-editor-toolbar", "workflow-node",
+          "workflow-node--agent", "workflow-node--terminal", "workflow-node-header",
+          "workflow-node-remove", "workflow-node-select", "workflow-node-title"
+        ]
+      },
+      {
         "name": "style-lab-experiment",
         "paths": ["src/pages/StyleLabPage.vue"],
         "classes": [
@@ -298,7 +310,7 @@
     "allowed": [
       "archive", "arrow-clockwise", "arrow-down", "arrow-right", "arrow-up", "book", "boxes", "check-circle", "check-lg", "chevron-left", "circle",
       "chevron-right", "circle-half", "copy", "download", "exclamation-triangle", "eye", "eye-slash",
-      "file-earmark", "folder", "gear", "hdd-network", "house", "info-circle", "key", "list", "moon-fill", "pencil",
+      "file-earmark", "floppy", "folder", "gear", "hdd-network", "house", "info-circle", "key", "list", "moon-fill", "pencil",
       "play-fill", "plus-lg", "robot", "search", "sliders", "stop-fill", "sun-fill", "three-dots",
       "shield-lock", "translate", "trash", "upload", "x-circle", "x-lg"
     ],
@@ -386,8 +398,9 @@
           "src/editors/FilesystemEditor.vue",
           "src/editors/FilesystemPermissionsEditor.vue",
           "src/editors/ModelEditor.vue",
-          "src/editors/OtherEditor.vue",
           "src/editors/OutputModeEditor.vue",
+          "src/editors/PromptCachingEditor.vue",
+          "src/editors/SummarizationEditor.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/WorkflowsPage.vue"
         ]

@@ -5,7 +5,11 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from agent_shell.runtime.output_projection import OutputProjector, StreamProjection
+from agent_shell.runtime.output_projection import (
+    OutputProjector,
+    StreamProjection,
+    WorkflowOutputProjector,
+)
 from agent_shell.runtime.output_stream import OutputEvent
 
 TOOL_OUTCOME_TYPES = {"tool_result", "tool_error"}
@@ -38,7 +42,7 @@ class OutputEventRectifier:
 
     def __init__(
         self,
-        projector: OutputProjector,
+        projector: OutputProjector | WorkflowOutputProjector,
         *,
         quiet_seconds: float = 1.0,
         clock: Callable[[], float] = time.monotonic,
@@ -153,7 +157,7 @@ class OutputEventRectifier:
         pending.last_activity = now
         if pending is self._current:
             pending.sent_length = len(pending.text)
-            return [self._projector.encode_message(fragment)]
+            return [self._projector.encode_message(fragment, source.event)]
         return []
 
     def _finish_source(
@@ -235,7 +239,7 @@ class OutputEventRectifier:
         if item.sent_length < len(item.text):
             unsent = item.text[item.sent_length :]
             item.sent_length = len(item.text)
-            encoded = self._projector.encode_message(unsent)
+            encoded = self._projector.encode_message(unsent, item.event)
             if encoded:
                 parts.append(encoded)
         return parts
@@ -248,7 +252,7 @@ class OutputEventRectifier:
         if item.sent_length < len(item.text):
             unsent = item.text[item.sent_length :]
             item.sent_length = len(item.text)
-            encoded = self._projector.encode_message(unsent)
+            encoded = self._projector.encode_message(unsent, item.event)
             if encoded:
                 parts.append(encoded)
         if item.projection and item.projection.suffix:

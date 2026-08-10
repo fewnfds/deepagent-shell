@@ -11,8 +11,15 @@ from agent_shell.runtime.model_response import (
     ModelResponseTracker,
     public_finish_reason,
 )
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.types import Command
+from pydantic import ValidationError
+
+from agent_shell.workflow.events import (
+    WORKFLOW_CUSTOM_EVENT_SCHEMA,
+    WorkflowCustomEventV1,
+    WorkflowEventSourceV1,
+)
 
 _SUBAGENT_ERROR_STATUSES = frozenset(
     {"failed", "error", "interrupted", "cancelled", "timeout", "timed_out"}
@@ -103,6 +110,10 @@ class OutputEvent:
     namespace: str = "root"
     agent_name: str = ""
     node: str = ""
+    source_type: str = "agent"
+    workflow_node_id: str = ""
+    agent_profile_id: str = ""
+    subagent_profile_id: str = ""
     message: str = ""
     values: dict[str, str] = field(default_factory=dict)
     stream_id: str = ""
@@ -116,6 +127,10 @@ class OutputEvent:
             "namespace": self.namespace,
             "agent_name": self.agent_name,
             "node": self.node,
+            "source_type": self.source_type,
+            "workflow_node_id": self.workflow_node_id,
+            "agent_profile_id": self.agent_profile_id,
+            "subagent_profile_id": self.subagent_profile_id,
             "message": self.message,
             **self.values,
         }
@@ -156,8 +171,13 @@ class V3EventNormalizer:
         self,
         main_agent_name: str,
         model_response_observers: tuple[Callable[[ModelResponse], None], ...] = (),
+        *,
+        workflow_sources: Mapping[str, WorkflowEventSourceV1] | None = None,
+        subagent_profile_ids: Mapping[str, str] | None = None,
     ) -> None:
         self._main_agent_name = main_agent_name
+        self._workflow_sources = dict(workflow_sources or {})
+        self._subagent_profile_ids = dict(subagent_profile_ids or {})
         self._sequence = 0
         self._blocks: dict[tuple[str, int], _MessageBlock] = {}
         self._message_ids: dict[str, str] = {}
@@ -221,14 +241,28 @@ class V3EventNormalizer:
         if method == "tools":
             return self._tool_events(data, timestamp=timestamp, namespace=namespace)
         if method == "custom" or method.startswith("custom:"):
-            serialized = _json_text(data)
+            source = None
             channel = method.partition(":")[2] or "custom"
+            custom_data = data
+            if (
+                isinstance(data, dict)
+                and data.get("schema_name") == WORKFLOW_CUSTOM_EVENT_SCHEMA
+            ):
+                try:
+                    workflow_event = WorkflowCustomEventV1.model_validate(data)
+                except ValidationError:
+                    return []
+                source = workflow_event.source
+                channel = workflow_event.channel
+                custom_data = workflow_event.data
+            serialized = _json_text(custom_data)
             return [
                 self._event(
                     "custom",
                     "end",
                     timestamp=timestamp,
                     namespace=namespace,
+                    source=source,
                     message=serialized,
                     channel=channel,
                     data_json=serialized,
@@ -269,6 +303,7 @@ class V3EventNormalizer:
                     phase,
                     timestamp=timestamp,
                     namespace=lifecycle_namespace,
+                    source_agent_name=subagent_name,
                     message=status,
                     **values,
                 )
@@ -301,7 +336,7 @@ class V3EventNormalizer:
         is_main_agent = agent_name == self._main_agent_name
 
         if not isinstance(payload, dict):
-            if not is_main_agent:
+            if not is_main_agent or not isinstance(payload, AIMessage):
                 return []
             usage = getattr(payload, "usage_metadata", None)
             response_metadata = getattr(payload, "response_metadata", None)
@@ -859,26 +894,70 @@ class V3EventNormalizer:
         node: str = "",
         message: str = "",
         stream_id: str = "",
+        source: WorkflowEventSourceV1 | None = None,
+        source_agent_name: str = "",
         **values: str,
     ) -> OutputEvent:
         self._sequence += 1
+        effective_agent_name = agent_name or self._main_agent_name
+        effective_source = source or self._source_for(
+            namespace=namespace,
+            node=node,
+            agent_name=source_agent_name or effective_agent_name,
+        )
         return OutputEvent(
             event_type=event_type,
             phase=phase,
             sequence=self._sequence,
             timestamp=timestamp,
             namespace=namespace,
-            agent_name=agent_name or self._main_agent_name,
+            agent_name=effective_agent_name,
             node=node,
+            source_type=(effective_source.source_type if effective_source else "agent"),
+            workflow_node_id=(
+                effective_source.workflow_node_id if effective_source else ""
+            ),
+            agent_profile_id=(
+                effective_source.agent_profile_id or "" if effective_source else ""
+            ),
+            subagent_profile_id=(
+                effective_source.subagent_profile_id or "" if effective_source else ""
+            ),
             message=message,
             values={key: str(value or "") for key, value in values.items()},
             stream_id=stream_id,
+        )
+
+    def _source_for(
+        self,
+        *,
+        namespace: str,
+        node: str,
+        agent_name: str,
+    ) -> WorkflowEventSourceV1 | None:
+        source = self._workflow_sources.get(node)
+        if source is None:
+            for part in reversed(namespace.split("/")):
+                source = self._workflow_sources.get(part.partition(":")[0])
+                if source is not None:
+                    break
+        if source is None:
+            return None
+        subagent_profile_id = self._subagent_profile_ids.get(agent_name)
+        if not subagent_profile_id or agent_name == self._main_agent_name:
+            return source
+        return WorkflowEventSourceV1(
+            source_type="subagent",
+            workflow_node_id=source.workflow_node_id,
+            agent_profile_id=source.agent_profile_id,
+            subagent_profile_id=subagent_profile_id,
         )
 
 
 __all__ = [
     "ModelCallBoundary",
     "OutputEvent",
+    "WorkflowEventSourceV1",
     "MainAgentMediaBlock",
     "V3EventNormalizer",
 ]

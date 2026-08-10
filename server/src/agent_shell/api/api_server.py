@@ -2,47 +2,24 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 import time
 from collections.abc import AsyncIterator
-from contextlib import suppress
-from datetime import datetime, timezone
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 from agent_shell.api.errors import management_error
-from agent_shell.api.completion_terminal import (
-    CompletionContext,
-    CompletionFinalizer,
-    CompletionTerminal,
-    MessageHistoryRecorder,
-)
-from agent_shell.runtime.workflow_runtime import WorkflowExecution
-from agent_shell.runtime.diagnostics import RuntimeDiagnostics
+from agent_shell.runtime.agent_runtime import AgentExecution
 from agent_shell.runtime.errors import AgentRuntimeError
-from agent_shell.runtime.interception import InterceptionTestController
 from agent_shell.runtime.input_messages import MAX_CHAT_COMPLETION_BODY_BYTES
-from agent_shell.runtime.model_response import termination_block
 from agent_shell.runtime.request_snapshot import RequestSnapshotRuntime
-from agent_shell.runtime.session_recording import AgentRunCapture
 from agent_shell.security import ApiKeyPolicyError, validate_api_key_policy
 from agent_shell.settings import Settings, bearer_token_is_valid
-from agent_shell.storage.agent_sessions import AgentRunStatus, AgentSessionStore
 from agent_shell.storage.api_server import ApiServerStore
-from agent_shell.storage.media_outputs import MediaOutputStore
 from agent_shell.storage.workflows import WorkflowStore
-from agent_shell.validation.models import validation_failure_detail
-from agent_shell.validation.service import ConfigurationValidationService
-
-SESSION_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,119}$")
-
-
-class _ClientDisconnected(RuntimeError):
-    pass
 
 
 class _BodyTooLarge(RuntimeError):
@@ -160,20 +137,6 @@ def _openai_error_payload(
     }
 
 
-def _internal_error_payload(request_id: str) -> dict[str, object]:
-    payload = _openai_error_payload(
-        "internal_error",
-        "An internal operation failed.",
-        status_code=500,
-    )
-    payload["request_id"] = request_id
-    return payload
-
-
-def _json_wire(payload: dict[str, object]) -> str:
-    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-
-
 def _model_object(model_id: str) -> dict[str, object]:
     return {
         "id": model_id,
@@ -197,14 +160,13 @@ def _usage_payload(usage: dict[str, int]) -> dict[str, object]:
     return payload
 
 
-def _main_agent_completion_payload(
+def _completion_payload(
+    *,
     model: str,
     content: str,
-    usage: dict[str, int],
-    finish_reason: str,
-    finish_reason_source: str | None,
+    execution: AgentExecution,
 ) -> dict[str, object]:
-    payload: dict[str, object] = {
+    return {
         "id": f"chatcmpl_{uuid4().hex}",
         "object": "chat.completion",
         "created": int(time.time()),
@@ -213,15 +175,117 @@ def _main_agent_completion_payload(
             {
                 "index": 0,
                 "message": {"role": "assistant", "content": content},
-                "finish_reason": finish_reason,
+                "finish_reason": execution.finish_reason,
             }
         ],
-        "usage": _usage_payload(usage),
+        "usage": _usage_payload(execution.usage),
     }
-    termination = termination_block(finish_reason, finish_reason_source)
-    if termination is not None:
-        payload["agent_shell"] = {"termination": termination}
-    return payload
+
+
+async def _completion_stream(
+    execution: AgentExecution,
+    model: str,
+) -> AsyncIterator[str]:
+    completion_id = f"chatcmpl_{uuid4().hex}"
+    created = int(time.time())
+
+    def encode(payload: dict[str, object]) -> str:
+        return "data: " + json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ) + "\n\n"
+
+    yield encode(
+        {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"role": "assistant"},
+                    "finish_reason": None,
+                }
+            ],
+        }
+    )
+    try:
+        async for text in execution.stream_text():
+            if not text:
+                continue
+            yield encode(
+                {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": model,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"content": text},
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            )
+    except AgentRuntimeError as exc:
+        yield encode(
+            {
+                "id": completion_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [
+                    {"index": 0, "delta": {}, "finish_reason": "error"}
+                ],
+                "error": _openai_error_payload(
+                    exc.code,
+                    exc.safe_message,
+                    status_code=exc.status_code,
+                )["error"],
+            }
+        )
+        yield "data: [DONE]\n\n"
+        return
+    except Exception:
+        yield encode(
+            {
+                "id": completion_id,
+                "object": "chat.completion.chunk",
+                "created": created,
+                "model": model,
+                "choices": [
+                    {"index": 0, "delta": {}, "finish_reason": "error"}
+                ],
+                "error": _openai_error_payload(
+                    "internal_error",
+                    "An internal operation failed.",
+                    status_code=500,
+                )["error"],
+            }
+        )
+        yield "data: [DONE]\n\n"
+        return
+
+    yield encode(
+        {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {},
+                    "finish_reason": execution.finish_reason,
+                }
+            ],
+            "usage": _usage_payload(execution.usage),
+        }
+    )
+    yield "data: [DONE]\n\n"
 
 
 def build_api_server_router(
@@ -230,14 +294,8 @@ def build_api_server_router(
     runtime: RequestSnapshotRuntime,
     settings: Settings,
     events: ApiServerEventHub,
-    interception_tests: InterceptionTestController,
-    diagnostics: RuntimeDiagnostics,
-    agent_sessions: AgentSessionStore,
-    validation: ConfigurationValidationService,
-    media_outputs: MediaOutputStore,
 ) -> APIRouter:
     router = APIRouter()
-    history = MessageHistoryRecorder(store, events, diagnostics)
 
     def public_settings(request: Request) -> dict[str, object]:
         current = store.settings()
@@ -252,185 +310,6 @@ def build_api_server_router(
             "chat_completions_endpoint": f"{base}/v1/chat/completions",
             "runtime": "model_streaming",
         }
-
-    async def main_agent_completion_stream(
-        *,
-        execution: WorkflowExecution,
-        model: str,
-        finalizer: CompletionFinalizer,
-    ) -> AsyncIterator[str]:
-        completion_id = f"chatcmpl_{uuid4().hex}"
-        created = int(time.time())
-        wire: list[str] = []
-        response_parts: list[str] = []
-        terminal_status: AgentRunStatus = "client_disconnected"
-        terminal_error_code: str | None = "client_disconnected"
-
-        def encode(payload: dict[str, object]) -> str:
-            item = "data: " + json.dumps(
-                payload, ensure_ascii=False, separators=(",", ":")
-            ) + "\n\n"
-            wire.append(item)
-            return item
-
-        try:
-            role = {
-                "id": completion_id,
-                "object": "chat.completion.chunk",
-                "created": created,
-                "model": model,
-                "choices": [
-                    {
-                        "index": 0,
-                        "delta": {"role": "assistant"},
-                        "finish_reason": None,
-                    }
-                ],
-            }
-            yield encode(role)
-            try:
-                async for text in execution.stream_text():
-                    if not text:
-                        continue
-                    response_parts.append(text)
-                    chunk = {
-                        "id": completion_id,
-                        "object": "chat.completion.chunk",
-                        "created": created,
-                        "model": model,
-                        "choices": [
-                            {
-                                "index": 0,
-                                "delta": {"content": text},
-                                "finish_reason": None,
-                            }
-                        ],
-                    }
-                    yield encode(chunk)
-            except AgentRuntimeError as exc:
-                terminal_status = "failed"
-                terminal_error_code = exc.code
-                finalizer.runtime_error(exc, code=exc.code)
-                error_chunk = {
-                    "id": completion_id,
-                    "object": "chat.completion.chunk",
-                    "created": created,
-                    "model": model,
-                    "choices": [
-                        {"index": 0, "delta": {}, "finish_reason": "error"}
-                    ],
-                    "error": {
-                        "message": exc.safe_message,
-                        "type": "server_error",
-                        "param": None,
-                        "code": exc.code,
-                    },
-                }
-                yield encode(error_chunk)
-                wire.append("data: [DONE]\n\n")
-                yield "data: [DONE]\n\n"
-                return
-            except Exception as exc:
-                terminal_status = "failed"
-                terminal_error_code = "internal_error"
-                finalizer.runtime_error(exc, code="internal_error")
-                error_chunk = {
-                    "id": completion_id,
-                    "object": "chat.completion.chunk",
-                    "created": created,
-                    "model": model,
-                    "choices": [
-                        {"index": 0, "delta": {}, "finish_reason": "error"}
-                    ],
-                    "error": {
-                        "message": "An internal operation failed.",
-                        "type": "server_error",
-                        "param": None,
-                        "code": "internal_error",
-                    },
-                }
-                yield encode(error_chunk)
-                wire.append("data: [DONE]\n\n")
-                yield "data: [DONE]\n\n"
-                return
-
-            finish = {
-                "id": completion_id,
-                "object": "chat.completion.chunk",
-                "created": created,
-                "model": model,
-                "choices": [
-                    {
-                        "index": 0,
-                        "delta": {},
-                        "finish_reason": execution.finish_reason,
-                    }
-                ],
-                "usage": _usage_payload(execution.usage),
-            }
-            termination = termination_block(
-                execution.finish_reason,
-                execution.finish_reason_source,
-            )
-            if termination is not None:
-                finish["agent_shell"] = {"termination": termination}
-            yield encode(finish)
-            wire.append("data: [DONE]\n\n")
-            yield "data: [DONE]\n\n"
-            terminal_status = "completed"
-            terminal_error_code = None
-        finally:
-            response_text = "".join(response_parts)
-            await finalizer.finalize(
-                CompletionTerminal(
-                    status=terminal_status,
-                    error_code=terminal_error_code,
-                    response_text=response_text,
-                    response_body="".join(wire),
-                    response_content_type="text/event-stream",
-                    http_status=200,
-                    finish_reason=(
-                        execution.finish_reason
-                        if terminal_status == "completed"
-                        else terminal_error_code or "unknown"
-                    ),
-                    reasoning_tokens=execution.usage.get("reasoning_tokens"),
-                    response_blocks=execution.response_blocks,
-                    media_assets=execution.media_assets,
-                )
-            )
-
-    async def run_until_disconnect(
-        execution: WorkflowExecution,
-        request: Request,
-    ) -> tuple[str, dict[str, int]]:
-        async def wait_for_disconnect() -> None:
-            while True:
-                message = await request.receive()
-                if message["type"] == "http.disconnect":
-                    return
-
-        execution_task = asyncio.create_task(execution.run())
-        disconnect_task = asyncio.create_task(wait_for_disconnect())
-        try:
-            done, _ = await asyncio.wait(
-                (execution_task, disconnect_task),
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            if execution_task in done:
-                return execution_task.result()
-            execution_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await execution_task
-            raise _ClientDisconnected
-        finally:
-            disconnect_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await disconnect_task
-            if not execution_task.done():
-                execution_task.cancel()
-                with suppress(asyncio.CancelledError):
-                    await execution_task
 
     @router.get("/api/api-server")
     async def get_api_server_settings(request: Request) -> dict[str, object]:
@@ -470,14 +349,6 @@ def build_api_server_router(
 
     @router.post("/api/api-server/start")
     async def start_api_server(request: Request) -> dict[str, object]:
-        store.set_enabled(False)
-        report = validation.validate_api_start()
-        if not report.valid:
-            await events.publish({"type": "settings_changed"})
-            raise HTTPException(
-                status_code=422,
-                detail=validation_failure_detail(report),
-            )
         store.set_enabled(True)
         await events.publish({"type": "settings_changed"})
         return public_settings(request)
@@ -532,23 +403,14 @@ def build_api_server_router(
         model = payload.get("model")
         if not isinstance(model, str) or not model:
             return _openai_error(422, "model_required", "A model is required.", param="model")
-        started_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
         try:
             request_snapshot = runtime.capture()
-        except Exception as exc:
-            diagnostics.runtime_error(
-                exc,
-                request_id=getattr(request.state, "request_id", ""),
-                model=model,
-                agent_name="",
-                code="configuration_snapshot_failed",
-            )
-            error = _openai_error_payload(
+        except Exception:
+            return _openai_error(
+                500,
                 "configuration_snapshot_failed",
                 "The current Workflow configuration could not be captured.",
-                status_code=500,
             )
-            return JSONResponse(status_code=500, content=error)
         workflow = request_snapshot.workflow_by_name(model)
         if workflow is None or not workflow["enabled"]:
             request_snapshot.close()
@@ -558,287 +420,79 @@ def build_api_server_router(
                 "The requested model does not exist.",
                 param="model",
             )
-        agent_name = str(workflow["main_agent_name"])
         stream = payload.get("stream", False)
         if not isinstance(stream, bool):
             request_snapshot.close()
-            error = _openai_error_payload(
+            return _openai_error(
+                422,
                 "invalid_stream",
                 "stream must be a boolean.",
-                status_code=422,
                 param="stream",
             )
-            await history.record(
-                request_id=getattr(request.state, "request_id", ""),
-                model=model,
-                agent_name=agent_name,
-                started_at=started_at,
-                status="failed",
-                request_body=raw_json,
-                response_body=_json_wire(error),
-                response_content_type="application/json",
-                http_status=422,
-                error_code="invalid_stream",
-            )
-            return JSONResponse(status_code=422, content=error)
-        input_messages = payload.get("messages")
+        messages = payload.get("messages")
         max_initial_messages = int(server_settings["max_initial_messages"])
-        if isinstance(input_messages, list) and len(input_messages) > max_initial_messages:
+        if isinstance(messages, list) and len(messages) > max_initial_messages:
             request_snapshot.close()
-            error = _openai_error_payload(
+            return _openai_error(
+                422,
                 "input_messages_too_many",
                 f"messages cannot contain more than {max_initial_messages} items.",
-                status_code=422,
                 param="messages",
             )
-            await history.record(
+        try:
+            execution = await request_snapshot.start_workflow(
+                workflow,
+                messages,
                 request_id=getattr(request.state, "request_id", ""),
+                public_model=model,
+            )
+        except AgentRuntimeError as exc:
+            issue = (
+                exc.validation_report.issues[0]
+                if exc.validation_report is not None
+                and exc.validation_report.issues
+                else None
+            )
+            return _openai_error(
+                exc.status_code,
+                issue.code if issue is not None else exc.code,
+                issue.message if issue is not None else exc.safe_message,
+            )
+        except Exception:
+            return _openai_error(
+                500,
+                "internal_error",
+                "An internal operation failed.",
+            )
+        if stream:
+            return StreamingResponse(
+                _completion_stream(execution, model),
+                media_type="text/event-stream",
+                headers={
+                    "Cache-Control": "no-cache",
+                    "X-Accel-Buffering": "no",
+                },
+            )
+        try:
+            content, _usage = await execution.run()
+        except AgentRuntimeError as exc:
+            return _openai_error(
+                exc.status_code,
+                exc.code,
+                exc.safe_message,
+            )
+        except Exception:
+            return _openai_error(
+                500,
+                "internal_error",
+                "An internal operation failed.",
+            )
+        return JSONResponse(
+            content=_completion_payload(
                 model=model,
-                agent_name=agent_name,
-                started_at=started_at,
-                status="failed",
-                request_body=raw_json,
-                response_body=_json_wire(error),
-                response_content_type="application/json",
-                http_status=422,
-                error_code="input_messages_too_many",
+                content=content,
+                execution=execution,
             )
-            return JSONResponse(status_code=422, content=error)
-        if workflow is not None:
-            requested_session_id = request.headers.get("x-agent-session-id", "")
-            if requested_session_id and not SESSION_ID_PATTERN.fullmatch(
-                requested_session_id
-            ):
-                request_snapshot.close()
-                error = _openai_error_payload(
-                    "invalid_agent_session_id",
-                    "X-Agent-Session-ID must contain 1-120 letters, digits, dot, colon, underscore, or hyphen.",
-                    status_code=422,
-                    param=None,
-                )
-                await history.record(
-                    request_id=getattr(request.state, "request_id", ""),
-                    model=model,
-                    agent_name=agent_name,
-                    started_at=started_at,
-                    status="failed",
-                    request_body=raw_json,
-                    response_body=_json_wire(error),
-                    response_content_type="application/json",
-                    http_status=422,
-                    error_code="invalid_agent_session_id",
-                )
-                return JSONResponse(status_code=422, content=error)
-            session_id = requested_session_id or f"session_{uuid4().hex}"
-            session_headers = {"X-Agent-Session-ID": session_id}
-            request_id = getattr(request.state, "request_id", "")
-            request_started_clock = time.monotonic()
-            capture = AgentRunCapture()
-            finalizer = CompletionFinalizer(
-                context=CompletionContext(
-                    request_id=request_id,
-                    session_id=session_id,
-                    model=model,
-                    agent_name=agent_name,
-                    started_at=started_at,
-                    request_body=raw_json,
-                    input_messages=payload.get("messages"),
-                    started_clock=request_started_clock,
-                ),
-                capture=capture,
-                diagnostics=diagnostics,
-                agent_sessions=agent_sessions,
-                events=events,
-                history=history,
-                media_outputs=media_outputs,
-            )
-
-            diagnostics.request_started(
-                request_id=request_id,
-                model=model,
-                agent_name=agent_name,
-            )
-            model_request_interceptor = None
-            if interception_tests.is_enabled():
-                def model_request_interceptor(
-                    model_request: dict[str, object],
-                ) -> None:
-                    item = store.add_interception_record(
-                        request_id=request_id,
-                        model=model,
-                        agent_name=agent_name,
-                        request_raw_json=raw_json,
-                        model_request_raw_json=json.dumps(
-                            model_request,
-                            ensure_ascii=False,
-                            indent=2,
-                        ),
-                    )
-                    events.publish_nowait(
-                        {"type": "interception_changed", "id": str(item["id"])}
-                    )
-
-            try:
-                execution = await request_snapshot.start_workflow(
-                    workflow,
-                    payload.get("messages"),
-                    model_request_interceptor=model_request_interceptor,
-                    model_request_observer=capture.model_request,
-                    model_response_observer=capture.model_response,
-                    event_observer=capture.output_event,
-                    request_id=request_id,
-                    public_model=model,
-                )
-            except AgentRuntimeError as exc:
-                issue = (
-                    exc.validation_report.issues[0]
-                    if exc.validation_report is not None
-                    and exc.validation_report.issues
-                    else None
-                )
-                error_code = issue.code if issue is not None else exc.code
-                error_message = issue.message if issue is not None else exc.safe_message
-                finalizer.runtime_error(exc, code=error_code)
-                error = _openai_error_payload(
-                    error_code,
-                    error_message,
-                    status_code=exc.status_code,
-                    param="model" if error_code.startswith("model_") else None,
-                )
-                await finalizer.finalize(
-                    CompletionTerminal(
-                        status="failed",
-                        error_code=error_code,
-                        response_text="",
-                        response_body=_json_wire(error),
-                        response_content_type="application/json",
-                        http_status=exc.status_code,
-                        finish_reason=error_code,
-                        reasoning_tokens=None,
-                    )
-                )
-                return JSONResponse(
-                    status_code=exc.status_code, content=error, headers=session_headers
-                )
-            except Exception as exc:
-                finalizer.runtime_error(exc, code="internal_error")
-                error = _internal_error_payload(
-                    getattr(request.state, "request_id", "")
-                )
-                await finalizer.finalize(
-                    CompletionTerminal(
-                        status="failed",
-                        error_code="internal_error",
-                        response_text="",
-                        response_body=_json_wire(error),
-                        response_content_type="application/json",
-                        http_status=500,
-                        finish_reason="internal_error",
-                        reasoning_tokens=None,
-                    )
-                )
-                return JSONResponse(
-                    status_code=500, content=error, headers=session_headers
-                )
-            if stream:
-                return StreamingResponse(
-                    main_agent_completion_stream(
-                        execution=execution,
-                        model=model,
-                        finalizer=finalizer,
-                    ),
-                    media_type="text/event-stream",
-                    headers={
-                        "Cache-Control": "no-cache",
-                        "X-Accel-Buffering": "no",
-                        **session_headers,
-                    },
-                )
-            try:
-                content, usage = await run_until_disconnect(execution, request)
-            except _ClientDisconnected:
-                await finalizer.finalize(
-                    CompletionTerminal(
-                        status="client_disconnected",
-                        error_code="client_disconnected",
-                        response_text="",
-                        response_body="",
-                        response_content_type="application/json",
-                        http_status=499,
-                        finish_reason="client_disconnected",
-                        reasoning_tokens=execution.usage.get("reasoning_tokens"),
-                        response_blocks=execution.response_blocks,
-                        media_assets=execution.media_assets,
-                    )
-                )
-                return Response(status_code=499, headers=session_headers)
-            except AgentRuntimeError as exc:
-                finalizer.runtime_error(exc, code=exc.code)
-                error = _openai_error_payload(
-                    exc.code,
-                    exc.safe_message,
-                    status_code=exc.status_code,
-                )
-                await finalizer.finalize(
-                    CompletionTerminal(
-                        status="failed",
-                        error_code=exc.code,
-                        response_text="",
-                        response_body=_json_wire(error),
-                        response_content_type="application/json",
-                        http_status=exc.status_code,
-                        finish_reason=exc.code,
-                        reasoning_tokens=execution.usage.get("reasoning_tokens"),
-                        response_blocks=execution.response_blocks,
-                        media_assets=execution.media_assets,
-                    )
-                )
-                return JSONResponse(
-                    status_code=exc.status_code, content=error, headers=session_headers
-                )
-            except Exception as exc:
-                finalizer.runtime_error(exc, code="internal_error")
-                error = _internal_error_payload(
-                    getattr(request.state, "request_id", "")
-                )
-                await finalizer.finalize(
-                    CompletionTerminal(
-                        status="failed",
-                        error_code="internal_error",
-                        response_text="",
-                        response_body=_json_wire(error),
-                        response_content_type="application/json",
-                        http_status=500,
-                        finish_reason="internal_error",
-                        reasoning_tokens=execution.usage.get("reasoning_tokens"),
-                        response_blocks=execution.response_blocks,
-                        media_assets=execution.media_assets,
-                    )
-                )
-                return JSONResponse(
-                    status_code=500, content=error, headers=session_headers
-                )
-            response_payload = _main_agent_completion_payload(
-                model,
-                content,
-                usage,
-                execution.finish_reason,
-                execution.finish_reason_source,
-            )
-            await finalizer.finalize(
-                CompletionTerminal(
-                    status="completed",
-                    error_code=None,
-                    response_text=content,
-                    response_body=_json_wire(response_payload),
-                    response_content_type="application/json",
-                    http_status=200,
-                    finish_reason=execution.finish_reason,
-                    reasoning_tokens=usage.get("reasoning_tokens"),
-                    response_blocks=execution.response_blocks,
-                    media_assets=execution.media_assets,
-                )
-            )
-            return JSONResponse(content=response_payload, headers=session_headers)
+        )
 
     return router

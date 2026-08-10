@@ -24,10 +24,11 @@ def test_health_catalog_and_readiness_are_small_and_current(
         "todo_list",
         "output_mode",
         "exception_retry",
-        "other",
+        "summarization",
+        "prompt_caching",
     }
     assert [item["type"] for item in catalog["block_types"]] == list(PUBLIC_TYPES)
-    assert [item["order"] for item in catalog["block_types"]] == list(range(1, 13))
+    assert [item["order"] for item in catalog["block_types"]] == list(range(1, 14))
     by_type = {item["type"]: item for item in catalog["block_types"]}
     assert set(by_type["model"]) == {
         "type",

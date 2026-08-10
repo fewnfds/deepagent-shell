@@ -7,21 +7,17 @@ import os
 import asyncio
 import sqlite3
 from pathlib import Path
-from typing import ClassVar
 
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.language_models.fake_chat_models import (
     FakeListChatModel,
-    FakeMessagesListChatModel,
 )
-from langchain_core.messages import AIMessage, ToolMessage
 from starlette.requests import Request
 
 from agent_shell.app import create_app
 from agent_shell.api.api_server import ApiServerEventHub
-from agent_shell.runtime.interception import INTERCEPTION_REPLY
-from support import ScopedAuthTestClient, configure_scope_tokens
+from support import API_KEY, ScopedAuthTestClient, configure_scope_tokens
 
 
 EVENT_FEED_TEST_WINDOW = {
@@ -73,37 +69,6 @@ class ToolCompatibleFakeListChatModel(FakeListChatModel):
 
     def bind_tools(self, _tools, **_kwargs):
         return self
-
-
-class RecordingFakeListChatModel(ToolCompatibleFakeListChatModel):
-    seen_messages: ClassVar[list[list[object]]] = []
-
-    async def _astream(self, messages, *args, **kwargs):
-        self.seen_messages.append(list(messages))
-        async for chunk in super()._astream(messages, *args, **kwargs):
-            yield chunk
-
-
-class ToolCallingFakeModel(FakeMessagesListChatModel):
-    seen_messages: ClassVar[list[list[object]]] = []
-    bound_tool_names: ClassVar[list[str]] = []
-    bound_tool_descriptions: ClassVar[dict[str, str]] = {}
-
-    def _get_ls_params(self, stop=None, **kwargs):
-        params = super()._get_ls_params(stop=stop, **kwargs)
-        params["ls_provider"] = "openai"
-        return params
-
-    def bind_tools(self, tools, **_kwargs):
-        type(self).bound_tool_names = [tool.name for tool in tools]
-        type(self).bound_tool_descriptions = {
-            tool.name: tool.description for tool in tools
-        }
-        return self
-
-    def _generate(self, messages, *args, **kwargs):
-        type(self).seen_messages.append(list(messages))
-        return super()._generate(messages, *args, **kwargs)
 
 
 @pytest.fixture(autouse=True)
@@ -182,8 +147,6 @@ def create_main_agent(
     *,
     provider_settings: dict[str, object] | None = None,
     model_request_settings: dict[str, object] | None = None,
-    include_filesystem: bool = True,
-    create_workflow: bool = True,
 ) -> dict:
     model_payload = {
         "name": "Published model",
@@ -206,27 +169,6 @@ def create_main_agent(
         json=output_mode_payload("Published output", include_lifecycle=False),
     ).json()
     capability_refs = [{"type": "model", "block_id": model["id"]}]
-    if include_filesystem:
-        filesystem = client.post(
-            "/api/blocks/filesystem",
-            json={
-                "name": "Published filesystem",
-                "tool_configs": {
-                    name: {"visible": False}
-                    for name in (
-                        "ls",
-                        "write_file",
-                        "edit_file",
-                        "glob",
-                        "grep",
-                        "execute",
-                    )
-                },
-            },
-        ).json()
-        capability_refs.append(
-            {"type": "filesystem", "block_id": filesystem["id"]}
-        )
     capability_refs.append(
         {"type": "output-mode", "block_id": output_mode["id"]}
     )
@@ -239,27 +181,85 @@ def create_main_agent(
         },
     )
     assert response.status_code == 200, response.text
-    main_agent = response.json()
-    if create_workflow:
-        create_workflow_for_agent(client, main_agent)
-    return main_agent
+    return response.json()
 
 
-def create_workflow_for_agent(
+def create_workflow(
     client: TestClient,
-    main_agent: dict,
     *,
     name: str | None = None,
     enabled: bool = True,
+    filesystem_id: str | None = None,
 ) -> dict:
+    workflow_name = name or "Test Workflow"
+    if filesystem_id is None:
+        filesystem_response = client.post(
+            "/api/blocks/filesystem",
+            json={"name": f"{workflow_name} filesystem"},
+        )
+        assert filesystem_response.status_code == 200, filesystem_response.text
+        filesystem_id = filesystem_response.json()["id"]
     response = client.post(
         "/api/workflows",
         json={
-            "name": name or main_agent["name"],
+            "name": workflow_name,
             "description": "Test Workflow.",
-            "main_agent_id": main_agent["id"],
+            "filesystem_id": filesystem_id,
             "enabled": enabled,
         },
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def save_linear_workflow_graph(
+    client: TestClient,
+    workflow: dict,
+    main_agent: dict,
+) -> dict:
+    document = {
+        "definition": {
+            "schema_version": 1,
+            "state_contract": "agent-shell.workflow.messages.v1",
+            "nodes": [
+                {"id": "start", "type": "start", "type_version": 1, "config": {}},
+                {
+                    "id": "agent",
+                    "type": "agent",
+                    "type_version": 1,
+                    "config": {"main_agent_id": main_agent["id"]},
+                },
+                {"id": "end", "type": "end", "type_version": 1, "config": {}},
+            ],
+            "edges": [
+                {
+                    "id": "start-agent",
+                    "source": "start",
+                    "source_handle": "next",
+                    "target": "agent",
+                    "target_handle": "in",
+                },
+                {
+                    "id": "agent-end",
+                    "source": "agent",
+                    "source_handle": "next",
+                    "target": "end",
+                    "target_handle": "in",
+                },
+            ],
+        },
+        "layout": {
+            "nodes": {
+                "start": {"x": 80, "y": 160},
+                "agent": {"x": 360, "y": 160},
+                "end": {"x": 640, "y": 160},
+            },
+            "viewport": {"x": 0, "y": 0, "zoom": 1},
+        },
+    }
+    response = client.put(
+        f"/api/workflows/{workflow['id']}/graph",
+        json=document,
     )
     assert response.status_code == 200, response.text
     return response.json()
@@ -319,81 +319,9 @@ def output_mode_payload(
     }
 
 
-def attach_output_mode(
-    client: TestClient,
-    main_agent: dict,
-    *,
-    filter_mappings: list[dict[str, str]] | None = None,
-) -> dict:
-    output_payload = output_mode_payload()
-    output_payload["filter_mappings"] = filter_mappings or []
-    output_mode = client.post(
-        "/api/blocks/output-mode", json=output_payload
-    ).json()
-    payload = {
-        "name": main_agent["name"],
-        "capability_refs": [
-            *[
-                item
-                for item in main_agent["capability_refs"]
-                if item["type"] != "output-mode"
-            ],
-            {"type": "output-mode", "block_id": output_mode["id"]},
-        ],
-        "subagents": main_agent["subagents"],
-    }
-    response = client.put(f"/api/main-agents/{main_agent['id']}", json=payload)
-    assert response.status_code == 200, response.text
-    return response.json()
-
-
-def streamed_content_parts(response) -> list[str]:
-    parts = []
-    for line in response.text.splitlines():
-        if not line.startswith("data: ") or line == "data: [DONE]":
-            continue
-        payload = json.loads(line.removeprefix("data: "))
-        delta = payload.get("choices", [{}])[0].get("delta", {})
-        if isinstance(delta.get("content"), str):
-            parts.append(delta["content"])
-    return parts
-
-
-def streamed_content(response) -> str:
-    return "".join(streamed_content_parts(response))
-
-
 def capability_reference_id(main_agent: dict, capability_type: str) -> str:
     return next(
         item["block_id"]
         for item in main_agent["capability_refs"]
         if item["type"] == capability_type
-    )
-
-
-def replace_capability_reference(
-    main_agent: dict, capability_type: str, block_id: str
-) -> list[dict]:
-    return [
-        *[
-            item
-            for item in main_agent["capability_refs"]
-            if item["type"] != capability_type
-        ],
-        {"type": capability_type, "block_id": block_id},
-    ]
-
-
-def duplicate_runtime_middleware_source() -> str:
-    return (
-        "from langchain.agents.middleware import AgentMiddleware\n"
-        "class FirstRecipe(AgentMiddleware):\n"
-        "    @property\n"
-        "    def name(self):\n"
-        "        return 'shared_runtime_name'\n"
-        "class SecondRecipe(AgentMiddleware):\n"
-        "    @property\n"
-        "    def name(self):\n"
-        "        return 'shared_runtime_name'\n"
-        "middleware = [FirstRecipe(), SecondRecipe()]\n"
     )

@@ -89,9 +89,14 @@ npm run build
 
 ```powershell
 cd server
-uv run pytest ..\.test\<domain>\test_relevant_module.py -q
+.\.venv\Scripts\python.exe -m pytest ..\.test\<domain>\test_relevant_module.py -q
 uv run python ..\.test\smoke_http.py
 ```
+
+首次准备开发依赖时在 `server/` 执行 `uv sync --extra dev`。之后的日常定向 pytest 直接使用项目 `.venv`，避免
+每轮测试都让 `uv` 重复检查环境。pytest 临时文件使用 Windows 系统临时目录，不在源码目录设置 `basetemp`；同时禁用
+pytest cache provider，避免生成仓库内 `.pytest_cache`。不要为一次局部改动运行完整 `.test/`。大量 TestClient 用例会
+分别创建隔离 data root 和 SQLite，Windows 杀毒软件与目录索引会放大这类全量运行的磁盘成本。
 
 永久测试按职责放入 `.test/api_server/`、`.test/authoring/`、`.test/runtime/` 或 `.test/security/`。
 用户可观察行为、API 和持久化结果是验收证据。
@@ -112,7 +117,8 @@ uv run pytest ..\.test -q
 ```
 
 `.test/smoke_http.py` 是显式进程 smoke，不在默认 pytest 收集范围；真实 Provider 与 Agent eval 也不进入
-日常门禁。普通局部修改仍只运行最接近的相关测试，完整门禁是分支集成入口，不是每次小改的固定本地流程。
+日常门禁。完整 pytest 门禁默认交给 GitHub Actions；普通局部修改只运行一个最接近的 contract owner，完整门禁不是
+每次小改的本地流程。本地确需复现完整门禁时才使用上面的 `uv run` 命令。
 
 ## 源码版本
 

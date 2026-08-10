@@ -1,10 +1,20 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createMemoryHistory, createRouter } from 'vue-router'
 
-import { managementApi, type MainAgent, type Workflow } from '@/api'
+import {
+  managementApi,
+  type SavedBlock,
+  type Workflow,
+  type WorkflowGraphDocument,
+} from '@/api'
 import { useConfirmation } from '@/composables/useConfirmation'
 import { useToasts } from '@/composables/useToasts'
+import {
+  workflowCanvasToDocument,
+  workflowDocumentToCanvas,
+} from '@/domain/workflowGraph'
 import { en } from '@/locales/en'
 
 import WorkflowsPage from './WorkflowsPage.vue'
@@ -13,18 +23,26 @@ function i18n() {
   return createI18n({ legacy: false, locale: 'en', messages: { en } })
 }
 
-const mainAgent = {
-  id: 'agent-1',
-  name: 'Research Agent',
-} as MainAgent
-
 const workflow: Workflow = {
   id: 'workflow-1',
   name: 'Research Workflow',
   description: 'Runs the research agent.',
-  main_agent_id: mainAgent.id,
-  main_agent_name: mainAgent.name,
+  filesystem_id: 'filesystem-1',
   enabled: true,
+}
+const filesystem: SavedBlock = {
+  id: 'filesystem-1',
+  name: 'Shared Filesystem',
+}
+
+function testRouter() {
+  return createRouter({
+    history: createMemoryHistory(),
+    routes: [
+      { path: '/workflows', component: { template: '<div />' } },
+      { path: '/workflows/:id/editor', component: { template: '<div />' } },
+    ],
+  })
 }
 
 afterEach(() => {
@@ -36,28 +54,33 @@ afterEach(() => {
 
 describe('WorkflowsPage', () => {
   it('loads Workflows and performs create and delete operations', async () => {
-    vi.spyOn(managementApi, 'listMainAgents').mockResolvedValue([mainAgent])
     vi.spyOn(managementApi, 'listWorkflows').mockResolvedValue([workflow])
+    vi.spyOn(managementApi, 'listBlocks').mockResolvedValue([filesystem])
     const create = vi.spyOn(managementApi, 'createWorkflow').mockResolvedValue(workflow)
     const remove = vi.spyOn(managementApi, 'deleteWorkflow').mockResolvedValue({ ok: true })
+    const router = testRouter()
+    await router.push('/workflows')
+    await router.isReady()
 
-    const wrapper = mount(WorkflowsPage, { global: { plugins: [i18n()] } })
+    const wrapper = mount(WorkflowsPage, { global: { plugins: [i18n(), router] } })
     await flushPromises()
 
     expect(wrapper.text()).toContain(workflow.name)
+    expect(wrapper.text()).toContain('Configure')
+    expect(wrapper.text()).toContain('Edit Flow')
     await wrapper.findAll('button').find((button) => button.text() === 'New')!.trigger('click')
     await flushPromises()
 
     await wrapper.get('#workflow-form input[type="text"]').setValue('New Workflow')
     await wrapper.get('#workflow-form textarea').setValue('New description')
-    await wrapper.get('#workflow-form select').setValue(mainAgent.id)
+    await wrapper.get('#workflow-form select').setValue(filesystem.id)
     await wrapper.get('#workflow-form').trigger('submit')
     await flushPromises()
 
     expect(create).toHaveBeenCalledWith({
       name: 'New Workflow',
       description: 'New description',
-      main_agent_id: mainAgent.id,
+      filesystem_id: filesystem.id,
       enabled: true,
     })
 
@@ -67,5 +90,52 @@ describe('WorkflowsPage', () => {
 
     expect(remove).toHaveBeenCalledWith(workflow.id)
     wrapper.unmount()
+  })
+
+  it('round-trips the current Vue Flow document and viewport', () => {
+    const document: WorkflowGraphDocument = {
+      definition: {
+        schema_version: 1,
+        state_contract: 'agent-shell.workflow.messages.v1',
+        nodes: [
+          { id: 'start', type: 'start', type_version: 1, config: {} },
+          {
+            id: 'agent',
+            type: 'agent',
+            type_version: 1,
+            config: { main_agent_id: '11111111-1111-4111-8111-111111111111' },
+          },
+          { id: 'end', type: 'end', type_version: 1, config: {} },
+        ],
+        edges: [
+          {
+            id: 'edge-start-agent',
+            source: 'start',
+            source_handle: 'next',
+            target: 'agent',
+            target_handle: 'in',
+          },
+          {
+            id: 'edge-agent-end',
+            source: 'agent',
+            source_handle: 'next',
+            target: 'end',
+            target_handle: 'in',
+          },
+        ],
+      },
+      layout: {
+        nodes: {
+          start: { x: 80, y: 180 },
+          agent: { x: 360, y: 180 },
+          end: { x: 680, y: 180 },
+        },
+        viewport: { x: 25, y: 40, zoom: 1.25 },
+      },
+    }
+
+    const canvas = workflowDocumentToCanvas(document)
+
+    expect(workflowCanvasToDocument(canvas.nodes, canvas.edges, canvas.viewport)).toEqual(document)
   })
 })

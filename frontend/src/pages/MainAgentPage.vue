@@ -51,7 +51,11 @@ const form = ref(blankMainAgent())
 let profileLoadSequence = 0
 
 const obsoleteReferences = computed(() => {
-  const supported = new Set<string>(manifests.value.map((manifest) => manifest.type))
+  const supported = new Set<string>(
+    manifests.value
+      .filter((manifest) => manifest.type !== 'filesystem')
+      .map((manifest) => manifest.type),
+  )
   return form.value.capability_refs
     .map((reference, index) => ({ index, reference }))
     .filter(({ reference }) => !supported.has(reference.type))
@@ -205,7 +209,9 @@ async function loadWorkspace(): Promise<void> {
     manifests.value = [...catalog.block_types].sort((left, right) => left.order - right.order)
     profiles.value = mainAgentItems.map(normalizeMainAgent)
     subagentProfiles.value = subagentItems
-    const entries = await Promise.all(manifests.value.map(async (manifest) => [
+    const entries = await Promise.all(manifests.value
+      .filter((manifest) => manifest.type !== 'filesystem')
+      .map(async (manifest) => [
       manifest.type,
       await service.value?.listBlocks(manifest.type) ?? [],
     ] as const))
@@ -316,29 +322,43 @@ watch(
 
         <section class="mb-3" :aria-label="t('agents.workspace.title')">
           <div class="row g-3">
-            <div v-for="type in ['filesystem', 'filesystem-permissions'] as CapabilityType[]" :key="type" class="col-md-6">
-              <section class="card h-100" :data-testid="`main-agent-${type}-card`">
+            <div class="col-md-6">
+              <section class="card h-100" data-testid="main-agent-filesystem-card">
                 <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-                  <label class="card-title mb-0" :for="`main-agent-capability-${type}`">
-                    {{ t(`capabilities.${type}.label`) }}
+                  <label class="card-title mb-0" for="main-agent-capability-filesystem">
+                    {{ t('capabilities.filesystem.label') }}
                   </label>
-                  <span v-if="type === 'filesystem'" class="badge text-bg-primary ms-auto">
+                  <span class="badge text-bg-primary ms-auto">
                     {{ t('agents.capability.required') }}
                   </span>
-                  <span v-else class="badge text-bg-info ms-auto">
+                </header>
+                <div class="card-body">
+                  <select id="main-agent-capability-filesystem" class="form-select" data-testid="main-agent-capability-filesystem" disabled>
+                    <option>{{ t('agents.override.mode.inherit') }}</option>
+                  </select>
+                </div>
+              </section>
+            </div>
+            <div class="col-md-6">
+              <section class="card h-100" data-testid="main-agent-filesystem-permissions-card">
+                <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                  <label class="card-title mb-0" for="main-agent-capability-filesystem-permissions">
+                    {{ t('capabilities.filesystem-permissions.label') }}
+                  </label>
+                  <span class="badge text-bg-info ms-auto">
                     {{ t('agents.capability.optional') }}
                   </span>
                 </header>
                 <div class="card-body">
                   <select
-                    :id="`main-agent-capability-${type}`"
+                    id="main-agent-capability-filesystem-permissions"
                     class="form-select"
-                    :data-testid="`main-agent-capability-${type}`"
-                    :value="referenceId(form, type)"
-                    @change="updateReference(type, ($event.target as HTMLSelectElement).value)"
+                    data-testid="main-agent-capability-filesystem-permissions"
+                    :value="referenceId(form, 'filesystem-permissions')"
+                    @change="updateReference('filesystem-permissions', ($event.target as HTMLSelectElement).value)"
                   >
-                    <option value="">{{ type === 'filesystem' ? t('agents.capability.minimal') : t('agents.capability.notAttached') }}</option>
-                    <option v-for="block in capabilityBlocks(type)" :key="block.id" :value="block.id">{{ block.name }}</option>
+                    <option value="">{{ t('agents.capability.notAttached') }}</option>
+                    <option v-for="block in capabilityBlocks('filesystem-permissions')" :key="block.id" :value="block.id">{{ block.name }}</option>
                   </select>
                 </div>
               </section>

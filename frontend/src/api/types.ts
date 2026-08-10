@@ -12,7 +12,8 @@ export type BlockType =
   | 'output-mode'
   | 'exception-retry'
   | 'subagent'
-  | 'other'
+  | 'summarization'
+  | 'prompt-caching'
 
 export interface CapabilityManifest {
   type: BlockType
@@ -204,13 +205,44 @@ export interface MiddlewarePackageResource {
 export interface WorkflowPayload {
   name: string
   description: string
-  main_agent_id: string
+  filesystem_id: string
   enabled: boolean
 }
 
 export interface Workflow extends WorkflowPayload {
   id: string
-  main_agent_name: string
+}
+
+export type WorkflowNodeType = 'start' | 'agent' | 'end'
+
+export interface WorkflowGraphNode {
+  id: string
+  type: WorkflowNodeType
+  type_version: 1
+  config: {
+    main_agent_id?: string
+  }
+}
+
+export interface WorkflowGraphEdge {
+  id: string
+  source: string
+  source_handle: string
+  target: string
+  target_handle: string
+}
+
+export interface WorkflowGraphDocument {
+  definition: {
+    schema_version: 1
+    state_contract: 'agent-shell.workflow.messages.v1'
+    nodes: WorkflowGraphNode[]
+    edges: WorkflowGraphEdge[]
+  }
+  layout: {
+    nodes: Record<string, { x: number; y: number }>
+    viewport: { x: number; y: number; zoom: number }
+  }
 }
 
 export interface SubagentReference {

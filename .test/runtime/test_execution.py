@@ -170,7 +170,7 @@ def test_agent_execution_closes_v3_stream_when_consumer_is_cancelled() -> None:
             "template": "{{message}}",
         }
         run = BlockingRun()
-        execution = WorkflowExecution(
+        execution = AgentExecution(
             graph=Graph(run),
             input_state={"messages": [{"role": "user", "content": "cancel me"}]},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
@@ -223,7 +223,7 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch) -> None:
                 return self.run
 
         monkeypatch.setattr(
-            "agent_shell.runtime.workflow_runtime.EXECUTION_TIMEOUT_SECONDS", 0.01
+            "agent_shell.runtime.agent_runtime.EXECUTION_TIMEOUT_SECONDS", 0.01
         )
         settings = config(mode="blocklist")
         settings["event_templates"]["assistant_text"]["enabled"] = False
@@ -232,7 +232,7 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch) -> None:
             "template": "{{message}}",
         }
         run = BlockingRun()
-        execution = WorkflowExecution(
+        execution = AgentExecution(
             graph=Graph(run),
             input_state={"messages": [{"role": "user", "content": "wait"}]},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
@@ -258,7 +258,7 @@ def test_graph_recursion_failure_uses_step_limit_error() -> None:
             async def astream_events(self, _input, *, config: dict, version: str):
                 raise GraphRecursionError("private graph state")
 
-        execution = WorkflowExecution(
+        execution = AgentExecution(
             graph=Graph(),
             input_state={"messages": [{"role": "user", "content": "loop"}]},
             rectifier=OutputEventRectifier(
@@ -313,7 +313,7 @@ def test_unclassified_graph_failure_is_not_mislabeled_as_provider() -> None:
             "enabled": True,
             "template": "{{message}}",
         }
-        execution = WorkflowExecution(
+        execution = AgentExecution(
             graph=Graph(),
             input_state={"messages": [{"role": "user", "content": "fail"}]},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
@@ -347,7 +347,7 @@ def test_classified_graph_failure_emits_matching_lifecycle_error() -> None:
             "enabled": True,
             "template": "{{phase}}:{{error_code}}",
         }
-        execution = WorkflowExecution(
+        execution = AgentExecution(
             graph=Graph(),
             input_state={"messages": [{"role": "user", "content": "fail"}]},
             rectifier=OutputEventRectifier(OutputProjector(settings)),

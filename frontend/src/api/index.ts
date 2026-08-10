@@ -26,6 +26,7 @@ import type {
   HealthResponse,
   ManagementEvent,
   Workflow,
+  WorkflowGraphDocument,
   WorkflowPayload,
   ManagedArchivePreview,
   ManagedDirectory,
@@ -119,6 +120,10 @@ export const managementApi = {
     return managementRequest('/api/workflows')
   },
 
+  getWorkflow(id: string): Promise<Workflow> {
+    return managementRequest(`/api/workflows/${encodeURIComponent(id)}`)
+  },
+
   createWorkflow(payload: WorkflowPayload): Promise<Workflow> {
     return managementRequest('/api/workflows', jsonBody(payload))
   },
@@ -132,6 +137,20 @@ export const managementApi = {
 
   deleteWorkflow(id: string): Promise<{ ok: boolean }> {
     return managementRequest(`/api/workflows/${id}`, { method: 'DELETE' })
+  },
+
+  getWorkflowGraph(id: string): Promise<WorkflowGraphDocument> {
+    return managementRequest(`/api/workflows/${encodeURIComponent(id)}/graph`)
+  },
+
+  updateWorkflowGraph(
+    id: string,
+    document: WorkflowGraphDocument,
+  ): Promise<WorkflowGraphDocument> {
+    return managementRequest(`/api/workflows/${encodeURIComponent(id)}/graph`, {
+      method: 'PUT',
+      body: JSON.stringify(document),
+    })
   },
 
   getSystemSettings(): Promise<SystemSettings> {

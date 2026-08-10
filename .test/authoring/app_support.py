@@ -23,7 +23,8 @@ PUBLIC_TYPES = (
     "output-mode",
     "exception-retry",
     "subagent",
-    "other",
+    "summarization",
+    "prompt-caching",
 )
 
 
@@ -170,17 +171,19 @@ def block_cases(tmp_path: Path) -> list[tuple[str, dict]]:
         ),
         ("subagent", {"name": "Delegation"}),
         (
-            "other",
+            "summarization",
             {
-                "name": "Deep Agents defaults",
-                "summarization": {
-                    "trigger": {"type": "tokens", "value": 120000},
-                    "keep": {"type": "messages", "value": 8},
-                },
-                "prompt_caching": {
-                    "ttl": "1h",
-                    "min_messages_to_cache": 4,
-                },
+                "name": "Long-context summarization",
+                "trigger": {"type": "tokens", "value": 120000},
+                "keep": {"type": "messages", "value": 8},
+            },
+        ),
+        (
+            "prompt-caching",
+            {
+                "name": "One-hour prompt cache",
+                "ttl": "1h",
+                "min_messages_to_cache": 4,
             },
         ),
         (

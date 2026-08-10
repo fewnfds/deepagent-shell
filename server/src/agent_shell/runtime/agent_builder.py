@@ -13,9 +13,10 @@ from agent_shell.capability_manifest import FILESYSTEM_TOOL_NAMES
 from agent_shell.contracts import (
     FilesystemBlock,
     FilesystemPermissionsBlock,
-    OtherBlock,
     OutputModeBlock,
+    PromptCachingBlock,
     SkillBlock,
+    SummarizationBlock,
 )
 from agent_shell.provider_http import PROVIDER_HTTP_TIMEOUT, ProviderHttpClients
 from agent_shell.provider_secrets import ProviderCredentialError, ProviderSecretResolver
@@ -30,7 +31,12 @@ from agent_shell.runtime.capabilities.exception_retry import (
     materialize_exception_retry,
     model_block_with_retry_overrides,
 )
-from agent_shell.runtime.capabilities.other import materialize_other_middlewares
+from agent_shell.runtime.capabilities.prompt_caching import (
+    materialize_prompt_caching_middleware,
+)
+from agent_shell.runtime.capabilities.summarization import (
+    materialize_summarization_middleware,
+)
 from agent_shell.runtime.agent_compilation import (
     MaterializedAgentProfile,
     configuration_error,
@@ -112,7 +118,9 @@ class BuiltAgent:
     graph: Any
     input_state: dict[str, Any]
     output_config: dict[str, Any]
+    agent_id: str
     agent_name: str
+    subagent_profile_ids: dict[str, str]
     middleware_runtime: MiddlewarePackageRuntime
 
 
@@ -297,7 +305,7 @@ class AgentBuilder:
                 path=(
                     "capability_refs.skill"
                     if skill is not None
-                    else "capability_refs.filesystem"
+                    else "workflow.filesystem_id"
                 ),
             ) from exc
         except Exception as exc:
@@ -311,7 +319,7 @@ class AgentBuilder:
                 path=(
                     "capability_refs.skill"
                     if skill is not None
-                    else "capability_refs.filesystem"
+                    else "workflow.filesystem_id"
                 ),
             ) from exc
         backend = deepagents.backend
@@ -320,15 +328,19 @@ class AgentBuilder:
         skill_sources = deepagents.skill_sources
 
         extra_middleware: list[Any] = []
-        other = selected_blocks.get("other")
-        if other is not None:
+        summarization = selected_blocks.get("summarization")
+        if summarization is not None:
             try:
-                other_block = OtherBlock.model_validate(
-                    {key: value for key, value in other.items() if key != "id"}
+                summarization_block = SummarizationBlock.model_validate(
+                    {
+                        key: value
+                        for key, value in summarization.items()
+                        if key != "id"
+                    }
                 )
-                extra_middleware.extend(
-                    materialize_other_middlewares(
-                        other_block,
+                extra_middleware.append(
+                    materialize_summarization_middleware(
+                        summarization_block,
                         model=model,
                         backend=backend,
                     )
@@ -336,12 +348,35 @@ class AgentBuilder:
             except Exception as exc:
                 raise configuration_error(
                     "middleware_materialization_failed",
-                    "The selected other configuration could not be constructed.",
+                    "The selected summarization configuration could not be constructed.",
                     status_code=422,
                     scope=scope,
                     owner_id=owner_id,
                     owner_name=owner_name,
-                    path="capability_refs.other",
+                    path="capability_refs.summarization",
+                ) from exc
+        prompt_caching = selected_blocks.get("prompt-caching")
+        if prompt_caching is not None:
+            try:
+                prompt_caching_block = PromptCachingBlock.model_validate(
+                    {
+                        key: value
+                        for key, value in prompt_caching.items()
+                        if key != "id"
+                    }
+                )
+                extra_middleware.append(
+                    materialize_prompt_caching_middleware(prompt_caching_block)
+                )
+            except Exception as exc:
+                raise configuration_error(
+                    "middleware_materialization_failed",
+                    "The selected prompt-caching configuration could not be constructed.",
+                    status_code=422,
+                    scope=scope,
+                    owner_id=owner_id,
+                    owner_name=owner_name,
+                    path="capability_refs.prompt-caching",
                 ) from exc
         package_middleware: tuple[Any, ...] = ()
         if self._middleware_runtime is not None:
@@ -393,11 +428,15 @@ class AgentBuilder:
         model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
         model_response_observer: Callable[[ModelResponse], Any] | None = None,
         request_id: str = "",
+        workflow_filesystem_id: str | None = None,
     ) -> BuiltAgent:
         # Validate the immutable request snapshot before any selected user module
         # can be imported or any optional capability can be materialized.
         messages = validate_client_messages(raw_messages)
-        report, assembly = self._validation.resolve_main_agent(main_agent_id)
+        report, assembly = self._validation.resolve_main_agent(
+            main_agent_id,
+            workflow_filesystem_id=workflow_filesystem_id,
+        )
         if not report.valid:
             issue = report.issues[0]
             if issue.code == "assembly.main_agent_not_found":
@@ -594,6 +633,10 @@ class AgentBuilder:
             graph=graph,
             input_state=input_state,
             output_config=output_config,
+            agent_id=main_agent_id,
             agent_name=str(main_agent["name"]),
+            subagent_profile_ids={
+                node.name: node.key for node in assembly.subagent_nodes.values()
+            },
             middleware_runtime=middleware_runtime,
         )

@@ -44,10 +44,11 @@ import {
   FilesystemEditor,
   FilesystemPermissionsEditor,
   ModelEditor,
-  OtherEditor,
   OutputModeEditor,
+  PromptCachingEditor,
   SkillEditor,
   SubagentCapabilityEditor,
+  SummarizationEditor,
   SystemPromptEditor,
   TodoListEditor,
 } from '@/editors'
@@ -70,7 +71,8 @@ const editorComponents: Record<BlockType, Component> = {
   'output-mode': OutputModeEditor,
   'exception-retry': ExceptionRetryEditor,
   subagent: SubagentCapabilityEditor,
-  other: OtherEditor,
+  summarization: SummarizationEditor,
+  'prompt-caching': PromptCachingEditor,
 }
 
 const { t } = useI18n()
@@ -172,7 +174,8 @@ const editorProps = computed<Record<string, unknown>>(() => {
     case 'output-mode':
     case 'exception-retry':
     case 'subagent':
-    case 'other':
+    case 'summarization':
+    case 'prompt-caching':
       return {
         defaults: activeDefaults.value,
         ...(activeType.value === 'filesystem-permissions'

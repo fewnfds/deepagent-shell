@@ -10,7 +10,8 @@ export const blockTypes = [
   'system-prompt',
   'subagent',
   'todo-list',
-  'other',
+  'summarization',
+  'prompt-caching',
 ] as const
 
 export interface BlockDraftBase {
@@ -248,7 +249,7 @@ export interface SummarizationThresholdDraft {
   type: SummarizationThresholdType
   value: number | string | null
 }
-export interface SummarizationDraft {
+export interface SummarizationDraft extends BlockDraftBase {
   enabled: boolean
   trigger: SummarizationThresholdDraft
   keep: SummarizationThresholdDraft
@@ -260,29 +261,39 @@ export interface SummarizationDraft {
   trim_tokens_to_summarize: number | string | null
   summary_prompt_override: string
 }
-export interface PromptCachingDraft {
+export interface PromptCachingDraft extends BlockDraftBase {
   enabled: boolean
   type: 'ephemeral'
   ttl: '5m' | '1h'
   min_messages_to_cache: number | string
 }
-export interface OtherDraft extends BlockDraftBase {
-  summarization: SummarizationDraft
-  prompt_caching: PromptCachingDraft
-}
-export type OtherDefaults = Omit<OtherDraft, 'id' | 'name'> & {
+export type SummarizationDefaults = Omit<SummarizationDraft, 'id' | 'name'> & {
   summary_prompt_default: string
 }
-interface OtherApiRecord extends BlockDraftBase {
-  summarization?: unknown
-  prompt_caching?: unknown
+interface SummarizationApiRecord extends BlockDraftBase {
+  enabled?: unknown
+  trigger?: unknown
+  keep?: unknown
+  truncate_args_enabled?: unknown
+  truncate_args_trigger?: unknown
+  truncate_args_keep?: unknown
+  truncate_args_max_length?: unknown
+  truncate_args_text?: unknown
+  trim_tokens_to_summarize?: unknown
+  summary_prompt_override?: unknown
 }
-interface OtherPayload extends BlockPayloadBase {
-  summarization: Omit<SummarizationDraft, 'summary_prompt_override'> & {
-    summary_prompt_override: string | null
-  }
-  prompt_caching: PromptCachingDraft
+interface SummarizationPayload extends BlockPayloadBase,
+  Omit<SummarizationDraft, 'id' | 'name' | 'summary_prompt_override'> {
+  summary_prompt_override: string | null
 }
+export type PromptCachingDefaults = Omit<PromptCachingDraft, 'id' | 'name'>
+interface PromptCachingApiRecord extends BlockDraftBase {
+  enabled?: unknown
+  type?: unknown
+  ttl?: unknown
+  min_messages_to_cache?: unknown
+}
+interface PromptCachingPayload extends BlockPayloadBase, Omit<PromptCachingDraft, 'id' | 'name'> {}
 
 export type FilesystemPermissionValue = 'read-write' | 'read-only' | 'no-access'
 
@@ -693,110 +704,95 @@ function summarizationThresholdDraft(
   }
 }
 
-export const otherAdapter = {
-  blank(defaults: OtherDefaults): OtherDraft {
+export const summarizationAdapter = {
+  blank(defaults: SummarizationDefaults): SummarizationDraft {
     return {
       id: '',
       name: '',
-      summarization: {
-        ...clone(defaults.summarization),
-        summary_prompt_override: defaults.summary_prompt_default,
-      },
-      prompt_caching: clone(defaults.prompt_caching),
+      ...clone(defaults),
+      summary_prompt_override: defaults.summary_prompt_default,
     }
   },
-  fromApi(value: OtherApiRecord, defaults: OtherDefaults): OtherDraft {
-    const summarization = isRecord(value.summarization) ? value.summarization : {}
-    const promptCaching = isRecord(value.prompt_caching) ? value.prompt_caching : {}
+  fromApi(value: SummarizationApiRecord, defaults: SummarizationDefaults): SummarizationDraft {
     return {
       ...identity(value),
-      summarization: {
-        enabled: typeof summarization.enabled === 'boolean'
-          ? summarization.enabled
-          : defaults.summarization.enabled,
-        trigger: summarizationThresholdDraft(
-          summarization.trigger,
-          defaults.summarization.trigger,
-        ),
-        keep: summarizationThresholdDraft(
-          summarization.keep,
-          defaults.summarization.keep,
-        ),
-        truncate_args_enabled: typeof summarization.truncate_args_enabled === 'boolean'
-          ? summarization.truncate_args_enabled
-          : defaults.summarization.truncate_args_enabled,
-        truncate_args_trigger: summarizationThresholdDraft(
-          summarization.truncate_args_trigger,
-          defaults.summarization.truncate_args_trigger,
-        ),
-        truncate_args_keep: summarizationThresholdDraft(
-          summarization.truncate_args_keep,
-          defaults.summarization.truncate_args_keep,
-        ),
-        truncate_args_max_length: normalizeTokenLimit(
-          summarization.truncate_args_max_length,
-          Number(defaults.summarization.truncate_args_max_length),
-        ) ?? defaults.summarization.truncate_args_max_length,
-        truncate_args_text: stringValue(
-          summarization.truncate_args_text,
-          defaults.summarization.truncate_args_text,
-        ),
-        trim_tokens_to_summarize: normalizeTokenLimit(
-          summarization.trim_tokens_to_summarize,
-          defaults.summarization.trim_tokens_to_summarize as number | null,
-        ),
-        summary_prompt_override: stringValue(
-          summarization.summary_prompt_override,
-          defaults.summary_prompt_default,
-        ),
-      },
-      prompt_caching: {
-        enabled: typeof promptCaching.enabled === 'boolean'
-          ? promptCaching.enabled
-          : defaults.prompt_caching.enabled,
-        type: 'ephemeral',
-        ttl: promptCaching.ttl === '1h' || promptCaching.ttl === '5m'
-          ? promptCaching.ttl
-          : defaults.prompt_caching.ttl,
-        min_messages_to_cache: normalizeTokenLimit(
-          promptCaching.min_messages_to_cache,
-          Number(defaults.prompt_caching.min_messages_to_cache),
-        ) ?? defaults.prompt_caching.min_messages_to_cache,
-      },
+      enabled: typeof value.enabled === 'boolean' ? value.enabled : defaults.enabled,
+      trigger: summarizationThresholdDraft(value.trigger, defaults.trigger),
+      keep: summarizationThresholdDraft(value.keep, defaults.keep),
+      truncate_args_enabled: typeof value.truncate_args_enabled === 'boolean'
+        ? value.truncate_args_enabled
+        : defaults.truncate_args_enabled,
+      truncate_args_trigger: summarizationThresholdDraft(
+        value.truncate_args_trigger,
+        defaults.truncate_args_trigger,
+      ),
+      truncate_args_keep: summarizationThresholdDraft(
+        value.truncate_args_keep,
+        defaults.truncate_args_keep,
+      ),
+      truncate_args_max_length: normalizeTokenLimit(
+        value.truncate_args_max_length,
+        Number(defaults.truncate_args_max_length),
+      ) ?? defaults.truncate_args_max_length,
+      truncate_args_text: stringValue(value.truncate_args_text, defaults.truncate_args_text),
+      trim_tokens_to_summarize: normalizeTokenLimit(
+        value.trim_tokens_to_summarize,
+        defaults.trim_tokens_to_summarize as number | null,
+      ),
+      summary_prompt_override: stringValue(
+        value.summary_prompt_override,
+        defaults.summary_prompt_default,
+      ),
     }
   },
-  toPayload(value: OtherDraft, defaults: OtherDefaults): OtherPayload {
+  toPayload(value: SummarizationDraft, defaults: SummarizationDefaults): SummarizationPayload {
     const threshold = (item: SummarizationThresholdDraft): SummarizationThresholdDraft => ({
       type: item.type,
       value: item.type === 'auto' ? null : normalizeTokenLimit(item.value, null),
     })
     return {
       name: cleanName(value.name),
-      summarization: {
-        ...value.summarization,
-        trigger: threshold(value.summarization.trigger),
-        keep: threshold(value.summarization.keep),
-        truncate_args_trigger: threshold(value.summarization.truncate_args_trigger),
-        truncate_args_keep: threshold(value.summarization.truncate_args_keep),
-        truncate_args_max_length: normalizeTokenLimit(
-          value.summarization.truncate_args_max_length,
-          null,
-        ) ?? value.summarization.truncate_args_max_length,
-        trim_tokens_to_summarize: normalizeTokenLimit(
-          value.summarization.trim_tokens_to_summarize,
-          null,
-        ),
-        summary_prompt_override: value.summarization.summary_prompt_override === defaults.summary_prompt_default
-          ? null
-          : value.summarization.summary_prompt_override || null,
-      },
-      prompt_caching: {
-        ...value.prompt_caching,
-        min_messages_to_cache: normalizeTokenLimit(
-          value.prompt_caching.min_messages_to_cache,
-          null,
-        ) ?? value.prompt_caching.min_messages_to_cache,
-      },
+      enabled: value.enabled,
+      trigger: threshold(value.trigger),
+      keep: threshold(value.keep),
+      truncate_args_enabled: value.truncate_args_enabled,
+      truncate_args_trigger: threshold(value.truncate_args_trigger),
+      truncate_args_keep: threshold(value.truncate_args_keep),
+      truncate_args_max_length: normalizeTokenLimit(value.truncate_args_max_length, null)
+        ?? value.truncate_args_max_length,
+      truncate_args_text: value.truncate_args_text,
+      trim_tokens_to_summarize: normalizeTokenLimit(value.trim_tokens_to_summarize, null),
+      summary_prompt_override: value.summary_prompt_override === defaults.summary_prompt_default
+        ? null
+        : value.summary_prompt_override || null,
+    }
+  },
+}
+
+export const promptCachingAdapter = {
+  blank(defaults: PromptCachingDefaults): PromptCachingDraft {
+    return { id: '', name: '', ...clone(defaults) }
+  },
+  fromApi(value: PromptCachingApiRecord, defaults: PromptCachingDefaults): PromptCachingDraft {
+    return {
+      ...identity(value),
+      enabled: typeof value.enabled === 'boolean' ? value.enabled : defaults.enabled,
+      type: 'ephemeral',
+      ttl: value.ttl === '1h' || value.ttl === '5m' ? value.ttl : defaults.ttl,
+      min_messages_to_cache: normalizeTokenLimit(
+        value.min_messages_to_cache,
+        Number(defaults.min_messages_to_cache),
+      ) ?? defaults.min_messages_to_cache,
+    }
+  },
+  toPayload(value: PromptCachingDraft): PromptCachingPayload {
+    return {
+      name: cleanName(value.name),
+      enabled: value.enabled,
+      type: value.type,
+      ttl: value.ttl,
+      min_messages_to_cache: normalizeTokenLimit(value.min_messages_to_cache, null)
+        ?? value.min_messages_to_cache,
     }
   },
 }
@@ -1131,6 +1127,7 @@ export const blockAdapters = {
   'system-prompt': systemPromptAdapter,
   subagent: subagentAdapter,
   'todo-list': todoListAdapter,
-  other: otherAdapter,
+  summarization: summarizationAdapter,
+  'prompt-caching': promptCachingAdapter,
 } as const
 import type { MiddlewareConfigSchema } from '@/api'

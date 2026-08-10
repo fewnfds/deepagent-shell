@@ -377,7 +377,7 @@ def test_non_streaming_model_messages_use_the_same_tool_pairing_cycle() -> None:
                 AIMessage(content="done"), run_id="nonstream-2", timestamp=4
             ),
         ]
-        execution = WorkflowExecution(
+        execution = AgentExecution(
             graph=EventGraph(events),
             input_state={"messages": []},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
@@ -514,7 +514,7 @@ def test_next_model_start_drains_compat_bridge_order_before_the_new_call() -> No
                 {"event": "message-finish", "usage": {}}, run_id="run-next"
             ),
         ]
-        execution = WorkflowExecution(
+        execution = AgentExecution(
             graph=EventGraph(events),
             input_state={"messages": []},
             rectifier=OutputEventRectifier(OutputProjector(settings)),

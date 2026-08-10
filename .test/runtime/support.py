@@ -9,7 +9,8 @@ from langchain_core.messages import ToolMessage
 from langgraph.types import Command
 
 from agent_shell.runtime.agent_builder import _build_chat_model
-from agent_shell.runtime.workflow_runtime import WorkflowExecution
+from agent_shell.runtime.agent_runtime import AgentExecution
+
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.output_event_pool import OutputEventRectifier
 from agent_shell.runtime.output_projection import OutputProjector

@@ -2,10 +2,11 @@
 import { LteAlert, LteButton, LteInput, LteTextarea } from '@adminlte/vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
 
 import {
   managementApi,
-  type MainAgent,
+  type SavedBlock,
   type Workflow,
   type WorkflowPayload,
 } from '@/api'
@@ -18,19 +19,20 @@ import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
 
 const { t } = useI18n()
+const router = useRouter()
 const managementError = useManagementError()
 const { notify } = useToasts()
 
 const table = ref<{ reload: () => Promise<void> } | null>(null)
-const mainAgents = ref<MainAgent[]>([])
 const editingId = ref('')
 const formOpen = ref(false)
 const saving = ref(false)
 const formError = ref('')
+const filesystems = ref<SavedBlock[]>([])
 const form = ref<WorkflowPayload>(blankWorkflow())
 
 function blankWorkflow(): WorkflowPayload {
-  return { name: '', description: '', main_agent_id: '', enabled: true }
+  return { name: '', description: '', filesystem_id: '', enabled: true }
 }
 
 function openNew(): void {
@@ -45,7 +47,7 @@ function openEdit(workflow: Workflow): void {
   form.value = {
     name: workflow.name,
     description: workflow.description,
-    main_agent_id: workflow.main_agent_id,
+    filesystem_id: workflow.filesystem_id,
     enabled: workflow.enabled,
   }
   formError.value = ''
@@ -65,7 +67,7 @@ async function save(): Promise<void> {
     const payload: WorkflowPayload = {
       name: form.value.name.trim(),
       description: form.value.description.trim(),
-      main_agent_id: form.value.main_agent_id,
+      filesystem_id: form.value.filesystem_id,
       enabled: form.value.enabled,
     }
     if (editingId.value) await managementApi.updateWorkflow(editingId.value, payload)
@@ -80,6 +82,22 @@ async function save(): Promise<void> {
   }
 }
 
+function filesystemName(id: string): string {
+  return filesystems.value.find((item) => item.id === id)?.name ?? id
+}
+
+onMounted(async () => {
+  try {
+    filesystems.value = await managementApi.listBlocks('filesystem')
+  } catch (error) {
+    notify({
+      tone: 'danger',
+      title: t('workflows.filesystemLoadFailed'),
+      message: managementError.describe(error).display,
+    })
+  }
+})
+
 const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
   id: 'workflows',
   ariaLabel: () => t('workflows.tableAriaLabel'),
@@ -91,14 +109,14 @@ const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
   search: {
     label: () => t('common.search'),
     placeholder: () => t('workflows.searchPlaceholder'),
-    values: (row) => [row.name, row.description, row.main_agent_name],
+    values: (row) => [row.name, row.description],
   },
   columns: [
     { key: 'name', label: () => t('workflows.fields.name'), value: (row) => row.name },
     {
-      key: 'mainAgent',
-      label: () => t('workflows.fields.mainAgent'),
-      value: (row) => row.main_agent_name,
+      key: 'filesystem',
+      label: () => t('workflows.fields.filesystem'),
+      value: (row) => filesystemName(row.filesystem_id),
     },
     {
       key: 'enabled',
@@ -108,10 +126,16 @@ const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
   ],
   rowActions: [
     {
-      key: 'edit',
-      label: () => t('common.edit'),
+      key: 'configure',
+      label: () => t('workflows.actions.configure'),
       tone: 'primary',
       run: (row) => openEdit(row),
+    },
+    {
+      key: 'edit-flow',
+      label: () => t('workflows.actions.editFlow'),
+      tone: 'info',
+      run: (row) => router.push(`/workflows/${encodeURIComponent(row.id)}/editor`),
     },
     {
       key: 'delete',
@@ -131,18 +155,6 @@ const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
     },
   ],
 }))
-
-onMounted(async () => {
-  try {
-    mainAgents.value = await managementApi.listMainAgents()
-  } catch (error) {
-    notify({
-      tone: 'danger',
-      title: t('workflows.mainAgentsLoadFailed'),
-      message: managementError.describe(error).display,
-    })
-  }
-})
 </script>
 
 <template>
@@ -168,11 +180,11 @@ onMounted(async () => {
       <FormField field-path="description" label-key="workflows.fields.description">
         <LteTextarea v-model="form.description" :rows="4" maxlength="2000" />
       </FormField>
-      <FormField field-path="main_agent_id" label-key="workflows.fields.mainAgent">
-        <select v-model="form.main_agent_id" class="form-select" required>
-          <option value="">{{ t('workflows.selectMainAgent') }}</option>
-          <option v-for="agent in mainAgents" :key="agent.id" :value="agent.id">
-            {{ agent.name }}
+      <FormField field-path="filesystem_id" label-key="workflows.fields.filesystem">
+        <select v-model="form.filesystem_id" class="form-select" required>
+          <option disabled value="">{{ t('common.chooseConfiguration') }}</option>
+          <option v-for="filesystem in filesystems" :key="filesystem.id" :value="filesystem.id">
+            {{ filesystem.name }}
           </option>
         </select>
       </FormField>

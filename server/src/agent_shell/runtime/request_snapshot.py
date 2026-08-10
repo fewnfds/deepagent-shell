@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,18 +11,18 @@ from typing import Any
 from agent_shell.provider_http import ProviderHttpClients
 from agent_shell.provider_secrets import ProviderSecretResolver
 from agent_shell.runtime.agent_builder import AgentBuilder
-from agent_shell.runtime.workflow_runtime import WorkflowExecution, WorkflowRuntime
-from agent_shell.runtime.state import AgentShellState
+from agent_shell.runtime.agent_runtime import AgentExecution, AgentRuntime
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.database import SQLiteDatabase
 from agent_shell.storage.media_outputs import MediaOutputStore
-from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.storage.schema import SCHEMA_SQL
+from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.middleware_packages.validation import MiddlewarePackageValidationService
 from agent_shell.validation.service import ConfigurationValidationService
-from langgraph.graph import END, START, StateGraph
+from agent_shell.validation.models import ValidationReport
+from agent_shell.validation.service import StaticAssembly
 
 
 class _SnapshotDatabase:
@@ -35,7 +35,15 @@ class _SnapshotDatabase:
         ("subagents", ("id", "component_name", "payload")),
         (
             "workflows",
-            ("id", "name", "description", "main_agent_id", "enabled"),
+            (
+                "id",
+                "name",
+                "description",
+                "filesystem_id",
+                "enabled",
+                "definition_json",
+                "layout_json",
+            ),
         ),
     )
 
@@ -86,40 +94,66 @@ class _SnapshotDatabase:
 
 @dataclass(slots=True)
 class RequestRuntimeSnapshot:
-    """Resolve a model and build exactly one request from one database image."""
+    """Resolve and build exactly one Agent from one committed database image."""
 
+    _configs: AgentConfigStore
     _workflows: WorkflowStore
-    _runtime: WorkflowRuntime
+    _validation: ConfigurationValidationService
+    _runtime: AgentRuntime
     _database: _SnapshotDatabase
+
+    def main_agent_by_name(self, name: str) -> dict[str, Any] | None:
+        return self._configs.get_item_by_name("main_agents", name)
 
     def workflow_by_name(self, name: str) -> dict[str, Any] | None:
         return self._workflows.get_item_by_name(name)
 
+    def resolve_main_agent(
+        self,
+        main_agent_id: str,
+        *,
+        workflow_filesystem_id: str,
+    ) -> tuple[ValidationReport, StaticAssembly | None]:
+        return self._validation.resolve_main_agent(
+            main_agent_id,
+            workflow_filesystem_id=workflow_filesystem_id,
+        )
+
     def close(self) -> None:
         self._database.close()
 
-    async def start_workflow(
+    async def start_agent(
         self,
-        workflow: dict[str, Any],
+        main_agent_id: str,
         raw_messages: object,
         **kwargs: Any,
-    ) -> WorkflowExecution:
+    ) -> AgentExecution:
         try:
-            execution = await self._runtime.start(
-                str(workflow["main_agent_id"]), raw_messages, **kwargs
-            )
-            workflow_graph = (
-                StateGraph(AgentShellState)
-                .add_node("agent", execution.graph)
-                .add_edge(START, "agent")
-                .add_edge("agent", END)
-                .compile()
-            )
-            execution.graph = workflow_graph
-            return execution
+            return await self._runtime.start(main_agent_id, raw_messages, **kwargs)
         finally:
             # Agent construction has materialized every database-backed dependency.
             # Closing here makes any accidental lazy configuration read fail.
+            self.close()
+
+    async def start_workflow(
+        self,
+        workflow: Mapping[str, Any],
+        raw_messages: object,
+        **kwargs: Any,
+    ) -> AgentExecution:
+        try:
+            document = self._workflows.get_graph(str(workflow["id"]))
+            if document is None:
+                raise RuntimeError("the captured Workflow no longer exists")
+            return await self._runtime.start_workflow(
+                document,
+                raw_messages,
+                workflow_filesystem_id=str(workflow["filesystem_id"]),
+                **kwargs,
+            )
+        finally:
+            # The graph and all Agent dependencies are now materialized from
+            # one immutable database image.
             self.close()
 
 
@@ -164,7 +198,7 @@ class RequestSnapshotRuntime:
                 middleware_package_validation,
                 custom_tools_dir=self._custom_tools_dir,
             )
-            runtime = WorkflowRuntime(
+            runtime = AgentRuntime(
                 AgentBuilder(
                     secrets,
                     custom_tools_dir=self._custom_tools_dir,
@@ -178,7 +212,9 @@ class RequestSnapshotRuntime:
                 self._diagnostics,
             )
             return RequestRuntimeSnapshot(
+                _configs=configs,
                 _workflows=workflows,
+                _validation=validation,
                 _runtime=runtime,
                 _database=database,
             )

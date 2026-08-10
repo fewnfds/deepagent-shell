@@ -99,6 +99,7 @@ class ConfigurationValidationService:
         stage: str,
         owner_id: str = "",
         stored: bool = False,
+        workflow_filesystem_id: str | None = None,
         block_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
         profile_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> tuple[ValidationReport, dict[str, Any] | None, StaticAssembly | None]:
@@ -138,6 +139,7 @@ class ConfigurationValidationService:
             main_agent,
             stage=stage,
             owner_id=owner_id,
+            workflow_filesystem_id=workflow_filesystem_id,
             block_overrides=block_overrides,
             profile_overrides=profile_overrides,
         )
@@ -333,7 +335,11 @@ class ConfigurationValidationService:
         return ValidationReport(stage=stage, issues=tuple(issues)), validated
 
     def resolve_main_agent(
-        self, main_agent_id: str, *, stage: str = "request_assembly"
+        self,
+        main_agent_id: str,
+        *,
+        workflow_filesystem_id: str | None = None,
+        stage: str = "request_assembly",
     ) -> tuple[ValidationReport, StaticAssembly | None]:
         main_agent = self._agent_configs.get_item("main_agents", main_agent_id)
         if main_agent is None:
@@ -352,6 +358,7 @@ class ConfigurationValidationService:
             stage=stage,
             owner_id=main_agent_id,
             stored=True,
+            workflow_filesystem_id=workflow_filesystem_id,
         )
         return report, assembly
 
@@ -396,13 +403,6 @@ class ConfigurationValidationService:
             issues.extend(report.issues)
         issues.extend(self._saved_main_agent_issues(stage))
         return ValidationReport(stage=stage, issues=tuple(issues))
-
-    def validate_api_start(self) -> ValidationReport:
-        repository = self.validate_repository()
-        return ValidationReport(
-            stage="api_start",
-            issues=repository.issues,
-        )
 
     def _saved_main_agent_issues(self, stage: str) -> list[ValidationIssue]:
         issues: list[ValidationIssue] = []
@@ -795,11 +795,15 @@ class ConfigurationValidationService:
         *,
         stage: str,
         owner_id: str,
+        workflow_filesystem_id: str | None = None,
         block_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
         profile_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> tuple[ValidationReport, StaticAssembly | None]:
         owner_name = str(main_agent.get("name", ""))
-        references = self._reference_map(main_agent)
+        profile_references = self._reference_map(main_agent)
+        references = dict(profile_references)
+        if workflow_filesystem_id is not None:
+            references["filesystem"] = workflow_filesystem_id
         selected, issues, filesystem_mode = self._resolve_capability_subject(
             references,
             required_types=_MAIN_AGENT_REQUIRED_CAPABILITY_TYPES,

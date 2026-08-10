@@ -356,6 +356,10 @@ OUTPUT_COMMON_TEMPLATE_VARIABLES = (
     "agent_name",
     "node",
     "message",
+    "source_type",
+    "workflow_node_id",
+    "agent_profile_id",
+    "subagent_profile_id",
 )
 OUTPUT_EVENT_TEMPLATE_VARIABLES = {
     "assistant_text": ("message_id",),
@@ -837,9 +841,7 @@ class SummarizationThreshold(BaseModel):
         return self
 
 
-class SummarizationConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
-
+class SummarizationBlock(StrictBlock):
     enabled: bool = True
     trigger: SummarizationThreshold = Field(default_factory=SummarizationThreshold)
     keep: SummarizationThreshold = Field(default_factory=SummarizationThreshold)
@@ -856,18 +858,11 @@ class SummarizationConfig(BaseModel):
     summary_prompt_override: PromptOverrideText | None = None
 
 
-class PromptCachingConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class PromptCachingBlock(StrictBlock):
     enabled: bool = True
     type: Literal["ephemeral"] = "ephemeral"
     ttl: Literal["5m", "1h"] = "5m"
     min_messages_to_cache: Annotated[int, Field(ge=0)] = 0
-
-
-class OtherBlock(StrictBlock):
-    summarization: SummarizationConfig = Field(default_factory=SummarizationConfig)
-    prompt_caching: PromptCachingConfig = Field(default_factory=PromptCachingConfig)
 
 
 class TodoListBlock(StrictBlock):
@@ -893,6 +888,10 @@ class CapabilityReference(BaseModel):
         manifest = CAPABILITY_BY_TYPE.get(value)
         if manifest is None:
             raise ValueError(f"unknown Main Agent capability: {value}")
+        if value == "filesystem":
+            raise ValueError(
+                "filesystem is selected by Workflow and cannot be selected by Main Agent"
+            )
         return value
 
 
@@ -979,7 +978,8 @@ BLOCK_MODELS: dict[str, type[StrictBlock]] = {
     "output-mode": OutputModeBlock,
     "exception-retry": ExceptionRetryBlock,
     "subagent": SubagentBlock,
-    "other": OtherBlock,
+    "summarization": SummarizationBlock,
+    "prompt-caching": PromptCachingBlock,
 }
 
 validate_capability_manifests(CAPABILITY_MANIFESTS, BLOCK_MODELS)

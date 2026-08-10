@@ -1,7 +1,7 @@
 # API Server
 
-首页显示 API Server 状态、接入地址和配置告警，并提供启动、停止、API Key 和单次请求初始消息条数
-上限。管理台 navbar 在所有页面显示运行状态。
+首页显示 API Server 状态、接入地址和配置告警，并提供启动、停止、API Key 和单次请求初始消息条数上限。
+管理台 navbar 在所有页面显示运行状态。
 
 ## 接口
 
@@ -24,78 +24,30 @@ Content-Type: application/json
 }
 ```
 
-支持流式和非流式响应。客户端必须在每次请求中提交完整 `messages[]`；core 只保存和校验这份请求事实，不会在
-没有自定义 Middleware 的情况下自动交给 Main Agent。模型组件中的 `tool_choice`、`response_format` 和
-`model_settings` 决定 Provider-bound ModelRequest，请求体中的临时生成参数不会覆盖模型组件。
+请求按 Workflow name 捕获一次配置快照，从同一快照读取当前 Graph、共享 Filesystem 和画布 Agent 节点引用，再递归
+构造该 Main Agent 的 Subagent、权限、Middleware、组件和 Provider secret view。构造完成后关闭配置数据库快照，
+运行中的图不再回读配置。
 
-Main Agent 如需把客户端消息交给模型，必须配置返回原生 LangChain `before_agent`/`abefore_agent` 的
-Middleware 包，从只读 `ctx.request.messages` 派生并返回 graph state update；这一步不由 API Server 隐式补回。
-Subagent 默认只接收 Deep Agents 原生 delegated messages，需要额外消息时使用相同的 Middleware 入口。
+当前可执行范式只有 `Start -> Agent -> End`，且只能包含一个 Agent。画布 Start/End 直接映射 LangGraph 官方
+`START/END`；Start 不注入客户端消息。规范化后的 `messages[]` 保存在请求级不可变 Middleware context 中，只有已
+装配的 `before_agent`/`abefore_agent` Middleware 决定如何切割并写入 Agent state。
 
-### 生命周期输入与装配校验
+`stream=false` 返回标准 `chat.completion` JSON。`stream=true` 返回 `chat.completion.chunk` SSE，并以
+`data: [DONE]` 结束。两种模式都消费同一次 LangGraph v3 事件流，并按 Workflow node 对应 Main Agent 的
+`output-mode` 过滤和渲染；不会从最终 state 绕过输出策略读取原始 Agent 内容。
 
-请求进入后，服务端会在本次生命周期外围保留规范化后的完整 `messages[]`，并计算其 SHA。用户输入正文不作为每个
-Agent 的固定装配数据，也不复制到每个 Agent 的 graph state。后续灾难恢复功能会在异常生命周期保存 SHA；用户重试
-时再次提交完整 `messages[]`，由服务端计算并校验是否一致。当前版本尚未启用该落盘与 checkpoint 恢复流程。
+## 当前边界
 
-服务端先按 Workflow 名称解析固定根图及其 Main Agent，再冻结 Main Agent 和直接 Subagent 的有效装配。Subagent
-不会在运行过程中重新读取数据库装配。冻结装配属于外围只读运行配置，不放入 graph state；恢复校验范围只到
-Agent 装配信息：Agent、Subagent、能力引用、Middleware 包引用及其
-装配关系等规范化 JSON。当前不校验包源码、安装包版本或运行时生成的随机数据；后续如有更严格的恢复要求再
-扩展校验范围。
-
-`content` 可以是字符串，或由下列受控 content parts 组成的数组：
-
-- OpenAI Chat 形状：`text`、`image_url`、`input_audio`、`file`；
-- Agent Shell 标准扩展：`image`、`audio`、`video`、`file`，用于直接表达 LangChain 标准 block。
-
-入口会把两种形状统一规范化为 LangChain `text/image/audio/video/file` blocks，同时保持消息角色、楼层和块顺序。
-system 消息第一阶段只接受字符串或 text blocks，不接受媒体。标准媒体 block 必须且只能提供 `url`、`base64`、
-`file_id` 一种来源；base64 必须同时提供与 block 类型相符的 `mime_type`。URL 只接受不含凭据的绝对
-`http`/`https` 地址；Shell 不下载它。`file_id` 原样交给所选 Provider，因此只能引用该 Provider 可识别的文件。
-
-固定输入边界为：请求 JSON 最多 64 MiB、全部消息最多 4096 个 content blocks、单个 base64 解码后最多 24 MiB、
-一次请求全部 base64 解码后最多 48 MiB。更大的媒体应使用 Provider 支持的 URL 或 `file_id`。未知 block、畸形
-data URI/base64、错误 MIME family 和多来源 block 在 Provider 调用前返回 422。LangChain 标准块不等于所有
-Provider 都支持相同 modality、来源或 assistant 历史；合法的 Provider adapter 降级或拒绝保持其原生语义。
-
-## 多模态输出
-
-最终 Main Agent 响应中的 `image/audio/video/file` block 不会作为 Chat content-parts 或 Web 链接返回。Shell 只在能从
-base64 或 data URI 取得有效字节时，将媒体保存到实例私有的
-`data/media/outputs/<年月>/<request-id>/`，并在该 block 原位置向标准字符串响应插入：
-
-```text
-AI发送来了【图片】，已保存到【data/media/outputs/<年月>/<request-id>】。
-```
-
-非流式响应仍使用 `choices[0].message.content` 字符串；流式响应使用普通 `delta.content`。每个媒体 block 最多生成
-一次通知，单个输出媒体最多 64 MiB。远程 URL、Provider `file_id`、无效或超限内容不会由 Shell 下载，并只返回
-`AI发送来了【图片】，但返回内容无法保存。`，不会错误声称已经落盘。
-
-API history 和 Agent session 另外保存去除正文后的结构化 blocks 与资产引用，用于管理查看和引用清理；其中只有
-以 `data/` 为根的逻辑相对路径，不含 base64、媒体 URL 或宿主绝对路径。媒体目录没有 HTTP endpoint，也不属于文件
-管理器 scope。只要 API history 或 session 仍引用资产，重启后文件继续保留；全部引用随 retention 或人工删除消失后，
-对应文件会清理。
-
-这是 Chat Completions 的有意降级，不是无损多模态往返。客户端下一轮重放的通知只是普通 assistant 文本，Shell
-不会把其中的路径恢复为媒体 block。Subagent、reasoning、tool 和其他内部模型媒体不会因此进入 Main Agent 公开响应。
-
-服务端接受可选 headers：
-
-- `X-Request-ID`：格式有效时作为单次请求关联 ID，否则服务端生成；响应会返回最终值；
-- `X-Agent-Session-ID`：把多次请求归入同一历史会话；省略时服务端创建并在响应中返回。
-
-session ID 只用于观察记录，不会从数据库加载消息或拼接上下文。
-
-请求中以 assistant 开始或结束的历史仍按原角色交给所选 Provider；尾部 assistant 在协议语义上属于 prefill，
-部分 Provider/模型会拒绝。Agent Shell 不为此合成 user 消息或承诺全部 Provider 接受任意角色排列。
-需要人工 assistant 引导时，更便携的做法是补成完整 user/assistant 示例，并以新的 user 消息触发生成。
+- Workflow 只有一份当前图，没有 draft/published revision、发布审核或历史回滚；
+- 每次请求是一次新的完整运行，尚未接入 thread/checkpointer/resume；
+- 当前不支持多 Agent、条件边、并行、脚本节点或 Subworkflow；
+- 图不完整、引用失效、Agent 装配失败或 Provider 失败时，本次请求直接返回错误；
+- session/history、拦截和其他观察能力只有在重新接入 Workflow 生命周期后才会写入，不提供旧 Main Agent 直连兼容。
 
 ## API Key 与状态
 
-API Key 是 write-only 设置，用于 `/v1/*`；管理密码用于管理台和 `/api/*`。清除 API Key 后推理 API
-不可用。API Server 启动会执行仓库静态校验；Workflow 指向的 Main Agent 外部资源和 Provider 状态仍在请求时确认。
+API Key 是 write-only 设置，用于 `/v1/*`；管理密码用于管理台和 `/api/*`。清除 API Key 后推理 API 不可用。
+API Server 启停不扫描未被 Workflow 引用的 Main Agent；完整 repository validation 只用于管理诊断，单次 Chat 请求
+只解析所选 Workflow 的当前图和可达装配。
 
-所有 API 调用都会形成有界历史记录。日志中心的精简预览不显示消息正文；management 鉴权的 RAW 下载
-包含实际请求与响应内容，应按敏感数据处理。
+Provider secret、Bearer token、宿主敏感路径、traceback 和 Provider 原始响应不得进入普通 API、DOM 或日志。
