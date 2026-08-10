@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from langchain_core.messages import AIMessage
 
+from agent_shell.runtime.output_projection import WorkflowOutputProjector
+
 from .support import *
 
 
@@ -275,6 +277,93 @@ def test_tool_call_waits_for_an_outcome_within_the_current_cycle() -> None:
         "<result id=call-a>result-a</result>",
         "<call id=call-b>args-b</call>",
         "<result id=call-b>result-b</result>",
+    ]
+
+
+def test_tool_pairing_isolated_by_workflow_source_for_reused_call_ids() -> None:
+    settings_a = config(mode="blocklist")
+    settings_b = config(mode="blocklist")
+    for settings, prefix in ((settings_a, "A"), (settings_b, "B")):
+        settings["variable_encoding"] = "plain"
+        settings["event_templates"]["tool_call"] = {
+            "enabled": True,
+            "template": f"{prefix}-call:{{{{message}}}}",
+        }
+        settings["event_templates"]["tool_result"] = {
+            "enabled": True,
+            "template": f"{prefix}-result:{{{{message}}}}",
+        }
+    pool = OutputEventRectifier(
+        WorkflowOutputProjector({"node-a": settings_a, "node-b": settings_b})
+    )
+
+    def event(node_id: str, event_type: str, message: str, sequence: int) -> OutputEvent:
+        return OutputEvent(
+            event_type=event_type,
+            phase="end",
+            sequence=sequence,
+            timestamp="2026-08-01T00:00:00Z",
+            namespace=f"{node_id}:invocation",
+            workflow_node_id=node_id,
+            agent_profile_id=node_id,
+            message=message,
+            values={"tool_call_id": "reused-call-id"},
+        )
+
+    assert pool.feed(event("node-a", "tool_call", "a-args", 1)) == []
+    assert pool.feed(event("node-b", "tool_call", "b-args", 2)) == []
+    assert pool.feed(event("node-b", "tool_result", "b-result", 3)) == []
+    assert pool.feed(event("node-a", "tool_result", "a-result", 4)) == [
+        "A-call:a-args",
+        "A-result:a-result",
+        "B-call:b-args",
+        "B-result:b-result",
+    ]
+
+
+def test_local_source_flush_does_not_close_another_active_source() -> None:
+    settings_a = config(mode="blocklist")
+    settings_b = config(mode="blocklist")
+    for settings, prefix in ((settings_a, "A"), (settings_b, "B")):
+        settings["variable_encoding"] = "plain"
+        settings["event_templates"]["assistant_text"] = {
+            "enabled": True,
+            "template": f"<{prefix}>{{{{message}}}}</{prefix}>",
+        }
+    pool = OutputEventRectifier(
+        WorkflowOutputProjector({"node-a": settings_a, "node-b": settings_b})
+    )
+
+    def event(node_id: str, phase: str, message: str = "") -> OutputEvent:
+        return OutputEvent(
+            event_type="assistant_text",
+            phase=phase,
+            sequence=1,
+            timestamp="2026-08-01T00:00:00Z",
+            namespace=f"{node_id}:invocation",
+            workflow_node_id=node_id,
+            agent_profile_id=node_id,
+            message=message,
+            # Synthetic collision proves stream bookkeeping is source-scoped.
+            stream_id="shared-run:0",
+        )
+
+    source_a = pool.event_source_key(event("node-a", "start"))
+    source_b = pool.event_source_key(event("node-b", "start"))
+    assert pool.feed(event("node-a", "start"), now=0.0) == ["<A>"]
+    assert pool.feed(event("node-a", "delta", "a1"), now=0.1) == ["a1"]
+    assert pool.feed(event("node-b", "start"), now=0.2) == []
+    assert pool.feed(event("node-b", "delta", "b1"), now=0.3) == []
+
+    # Closing B while A is active must not close A's wrapper or lose A's state.
+    assert pool.flush_source(source_b) == []
+    assert pool.feed(event("node-a", "delta", "a2"), now=0.4) == ["a2"]
+    assert pool.feed(event("node-a", "end", "a1a2"), now=0.5) == []
+    assert pool.flush_cycle(source_a, "node-a:invocation") == [
+        "</A>",
+        "<B>",
+        "b1",
+        "</B>",
     ]
 
 

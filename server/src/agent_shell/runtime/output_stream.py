@@ -16,6 +16,7 @@ from langgraph.types import Command
 from pydantic import ValidationError
 
 from agent_shell.workflow.events import (
+    MAX_WORKFLOW_CUSTOM_EVENT_BYTES,
     WORKFLOW_CUSTOM_EVENT_SCHEMA,
     WorkflowCustomEventV1,
     WorkflowEventSourceV1,
@@ -31,6 +32,18 @@ def _json_text(value: object) -> str:
         return json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
     except (TypeError, ValueError):
         return json.dumps(str(value), ensure_ascii=False)
+
+
+def _bounded_json_text(value: object) -> str:
+    text = _json_text(value)
+    encoded = text.encode("utf-8")
+    if len(encoded) <= MAX_WORKFLOW_CUSTOM_EVENT_BYTES:
+        return text
+    suffix = b"...[truncated]"
+    prefix = encoded[: MAX_WORKFLOW_CUSTOM_EVENT_BYTES - len(suffix)].decode(
+        "utf-8", errors="ignore"
+    )
+    return prefix + suffix.decode("ascii")
 
 
 def _timestamp(value: object) -> str:
@@ -52,6 +65,15 @@ def _namespace(value: object) -> str:
         parts = [str(part) for part in value if str(part)]
         return "/".join(parts) if parts else "root"
     return str(value or "root")
+
+
+def _namespace_scope(value: str) -> str:
+    """Drop leaf model/tool runtime segments for cross-channel correlation."""
+
+    parts = [part for part in value.split("/") if part]
+    while parts and parts[-1].partition(":")[0] in {"model", "tools"}:
+        parts.pop()
+    return "/".join(parts) or "root"
 
 
 def _message_text(message: object) -> str:
@@ -117,6 +139,9 @@ class OutputEvent:
     message: str = ""
     values: dict[str, str] = field(default_factory=dict)
     stream_id: str = ""
+    raw_seq: int = 0
+    source_key: str = ""
+    cycle_key: str = ""
 
     def template_values(self) -> dict[str, str]:
         return {
@@ -139,6 +164,9 @@ class OutputEvent:
 @dataclass(frozen=True, slots=True)
 class ModelCallBoundary:
     run_key: str
+    source_key: str = ""
+    cycle_key: str = ""
+    raw_seq: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +179,7 @@ class MainAgentMediaBlock:
     block_index: int
     content: dict[str, object]
     stream_id: str = ""
+    source: WorkflowEventSourceV1 | None = None
 
 
 @dataclass(slots=True)
@@ -160,6 +189,7 @@ class _MessageBlock:
     agent_name: str
     node: str
     message_id: str
+    source: WorkflowEventSourceV1 | None = None
     block_type: str = ""
     streamed_text: str = ""
 
@@ -175,6 +205,7 @@ class V3EventNormalizer:
         workflow_sources: Mapping[str, WorkflowEventSourceV1] | None = None,
         subagent_profile_ids: Mapping[str, str] | None = None,
         main_agent_names: tuple[str, ...] | None = None,
+        workflow_agent_names: Mapping[str, str] | None = None,
         workflow_subagent_profile_ids: Mapping[
             str, Mapping[str, str]
         ] | None = None,
@@ -182,6 +213,7 @@ class V3EventNormalizer:
         self._main_agent_name = main_agent_name
         self._main_agent_names = frozenset(main_agent_names or (main_agent_name,))
         self._workflow_sources = dict(workflow_sources or {})
+        self._workflow_agent_names = dict(workflow_agent_names or {})
         self._subagent_profile_ids = dict(subagent_profile_ids or {})
         self._workflow_subagent_profile_ids = {
             node_id: dict(profile_ids)
@@ -190,11 +222,13 @@ class V3EventNormalizer:
         self._sequence = 0
         self._blocks: dict[tuple[str, int], _MessageBlock] = {}
         self._message_ids: dict[str, str] = {}
+        self._message_sources: dict[str, WorkflowEventSourceV1 | None] = {}
         self._main_agent_message_runs: set[str] = set()
         self._main_agent_ai_runs: dict[str, bool] = {}
         self._responses = ModelResponseTracker(model_response_observers)
-        self._tool_names: dict[str, str] = {}
+        self._tool_names: dict[tuple[str, str, str], str] = {}
         self._subagent_runs: dict[str, tuple[str, str]] = {}
+        self._raw_seq: int = 0
         self.usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
     @property
@@ -229,6 +263,7 @@ class V3EventNormalizer:
             status=status,
             finish_reason=finish_reason,
             error_code=error_code,
+            source_type_override=("non_agent" if self._workflow_sources else ""),
         )
 
     def feed(
@@ -243,93 +278,264 @@ class V3EventNormalizer:
         timestamp = _timestamp(params.get("timestamp"))
         namespace = _namespace(params.get("namespace"))
         data = params.get("data")
-        if method == "messages":
-            return self._message_events(
-                data, timestamp=timestamp, namespace=namespace
+        raw_seq = envelope.get("seq")
+        self._raw_seq = raw_seq if isinstance(raw_seq, int) and raw_seq >= 0 else 0
+        try:
+            if method == "messages":
+                return self._message_events(
+                    data, timestamp=timestamp, namespace=namespace
+                )
+            if method == "tools":
+                return self._tool_events(data, timestamp=timestamp, namespace=namespace)
+            if method == "custom" or method.startswith("custom:"):
+                return self._custom_events(
+                    method, data, timestamp=timestamp, namespace=namespace
+                )
+            if method == "lifecycle" and isinstance(data, dict):
+                return self._lifecycle_events(
+                    data, timestamp=timestamp, namespace=namespace
+                )
+            # These methods contain state, task inputs/results, checkpoints, HITL
+            # payloads, or debug data and are never exposed as template variables.
+            if method in {
+                "values",
+                "updates",
+                "tasks",
+                "checkpoints",
+                "input",
+                "input.requested",
+                "debug",
+            }:
+                return (
+                    [
+                        self._non_agent_event(
+                            method, data, timestamp=timestamp, namespace=namespace
+                        )
+                    ]
+                    if self._workflow_sources
+                    and not self._known_agent_scope(namespace)
+                    else []
+                )
+            return (
+                [
+                    self._non_agent_event(
+                        method, data, timestamp=timestamp, namespace=namespace
+                    )
+                ]
+                if self._workflow_sources
+                and not self._known_agent_scope(namespace)
+                else []
             )
-        if method == "tools":
-            return self._tool_events(data, timestamp=timestamp, namespace=namespace)
-        if method == "custom" or method.startswith("custom:"):
+        finally:
+            self._raw_seq = 0
+
+    def _custom_events(
+        self, method: str, data: object, *, timestamp: str, namespace: str
+    ) -> list[OutputEvent]:
+        source = None
+        channel = method.partition(":")[2] or "custom"
+        custom_data = data
+        if (
+            isinstance(data, dict)
+            and data.get("schema_name") == WORKFLOW_CUSTOM_EVENT_SCHEMA
+        ):
             source = None
-            channel = method.partition(":")[2] or "custom"
-            custom_data = data
-            if (
-                isinstance(data, dict)
-                and data.get("schema_name") == WORKFLOW_CUSTOM_EVENT_SCHEMA
-            ):
-                try:
-                    workflow_event = WorkflowCustomEventV1.model_validate(data)
-                except ValidationError:
-                    return []
-                source = workflow_event.source
-                channel = workflow_event.channel
-                custom_data = workflow_event.data
-            serialized = _json_text(custom_data)
-            return [
-                self._event(
-                    "custom",
-                    "end",
-                    timestamp=timestamp,
-                    namespace=namespace,
-                    source=source,
-                    message=serialized,
-                    channel=channel,
-                    data_json=serialized,
-                )
-            ]
-        if method == "lifecycle" and isinstance(data, dict):
-            status = str(data.get("event") or "running")
-            lifecycle_namespace = _namespace(data.get("namespace"))
-            if status == "started":
-                subagent_name = str(data.get("graph_name") or "")
-                if not subagent_name:
-                    return []
-                cause = data.get("cause")
-                tool_call_id = (
-                    str(cause.get("tool_call_id") or "")
-                    if isinstance(cause, dict)
-                    else ""
-                )
-                self._subagent_runs[lifecycle_namespace] = (
-                    subagent_name,
-                    tool_call_id,
-                )
-                phase = "start"
+            try:
+                workflow_event = WorkflowCustomEventV1.model_validate(data)
+            except ValidationError:
+                return []
+            source = workflow_event.source
+            channel = workflow_event.channel
+            custom_data = workflow_event.data
+        serialized = _bounded_json_text(custom_data)
+        source_agent_name = (
+            self._subagent_for_namespace(namespace)
+            or self._workflow_agent_name(node="", namespace=namespace)
+        )
+        if source is None:
+            source = self._source_for(
+                namespace=namespace,
+                node="",
+                agent_name=source_agent_name,
+            )
+        if self._workflow_sources and isinstance(data, dict) and data.get(
+            "schema_name"
+        ) == WORKFLOW_CUSTOM_EVENT_SCHEMA:
+            registered = self._source_for(
+                namespace=namespace,
+                node="",
+                agent_name=source_agent_name,
+            )
+            if registered is not None and registered.source_type in {
+                "agent",
+                "subagent",
+            }:
+                if (
+                    registered.workflow_node_id == source.workflow_node_id
+                    and registered.source_type == source.source_type
+                    and registered == source
+                ):
+                    source = registered
+                elif not (
+                    registered.source_type == "agent"
+                    and source.source_type == "subagent"
+                    and registered.agent_profile_id == source.agent_profile_id
+                    and source.subagent_profile_id
+                    in self._workflow_subagent_profile_ids.get(
+                        registered.workflow_node_id,
+                        self._subagent_profile_ids,
+                    ).values()
+                ):
+                    source = registered
+            elif registered is not None:
+                source = registered
             else:
-                subagent = self._subagent_runs.pop(lifecycle_namespace, None)
-                if subagent is None:
-                    return []
-                subagent_name, tool_call_id = subagent
-                phase = "error" if status in _SUBAGENT_ERROR_STATUSES else "end"
-            values = {
-                "status": status,
-                "tool_call_id": tool_call_id,
-                "subagent_name": subagent_name,
-            }
+                source = None
+        source_type_override = "non_agent" if source is None else ""
+        return [
+            self._event(
+                "custom",
+                "end",
+                timestamp=timestamp,
+                namespace=namespace,
+                source=source,
+                message=serialized,
+                channel=channel,
+                data_json=serialized,
+                source_type_override=source_type_override,
+            )
+        ]
+
+    def _non_agent_event(
+        self,
+        method: str,
+        data: object,
+        *,
+        timestamp: str,
+        namespace: str,
+    ) -> OutputEvent:
+        serialized = _bounded_json_text(data)
+        return self._event(
+            "custom",
+            "end",
+            timestamp=timestamp,
+            namespace=namespace,
+            message=serialized,
+            channel=method or "unknown",
+            data_json=serialized,
+            source_type_override="non_agent",
+        )
+
+    def _lifecycle_events(
+        self, data: dict[str, object], *, timestamp: str, namespace: str
+    ) -> list[OutputEvent]:
+        status = str(data.get("event") or "running")
+        lifecycle_namespace = _namespace(data.get("namespace") or namespace)
+        graph_name = str(data.get("graph_name") or "")
+        cause = data.get("cause")
+        tool_call_id = (
+            str(cause.get("tool_call_id") or "")
+            if isinstance(cause, dict)
+            else ""
+        )
+        active_key = self._subagent_run_key(lifecycle_namespace)
+        active_subagent = (
+            self._subagent_runs.get(active_key) if active_key is not None else None
+        )
+        if active_subagent is not None and status != "started":
+            subagent_name, started_tool_call_id = self._subagent_runs.pop(active_key)
+            source = self._source_for(
+                namespace=lifecycle_namespace,
+                node="",
+                agent_name=subagent_name,
+            )
             return [
                 self._event(
                     "subagent",
+                    "error" if status in _SUBAGENT_ERROR_STATUSES else "end",
+                    timestamp=timestamp,
+                    namespace=lifecycle_namespace,
+                    source=source,
+                    source_agent_name=subagent_name,
+                    message=status,
+                    status=status,
+                    tool_call_id=started_tool_call_id,
+                    subagent_name=subagent_name,
+                )
+            ]
+
+        workflow_agent_name = self._workflow_agent_name(
+            node="", namespace=lifecycle_namespace
+        )
+        workflow_source = self._source_for(
+            namespace=lifecycle_namespace,
+            node=graph_name,
+            agent_name=(graph_name or workflow_agent_name),
+        )
+        is_workflow_agent = (
+            workflow_source is not None
+            and workflow_source.source_type == "agent"
+            and (
+                not graph_name
+                or graph_name in self._main_agent_names
+                or graph_name == workflow_agent_name
+            )
+        )
+        if is_workflow_agent or (
+            workflow_source is not None and workflow_source.source_type == "script"
+        ):
+            phase = "start" if status == "started" else (
+                "error" if status in _SUBAGENT_ERROR_STATUSES else "end"
+            )
+            return [
+                self._event(
+                    "lifecycle",
                     phase,
                     timestamp=timestamp,
                     namespace=lifecycle_namespace,
-                    source_agent_name=subagent_name,
+                    source=workflow_source,
                     message=status,
-                    **values,
+                    status=status,
+                    finish_reason="",
+                    error_code=("workflow_node_failed" if phase == "error" else ""),
                 )
             ]
-        # These methods contain state, task inputs/results, checkpoints, HITL
-        # payloads, or debug data and are never exposed as template variables.
-        if method in {
-            "values",
-            "updates",
-            "tasks",
-            "checkpoints",
-            "input",
-            "input.requested",
-            "debug",
-        }:
-            return []
-        return []
+
+        is_subagent = bool(graph_name) and (
+            not self._workflow_sources
+            or (
+                workflow_source is not None
+                and graph_name != workflow_agent_name
+            )
+        )
+        if status == "started" and is_subagent:
+            self._subagent_runs[lifecycle_namespace] = (graph_name, tool_call_id)
+            return [
+                self._event(
+                    "subagent",
+                    "start",
+                    timestamp=timestamp,
+                    namespace=lifecycle_namespace,
+                    source=workflow_source,
+                    source_agent_name=graph_name,
+                    message=status,
+                    status=status,
+                    tool_call_id=tool_call_id,
+                    subagent_name=graph_name,
+                )
+            ]
+        return (
+            [
+                self._non_agent_event(
+                    "lifecycle",
+                    data,
+                    timestamp=timestamp,
+                    namespace=lifecycle_namespace,
+                )
+            ]
+            if self._workflow_sources and workflow_source is None
+            else []
+        )
 
     def _message_events(
         self, data: object, *, timestamp: str, namespace: str
@@ -339,10 +545,35 @@ class V3EventNormalizer:
         payload, raw_metadata = data
         metadata = raw_metadata if isinstance(raw_metadata, dict) else {}
         node = str(metadata.get("langgraph_node") or "")
-        agent_name = str(metadata.get("lc_agent_name") or self._main_agent_name)
+        metadata_agent_name = str(metadata.get("lc_agent_name") or "")
+        subagent_name = self._subagent_for_namespace(namespace)
+        workflow_agent_name = self._workflow_agent_name(
+            node=node, namespace=namespace
+        )
+        agent_name = (
+            metadata_agent_name
+            or subagent_name
+            or workflow_agent_name
+            or ("" if self._workflow_sources else self._main_agent_name)
+        )
+        source = self._source_for(
+            namespace=namespace,
+            node=node,
+            agent_name=agent_name,
+        )
         run_id = str(metadata.get("run_id") or "")
-        run_key = run_id or f"{namespace}:{agent_name}"
-        is_main_agent = agent_name in self._main_agent_names
+        source_key = self._source_key(source, namespace, agent_name)
+        cycle_key = self._cycle_key(namespace)
+        if self._workflow_sources and source is None:
+            return [
+                self._non_agent_event(
+                    "messages", data, timestamp=timestamp, namespace=namespace
+                )
+            ]
+        run_key = run_id or f"{source_key}:{agent_name}"
+        is_main_agent = self._is_main_agent_source(
+            source, agent_name=agent_name, subagent_name=subagent_name
+        )
 
         if not isinstance(payload, dict):
             if not is_main_agent or not isinstance(payload, AIMessage):
@@ -367,7 +598,7 @@ class V3EventNormalizer:
                 run_id=run_id,
                 run_key=run_key,
                 message_id=str(getattr(payload, "id", "") or ""),
-                is_main_agent=True,
+                is_main_agent=is_main_agent,
                 usage=usage_data,
                 response_metadata=metadata_data,
                 additional_kwargs=additional_data,
@@ -378,7 +609,9 @@ class V3EventNormalizer:
                 ),
             )
             return [
-                ModelCallBoundary(run_key),
+                ModelCallBoundary(
+                    run_key, source_key, cycle_key, self._raw_seq
+                ),
                 *self._whole_message_events(
                     payload,
                     run_key=run_key,
@@ -386,6 +619,7 @@ class V3EventNormalizer:
                     namespace=namespace,
                     agent_name=agent_name,
                     node=node,
+                    source=source,
                 ),
             ]
 
@@ -393,12 +627,17 @@ class V3EventNormalizer:
         if event_name == "message-start":
             message_id = str(payload.get("id") or payload.get("message_id") or "")
             self._message_ids[run_key] = message_id
+            self._message_sources[run_key] = source
             self._responses.begin(run_key, payload.get("metadata"))
             is_main_agent_ai = is_main_agent and str(payload.get("role") or "ai") == "ai"
             self._main_agent_ai_runs[run_key] = is_main_agent_ai
             if is_main_agent_ai:
                 self._main_agent_message_runs.add(run_key)
-            return [ModelCallBoundary(run_key)] if is_main_agent_ai else []
+            return [
+                ModelCallBoundary(
+                    run_key, source_key, cycle_key, self._raw_seq
+                )
+            ] if is_main_agent_ai else []
         if event_name == "message-finish":
             usage = payload.get("usage")
             usage_data = usage if isinstance(usage, dict) else {}
@@ -466,6 +705,7 @@ class V3EventNormalizer:
                 agent_name=agent_name,
                 node=node,
                 message_id=message_id,
+                source=source,
                 block_type=block_type,
             )
             diagnostics = self._responses.diagnostics(run_key)
@@ -484,6 +724,7 @@ class V3EventNormalizer:
                         namespace=namespace,
                         agent_name=agent_name,
                         node=node,
+                        source=source,
                         message_id=message_id,
                         stream_id=stream_id,
                     )
@@ -502,6 +743,7 @@ class V3EventNormalizer:
                         namespace=namespace,
                         agent_name=agent_name,
                         node=node,
+                        source=source,
                         stream_id=stream_id,
                     )
                 ]
@@ -529,6 +771,7 @@ class V3EventNormalizer:
                     namespace=namespace,
                     agent_name=agent_name,
                     node=node,
+                    source=block.source,
                     message=fragment,
                     message_id=message_id,
                     stream_id=f"{run_key}:{index}",
@@ -578,6 +821,7 @@ class V3EventNormalizer:
                         namespace=block.namespace,
                         agent_name=block.agent_name,
                         node=block.node,
+                        source=block.source,
                         message=complete_text,
                         message_id=block.message_id,
                         stream_id=f"{run_key}:{index}",
@@ -600,6 +844,7 @@ class V3EventNormalizer:
         namespace: str,
         agent_name: str,
         node: str,
+        source: WorkflowEventSourceV1 | None,
     ) -> list[OutputEvent | MainAgentMediaBlock]:
         message_id = str(getattr(message, "id", "") or "")
         blocks = getattr(message, "content_blocks", None)
@@ -616,6 +861,7 @@ class V3EventNormalizer:
                 agent_name=agent_name,
                 node=node,
                 message_id=message_id,
+                source=source,
             )
             events.extend(
                 self._finished_block_events(
@@ -645,6 +891,7 @@ class V3EventNormalizer:
                     namespace=block.namespace,
                     agent_name=block.agent_name,
                     node=block.node,
+                    source=block.source,
                     message=self._block_text(content),
                     message_id=block.message_id,
                 )
@@ -660,6 +907,7 @@ class V3EventNormalizer:
                     block_index=block_index,
                     content=dict(content),
                     stream_id=stream_id,
+                    source=block.source,
                 )
             ]
         if block_type in {"tool_call", "server_tool_call"}:
@@ -671,6 +919,7 @@ class V3EventNormalizer:
                     namespace=block.namespace,
                     agent_name=block.agent_name,
                     node=block.node,
+                    source=block.source,
                     stream_id=stream_id,
                 )
             ]
@@ -683,6 +932,7 @@ class V3EventNormalizer:
                     namespace=block.namespace,
                     agent_name=block.agent_name,
                     node=block.node,
+                    source=block.source,
                     message="Tool call arguments did not finish.",
                     tool_name=str(content.get("name") or ""),
                     tool_call_id=str(content.get("id") or ""),
@@ -700,6 +950,7 @@ class V3EventNormalizer:
                     namespace=block.namespace,
                     agent_name=block.agent_name,
                     node=block.node,
+                    source=block.source,
                     message="Invalid tool call arguments.",
                     tool_name=str(content.get("name") or ""),
                     tool_call_id=str(content.get("id") or ""),
@@ -720,8 +971,17 @@ class V3EventNormalizer:
                         namespace=block.namespace,
                         agent_name=block.agent_name,
                         node=block.node,
+                        source=block.source,
                         message="Server tool execution failed.",
-                        tool_name=self._tool_names.pop(call_id, ""),
+                        tool_name=self._tool_names.pop(
+                            self._tool_cache_key(
+                                namespace=block.namespace,
+                                node=block.node,
+                                agent_name=block.agent_name,
+                                call_id=call_id,
+                            ),
+                            "",
+                        ),
                         tool_call_id=call_id,
                         status="failed",
                         error_code="server_tool_error",
@@ -729,7 +989,15 @@ class V3EventNormalizer:
                     )
                 ]
             text, result_name = _tool_result_text(content.get("output"), call_id)
-            stored_name = self._tool_names.pop(call_id, "")
+            stored_name = self._tool_names.pop(
+                self._tool_cache_key(
+                    namespace=block.namespace,
+                    node=block.node,
+                    agent_name=block.agent_name,
+                    call_id=call_id,
+                ),
+                "",
+            )
             name = result_name or stored_name
             return [
                 self._event(
@@ -739,6 +1007,7 @@ class V3EventNormalizer:
                     namespace=block.namespace,
                     agent_name=block.agent_name,
                     node=block.node,
+                    source=block.source,
                     message=text,
                     tool_name=name,
                     tool_call_id=call_id,
@@ -762,6 +1031,7 @@ class V3EventNormalizer:
             message=message,
             message_id=block.message_id,
             stream_id=block.stream_id,
+            source=block.source,
         )
 
     @staticmethod
@@ -781,6 +1051,7 @@ class V3EventNormalizer:
         namespace: str,
         agent_name: str,
         node: str,
+        source: WorkflowEventSourceV1 | None = None,
         stream_id: str = "",
     ) -> OutputEvent:
         name = str(tool_call.get("name") or "")
@@ -790,7 +1061,14 @@ class V3EventNormalizer:
             arguments if isinstance(arguments, str) else _json_text(arguments)
         )
         if call_id and name:
-            self._tool_names[call_id] = name
+            self._tool_names[
+                self._tool_cache_key(
+                    namespace=namespace,
+                    node=node,
+                    agent_name=agent_name,
+                    call_id=call_id,
+                )
+            ] = name
         return self._event(
             "tool_call",
             phase,
@@ -798,6 +1076,7 @@ class V3EventNormalizer:
             namespace=namespace,
             agent_name=agent_name,
             node=node,
+            source=source,
             message=arguments_text,
             tool_name=name,
             tool_call_id=call_id,
@@ -814,24 +1093,49 @@ class V3EventNormalizer:
         call_id = str(data.get("tool_call_id") or "")
         output = data.get("output")
         result_text, result_name = _tool_result_text(output, call_id)
+        subagent_name = self._subagent_for_namespace(namespace)
+        agent_name = (
+            subagent_name
+            or self._workflow_agent_name(node="", namespace=namespace)
+            or self._main_agent_name
+        )
+        source = self._source_for(
+            namespace=namespace,
+            node="tools",
+            agent_name=agent_name,
+        )
+        if self._workflow_sources and source is None:
+            return [
+                self._non_agent_event(
+                    "tools", data, timestamp=timestamp, namespace=namespace
+                )
+            ]
+        tool_key = self._tool_cache_key(
+            namespace=namespace,
+            node="tools",
+            agent_name=agent_name,
+            call_id=call_id,
+        )
         name = str(
-            data.get("tool_name") or result_name or self._tool_names.get(call_id, "")
+            data.get("tool_name") or result_name or self._tool_names.get(tool_key, "")
         )
         if call_id and name:
-            self._tool_names[call_id] = name
+            self._tool_names[tool_key] = name
         if lifecycle == "tool-started":
             return []
         if lifecycle == "tool-output-delta":
             return []
         if lifecycle == "tool-finished":
-            self._tool_names.pop(call_id, None)
+            self._tool_names.pop(tool_key, None)
             return [
                 self._event(
                     "tool_result",
                     "end",
                     timestamp=timestamp,
                     namespace=namespace,
+                    agent_name=agent_name,
                     node="tools",
+                    source=source,
                     message=result_text,
                     tool_name=name,
                     tool_call_id=call_id,
@@ -840,14 +1144,16 @@ class V3EventNormalizer:
                 )
             ]
         if "fail" in lifecycle or "error" in lifecycle:
-            self._tool_names.pop(call_id, None)
+            self._tool_names.pop(tool_key, None)
             return [
                 self._event(
                     "tool_error",
                     "error",
                     timestamp=timestamp,
                     namespace=namespace,
+                    agent_name=agent_name,
                     node="tools",
+                    source=source,
                     message="Tool execution failed.",
                     tool_name=name,
                     tool_call_id=call_id,
@@ -861,6 +1167,7 @@ class V3EventNormalizer:
         for key in [item for item in self._blocks if item[0] == run_key]:
             self._blocks.pop(key, None)
         self._message_ids.pop(run_key, None)
+        self._message_sources.pop(run_key, None)
         self._responses.discard(run_key)
         self._main_agent_ai_runs.pop(run_key, None)
         self._main_agent_message_runs.discard(run_key)
@@ -892,6 +1199,102 @@ class V3EventNormalizer:
                     self.usage.get("reasoning_tokens", 0) + reasoning
                 )
 
+    def _subagent_for_namespace(self, namespace: str) -> str:
+        """Resolve the nearest active Deep Agent subagent scope."""
+
+        key = self._subagent_run_key(namespace)
+        return self._subagent_runs[key][0] if key is not None else ""
+
+    def _subagent_run_key(self, namespace: str) -> str | None:
+        scope = _namespace_scope(namespace)
+        best: tuple[int, str] | None = None
+        for run_scope, (name, _tool_call_id) in self._subagent_runs.items():
+            normalized = _namespace_scope(run_scope)
+            if normalized == scope or scope.startswith(normalized + "/"):
+                candidate = (len(normalized), name)
+                if best is None or candidate[0] > best[0]:
+                    best = (candidate[0], run_scope)
+        return best[1] if best is not None else None
+
+    def _workflow_agent_name(self, *, node: str, namespace: str) -> str:
+        """Map a raw node/namespace name to the frozen Workflow Agent name."""
+
+        if node and node in self._workflow_agent_names:
+            return self._workflow_agent_names[node]
+        for part in reversed(namespace.split("/")):
+            candidate = part.partition(":")[0]
+            if candidate in self._workflow_agent_names:
+                return self._workflow_agent_names[candidate]
+        return ""
+
+    def _is_main_agent_source(
+        self,
+        source: WorkflowEventSourceV1 | None,
+        *,
+        agent_name: str,
+        subagent_name: str,
+    ) -> bool:
+        if subagent_name:
+            return False
+        if source is not None:
+            return source.source_type == "agent"
+        if self._workflow_sources:
+            return False
+        return agent_name in self._main_agent_names
+
+    def _known_agent_scope(self, namespace: str) -> bool:
+        source = self._source_for(
+            namespace=namespace,
+            node="",
+            agent_name=self._subagent_for_namespace(namespace)
+            or self._workflow_agent_name(node="", namespace=namespace),
+        )
+        if source is not None:
+            return source.source_type in {"agent", "subagent"}
+        return not self._workflow_sources and namespace == "root"
+
+    @staticmethod
+    def _cycle_key(namespace: str) -> str:
+        return _namespace_scope(namespace)
+
+    def _source_key(
+        self,
+        source: WorkflowEventSourceV1 | None,
+        namespace: str,
+        agent_name: str = "",
+    ) -> str:
+        if source is not None:
+            return "|".join(
+                (
+                    source.source_type,
+                    str(source.workflow_node_id),
+                    str(source.agent_profile_id or ""),
+                    str(source.subagent_profile_id or ""),
+                )
+            )
+        if agent_name:
+            return f"agent|{agent_name}"
+        return f"unknown|{self._cycle_key(namespace)}"
+
+    def _tool_cache_key(
+        self,
+        *,
+        namespace: str,
+        node: str,
+        agent_name: str,
+        call_id: str,
+    ) -> tuple[str, str, str]:
+        source = self._source_for(
+            namespace=namespace,
+            node=node,
+            agent_name=agent_name,
+        )
+        return (
+            self._source_key(source, namespace, agent_name),
+            self._cycle_key(namespace),
+            call_id,
+        )
+
     def _event(
         self,
         event_type: str,
@@ -905,6 +1308,7 @@ class V3EventNormalizer:
         stream_id: str = "",
         source: WorkflowEventSourceV1 | None = None,
         source_agent_name: str = "",
+        source_type_override: str = "",
         **values: str,
     ) -> OutputEvent:
         self._sequence += 1
@@ -914,6 +1318,11 @@ class V3EventNormalizer:
             node=node,
             agent_name=source_agent_name or effective_agent_name,
         )
+        effective_source_key = self._source_key(
+            effective_source,
+            namespace,
+            "" if source_type_override else effective_agent_name,
+        )
         return OutputEvent(
             event_type=event_type,
             phase=phase,
@@ -922,7 +1331,10 @@ class V3EventNormalizer:
             namespace=namespace,
             agent_name=effective_agent_name,
             node=node,
-            source_type=(effective_source.source_type if effective_source else "agent"),
+            source_type=(
+                source_type_override
+                or (effective_source.source_type if effective_source else "agent")
+            ),
             workflow_node_id=(
                 effective_source.workflow_node_id if effective_source else ""
             ),
@@ -935,6 +1347,9 @@ class V3EventNormalizer:
             message=message,
             values={key: str(value or "") for key, value in values.items()},
             stream_id=stream_id,
+            raw_seq=self._raw_seq,
+            source_key=effective_source_key,
+            cycle_key=self._cycle_key(namespace),
         )
 
     def _source_for(

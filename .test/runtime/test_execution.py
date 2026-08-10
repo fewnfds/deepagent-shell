@@ -158,9 +158,12 @@ def test_agent_execution_closes_v3_stream_when_consumer_is_cancelled() -> None:
             def __init__(self, run: BlockingRun) -> None:
                 self.run = run
 
-            async def astream_events(self, _input, *, config: dict, version: str):
+            async def astream_events(
+                self, _input, *, config: dict, version: str, transformers: tuple = ()
+            ):
                 assert version == "v3"
                 assert config == {"recursion_limit": 100}
+                assert transformers
                 return self.run
 
         settings = config(mode="blocklist")
@@ -217,9 +220,12 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch) -> None:
             def __init__(self, run: BlockingRun) -> None:
                 self.run = run
 
-            async def astream_events(self, _input, *, config: dict, version: str):
+            async def astream_events(
+                self, _input, *, config: dict, version: str, transformers: tuple = ()
+            ):
                 assert config == {"recursion_limit": 100}
                 assert version == "v3"
+                assert transformers
                 return self.run
 
         monkeypatch.setattr(
@@ -255,7 +261,10 @@ def test_graph_recursion_failure_uses_step_limit_error() -> None:
         from langgraph.errors import GraphRecursionError
 
         class Graph:
-            async def astream_events(self, _input, *, config: dict, version: str):
+            async def astream_events(
+                self, _input, *, config: dict, version: str, transformers: tuple = ()
+            ):
+                assert transformers
                 raise GraphRecursionError("private graph state")
 
         execution = AgentExecution(
@@ -304,7 +313,10 @@ def test_tool_error_boundary_preserves_successful_result() -> None:
 def test_unclassified_graph_failure_is_not_mislabeled_as_provider() -> None:
     async def scenario() -> str:
         class Graph:
-            async def astream_events(self, _input, *, config: dict, version: str):
+            async def astream_events(
+                self, _input, *, config: dict, version: str, transformers: tuple = ()
+            ):
+                assert transformers
                 raise RuntimeError("private middleware or graph details")
 
         settings = config(mode="blocklist")
@@ -334,7 +346,10 @@ def test_unclassified_graph_failure_is_not_mislabeled_as_provider() -> None:
 def test_classified_graph_failure_emits_matching_lifecycle_error() -> None:
     async def scenario() -> str:
         class Graph:
-            async def astream_events(self, _input, *, config: dict, version: str):
+            async def astream_events(
+                self, _input, *, config: dict, version: str, transformers: tuple = ()
+            ):
+                assert transformers
                 raise AgentRuntimeError(
                     "provider_request_failed",
                     "The provider request failed.",

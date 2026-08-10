@@ -21,6 +21,7 @@ from agent_shell.runtime.output_stream import (
     MainAgentMediaBlock,
     V3EventNormalizer,
 )
+from agent_shell.runtime.stream_transformers import RawCustomEventTransformer
 from agent_shell.storage.media_outputs import MediaOutputStore
 from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
 from langgraph.errors import GraphRecursionError
@@ -113,11 +114,11 @@ class AgentExecution:
                             r"The v3 streaming protocol on Pregel is experimental\."
                         ),
                     )
-                    stream_options: dict[str, Any] = {"version": "v3"}
                     stream = await self.graph.astream_events(
                         self.input_state,
                         config={"recursion_limit": GRAPH_RECURSION_LIMIT},
-                        **stream_options,
+                        version="v3",
+                        transformers=(RawCustomEventTransformer,),
                     )
                 # The v3 run stream owns the graph iterator. Its async context
                 # manager aborts in-flight provider/tool work when an OpenAI
@@ -148,7 +149,16 @@ class AgentExecution:
                             next_envelope = asyncio.ensure_future(anext(envelopes))
                             for event in self.normalizer.feed(envelope):
                                 if isinstance(event, ModelCallBoundary):
-                                    projected = self.rectifier.flush()
+                                    if event.source_key and event.cycle_key:
+                                        projected = self.rectifier.flush_cycle(
+                                            event.source_key, event.cycle_key
+                                        )
+                                    elif event.source_key:
+                                        projected = self.rectifier.flush_source(
+                                            event.source_key
+                                        )
+                                    else:
+                                        projected = self.rectifier.flush()
                                 elif isinstance(event, MainAgentMediaBlock):
                                     notification = await self.media_response.project(event)
                                     projected = (
@@ -269,6 +279,7 @@ class AgentRuntime:
         request_id: str = "",
         public_model: str = "",
         workflow_built: tuple[tuple[str, BuiltAgent], ...] = (),
+        workflow_non_agent_filter: Callable[[OutputEvent], bool] | None = None,
     ) -> AgentExecution:
         observers = []
         if event_observer is not None:
@@ -292,7 +303,8 @@ class AgentRuntime:
                 for node_id, agent in workflow_agents
             }
             projector = WorkflowOutputProjector(
-                {node_id: agent.output_config for node_id, agent in workflow_agents}
+                {node_id: agent.output_config for node_id, agent in workflow_agents},
+                non_agent_filter=workflow_non_agent_filter,
             )
         else:
             workflow_sources = None
@@ -313,6 +325,10 @@ class AgentRuntime:
                 main_agent_names=tuple(agent.agent_name for _, agent in workflow_agents),
                 workflow_subagent_profile_ids={
                     node_id: agent.subagent_profile_ids
+                    for node_id, agent in workflow_agents
+                } if workflow_node_id else None,
+                workflow_agent_names={
+                    node_id: agent.agent_name
                     for node_id, agent in workflow_agents
                 } if workflow_node_id else None,
             ),
@@ -365,6 +381,7 @@ class AgentRuntime:
         event_observer: Callable[[OutputEvent], None] | None = None,
         request_id: str = "",
         public_model: str = "",
+        workflow_non_agent_filter: Callable[[OutputEvent], bool] | None = None,
     ) -> AgentExecution:
         from agent_shell.workflow.catalog import AgentNodeConfig
         from agent_shell.workflow.compiler import compile_workflow
@@ -414,4 +431,5 @@ class AgentRuntime:
             model_response_observer=model_response_observer,
             request_id=request_id,
             public_model=public_model,
+            workflow_non_agent_filter=workflow_non_agent_filter,
         )

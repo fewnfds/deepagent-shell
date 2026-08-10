@@ -91,6 +91,66 @@ def test_v3_sources_keep_multiple_workflow_agents_distinct() -> None:
     assert output.agent_profile_id == MAIN_B
 
 
+def test_v3_namespace_resolves_agent_without_lc_agent_name_and_keeps_raw_order() -> None:
+    normalizer = V3EventNormalizer(
+        "Writer",
+        workflow_sources={
+            "agent-a": WorkflowEventSourceV1(
+                source_type="agent",
+                workflow_node_id="agent-a",
+                agent_profile_id=MAIN_A,
+            ),
+            "agent-b": WorkflowEventSourceV1(
+                source_type="agent",
+                workflow_node_id="agent-b",
+                agent_profile_id=MAIN_B,
+            ),
+        },
+        main_agent_names=("Writer", "Reviewer"),
+        workflow_agent_names={"agent-a": "Writer", "agent-b": "Reviewer"},
+    )
+
+    events = normalizer.feed(
+        {
+            "seq": 17,
+            "method": "messages",
+            "params": {
+                "namespace": ["agent-b:invocation-2", "model:model-run"],
+                "timestamp": 1,
+                "data": [
+                    AIMessage(content="review complete"),
+                    {"langgraph_node": "model", "run_id": "review-run"},
+                ],
+            },
+        }
+    )
+
+    boundary = events[0]
+    output = next(item for item in events if isinstance(item, OutputEvent))
+    assert boundary.source_key == output.source_key
+    assert boundary.cycle_key == output.cycle_key == "agent-b:invocation-2"
+    assert boundary.raw_seq == output.raw_seq == 17
+    assert output.agent_name == "Reviewer"
+    assert output.workflow_node_id == "agent-b"
+
+    unknown = normalizer.feed(
+        {
+            "seq": 18,
+            "method": "messages",
+            "params": {
+                "namespace": ["unknown:invocation"],
+                "data": [
+                    AIMessage(content="must stay private"),
+                    {"langgraph_node": "model", "run_id": "unknown-run"},
+                ],
+            },
+        }
+    )
+    assert len(unknown) == 1
+    assert isinstance(unknown[0], OutputEvent)
+    assert unknown[0].source_type == "non_agent"
+
+
 def test_v3_subagent_identity_is_scoped_by_workflow_node() -> None:
     normalizer = V3EventNormalizer(
         "Writer",
@@ -132,6 +192,73 @@ def test_v3_subagent_identity_is_scoped_by_workflow_node() -> None:
     assert output.workflow_node_id == "agent-b"
     assert output.agent_profile_id == MAIN_B
     assert output.subagent_profile_id == SUBAGENT_B
+    assert output.event_type == "subagent"
+
+
+def test_tool_name_cache_is_scoped_by_workflow_source_and_invocation() -> None:
+    normalizer = V3EventNormalizer(
+        "Writer",
+        workflow_sources={
+            "agent-a": WorkflowEventSourceV1(
+                source_type="agent",
+                workflow_node_id="agent-a",
+                agent_profile_id=MAIN_A,
+            ),
+            "agent-b": WorkflowEventSourceV1(
+                source_type="agent",
+                workflow_node_id="agent-b",
+                agent_profile_id=MAIN_B,
+            ),
+        },
+        main_agent_names=("Writer", "Reviewer"),
+        workflow_agent_names={"agent-a": "Writer", "agent-b": "Reviewer"},
+    )
+
+    for node_id, tool_name in (("agent-a", "read_file"), ("agent-b", "search")):
+        normalizer.feed(
+            {
+                "method": "messages",
+                "params": {
+                    "namespace": [f"{node_id}:invocation", "model:model-run"],
+                    "data": [
+                        {
+                            "event": "content-block-finish",
+                            "index": 0,
+                            "content": {
+                                "type": "tool_call",
+                                "id": "shared-call",
+                                "name": tool_name,
+                                "args": {},
+                            },
+                        },
+                        {"langgraph_node": "model", "run_id": f"run-{node_id}"},
+                    ],
+                },
+            }
+        )
+
+    results = []
+    for node_id in ("agent-b", "agent-a"):
+        results.extend(
+            normalizer.feed(
+                {
+                    "method": "tools",
+                    "params": {
+                        "namespace": [f"{node_id}:invocation", "tools:tool-run"],
+                        "data": {
+                            "event": "tool-finished",
+                            "tool_call_id": "shared-call",
+                            "output": f"{node_id} result",
+                        },
+                    },
+                }
+            )
+        )
+
+    assert [event.values["tool_name"] for event in results] == [
+        "search",
+        "read_file",
+    ]
 
 
 def test_v3_sources_distinguish_agent_subagent_and_script_nodes() -> None:
@@ -142,7 +269,13 @@ def test_v3_sources_distinguish_agent_subagent_and_script_nodes() -> None:
     )
     normalizer = V3EventNormalizer(
         "Main Agent",
-        workflow_sources={"agent-a": agent_source},
+        workflow_sources={
+            "agent-a": agent_source,
+            "inspect-file": WorkflowEventSourceV1(
+                source_type="script",
+                workflow_node_id="inspect-file",
+            ),
+        },
         subagent_profile_ids={"Researcher": SUBAGENT},
     )
     started = normalizer.feed(
@@ -197,15 +330,9 @@ def test_v3_sources_distinguish_agent_subagent_and_script_nodes() -> None:
     }
 
 
-def test_script_custom_event_passes_through_its_assigned_output_policy(
+def test_script_custom_event_ignores_agent_output_policy_until_workflow_filter_exists(
     monkeypatch,
 ) -> None:
-    settings = config(mode="blocklist")
-    settings["event_templates"]["assistant_text"]["enabled"] = False
-    settings["event_templates"]["custom"] = {
-        "enabled": True,
-        "template": "{{source_type}}:{{channel}}:{{message}}",
-    }
     normalizer = V3EventNormalizer("Main Agent")
     custom = WorkflowCustomEventV1(
         source=WorkflowEventSourceV1(
@@ -230,12 +357,115 @@ def test_script_custom_event_passes_through_its_assigned_output_policy(
             },
         }
     )
-    rectifier = OutputEventRectifier(
-        WorkflowOutputProjector({"inspect-file": settings})
-    )
+    rectifier = OutputEventRectifier(WorkflowOutputProjector({}))
 
     assert len(events) == 1
     assert isinstance(events[0], OutputEvent)
-    assert rectifier.feed(events[0]) == [
-        'script:artifact.ready:{&quot;content&quot;:&quot;finished&quot;}'
-    ]
+    assert rectifier.feed(events[0]) == ['{"content":"finished"}']
+
+
+def test_registered_script_custom_event_uses_bounded_builtin_passthrough() -> None:
+    source = WorkflowEventSourceV1(
+        source_type="script",
+        workflow_node_id="inspect-file",
+    )
+    normalizer = V3EventNormalizer(
+        "Main Agent",
+        workflow_sources={"inspect-file": source},
+    )
+    custom = WorkflowCustomEventV1(
+        source=source,
+        channel="artifact.ready",
+        data={"content": "finished"},
+    )
+    events = normalizer.feed(
+        {
+            "method": "custom",
+            "params": {
+                "namespace": ["inspect-file:invocation"],
+                "data": custom.model_dump(mode="json"),
+            },
+        }
+    )
+    rectifier = OutputEventRectifier(WorkflowOutputProjector({}))
+
+    assert rectifier.feed(events[0]) == ['{"content":"finished"}']
+
+    unregistered = normalizer.feed(
+        {
+            "method": "custom",
+            "params": {
+                "namespace": ["unknown:invocation"],
+                "data": custom.model_dump(mode="json"),
+            },
+        }
+    )
+    assert len(unregistered) == 1
+    assert isinstance(unregistered[0], OutputEvent)
+    assert unregistered[0].source_type == "non_agent"
+
+
+def test_workflow_non_agent_filter_hook_is_optional_and_future_facing() -> None:
+    event = OutputEvent(
+        event_type="custom",
+        phase="end",
+        sequence=1,
+        timestamp="2026-01-01T00:00:00Z",
+        source_type="non_agent",
+        message="visible",
+        values={"channel": "progress"},
+    )
+    blocked = OutputEventRectifier(
+        WorkflowOutputProjector(
+            {}, non_agent_filter=lambda item: item.values.get("channel") == "audit"
+        )
+    )
+    allowed = OutputEventRectifier(
+        WorkflowOutputProjector(
+            {}, non_agent_filter=lambda item: item.values.get("channel") == "progress"
+        )
+    )
+
+    assert blocked.feed(event) == []
+    assert allowed.feed(event) == ["visible"]
+
+
+def test_non_agent_raw_channels_default_to_string_while_agent_state_stays_internal() -> None:
+    normalizer = V3EventNormalizer(
+        "Writer",
+        workflow_sources={
+            "agent-a": WorkflowEventSourceV1(
+                source_type="agent",
+                workflow_node_id="agent-a",
+                agent_profile_id=MAIN_A,
+            )
+        },
+        workflow_agent_names={"agent-a": "Writer"},
+    )
+
+    agent_state = normalizer.feed(
+        {
+            "method": "updates",
+            "params": {
+                "namespace": ["agent-a:invocation"],
+                "data": {"messages": "private agent state"},
+            },
+        }
+    )
+    script_output = normalizer.feed(
+        {
+            "method": "updates",
+            "params": {
+                "namespace": ["script-node:invocation"],
+                "data": {"result": "ready"},
+            },
+        }
+    )
+    rectifier = OutputEventRectifier(WorkflowOutputProjector({}))
+
+    assert agent_state == []
+    assert len(script_output) == 1
+    assert isinstance(script_output[0], OutputEvent)
+    assert script_output[0].source_type == "non_agent"
+    assert script_output[0].source_key == "unknown|script-node:invocation"
+    assert rectifier.feed(script_output[0]) == ['{"result":"ready"}']

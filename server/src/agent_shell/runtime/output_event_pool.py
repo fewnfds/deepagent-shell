@@ -18,11 +18,14 @@ TOOL_OUTCOME_TYPES = {"tool_result", "tool_error"}
 @dataclass(slots=True)
 class _PendingEvent:
     event: OutputEvent
+    source_key: str
+    cycle_key: str
     projection: StreamProjection | None = None
     text: str = ""
     sent_length: int = 0
     last_activity: float = 0.0
     ready: bool = False
+    boundary_closed: bool = False
 
     @property
     def streamable(self) -> bool:
@@ -31,6 +34,7 @@ class _PendingEvent:
 
 @dataclass(slots=True)
 class _SourceState:
+    source_key: str
     event: OutputEvent
     text: str = ""
     pending: _PendingEvent | None = None
@@ -51,7 +55,7 @@ class OutputEventRectifier:
         self._quiet_seconds = quiet_seconds
         self._clock = clock
         self._queue: deque[_PendingEvent] = deque()
-        self._sources: dict[str, _SourceState] = {}
+        self._sources: dict[tuple[str, str], _SourceState] = {}
         self._current: _PendingEvent | None = None
 
     @property
@@ -72,6 +76,53 @@ class OutputEventRectifier:
             parts = self._feed_atomic_event(event, observed_at)
         parts.extend(self._drain(observed_at))
         return parts
+
+    @staticmethod
+    def event_source_key(event: OutputEvent) -> str:
+        """Return a request-local identity for the event's public source.
+
+        Workflow node/profile identity is preferred.  Invocation/runtime scope
+        is tracked separately by ``event_cycle_key`` so repeated invocations
+        of the same node cannot share pending tool-call state.
+        """
+
+        explicit = str(getattr(event, "source_key", "") or "").strip()
+        if explicit:
+            return explicit
+        identity = (
+            event.workflow_node_id,
+            event.source_type,
+            event.agent_profile_id,
+            event.subagent_profile_id,
+        )
+        stable = "|".join(str(item or "") for item in identity)
+        runtime = event.namespace.strip()
+        if runtime and runtime != "root":
+            return f"{stable}|{runtime}"
+        return stable or f"{event.agent_name}|{event.node}"
+
+    @staticmethod
+    def event_cycle_key(event: OutputEvent) -> str:
+        """Return the finest cycle scope available on an output event."""
+
+        explicit = str(getattr(event, "cycle_key", "") or "").strip()
+        if explicit:
+            return explicit
+        return event.namespace.strip() or "root"
+
+    def flush_source(self, source_key: str) -> list[str]:
+        """Close and render only pending output owned by ``source_key``.
+
+        This is the boundary hook for a Workflow node/cycle.  It never
+        mutates pending state belonging to another concurrent source.
+        """
+
+        return self._flush_scope(source_key=source_key)
+
+    def flush_cycle(self, source_key: str, cycle_key: str) -> list[str]:
+        """Close and render pending output for one source invocation cycle."""
+
+        return self._flush_scope(source_key=source_key, cycle_key=cycle_key)
 
     def expire(self, *, now: float | None = None) -> list[str]:
         observed_at = self._clock() if now is None else now
@@ -96,6 +147,43 @@ class OutputEventRectifier:
         self._sources.clear()
         return parts
 
+    def _flush_scope(
+        self, *, source_key: str, cycle_key: str | None = None
+    ) -> list[str]:
+        parts: list[str] = []
+        current = self._current
+        if current is not None and self._matches_scope(
+            current, source_key=source_key, cycle_key=cycle_key
+        ):
+            parts.extend(self._close_current())
+        for item in self._queue:
+            if self._matches_scope(
+                item, source_key=source_key, cycle_key=cycle_key
+            ):
+                item.boundary_closed = True
+        for state_key, source in tuple(self._sources.items()):
+            if source.source_key != source_key:
+                continue
+            if (
+                cycle_key is not None
+                and self.event_cycle_key(source.event) != cycle_key
+            ):
+                continue
+            self._sources.pop(state_key, None)
+        parts.extend(self._drain(self._clock()))
+        return parts
+
+    @staticmethod
+    def _matches_scope(
+        item: _PendingEvent,
+        *,
+        source_key: str,
+        cycle_key: str | None,
+    ) -> bool:
+        return item.source_key == source_key and (
+            cycle_key is None or item.cycle_key == cycle_key
+        )
+
     def abort(self) -> list[str]:
         parts = self._close_current() if self._current is not None else []
         self.discard()
@@ -107,15 +195,20 @@ class OutputEventRectifier:
         self._current = None
 
     def _feed_source_event(self, event: OutputEvent, now: float) -> list[str]:
-        source = self._sources.get(event.stream_id)
+        source_key = self.event_source_key(event)
+        cycle_key = self.event_cycle_key(event)
+        source_state_key = (source_key, event.stream_id)
+        source = self._sources.get(source_state_key)
         if event.phase == "start":
             if not self._projector.enabled(event) or source is not None:
                 return []
-            source = _SourceState(event=event)
-            self._sources[event.stream_id] = source
+            source = _SourceState(source_key=source_key, event=event)
+            self._sources[source_state_key] = source
             projection = self._projector.stream_projection(event)
             pending = _PendingEvent(
                 event=event,
+                source_key=source_key,
+                cycle_key=cycle_key,
                 projection=projection,
                 last_activity=now,
                 ready=projection is not None,
@@ -146,6 +239,8 @@ class OutputEventRectifier:
                 return []
             pending = _PendingEvent(
                 event=source.event,
+                source_key=source.source_key,
+                cycle_key=self.event_cycle_key(source.event),
                 projection=projection,
                 last_activity=now,
                 ready=True,
@@ -180,6 +275,8 @@ class OutputEventRectifier:
         self._queue.append(
             _PendingEvent(
                 event=event,
+                source_key=self.event_source_key(event),
+                cycle_key=self.event_cycle_key(event),
                 text=event.message,
                 last_activity=now,
                 ready=True,
@@ -196,6 +293,9 @@ class OutputEventRectifier:
             self._queue.remove(item)
             if item.streamable:
                 parts.extend(self._activate(item))
+                if item.boundary_closed:
+                    parts.extend(self._close_current())
+                    continue
                 if self._queue and now >= item.last_activity + self._quiet_seconds:
                     parts.extend(self._close_current())
                     continue
@@ -213,7 +313,7 @@ class OutputEventRectifier:
             event_type = candidate.event.event_type
             if event_type == "tool_call":
                 call_id = candidate.event.values.get("tool_call_id", "")
-                if not call_id:
+                if not call_id or candidate.boundary_closed:
                     return candidate
                 if self._find_tool_partner(candidate) is None:
                     unmatched_tool_call_seen = True
@@ -258,7 +358,7 @@ class OutputEventRectifier:
         if item.projection and item.projection.suffix:
             parts.append(item.projection.suffix)
         self._current = None
-        source_id = item.event.stream_id
+        source_id = (self.event_source_key(item.event), item.event.stream_id)
         source = self._sources.get(source_id)
         if source is not None and source.pending is item:
             source.closed = True
@@ -301,6 +401,8 @@ class OutputEventRectifier:
             if (
                 candidate.ready
                 and complementary
+                and candidate.source_key == item.source_key
+                and candidate.cycle_key == item.cycle_key
                 and candidate.event.values.get("tool_call_id", "") == call_id
             ):
                 return candidate

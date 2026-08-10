@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import html
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from agent_shell.runtime.output_stream import OutputEvent
@@ -113,22 +113,34 @@ class OutputProjector:
 
 
 class WorkflowOutputProjector:
-    """Select a frozen Main Agent output policy by stable Workflow node ID."""
+    """Route Agent policies and leave non-Agent filtering as a future hook."""
 
-    def __init__(self, configs_by_node: Mapping[str, dict[str, object]]) -> None:
+    def __init__(
+        self,
+        configs_by_node: Mapping[str, dict[str, object]],
+        *,
+        non_agent_filter: Callable[[OutputEvent], bool] | None = None,
+    ) -> None:
         self._projectors = {
             node_id: OutputProjector(config)
             for node_id, config in configs_by_node.items()
         }
+        self._non_agent_filter = non_agent_filter
 
     def _for(self, event: OutputEvent) -> OutputProjector | None:
+        if event.source_type not in {"agent", "subagent"}:
+            return None
         if not event.workflow_node_id:
             return None
         return self._projectors.get(event.workflow_node_id)
 
     def enabled(self, event: OutputEvent) -> bool:
         projector = self._for(event)
-        return projector.enabled(event) if projector is not None else False
+        return (
+            projector.enabled(event)
+            if projector is not None
+            else self._passthrough(event)
+        )
 
     def stream_projection(self, event: OutputEvent) -> StreamProjection | None:
         projector = self._for(event)
@@ -136,13 +148,26 @@ class WorkflowOutputProjector:
 
     def render(self, event: OutputEvent) -> str:
         projector = self._for(event)
-        return projector.render(event) if projector is not None else ""
+        if projector is not None:
+            return projector.render(event)
+        return event.message if self._passthrough(event) else ""
 
     def encode_message(self, value: str, event: OutputEvent | None = None) -> str:
         if event is None:
             return ""
         projector = self._for(event)
-        return projector.encode_message(value, event) if projector is not None else ""
+        if projector is not None:
+            return projector.encode_message(value, event)
+        return value if self._passthrough(event) else ""
+
+    def _passthrough(self, event: OutputEvent) -> bool:
+        return (
+            event.source_type not in {"agent", "subagent"}
+            and (
+                self._non_agent_filter is None
+                or self._non_agent_filter(event)
+            )
+        )
 
 
 __all__ = ["OutputProjector", "StreamProjection", "WorkflowOutputProjector"]
