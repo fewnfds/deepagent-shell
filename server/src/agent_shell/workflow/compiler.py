@@ -7,6 +7,7 @@ from langgraph.graph import END, START, StateGraph
 
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.state import AgentShellState
+from agent_shell.workflow.catalog import node_type_spec
 from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
 from agent_shell.workflow.topology import validate_workflow_topology
 from agent_shell.workflow.validation import admit_workflow_document
@@ -19,9 +20,9 @@ def _compile_error(code: str, message: str) -> AgentRuntimeError:
 def compile_workflow(
     document: WorkflowGraphDocumentV1,
     *,
-    agent_graphs: Mapping[str, Any],
+    node_graphs: Mapping[str, Any],
 ) -> Any:
-    """Compile the first supported canvas shape into an official StateGraph."""
+    """Compile catalog-declared canvas nodes into an official StateGraph."""
 
     admission, normalized = admit_workflow_document(document)
     if normalized is None:
@@ -34,30 +35,31 @@ def compile_workflow(
         raise _compile_error(issue.code, issue.message)
 
     nodes = normalized.definition.nodes
-    start_nodes = [node for node in nodes if node.type == "start"]
-    agent_nodes = [node for node in nodes if node.type == "agent"]
-    end_nodes = [node for node in nodes if node.type == "end"]
-    if len(agent_nodes) != 1:
-        raise _compile_error(
-            "workflow.agent_count_unsupported",
-            "The first Workflow runtime requires exactly one Agent node.",
-        )
-
-    start_node = start_nodes[0]
-    agent_node = agent_nodes[0]
-    end_node = end_nodes[0]
-    agent_graph = agent_graphs.get(agent_node.id)
-    if agent_graph is None:
-        raise _compile_error(
-            "workflow.agent_graph_missing",
-            "The Workflow Agent node could not be materialized.",
-        )
+    entry_ids: set[str] = set()
+    exit_ids: set[str] = set()
+    executable_nodes = []
+    for node in nodes:
+        spec = node_type_spec(node.type, node.type_version)
+        assert spec is not None
+        if spec.runtime_kind == "graph_entry":
+            entry_ids.add(node.id)
+        elif spec.runtime_kind == "graph_exit":
+            exit_ids.add(node.id)
+        else:
+            executable_nodes.append(node)
 
     builder = StateGraph(AgentShellState)
-    builder.add_node(agent_node.id, agent_graph)
+    for node in executable_nodes:
+        node_graph = node_graphs.get(node.id)
+        if node_graph is None:
+            raise _compile_error(
+                "workflow.node_graph_missing",
+                "The Workflow node could not be materialized.",
+            )
+        builder.add_node(node.id, node_graph)
     for edge in normalized.definition.edges:
-        source = START if edge.source == start_node.id else edge.source
-        target = END if edge.target == end_node.id else edge.target
+        source = START if edge.source in entry_ids else edge.source
+        target = END if edge.target in exit_ids else edge.target
         builder.add_edge(source, target)
     return builder.compile()
 

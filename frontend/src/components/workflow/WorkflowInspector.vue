@@ -101,7 +101,7 @@ function updateAgent(event: Event): void {
       <template v-else-if="edge">
         <div class="workflow-inspector-field">
           <span class="workflow-inspector-label">{{ $t('workflows.editor.edgeType') }}</span>
-          <span class="workflow-inspector-value">normal</span>
+          <span class="workflow-inspector-value">{{ edge.data?.edgeType }}</span>
         </div>
         <div class="workflow-inspector-field">
           <span class="workflow-inspector-label">{{ $t('workflows.editor.source') }}</span>

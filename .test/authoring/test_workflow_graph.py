@@ -7,6 +7,8 @@ import pytest
 from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
 
+from agent_shell.runtime.agent_builder import BuiltAgent
+from agent_shell.runtime.agent_runtime import AgentRuntime
 from agent_shell.runtime.state import AgentShellState
 from agent_shell.validation import ValidationIssue, ValidationReport
 from agent_shell.workflow import (
@@ -70,7 +72,7 @@ def valid_main_agent(_main_agent_id: str) -> ValidationReport:
     return ValidationReport(stage="workflow_publish")
 
 
-def test_catalog_exposes_only_the_first_supported_node_and_handle_paradigms() -> None:
+def test_catalog_exposes_the_first_supported_node_and_handle_paradigms() -> None:
     assert [item.type for item in NODE_CATALOG] == ["start", "agent", "end"]
     assert [item.runtime_kind for item in NODE_CATALOG] == [
         "graph_entry",
@@ -81,6 +83,17 @@ def test_catalog_exposes_only_the_first_supported_node_and_handle_paradigms() ->
     assert [handle.id for handle in NODE_CATALOG[1].input_handles] == ["in"]
     assert [handle.id for handle in NODE_CATALOG[1].output_handles] == ["next"]
     assert [handle.id for handle in NODE_CATALOG[2].input_handles] == ["in"]
+    assert {
+        handle.edge_type for item in NODE_CATALOG for handle in (
+            *item.input_handles,
+            *item.output_handles,
+        )
+    } == {"normal"}
+    assert all(
+        handle.max_connections is None
+        for item in NODE_CATALOG
+        for handle in (*item.input_handles, *item.output_handles)
+    )
     assert NODE_CATALOG[1].config_model.model_json_schema()["required"] == [
         "main_agent_id"
     ]
@@ -98,13 +111,7 @@ def test_admission_accepts_incomplete_drafts_and_layout_does_not_change_executio
         admitted,
         validate_main_agent=valid_main_agent,
     )
-    assert executable.valid is False
-    assert {
-        issue.code for issue in executable.issues
-    } >= {
-        "workflow.node_input_cardinality_invalid",
-        "workflow.node_output_cardinality_invalid",
-    }
+    assert executable.valid is True
 
     complete_report, complete = admit_workflow_document(graph_payload(AGENT_A))
     assert complete_report.valid is True
@@ -194,9 +201,17 @@ def test_admission_rejects_unsupported_or_ambiguous_graph_documents(
     )
 
 
-@pytest.mark.parametrize("agent_ids", [(AGENT_A,), (AGENT_A, AGENT_B)])
+@pytest.mark.parametrize(
+    ("agent_ids", "expected_validated"),
+    [
+        ((AGENT_A,), [AGENT_A]),
+        ((AGENT_A, AGENT_B), [AGENT_A, AGENT_B]),
+        ((AGENT_A, AGENT_A), [AGENT_A]),
+    ],
+)
 def test_executable_validation_accepts_one_or_more_agent_linear_graphs(
     agent_ids: tuple[str, ...],
+    expected_validated: list[str],
 ) -> None:
     admission, document = admit_workflow_document(graph_payload(*agent_ids))
     seen: list[str] = []
@@ -210,7 +225,71 @@ def test_executable_validation_accepts_one_or_more_agent_linear_graphs(
     report = validate_workflow_executable(document, validate_main_agent=validate)
 
     assert report.valid is True
-    assert seen == list(agent_ids)
+    assert seen == expected_validated
+
+
+def test_executable_validation_accepts_multiple_normal_inputs_and_outputs() -> None:
+    payload = graph_payload(AGENT_A, AGENT_B)
+    payload["definition"]["edges"] = [  # type: ignore[index]
+        {
+            "id": "start-agent-1",
+            "source": "start",
+            "source_handle": "next",
+            "target": "agent-1",
+            "target_handle": "in",
+        },
+        {
+            "id": "agent-1-agent-2",
+            "source": "agent-1",
+            "source_handle": "next",
+            "target": "agent-2",
+            "target_handle": "in",
+        },
+        {
+            "id": "agent-1-end",
+            "source": "agent-1",
+            "source_handle": "next",
+            "target": "end",
+            "target_handle": "in",
+        },
+        {
+            "id": "agent-2-end",
+            "source": "agent-2",
+            "source_handle": "next",
+            "target": "end",
+            "target_handle": "in",
+        },
+    ]
+    admission, document = admit_workflow_document(payload)
+
+    assert admission.valid is True
+    assert document is not None
+    assert validate_workflow_executable(
+        document,
+        validate_main_agent=valid_main_agent,
+    ).valid is True
+
+
+def test_topology_does_not_forbid_langgraph_cycles() -> None:
+    payload = graph_payload(AGENT_A, AGENT_B)
+    payload["definition"]["edges"] = [  # type: ignore[index]
+        *payload["definition"]["edges"],  # type: ignore[index]
+        {
+            "id": "agent-2-agent-1",
+            "source": "agent-2",
+            "source_handle": "next",
+            "target": "agent-1",
+            "target_handle": "in",
+        },
+    ]
+    admission, document = admit_workflow_document(payload)
+
+    assert admission.valid is True
+    assert document is not None
+    assert validate_workflow_executable(
+        document,
+        validate_main_agent=valid_main_agent,
+    ).valid is True
 
 
 def test_executable_validation_attaches_main_agent_issues_to_the_agent_node() -> None:
@@ -262,7 +341,7 @@ def test_compiler_maps_canvas_start_and_end_to_langgraph_sentinels() -> None:
         .add_edge("answer", END)
         .compile()
     )
-    graph = compile_workflow(document, agent_graphs={"agent-1": agent_graph})
+    graph = compile_workflow(document, node_graphs={"agent-1": agent_graph})
 
     result = asyncio.run(
         graph.ainvoke(
@@ -275,3 +354,102 @@ def test_compiler_maps_canvas_start_and_end_to_langgraph_sentinels() -> None:
 
     assert [message.type for message in result["messages"]] == ["ai"]
     assert result["messages"][-1].content == "compiled workflow response"
+
+
+def test_compiler_maps_every_agent_node_to_a_compiled_subgraph() -> None:
+    admission, document = admit_workflow_document(graph_payload(AGENT_A, AGENT_B))
+    assert admission.valid is True
+    assert document is not None
+
+    def answer(content: str):
+        def node(_state: AgentShellState) -> dict[str, list[AIMessage]]:
+            return {"messages": [AIMessage(content=content)]}
+
+        return (
+            StateGraph(AgentShellState)
+            .add_node("answer", node)
+            .add_edge(START, "answer")
+            .add_edge("answer", END)
+            .compile()
+        )
+
+    graph = compile_workflow(
+        document,
+        node_graphs={
+            "agent-1": answer("first agent"),
+            "agent-2": answer("second agent"),
+        },
+    )
+
+    result = asyncio.run(
+        graph.ainvoke(
+            {
+                "messages": [],
+                "shared_vars": {},
+            }
+        )
+    )
+
+    assert [message.content for message in result["messages"]] == [
+        "first agent",
+        "second agent",
+    ]
+
+
+def test_runtime_builds_repeated_main_agent_references_per_workflow_node() -> None:
+    admission, document = admit_workflow_document(graph_payload(AGENT_A, AGENT_A))
+    assert admission.valid is True
+    assert document is not None
+
+    class MiddlewareRuntime:
+        async def close(self) -> None:
+            return None
+
+    class RecordingRuntime(AgentRuntime):
+        def __init__(self) -> None:
+            self.built_ids: list[str] = []
+
+        async def build_agent(self, main_agent_id: str, _raw_messages, **_kwargs):
+            self.built_ids.append(main_agent_id)
+
+            def answer(_state: AgentShellState) -> dict[str, list[AIMessage]]:
+                return {"messages": [AIMessage(content=main_agent_id)]}
+
+            graph = (
+                StateGraph(AgentShellState)
+                .add_node("answer", answer)
+                .add_edge(START, "answer")
+                .add_edge("answer", END)
+                .compile()
+            )
+            return BuiltAgent(
+                graph=graph,
+                input_state={"messages": [], "shared_vars": {}},
+                output_config={},
+                agent_id=main_agent_id,
+                agent_name="Repeated Agent",
+                subagent_profile_ids={},
+                middleware_runtime=MiddlewareRuntime(),  # type: ignore[arg-type]
+            )
+
+        def _execution(self, built: BuiltAgent, **kwargs):
+            return {"built": built, **kwargs}
+
+    runtime = RecordingRuntime()
+    execution = asyncio.run(
+        runtime.start_workflow(
+            document,
+            [],
+            workflow_filesystem_id="33333333-3333-4333-8333-333333333333",
+        )
+    )
+
+    assert runtime.built_ids == [AGENT_A, AGENT_A]
+    assert [node_id for node_id, _ in execution["workflow_built"]] == [
+        "agent-1",
+        "agent-2",
+    ]
+    result = asyncio.run(
+        execution["graph"].ainvoke({"messages": [], "shared_vars": {}})
+    )
+    assert [message.content for message in result["messages"]] == [AGENT_A, AGENT_A]

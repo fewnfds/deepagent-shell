@@ -37,6 +37,7 @@ class AgentExecution:
     normalizer: V3EventNormalizer
     middleware_runtime: MiddlewarePackageRuntime
     media_response: MainAgentMediaResponse
+    middleware_runtimes: tuple[MiddlewarePackageRuntime, ...] = ()
     event_observers: tuple[Callable[[OutputEvent], None], ...] = ()
     final_state: dict[str, Any] | None = None
     _started: bool = False
@@ -71,7 +72,9 @@ class AgentExecution:
             async for part in self._stream_text_inner():
                 yield part
         finally:
-            await self.middleware_runtime.close()
+            runtimes = (self.middleware_runtime, *self.middleware_runtimes)
+            for runtime in runtimes:
+                await runtime.close()
 
     async def _stream_text_inner(self) -> AsyncIterator[str]:
 
@@ -265,6 +268,7 @@ class AgentRuntime:
         model_response_observer: Callable[[ModelResponse], None] | None = None,
         request_id: str = "",
         public_model: str = "",
+        workflow_built: tuple[tuple[str, BuiltAgent], ...] = (),
     ) -> AgentExecution:
         observers = []
         if event_observer is not None:
@@ -275,18 +279,20 @@ class AgentRuntime:
                     event, request_id=request_id, model=public_model
                 )
             )
+        workflow_agents = workflow_built or ((workflow_node_id, built),)
         if workflow_node_id:
             from agent_shell.workflow.events import WorkflowEventSourceV1
 
             workflow_sources = {
-                workflow_node_id: WorkflowEventSourceV1(
+                node_id: WorkflowEventSourceV1(
                     source_type="agent",
-                    workflow_node_id=workflow_node_id,
-                    agent_profile_id=built.agent_id,
+                    workflow_node_id=node_id,
+                    agent_profile_id=agent.agent_id,
                 )
+                for node_id, agent in workflow_agents
             }
             projector = WorkflowOutputProjector(
-                {workflow_node_id: built.output_config}
+                {node_id: agent.output_config for node_id, agent in workflow_agents}
             )
         else:
             workflow_sources = None
@@ -304,8 +310,17 @@ class AgentRuntime:
                 else (),
                 workflow_sources=workflow_sources,
                 subagent_profile_ids=built.subagent_profile_ids,
+                main_agent_names=tuple(agent.agent_name for _, agent in workflow_agents),
+                workflow_subagent_profile_ids={
+                    node_id: agent.subagent_profile_ids
+                    for node_id, agent in workflow_agents
+                } if workflow_node_id else None,
             ),
             event_observers=tuple(observers),
+            middleware_runtimes=tuple(
+                agent.middleware_runtime
+                for _, agent in workflow_agents[1:]
+            ),
         )
 
     async def start(
@@ -357,37 +372,44 @@ class AgentRuntime:
         agent_nodes = [
             node for node in document.definition.nodes if node.type == "agent"
         ]
-        if len(agent_nodes) != 1:
-            raise AgentRuntimeError(
-                "workflow.agent_count_unsupported",
-                "The first Workflow runtime requires exactly one Agent node.",
-                status_code=422,
-            )
-        agent_node = agent_nodes[0]
-        main_agent_id = str(
-            AgentNodeConfig.model_validate(agent_node.config).main_agent_id
-        )
-        built = await self.build_agent(
-            main_agent_id,
-            raw_messages,
-            model_request_interceptor=model_request_interceptor,
-            model_request_observer=model_request_observer,
-            model_response_observer=model_response_observer,
-            request_id=request_id,
-            workflow_filesystem_id=workflow_filesystem_id,
-        )
+        built_agents: list[tuple[str, BuiltAgent]] = []
         try:
+            for agent_node in agent_nodes:
+                main_agent_id = str(
+                    AgentNodeConfig.model_validate(agent_node.config).main_agent_id
+                )
+                built_agents.append((
+                    agent_node.id,
+                    await self.build_agent(
+                        main_agent_id,
+                        raw_messages,
+                        model_request_interceptor=model_request_interceptor,
+                        model_request_observer=model_request_observer,
+                        model_response_observer=model_response_observer,
+                        request_id=request_id,
+                        workflow_filesystem_id=workflow_filesystem_id,
+                    ),
+                ))
+            if not built_agents:
+                raise AgentRuntimeError(
+                    "workflow.node_runtime_missing",
+                    "The Workflow has no materialized runtime node.",
+                    status_code=422,
+                )
             graph = compile_workflow(
                 document,
-                agent_graphs={agent_node.id: built.graph},
+                node_graphs={node_id: agent.graph for node_id, agent in built_agents},
             )
         except Exception:
-            await built.middleware_runtime.close()
+            for _, agent in built_agents:
+                await agent.middleware_runtime.close()
             raise
+        first_node_id, built = built_agents[0]
         return self._execution(
             built,
             graph=graph,
-            workflow_node_id=agent_node.id,
+            workflow_node_id=first_node_id,
+            workflow_built=tuple(built_agents),
             event_observer=event_observer,
             model_response_observer=model_response_observer,
             request_id=request_id,

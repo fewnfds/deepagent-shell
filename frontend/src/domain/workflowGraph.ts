@@ -1,8 +1,18 @@
-import type { Edge, Node, ViewportTransform, XYPosition } from '@vue-flow/core'
+import {
+  MarkerType,
+  type Connection,
+  type Edge,
+  type Node,
+  type ViewportTransform,
+  type XYPosition,
+} from '@vue-flow/core'
 
 import type {
   WorkflowGraphDocument,
+  WorkflowGraphEdge,
   WorkflowGraphNode,
+  WorkflowNodeHandleSpec,
+  WorkflowNodeCatalogItem,
   WorkflowNodeType,
 } from '@/api'
 
@@ -14,12 +24,13 @@ export interface WorkflowCanvasNodeData {
 export type WorkflowCanvasNode = Node<WorkflowCanvasNodeData>
 
 export interface WorkflowCanvasEdgeData {
-  edgeType: 'normal'
+  edgeType: string
 }
 
 export type WorkflowCanvasEdge = Edge<WorkflowCanvasEdgeData>
 
 export const WORKFLOW_NODE_DRAG_MIME = 'application/x-agent-shell-workflow-node'
+export const WORKFLOW_NORMAL_EDGE_MARKER = MarkerType.ArrowClosed
 
 export interface WorkflowCanvasState {
   nodes: WorkflowCanvasNode[]
@@ -46,7 +57,36 @@ function canvasNode(node: WorkflowGraphNode, document: WorkflowGraphDocument): W
   }
 }
 
-export function workflowDocumentToCanvas(document: WorkflowGraphDocument): WorkflowCanvasState {
+function catalogHandle(
+  catalog: WorkflowNodeCatalogItem[],
+  nodeType: WorkflowNodeType,
+  handleId: string | null | undefined,
+  output: boolean,
+): WorkflowNodeHandleSpec | null {
+  const nodeTypeSpec = catalog.find((item) => item.type === nodeType)
+  if (!nodeTypeSpec || !handleId) return null
+  const handles = output ? nodeTypeSpec.output_handles : nodeTypeSpec.input_handles
+  return handles.find((handle) => handle.id === handleId) ?? null
+}
+
+function documentEdgeType(
+  edge: WorkflowGraphEdge,
+  document: WorkflowGraphDocument,
+  catalog: WorkflowNodeCatalogItem[],
+): string {
+  const source = document.definition.nodes.find((node) => node.id === edge.source)
+  const target = document.definition.nodes.find((node) => node.id === edge.target)
+  if (!source || !target) return ''
+  const sourceHandle = catalogHandle(catalog, source.type, edge.source_handle, true)
+  const targetHandle = catalogHandle(catalog, target.type, edge.target_handle, false)
+  if (!sourceHandle || !targetHandle) return ''
+  return sourceHandle.edge_type === targetHandle.edge_type ? sourceHandle.edge_type : ''
+}
+
+export function workflowDocumentToCanvas(
+  document: WorkflowGraphDocument,
+  catalog: WorkflowNodeCatalogItem[],
+): WorkflowCanvasState {
   const sourceNodes = document.definition.nodes.length > 0
     ? document.definition.nodes
     : [
@@ -63,7 +103,8 @@ export function workflowDocumentToCanvas(document: WorkflowGraphDocument): Workf
       target: edge.target,
       targetHandle: edge.target_handle,
       type: 'smoothstep',
-      data: { edgeType: 'normal' },
+      markerEnd: WORKFLOW_NORMAL_EDGE_MARKER,
+      data: { edgeType: documentEdgeType(edge, document, catalog) },
     })),
     viewport: { ...document.layout.viewport },
   }
@@ -89,9 +130,9 @@ export function workflowCanvasToDocument(
       edges: edges.map((edge) => ({
         id: edge.id,
         source: edge.source,
-        source_handle: edge.sourceHandle ?? 'next',
+        source_handle: edge.sourceHandle ?? '',
         target: edge.target,
-        target_handle: edge.targetHandle ?? 'in',
+        target_handle: edge.targetHandle ?? '',
       })),
     },
     layout: {
@@ -104,14 +145,53 @@ export function workflowCanvasToDocument(
 }
 
 export function newAgentCanvasNode(
+  id: string,
   mainAgentId: string,
   position: XYPosition = defaultPositions.agent,
 ): WorkflowCanvasNode {
   return {
-    id: 'agent',
+    id,
     type: 'agent',
     position: { ...position },
     deletable: true,
     data: { nodeType: 'agent', mainAgentId },
   }
+}
+
+export function workflowConnectionEdgeType(
+  connection: Connection,
+  nodes: WorkflowCanvasNode[],
+  edges: WorkflowCanvasEdge[],
+  catalog: WorkflowNodeCatalogItem[],
+): 'normal' | null {
+  const source = nodes.find((node) => node.id === connection.source)
+  const target = nodes.find((node) => node.id === connection.target)
+  if (!source || !target || source.id === target.id) return null
+
+  const sourceHandle = catalogHandle(
+    catalog,
+    source.data.nodeType,
+    connection.sourceHandle,
+    true,
+  )
+  const targetHandle = catalogHandle(
+    catalog,
+    target.data.nodeType,
+    connection.targetHandle,
+    false,
+  )
+  if (
+    !sourceHandle
+    || !targetHandle
+    || sourceHandle.edge_type !== 'normal'
+    || targetHandle.edge_type !== sourceHandle.edge_type
+  ) return null
+
+  const duplicate = edges.some((edge) => (
+    edge.source === connection.source
+    && edge.sourceHandle === connection.sourceHandle
+    && edge.target === connection.target
+    && edge.targetHandle === connection.targetHandle
+  ))
+  return duplicate ? null : 'normal'
 }

@@ -20,12 +20,16 @@ class AgentNodeConfig(BaseModel):
 @dataclass(frozen=True, slots=True)
 class NodeHandleSpec:
     id: str
-    max_connections: int = 1
+    edge_type: str = "normal"
+    # None follows Vue Flow/LangGraph semantics: the control handle is not
+    # cardinality-limited by the catalog. Graph topology remains authoritative.
+    max_connections: int | None = None
 
     def as_dict(self) -> dict[str, object]:
         return {
             "id": self.id,
             "kind": "control",
+            "edge_type": self.edge_type,
             "max_connections": self.max_connections,
         }
 

@@ -174,10 +174,19 @@ class V3EventNormalizer:
         *,
         workflow_sources: Mapping[str, WorkflowEventSourceV1] | None = None,
         subagent_profile_ids: Mapping[str, str] | None = None,
+        main_agent_names: tuple[str, ...] | None = None,
+        workflow_subagent_profile_ids: Mapping[
+            str, Mapping[str, str]
+        ] | None = None,
     ) -> None:
         self._main_agent_name = main_agent_name
+        self._main_agent_names = frozenset(main_agent_names or (main_agent_name,))
         self._workflow_sources = dict(workflow_sources or {})
         self._subagent_profile_ids = dict(subagent_profile_ids or {})
+        self._workflow_subagent_profile_ids = {
+            node_id: dict(profile_ids)
+            for node_id, profile_ids in (workflow_subagent_profile_ids or {}).items()
+        }
         self._sequence = 0
         self._blocks: dict[tuple[str, int], _MessageBlock] = {}
         self._message_ids: dict[str, str] = {}
@@ -333,7 +342,7 @@ class V3EventNormalizer:
         agent_name = str(metadata.get("lc_agent_name") or self._main_agent_name)
         run_id = str(metadata.get("run_id") or "")
         run_key = run_id or f"{namespace}:{agent_name}"
-        is_main_agent = agent_name == self._main_agent_name
+        is_main_agent = agent_name in self._main_agent_names
 
         if not isinstance(payload, dict):
             if not is_main_agent or not isinstance(payload, AIMessage):
@@ -943,8 +952,11 @@ class V3EventNormalizer:
                     break
         if source is None:
             return None
-        subagent_profile_id = self._subagent_profile_ids.get(agent_name)
-        if not subagent_profile_id or agent_name == self._main_agent_name:
+        subagent_profile_id = self._workflow_subagent_profile_ids.get(
+            source.workflow_node_id,
+            self._subagent_profile_ids,
+        ).get(agent_name)
+        if not subagent_profile_id or agent_name in self._main_agent_names:
             return source
         return WorkflowEventSourceV1(
             source_type="subagent",

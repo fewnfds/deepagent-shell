@@ -134,7 +134,38 @@ describe('WorkflowsPage', () => {
       },
     }
 
-    const canvas = workflowDocumentToCanvas(document)
+    const canvas = workflowDocumentToCanvas(document, [
+      {
+        type: 'start',
+        type_version: 1,
+        runtime_kind: 'graph_entry',
+        title_key: '',
+        description_key: '',
+        config_schema: {},
+        input_handles: [],
+        output_handles: [{ id: 'next', kind: 'control', edge_type: 'normal', max_connections: null }],
+      },
+      {
+        type: 'agent',
+        type_version: 1,
+        runtime_kind: 'compiled_subgraph',
+        title_key: '',
+        description_key: '',
+        config_schema: {},
+        input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', max_connections: null }],
+        output_handles: [{ id: 'next', kind: 'control', edge_type: 'normal', max_connections: null }],
+      },
+      {
+        type: 'end',
+        type_version: 1,
+        runtime_kind: 'graph_exit',
+        title_key: '',
+        description_key: '',
+        config_schema: {},
+        input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', max_connections: null }],
+        output_handles: [],
+      },
+    ])
 
     expect(workflowCanvasToDocument(canvas.nodes, canvas.edges, canvas.viewport)).toEqual(document)
   })

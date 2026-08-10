@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from langchain_core.messages import AIMessage
+
 from agent_shell.runtime.output_event_pool import OutputEventRectifier
 from agent_shell.runtime.output_projection import WorkflowOutputProjector
 from agent_shell.runtime.output_stream import OutputEvent, V3EventNormalizer
@@ -15,6 +17,7 @@ from .support import config
 MAIN_A = "11111111-1111-4111-8111-111111111111"
 MAIN_B = "22222222-2222-4222-8222-222222222222"
 SUBAGENT = "33333333-3333-4333-8333-333333333333"
+SUBAGENT_B = "44444444-4444-4444-8444-444444444444"
 
 
 def _assistant_event(node_id: str, message: str, sequence: int) -> OutputEvent:
@@ -44,6 +47,91 @@ def test_workflow_output_uses_the_policy_frozen_for_each_node() -> None:
         "B:<second>"
     ]
     assert rectifier.feed(_assistant_event("unknown", "must stay private", 3)) == []
+
+
+def test_v3_sources_keep_multiple_workflow_agents_distinct() -> None:
+    normalizer = V3EventNormalizer(
+        "Writer",
+        workflow_sources={
+            "agent-a": WorkflowEventSourceV1(
+                source_type="agent",
+                workflow_node_id="agent-a",
+                agent_profile_id=MAIN_A,
+            ),
+            "agent-b": WorkflowEventSourceV1(
+                source_type="agent",
+                workflow_node_id="agent-b",
+                agent_profile_id=MAIN_B,
+            ),
+        },
+        main_agent_names=("Writer", "Reviewer"),
+    )
+
+    events = normalizer.feed(
+        {
+            "method": "messages",
+            "params": {
+                "namespace": ["agent-b:runtime-task-id"],
+                "timestamp": 1,
+                "data": [
+                    AIMessage(content="review complete"),
+                    {
+                        "lc_agent_name": "Reviewer",
+                        "langgraph_node": "model",
+                        "run_id": "review-run",
+                    },
+                ],
+            },
+        }
+    )
+
+    output = next(item for item in events if isinstance(item, OutputEvent))
+    assert output.agent_name == "Reviewer"
+    assert output.workflow_node_id == "agent-b"
+    assert output.agent_profile_id == MAIN_B
+
+
+def test_v3_subagent_identity_is_scoped_by_workflow_node() -> None:
+    normalizer = V3EventNormalizer(
+        "Writer",
+        workflow_sources={
+            "agent-a": WorkflowEventSourceV1(
+                source_type="agent",
+                workflow_node_id="agent-a",
+                agent_profile_id=MAIN_A,
+            ),
+            "agent-b": WorkflowEventSourceV1(
+                source_type="agent",
+                workflow_node_id="agent-b",
+                agent_profile_id=MAIN_B,
+            ),
+        },
+        main_agent_names=("Writer", "Reviewer"),
+        workflow_subagent_profile_ids={
+            "agent-a": {"Researcher": SUBAGENT},
+            "agent-b": {"Researcher": SUBAGENT_B},
+        },
+    )
+
+    events = normalizer.feed(
+        {
+            "method": "lifecycle",
+            "params": {
+                "timestamp": 1,
+                "data": {
+                    "event": "started",
+                    "namespace": ["agent-b:runtime-task-id"],
+                    "graph_name": "Researcher",
+                    "cause": {"tool_call_id": "call-task"},
+                },
+            },
+        }
+    )
+
+    output = next(item for item in events if isinstance(item, OutputEvent))
+    assert output.workflow_node_id == "agent-b"
+    assert output.agent_profile_id == MAIN_B
+    assert output.subagent_profile_id == SUBAGENT_B
 
 
 def test_v3_sources_distinguish_agent_subagent_and_script_nodes() -> None:

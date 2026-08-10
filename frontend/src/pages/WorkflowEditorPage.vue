@@ -18,6 +18,7 @@ import {
   type MainAgent,
   type Workflow,
   type WorkflowNodeCatalogItem,
+  type WorkflowNodeType,
 } from '@/api'
 import WorkflowInspector from '@/components/workflow/WorkflowInspector.vue'
 import WorkflowNodeLibrary from '@/components/workflow/WorkflowNodeLibrary.vue'
@@ -26,7 +27,9 @@ import { useToasts } from '@/composables/useToasts'
 import {
   newAgentCanvasNode,
   WORKFLOW_NODE_DRAG_MIME,
+  WORKFLOW_NORMAL_EDGE_MARKER,
   workflowCanvasToDocument,
+  workflowConnectionEdgeType,
   workflowDocumentToCanvas,
   type WorkflowCanvasEdge,
   type WorkflowCanvasNode,
@@ -51,13 +54,11 @@ const loaded = ref(false)
 const saving = ref(false)
 const loadError = ref('')
 const workflowId = computed(() => String(route.params.id ?? ''))
-const hasAgent = computed(() => nodes.value.some((node) => node.data.nodeType === 'agent'))
 const agentCatalogItem = computed(() => (
   nodeCatalog.value.find((item) => item.type === 'agent') ?? null
 ))
 const canAddAgent = computed(() => (
   loaded.value
-  && !hasAgent.value
   && mainAgents.value.length > 0
   && agentCatalogItem.value !== null
 ))
@@ -71,32 +72,43 @@ const selectedEdge = computed(() => (
   selectedNode.value ? null : edges.value.find((edge) => edge.selected) ?? null
 ))
 
+function normalHandleId(nodeType: WorkflowNodeType, output: boolean): string {
+  const catalog = nodeCatalog.value.find((item) => item.type === nodeType)
+  if (!catalog) return ''
+  const handles = output ? catalog.output_handles : catalog.input_handles
+  return handles.find((handle) => handle.edge_type === 'normal')?.id ?? ''
+}
+
 function isValidConnection(connection: Connection): boolean {
-  const source = nodes.value.find((node) => node.id === connection.source)
-  const target = nodes.value.find((node) => node.id === connection.target)
-  if (!source || !target) return false
-  const pair = `${source.data.nodeType}:${connection.sourceHandle}->${target.data.nodeType}:${connection.targetHandle}`
-  if (pair !== 'start:next->agent:in' && pair !== 'agent:next->end:in') return false
-  return !edges.value.some((edge) => (
-    edge.source === connection.source
-    || edge.target === connection.target
-  ))
+  return workflowConnectionEdgeType(
+    connection,
+    nodes.value,
+    edges.value,
+    nodeCatalog.value,
+  ) !== null
 }
 
 function connect(connection: Connection): void {
-  if (!isValidConnection(connection)) return
+  const edgeType = workflowConnectionEdgeType(
+    connection,
+    nodes.value,
+    edges.value,
+    nodeCatalog.value,
+  )
+  if (!edgeType) return
   nodes.value = nodes.value.map((node) => ({ ...node, selected: false }))
   edges.value = [
     ...edges.value.map((edge) => ({ ...edge, selected: false })),
     {
-      id: `edge-${connection.source}-${connection.target}`,
+      id: `edge-${connection.source}-${connection.sourceHandle}-${connection.target}-${connection.targetHandle}`,
       source: connection.source,
       sourceHandle: connection.sourceHandle,
       target: connection.target,
       targetHandle: connection.targetHandle,
       type: 'smoothstep',
+      markerEnd: WORKFLOW_NORMAL_EDGE_MARKER,
       selected: true,
-      data: { edgeType: 'normal' },
+      data: { edgeType },
     },
   ]
   rightCollapsed.value = false
@@ -105,7 +117,8 @@ function connect(connection: Connection): void {
 function addAgent(position?: XYPosition): void {
   const firstAgent = mainAgents.value[0]
   if (!canAddAgent.value || !firstAgent) return
-  const node = newAgentCanvasNode(firstAgent.id, position)
+  const nodeId = nextAgentNodeId()
+  const node = newAgentCanvasNode(nodeId, firstAgent.id, position ?? nextAgentPosition())
   node.selected = true
   nodes.value = [
     ...nodes.value.map((item) => ({ ...item, selected: false })),
@@ -113,6 +126,20 @@ function addAgent(position?: XYPosition): void {
   ]
   edges.value = edges.value.map((edge) => ({ ...edge, selected: false }))
   rightCollapsed.value = false
+}
+
+function nextAgentPosition(): XYPosition {
+  const count = nodes.value.filter((node) => node.data.nodeType === 'agent').length
+  return {
+    x: 360 + (count % 4) * 260,
+    y: 180 + Math.floor(count / 4) * 140,
+  }
+}
+
+function nextAgentNodeId(): string {
+  let index = 1
+  while (nodes.value.some((node) => node.id === `agent-${index}`)) index += 1
+  return `agent-${index}`
 }
 
 function dragOver(event: DragEvent): void {
@@ -204,7 +231,7 @@ onMounted(async () => {
     mainAgents.value = agents
     nodeCatalog.value = catalog
     stateContract.value = graph.definition.state_contract
-    const canvas = workflowDocumentToCanvas(graph)
+    const canvas = workflowDocumentToCanvas(graph, nodeCatalog.value)
     nodes.value = canvas.nodes
     edges.value = canvas.edges
     savedViewport.value = canvas.viewport
@@ -255,6 +282,7 @@ onMounted(async () => {
           v-model:edges="edges"
           class="workflow-editor-flow"
           :connection-mode="ConnectionMode.Strict"
+          default-marker-color="var(--bs-primary)"
           :delete-key-code="['Backspace', 'Delete']"
           :is-valid-connection="isValidConnection"
           :max-zoom="2"
@@ -270,11 +298,11 @@ onMounted(async () => {
               <span class="workflow-node-icon" aria-hidden="true"><i class="bi bi-play-fill" /></span>
               <span class="workflow-node-title">{{ t('workflows.editor.start') }}</span>
               <Handle
-                id="next"
+                :id="normalHandleId('start', true)"
                 class="workflow-port workflow-port--normal"
                 type="source"
                 :aria-label="t('workflows.editor.normalOutput')"
-                :connectable="1"
+                :connectable="true"
                 :position="Position.Right"
               />
             </div>
@@ -283,11 +311,11 @@ onMounted(async () => {
           <template #node-agent="{ data }">
             <div class="workflow-node workflow-node--agent">
               <Handle
-                id="in"
+                :id="normalHandleId('agent', false)"
                 class="workflow-port workflow-port--normal"
                 type="target"
                 :aria-label="t('workflows.editor.normalInput')"
-                :connectable="1"
+                :connectable="true"
                 :position="Position.Left"
               />
               <div class="workflow-node-header">
@@ -296,11 +324,11 @@ onMounted(async () => {
               </div>
               <span class="workflow-node-summary">{{ mainAgentName(data.mainAgentId) }}</span>
               <Handle
-                id="next"
+                :id="normalHandleId('agent', true)"
                 class="workflow-port workflow-port--normal"
                 type="source"
                 :aria-label="t('workflows.editor.normalOutput')"
-                :connectable="1"
+                :connectable="true"
                 :position="Position.Right"
               />
             </div>
@@ -309,11 +337,11 @@ onMounted(async () => {
           <template #node-end>
             <div class="workflow-node workflow-node--terminal">
               <Handle
-                id="in"
+                :id="normalHandleId('end', false)"
                 class="workflow-port workflow-port--normal"
                 type="target"
                 :aria-label="t('workflows.editor.normalInput')"
-                :connectable="1"
+                :connectable="true"
                 :position="Position.Left"
               />
               <span class="workflow-node-icon" aria-hidden="true"><i class="bi bi-stop-fill" /></span>

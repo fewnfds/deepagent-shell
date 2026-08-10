@@ -218,7 +218,8 @@ export type WorkflowNodeType = 'start' | 'agent' | 'end'
 export interface WorkflowNodeHandleSpec {
   id: string
   kind: 'control'
-  max_connections: number
+  edge_type: string
+  max_connections: number | null
 }
 
 export interface WorkflowNodeCatalogItem {
