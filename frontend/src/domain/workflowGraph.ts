@@ -185,7 +185,7 @@ export function nextWorkflowCanvasEdgeId(edges: WorkflowCanvasEdge[]): string {
 }
 
 export function workflowConnectionEdgeType(
-  connection: Connection,
+  connection: Connection & { id?: string },
   nodes: WorkflowCanvasNode[],
   edges: WorkflowCanvasEdge[],
   catalog: WorkflowNodeCatalogItem[],
@@ -214,7 +214,8 @@ export function workflowConnectionEdgeType(
   ) return null
 
   const duplicate = edges.some((edge) => (
-    edge.source === connection.source
+    edge.id !== connection.id
+    && edge.source === connection.source
     && edge.sourceHandle === connection.sourceHandle
     && edge.target === connection.target
     && edge.targetHandle === connection.targetHandle

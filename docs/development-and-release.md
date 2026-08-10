@@ -75,6 +75,15 @@ pwsh.exe -NoProfile -File .\packaging\development\start_dev.ps1 `
   -ProjectRoot $PWD -PythonExe $python
 ```
 
+自动化 Debug 可以显式传入仓库外的本地凭据文件。第一行必须是无空格的可打印 ASCII，并仅用于隔离 Debug；
+启动器将它同时用作临时 management token 和临时 API key，且不会打印内容。未传参数时仍分别生成随机凭据。
+
+```powershell
+$credentialFile = Join-Path $env:LOCALAPPDATA 'AgentShell\codex-debug-token.txt'
+pwsh.exe -NoProfile -File .\packaging\development\start_dev.ps1 `
+  -ProjectRoot $PWD -PythonExe $python -CredentialFile $credentialFile
+```
+
 ## 验证
 
 按改动风险选择最接近的一项，不把所有检查固定串联：

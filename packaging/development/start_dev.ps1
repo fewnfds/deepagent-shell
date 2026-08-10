@@ -4,7 +4,9 @@ param(
     [string]$ProjectRoot,
 
     [Parameter(Mandatory = $true)]
-    [string]$PythonExe
+    [string]$PythonExe,
+
+    [string]$CredentialFile = ""
 )
 
 Set-StrictMode -Version Latest
@@ -12,6 +14,9 @@ $ErrorActionPreference = "Stop"
 
 $project = [System.IO.Path]::GetFullPath($ProjectRoot)
 $python = [System.IO.Path]::GetFullPath($PythonExe)
+$projectPrefix = $project.TrimEnd("\") + "\"
+$credentialPath = $null
+$sharedDebugToken = $null
 $frontend = Join-Path $project "frontend"
 $source = Join-Path $project "server\src"
 $vite = Join-Path $frontend "node_modules\.bin\vite.cmd"
@@ -27,6 +32,24 @@ if (-not (Test-Path -LiteralPath (Join-Path $source "agent_shell\__main__.py") -
 }
 if (-not (Test-Path -LiteralPath (Join-Path $frontend "package.json") -PathType Leaf)) {
     throw "The Agent Shell frontend source tree is missing."
+}
+if (-not [string]::IsNullOrWhiteSpace($CredentialFile)) {
+    $credentialPath = [System.IO.Path]::GetFullPath($CredentialFile)
+    if ($credentialPath.StartsWith($projectPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Debug credentials must be stored outside the source tree."
+    }
+    if (-not (Test-Path -LiteralPath $credentialPath -PathType Leaf)) {
+        throw "The external Debug credential file is missing."
+    }
+    $credentialLines = [System.IO.File]::ReadAllLines($credentialPath)
+    if (
+        $credentialLines.Count -eq 0 -or
+        [string]::IsNullOrEmpty($credentialLines[0]) -or
+        $credentialLines[0] -match "[^\x21-\x7E]"
+    ) {
+        throw "The first Debug credential line must be non-empty printable ASCII without spaces."
+    }
+    $sharedDebugToken = $credentialLines[0]
 }
 $npm = Get-Command npm.cmd -ErrorAction SilentlyContinue
 if ($null -eq $npm) {
@@ -109,8 +132,18 @@ try {
     foreach ($name in $existingAgentShellNames) {
         [System.Environment]::SetEnvironmentVariable($name, $null, "Process")
     }
-    $temporaryManagementPassword = New-TemporaryBearerToken
-    $temporaryApiKey = New-TemporaryBearerToken
+    $temporaryManagementPassword = if ($null -ne $sharedDebugToken) {
+        $sharedDebugToken
+    }
+    else {
+        New-TemporaryBearerToken
+    }
+    $temporaryApiKey = if ($null -ne $sharedDebugToken) {
+        $sharedDebugToken
+    }
+    else {
+        New-TemporaryBearerToken
+    }
     $env:AGENT_SHELL_HOST = "127.0.0.1"
     $env:AGENT_SHELL_PORT = [string]$backendPort
     $env:AGENT_SHELL_ALLOW_REMOTE = "false"
@@ -180,8 +213,13 @@ try {
     Write-Host ""
     Write-Host "Agent Shell explicit frontend Debug"
     Write-Host "  URL: http://127.0.0.1:$frontendPort/admin/"
-    Write-Host "  Temporary management password: $temporaryManagementPassword"
-    Write-Host "  Temporary API Key: $temporaryApiKey"
+    if ($null -ne $credentialPath) {
+        Write-Host "  Debug credentials: loaded from the external credential file"
+    }
+    else {
+        Write-Host "  Temporary management password: $temporaryManagementPassword"
+        Write-Host "  Temporary API Key: $temporaryApiKey"
+    }
     Write-Host "  Temporary data: $dataRoot"
     Write-Host "  Vite hot reload is active. Press Ctrl+C to stop and clean up."
     Write-Host ""

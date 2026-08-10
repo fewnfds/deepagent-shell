@@ -193,5 +193,6 @@ describe('Workflow canvas panels', () => {
       target: end.id,
       targetHandle: 'in',
     }, nodes, [existing], catalog)).toBeNull()
+    expect(workflowConnectionEdgeType(existing, nodes, [existing], catalog)).toBe('normal')
   })
 })

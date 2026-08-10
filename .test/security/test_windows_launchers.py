@@ -221,6 +221,9 @@ def test_explicit_debug_uses_temporary_data_and_dynamic_ports() -> None:
 
     assert "Get-FreeLoopbackPort" in debug_script
     assert "GetTempPath" in debug_script
+    assert '[string]$CredentialFile = ""' in debug_script
+    assert "Debug credentials must be stored outside the source tree." in debug_script
+    assert "loaded from the external credential file" in debug_script
     assert '"--data-dir"' in debug_script
     assert "Remove-Item -LiteralPath $dataRoot -Recurse -Force" in debug_script
     assert "9100" not in debug_script
