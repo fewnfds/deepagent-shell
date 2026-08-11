@@ -1,16 +1,13 @@
 from __future__ import annotations
 
-from contextlib import closing
-import json
 import os
 from pathlib import Path
-import sqlite3
 
 import pytest
 from fastapi.testclient import TestClient
 
 from agent_shell.app import create_app
-from agent_shell.storage.database import SQLiteDatabase
+from agent_shell.storage.file_config import FileConfigRepository
 from support import ScopedAuthTestClient, configure_scope_tokens
 
 LOCAL_SECRET = "local-provider-secret-sentinel"
@@ -52,17 +49,28 @@ def model_payload(
     }
 
 
-def database_payload(database_path: Path, block_id: str) -> tuple[dict, list[sqlite3.Row]]:
-    with closing(sqlite3.connect(database_path)) as connection, connection:
-        connection.row_factory = sqlite3.Row
-        payload = json.loads(
-            connection.execute(
-                "SELECT payload FROM blocks WHERE id = ?", (block_id,)
-            ).fetchone()["payload"]
-        )
-        secrets = connection.execute(
-            "SELECT id, secret_value FROM provider_secrets ORDER BY id"
-        ).fetchall()
+def database_payload(database_path: Path, block_id: str) -> tuple[dict, list[dict[str, str]]]:
+    repository = FileConfigRepository(database_path.parent.parent)
+    payload = next(
+        item
+        for item in repository.config()["components"]["model"]
+        if item["id"] == block_id
+    )
+    environment: dict[str, str] = {}
+    env_path = repository.environment_path
+    if env_path.exists():
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            key, separator, value = line.partition("=")
+            if (
+                separator
+                and key.endswith("_API_KEY")
+                and key != "AGENT_SHELL_API_KEY"
+            ):
+                environment[key] = value
+    secrets = [
+        {"id": key, "secret_value": value}
+        for key, value in sorted(environment.items())
+    ]
     return payload, secrets
 
 

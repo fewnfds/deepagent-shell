@@ -25,7 +25,7 @@ Content-Type: application/json
 ```
 
 请求按 Workflow name 捕获一次配置快照，从同一快照读取当前 Graph、共享 Filesystem 和画布 Agent 节点引用，再递归
-构造该 Main Agent 的 Subagent、权限、Middleware、组件和 Provider secret view。构造完成后关闭配置数据库快照，
+构造该 Main Agent 的 Subagent、权限、Middleware、组件和 Provider secret view。构造完成后关闭请求配置快照，
 运行中的图不再回读配置。
 
 当前可执行 Node class 为 Start、Agent 和 End，Edge class 为 normal；一张图可以包含多个 Agent node，并可串联、

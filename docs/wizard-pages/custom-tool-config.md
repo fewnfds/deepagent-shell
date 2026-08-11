@@ -7,6 +7,6 @@
 {"name": "Writing tools", "tools": ["word_count", "local_search"]}
 ```
 
-数据库保存资源名，最多 200 个。真实请求只物化当前 Agent 选择的资源：重新扫描、import、取得
+组件 YAML 保存资源名，最多 200 个。真实请求只物化当前 Agent 选择的资源：重新扫描、import、取得
 `BaseTool` 并检查最终模型可见名称冲突。未选择的文件不会执行。依赖必须已经包含在发行 runtime 中；
 管理台不安装 Python 包。Subagent 可继承、替换或关闭整份工具组件。

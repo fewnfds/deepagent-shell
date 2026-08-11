@@ -4,12 +4,14 @@ import os
 from pathlib import Path
 
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 
 from agent_shell.app import create_app
 from agent_shell.settings import SettingsError, get_settings
 from agent_shell.storage.api_server import ApiServerStore
 from agent_shell.storage.database import SQLiteDatabase
+from agent_shell.storage.file_config import FileConfigRepository
 from agent_shell.storage import permissions as storage_permissions
 from agent_shell.storage.permissions import PermissionStatus
 
@@ -18,6 +20,13 @@ def _write_environment_file(root: Path, content: str) -> Path:
     path = root / "data" / "config" / "agent-shell.env"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+    return path
+
+
+def _write_system_settings(root: Path, **values: object) -> Path:
+    path = root / "data" / "config" / "system.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump({"settings": values}), encoding="utf-8")
     return path
 
 
@@ -39,7 +48,7 @@ def test_create_app_installs_minimal_cors_and_runtime_directories(
     runtime_dir = tmp_path / "runtime"
     data_root = tmp_path / "data"
     middleware_dir = data_root / "resources" / "custom_middlewares"
-    monkeypatch.setenv("AGENT_SHELL_CORS_ORIGINS", "https://console.example")
+    _write_system_settings(tmp_path, cors_origins=["https://console.example"])
     monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "management-secret")
 
     with TestClient(create_app()) as client:
@@ -75,12 +84,12 @@ def test_create_app_installs_minimal_cors_and_runtime_directories(
 
 def test_official_launcher_uses_only_validated_settings_and_disables_proxy_headers(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     from agent_shell import __main__ as launcher
 
     calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
-    monkeypatch.setenv("AGENT_SHELL_HOST", "127.0.0.2")
-    monkeypatch.setenv("AGENT_SHELL_PORT", "9123")
+    _write_system_settings(tmp_path, host="127.0.0.2", port=9123)
     monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "management-secret")
     monkeypatch.setattr(
         launcher.uvicorn,
@@ -105,12 +114,13 @@ def test_official_launcher_uses_only_validated_settings_and_disables_proxy_heade
 )
 def test_project_langsmith_tracing_boundary_is_explicit(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
     enabled: bool,
     expected: str,
 ) -> None:
     from agent_shell import __main__ as launcher
 
-    monkeypatch.setenv("AGENT_SHELL_LANGSMITH_TRACING_ENABLED", str(enabled).lower())
+    _write_system_settings(tmp_path, langsmith_tracing_enabled=enabled)
     monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "management-secret")
     monkeypatch.setenv("LANGSMITH_TRACING", "true" if not enabled else "false")
     monkeypatch.setenv("LANGCHAIN_TRACING_V2", "true" if not enabled else "false")
@@ -130,12 +140,8 @@ def test_official_launcher_prints_effective_settings_for_windows_script(
 ) -> None:
     from agent_shell import __main__ as launcher
 
-    _write_environment_file(
-        tmp_path,
-        "AGENT_SHELL_HOST=::1\n"
-        "AGENT_SHELL_PORT=9123\n"
-        "AGENT_SHELL_MANAGEMENT_TOKEN=management-secret\n",
-    )
+    _write_system_settings(tmp_path, host="::1", port=9123)
+    _write_environment_file(tmp_path, "AGENT_SHELL_MANAGEMENT_TOKEN=management-secret\n")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
         launcher.uvicorn,
@@ -163,10 +169,10 @@ def test_official_launcher_warns_when_remote_http_backend_is_enabled(
 
     management_token = "management-secret-sentinel"
     api_key = "api-secret-sentinel"
-    monkeypatch.setenv("AGENT_SHELL_ALLOW_REMOTE", "true")
+    _write_system_settings(tmp_path, allow_remote=True)
     monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", management_token)
     database = SQLiteDatabase(tmp_path / "data" / "state" / "agent-shell.sqlite3")
-    ApiServerStore(database).update_settings(
+    ApiServerStore(database, FileConfigRepository(tmp_path / "data")).update_settings(
         api_key_operation="replace",
         api_key=api_key,
     )
@@ -211,8 +217,6 @@ def test_windows_launcher_initializes_missing_local_management_password(
 
     sentinel = "local-admin-2026"
     (tmp_path / ".env.example").write_text(
-        "AGENT_SHELL_HOST=127.0.0.1\n"
-        "AGENT_SHELL_PORT=9123\n"
         "# AGENT_SHELL_MANAGEMENT_TOKEN=<generate-a-management-token>\n",
         encoding="utf-8",
     )
@@ -237,8 +241,6 @@ def test_windows_launcher_initializes_missing_local_management_password(
     env_text = (
         tmp_path / "data" / "config" / "agent-shell.env"
     ).read_text(encoding="utf-8")
-    assert "AGENT_SHELL_HOST=127.0.0.1" in env_text
-    assert "AGENT_SHELL_PORT=9123" in env_text
     assert f"AGENT_SHELL_MANAGEMENT_TOKEN={sentinel}" in env_text
     assert "# AGENT_SHELL_MANAGEMENT_TOKEN=" not in env_text
     assert get_settings().management_token.get_secret_value() == sentinel
@@ -279,8 +281,10 @@ def test_windows_launcher_does_not_overwrite_invalid_existing_settings(
 ) -> None:
     from agent_shell import __main__ as launcher
 
-    original = "AGENT_SHELL_PORT=not-a-port\n"
+    original = "AGENT_SHELL_MANAGEMENT_TOKEN=existing-admin-password\n"
     env_path = _write_environment_file(tmp_path, original)
+    system_path = _write_system_settings(tmp_path, port="not-a-port")
+    original_system = system_path.read_text(encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
         launcher.getpass,
@@ -295,6 +299,7 @@ def test_windows_launcher_does_not_overwrite_invalid_existing_settings(
         == 2
     )
     assert env_path.read_text(encoding="utf-8") == original
+    assert system_path.read_text(encoding="utf-8") == original_system
     captured = capsys.readouterr()
     assert "AGENT_SHELL_PORT" in captured.err
     assert "not-a-port" not in captured.err
@@ -307,11 +312,10 @@ def test_windows_launcher_does_not_initialize_remote_deployment(
 ) -> None:
     from agent_shell import __main__ as launcher
 
-    original = (
-        "AGENT_SHELL_HOST=0.0.0.0\n"
-        "AGENT_SHELL_ALLOW_REMOTE=true\n"
-    )
+    original = ""
     env_path = _write_environment_file(tmp_path, original)
+    system_path = _write_system_settings(tmp_path, host="0.0.0.0", allow_remote=True)
+    original_system = system_path.read_text(encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
         launcher.getpass,
@@ -326,5 +330,6 @@ def test_windows_launcher_does_not_initialize_remote_deployment(
         == 2
     )
     assert env_path.read_text(encoding="utf-8") == original
+    assert system_path.read_text(encoding="utf-8") == original_system
     captured = capsys.readouterr()
     assert "AGENT_SHELL_MANAGEMENT_TOKEN" in captured.err

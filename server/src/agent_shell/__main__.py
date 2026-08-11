@@ -68,20 +68,21 @@ def _write_management_password(
     password: str,
     *,
     env_path: Path,
-    example_path: Path,
 ) -> None:
-    source_path = env_path if env_path.exists() else example_path
-    if source_path.exists():
-        with source_path.open("r", encoding="utf-8-sig", newline="") as source:
-            existing = source.read()
-    else:
-        existing = ""
-
+    existing = env_path.read_text(encoding="utf-8-sig") if env_path.exists() else ""
     newline = "\r\n" if "\r\n" in existing else "\n"
-    lines = existing.splitlines()
+    lines: list[str] = []
+    for line in existing.splitlines():
+        key, separator, _ = line.partition("=")
+        normalized = key.strip().upper()
+        if separator and (
+            normalized == "AGENT_SHELL_API_KEY"
+            or normalized.endswith("_API_KEY")
+        ):
+            lines.append(line)
     replacement = f"AGENT_SHELL_MANAGEMENT_TOKEN={password}"
     placeholder = re.compile(
-        r"^\s*#\s*AGENT_SHELL_MANAGEMENT_TOKEN\s*=.*$",
+        r"^\s*AGENT_SHELL_MANAGEMENT_TOKEN\s*=.*$",
         flags=re.IGNORECASE,
     )
     for index, line in enumerate(lines):
@@ -116,14 +117,12 @@ def initialize_local_settings(
     data_root: Path | None = None,
     include_process_environment: bool = False,
     env_path: Path | None = None,
-    example_path: Path | None = None,
     password_reader: Callable[[str], str] | None = None,
 ) -> int:
     home = (application_home or Path.cwd()).resolve()
     root = data_root or (home / "data")
     root = root.resolve() if root.is_absolute() else (home / root).resolve()
     env_path = env_path or root / "config" / "agent-shell.env"
-    example_path = example_path or home / ".env.example"
     missing_management_error: SettingsError | None = None
     try:
         get_settings(
@@ -176,7 +175,6 @@ def initialize_local_settings(
         _write_management_password(
             password,
             env_path=env_path,
-            example_path=example_path,
         )
     except OSError:
         print("无法保存配置文件，请检查 data 目录是否可写。", file=sys.stderr)
@@ -265,7 +263,7 @@ def run_cli(arguments: list[str] | None = None) -> int:
         "--mode",
         choices=("portable", "environment"),
         default="portable",
-        help="Portable ignores host AGENT_SHELL_* variables; environment accepts them.",
+        help="Controls whether the allowed secret values may come from the process environment; system settings remain in system.yaml.",
     )
     parser.add_argument("--port", type=int, choices=range(1, 65536))
     action = parser.add_mutually_exclusive_group()

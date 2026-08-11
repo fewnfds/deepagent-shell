@@ -17,4 +17,4 @@
 `instruction_override` 必须为 `null`，但选中的 Skill 和读取能力仍然存在。
 
 每个 Agent 只看到自己最终选择的 `/skills/` 目录；该 namespace 只读，未选择的 Skill 返回 not found。
-Subagent 可以继承、替换或关闭 Skill。资源文件不进入数据库快照，真实请求会重新校验当前磁盘内容。
+Subagent 可以继承、替换或关闭 Skill。Skill 选择保存在组件 YAML；资源文件不进入文件配置快照，真实请求会重新校验当前磁盘内容。

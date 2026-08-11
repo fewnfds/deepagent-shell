@@ -44,11 +44,11 @@ Custom Middleware 组件保存有序 Middleware 包引用。Main Agent 选择组
 `create_deep_agent()`，不存在 prepare、周期循环或结束 Hook。
 
 客户端 `messages[]` 是外围不可变请求事实，不会自动成为 Main Agent 活动消息。需要消息策略时，由 Middleware
-在 `before_agent`/`abefore_agent` 中读取 `ctx.request.messages` 并返回 state update。Subagent 默认保留 Deep Agents
+在 `before_agent`/`abefore_agent` 中读取 `runtime.context.messages`，按 Agent 身份整理后返回官方 state update。Subagent 默认保留 Deep Agents
 delegated messages。格式见[自定义 Middleware 包](middleware-packages.md)。
 
 ## 校验与生效
 
 Main Agent 与 Subagent 编辑页继续提交完整草稿给后端预校验，保存时再次校验。Workflow Graph PUT 接受当前画布
-草稿；真实 Chat 请求从一次 SQLite 快照读取 Workflow 当前图、共享 Filesystem、Main Agent、Subagent、组件和
+草稿；真实 Chat 请求从一次文件配置快照读取 Workflow 当前图、共享 Filesystem、Main Agent、Subagent、组件和
 Provider secret view，完成 Agent 构造后关闭配置快照。图不能编译或装配失败时，本次请求直接失败。

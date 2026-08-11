@@ -101,7 +101,7 @@ class MiddlewarePackageLoader:
         binding_kind: str,
         binding_index: int,
         package_id: str,
-    ) -> tuple[Callable[[Any], Any] | None, Path]:
+    ) -> tuple[Callable[..., Any] | None, Path]:
         module, _metadata, package_dir = self.load(
             owner_id, binding_kind, binding_index, package_id
         )

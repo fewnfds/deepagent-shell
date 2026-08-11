@@ -12,7 +12,7 @@ def test_middleware_package_catalog_and_binding_schema_validation(
         "from langchain.agents.middleware import AgentMiddleware\n"
         "class RequestLabel(AgentMiddleware):\n"
         "    pass\n"
-        "def create_middleware(ctx):\n"
+        "def create_middleware(config, agent):\n"
         "    return RequestLabel()\n",
         config_schema=middleware_config_schema(
             {"label": "string"},

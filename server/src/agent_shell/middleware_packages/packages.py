@@ -62,19 +62,19 @@ def _validate_entrypoint(tree: ast.Module) -> None:
     if len(functions) != 1 or isinstance(functions[0], ast.AsyncFunctionDef):
         raise ResourceScanError(
             "resource.error.middlewarePackage.entrypointRequired",
-            f"main.py must define exactly one module-level def {function_name}(ctx).",
+            f"main.py must define exactly one module-level def {function_name}(config, agent).",
         )
     function = functions[0]
     positional = [*function.args.posonlyargs, *function.args.args]
     if (
-        len(positional) != 1
+        len(positional) != 2
         or function.args.vararg is not None
         or function.args.kwarg is not None
         or function.args.kwonlyargs
     ):
         raise ResourceScanError(
             "resource.error.middlewarePackage.entrypointSignatureInvalid",
-            f"The {function_name} entrypoint must accept exactly one positional ctx argument.",
+            f"The {function_name} entrypoint must accept exactly two positional arguments: config and agent.",
         )
 
 

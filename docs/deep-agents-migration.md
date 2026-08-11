@@ -27,8 +27,13 @@ model/tool/agent Hook。需要 checkpoint 的业务数据通过官方 state upda
 - Summarization 与 Prompt Caching 是两个独立 capability，每个身份显式物化自己的官方 middleware；
 - `AgentShellState.shared_vars` 是公共 checkpointed 业务变量，Middleware 实例属性不是。
 
-Canvas Start/End 只是 LangGraph 官方虚拟 `START/END`。客户端 `messages[]` 冻结在 request-local Middleware context，
-不会由 Start 注入或自动成为 Main Agent 活动消息；已装配的官方 `before_agent` Hook 自行产生 state update。
+当前项目仍支持把 Workflow 的 mapped directories 接到 Deep Agents `FilesystemBackend`。LangChain 官方文档明确把
+`FilesystemBackend` 列为不适合 Web server/HTTP API 的 backend；这是一条官方限制记录，不是 Shell 自己声称的安全保证。
+如果未来要消除该限制，应按官方建议改用 `StateBackend`、`StoreBackend` 或 sandbox backend，并另立需求，不在本次 ctx 迁移中偷偷替换。
+
+Canvas Start/End 只是 LangGraph 官方虚拟 `START/END`。客户端 `messages[]` 冻结在官方
+`WorkflowRuntimeContext`，通过 root `context=` 传递；不会由 Start 注入或自动成为 Main Agent 活动消息。已装配的官方
+`before_agent` Hook 从 `runtime.context.messages` 按 Agent 身份整理后产生 state update。
 
 同步 Subagent 是 Agent 内部的官方 `SubAgentMiddleware` 能力，不与外层 Workflow 竞争调度职责。后续
 AsyncSubAgent 使用 `create_deep_agent(subagents=[AsyncSubAgent(...)])` 的官方装配入口，并单独处理 `graph_id`、

@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-import sqlite3
-import threading
 from typing import Any
 
+from agent_shell.middleware_packages.validation import MiddlewarePackageValidationService
 from agent_shell.provider_http import ProviderHttpClients
 from agent_shell.provider_secrets import ProviderSecretResolver
 from agent_shell.runtime.agent_builder import AgentBuilder
@@ -15,92 +13,22 @@ from agent_shell.runtime.agent_runtime import AgentExecution, AgentRuntime
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.blocks import BlockStore
-from agent_shell.storage.database import SQLiteDatabase
+from agent_shell.storage.file_config import FileConfigRepository
 from agent_shell.storage.media_outputs import MediaOutputStore
-from agent_shell.storage.schema import SCHEMA_SQL
 from agent_shell.storage.workflows import WorkflowStore
-from agent_shell.middleware_packages.validation import MiddlewarePackageValidationService
-from agent_shell.validation.service import ConfigurationValidationService
 from agent_shell.validation.models import ValidationReport
-from agent_shell.validation.service import StaticAssembly
-
-
-class _SnapshotDatabase:
-    """Private query-only image of one committed configuration view."""
-
-    _TABLES: tuple[tuple[str, tuple[str, ...]], ...] = (
-        ("provider_secrets", ("id", "secret_value")),
-        ("blocks", ("id", "block_type", "name", "payload")),
-        ("main_agents", ("id", "name", "payload")),
-        ("subagents", ("id", "component_name", "payload")),
-        (
-            "workflows",
-            (
-                "id",
-                "name",
-                "description",
-                "filesystem_id",
-                "enabled",
-                "definition_json",
-                "layout_json",
-            ),
-        ),
-    )
-
-    def __init__(self, source: SQLiteDatabase) -> None:
-        self._lock = threading.RLock()
-        self._connection: sqlite3.Connection | None = sqlite3.connect(
-            ":memory:", check_same_thread=False
-        )
-        self._connection.row_factory = sqlite3.Row
-        self._connection.executescript(SCHEMA_SQL)
-        with source.transaction() as source_connection:
-            source_connection.execute("BEGIN")
-            for table, columns in self._TABLES:
-                names = ", ".join(columns)
-                rows = source_connection.execute(
-                    f"SELECT {names} FROM {table}"
-                ).fetchall()
-                if rows:
-                    placeholders = ", ".join("?" for _ in columns)
-                    self._connection.executemany(
-                        f"INSERT INTO {table} ({names}) VALUES ({placeholders})",
-                        [tuple(row[column] for column in columns) for row in rows],
-                    )
-        self._connection.commit()
-        self._connection.execute("PRAGMA foreign_keys = ON")
-        self._connection.execute("PRAGMA query_only = ON")
-
-    @contextmanager
-    def transaction(self) -> Iterator[sqlite3.Connection]:
-        with self._lock:
-            connection = self._connection
-            if connection is None:
-                raise RuntimeError("request configuration snapshot is closed")
-            yield connection
-
-    def close(self) -> None:
-        with self._lock:
-            connection, self._connection = self._connection, None
-        if connection is not None:
-            connection.close()
-
-    def __del__(self) -> None:  # pragma: no cover - interpreter timing varies
-        try:
-            self.close()
-        except Exception:
-            pass
+from agent_shell.validation.service import ConfigurationValidationService, StaticAssembly
 
 
 @dataclass(slots=True)
 class RequestRuntimeSnapshot:
-    """Resolve and build exactly one Agent from one committed database image."""
+    """Resolve and build exactly one Agent from one immutable file configuration view."""
 
     _configs: AgentConfigStore
     _workflows: WorkflowStore
     _validation: ConfigurationValidationService
     _runtime: AgentRuntime
-    _database: _SnapshotDatabase
+    _repository: FileConfigRepository
 
     def main_agent_by_name(self, name: str) -> dict[str, Any] | None:
         return self._configs.get_item_by_name("main_agents", name)
@@ -120,27 +48,17 @@ class RequestRuntimeSnapshot:
         )
 
     def close(self) -> None:
-        self._database.close()
+        # The repository clone owns no external handles. Keeping this method
+        # preserves the request lifecycle boundary used by AgentRuntime.
+        return None
 
-    async def start_agent(
-        self,
-        main_agent_id: str,
-        raw_messages: object,
-        **kwargs: Any,
-    ) -> AgentExecution:
+    async def start_agent(self, main_agent_id: str, raw_messages: object, **kwargs: Any) -> AgentExecution:
         try:
             return await self._runtime.start(main_agent_id, raw_messages, **kwargs)
         finally:
-            # Agent construction has materialized every database-backed dependency.
-            # Closing here makes any accidental lazy configuration read fail.
             self.close()
 
-    async def start_workflow(
-        self,
-        workflow: Mapping[str, Any],
-        raw_messages: object,
-        **kwargs: Any,
-    ) -> AgentExecution:
+    async def start_workflow(self, workflow: Mapping[str, Any], raw_messages: object, **kwargs: Any) -> AgentExecution:
         try:
             document = self._workflows.get_graph(str(workflow["id"]))
             if document is None:
@@ -149,20 +67,19 @@ class RequestRuntimeSnapshot:
                 document,
                 raw_messages,
                 workflow_filesystem_id=str(workflow["filesystem_id"]),
+                workflow_snapshot=workflow,
                 **kwargs,
             )
         finally:
-            # The graph and all Agent dependencies are now materialized from
-            # one immutable database image.
             self.close()
 
 
 class RequestSnapshotRuntime:
-    """Capture the latest committed configuration for each Agent construction."""
+    """Capture the latest committed file configuration for each Agent construction."""
 
     def __init__(
         self,
-        database: SQLiteDatabase,
+        configuration: FileConfigRepository,
         *,
         custom_tools_dir: Path,
         middleware_packages_dir: Path,
@@ -172,7 +89,7 @@ class RequestSnapshotRuntime:
         provider_http_clients: ProviderHttpClients,
         media_outputs: MediaOutputStore,
     ) -> None:
-        self._database = database
+        self._configuration = configuration
         self._custom_tools_dir = custom_tools_dir
         self._middleware_packages_dir = middleware_packages_dir
         self._runtime_dir = runtime_dir
@@ -182,12 +99,12 @@ class RequestSnapshotRuntime:
         self._media_outputs = media_outputs
 
     def capture(self) -> RequestRuntimeSnapshot:
-        database = _SnapshotDatabase(self._database)
+        repository = self._configuration.clone()
         try:
-            blocks = BlockStore(database)  # type: ignore[arg-type]
-            configs = AgentConfigStore(database)  # type: ignore[arg-type]
-            workflows = WorkflowStore(database)  # type: ignore[arg-type]
-            secrets = ProviderSecretResolver(database)  # type: ignore[arg-type]
+            blocks = BlockStore(repository)
+            configs = AgentConfigStore(repository)
+            workflows = WorkflowStore(repository)
+            secrets = ProviderSecretResolver(repository)
             middleware_package_validation = MiddlewarePackageValidationService(
                 packages_dir=self._middleware_packages_dir,
                 runtime_root=self._runtime_dir,
@@ -216,8 +133,7 @@ class RequestSnapshotRuntime:
                 _workflows=workflows,
                 _validation=validation,
                 _runtime=runtime,
-                _database=database,
+                _repository=repository,
             )
         except Exception:
-            database.close()
             raise

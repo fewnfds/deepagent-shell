@@ -15,8 +15,11 @@ def _configure_trusted_proxy(
     tmp_path: Path,
 ) -> None:
     _configure_auth(monkeypatch, tmp_path)
-    monkeypatch.setenv("AGENT_SHELL_ALLOW_REMOTE", "true")
-    monkeypatch.setenv("AGENT_SHELL_TRUSTED_PROXY_CIDRS", "10.0.0.0/8")
+    _write_system_settings(
+        tmp_path,
+        allow_remote=True,
+        trusted_proxy_cidrs=["10.0.0.0/8"],
+    )
 
 
 def _proxy_inspection_app() -> object:
@@ -143,7 +146,12 @@ def test_management_proxy_error_exposes_a_localization_key(
     tmp_path: Path,
 ) -> None:
     _configure_trusted_proxy(monkeypatch, tmp_path)
-    monkeypatch.setenv("AGENT_SHELL_CORS_ORIGINS", "https://console.example")
+    _write_system_settings(
+        tmp_path,
+        allow_remote=True,
+        trusted_proxy_cidrs=["10.0.0.0/8"],
+        cors_origins=["https://console.example"],
+    )
 
     with TestClient(create_app(), client=("10.2.0.4", 5000)) as client:
         response = client.get(

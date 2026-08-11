@@ -1,10 +1,5 @@
 from __future__ import annotations
 
-import json
-import os
-from pathlib import Path
-import re
-import tempfile
 from collections.abc import Callable
 from typing import Any
 
@@ -12,10 +7,7 @@ from pydantic import SecretStr, ValidationError
 
 from agent_shell.settings import Settings, SettingsError
 from agent_shell.security import ApiKeyPolicyError, validate_api_key_policy
-from agent_shell.storage.permissions import secure_file
-
-
-_ACTIVE_SETTING = re.compile(r"^\s*(AGENT_SHELL_[A-Za-z0-9_]+)\s*=")
+from agent_shell.storage.file_config import FileConfigRepository
 
 
 class SystemSettingsError(RuntimeError):
@@ -47,67 +39,17 @@ def _validation_keys(error: ValidationError) -> tuple[str, ...]:
     return tuple(sorted(keys))
 
 
-def serialize_settings_file(settings: Settings, existing: str) -> str:
-    preserved = [
-        line
-        for line in existing.splitlines()
-        if _ACTIVE_SETTING.match(line) is None
-    ]
-    while preserved and not preserved[-1].strip():
-        preserved.pop()
-    values = [
-        f"AGENT_SHELL_HOST={settings.host}",
-        f"AGENT_SHELL_PORT={settings.port}",
-        f"AGENT_SHELL_ALLOW_REMOTE={'true' if settings.allow_remote else 'false'}",
-        "AGENT_SHELL_LANGSMITH_TRACING_ENABLED="
-        f"{'true' if settings.langsmith_tracing_enabled else 'false'}",
-        (
-            "AGENT_SHELL_CORS_ORIGINS="
-            + json.dumps(list(settings.cors_origins), separators=(",", ":"))
-        ),
-        (
-            "AGENT_SHELL_TRUSTED_PROXY_CIDRS="
-            + json.dumps(
-                list(settings.trusted_proxy_cidrs), separators=(",", ":")
-            )
-        ),
-        f"AGENT_SHELL_MANAGEMENT_TOKEN={_secret_value(settings.management_token)}",
-    ]
-    lines = [*preserved, *([""] if preserved else []), *values]
-    return "\n".join(lines) + "\n"
-
-
-def write_settings_file(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix="agent-shell.env.",
-        suffix=".tmp",
-        dir=path.parent,
-    )
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as output:
-            output.write(content)
-            output.flush()
-            os.fsync(output.fileno())
-        permission = secure_file(temporary)
-        if not permission.enforced:
-            raise OSError("The settings file permissions are not private.")
-        os.replace(temporary, path)
-    except BaseException:
-        temporary.unlink(missing_ok=True)
-        raise
-
-
 class SystemSettingsService:
     def __init__(
         self,
         active: Settings,
         api_key_provider: Callable[[], str | None],
+        configuration: FileConfigRepository,
     ) -> None:
         self._active = active
         self._saved = active
         self._api_key_provider = api_key_provider
+        self._configuration = configuration
 
     @staticmethod
     def _public(settings: Settings) -> dict[str, Any]:
@@ -205,13 +147,24 @@ class SystemSettingsService:
 
     def update(self, payload: dict[str, Any]) -> dict[str, Any]:
         candidate = self._candidate(payload)
-        path = self._active.environment_file
-        if self._same(candidate, self._saved) and path.exists():
-            self._saved = candidate
-            return self.get()
         try:
-            existing = path.read_text(encoding="utf-8-sig") if path.exists() else ""
-            write_settings_file(path, serialize_settings_file(candidate, existing))
+            self._configuration.update_system(
+                lambda system: system.__setitem__(
+                    "settings",
+                    {
+                        "host": candidate.host,
+                        "port": candidate.port,
+                        "allow_remote": candidate.allow_remote,
+                        "langsmith_tracing_enabled": candidate.langsmith_tracing_enabled,
+                        "cors_origins": list(candidate.cors_origins),
+                        "trusted_proxy_cidrs": list(candidate.trusted_proxy_cidrs),
+                    },
+                )
+            )
+            self._configuration.set_secret(
+                "AGENT_SHELL_MANAGEMENT_TOKEN",
+                _secret_value(candidate.management_token),
+            )
         except OSError as exc:
             raise SystemSettingsError(
                 500,

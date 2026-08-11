@@ -19,6 +19,7 @@ import httpx
 
 from agent_shell.storage.api_server import ApiServerStore
 from agent_shell.storage.database import SQLiteDatabase
+from agent_shell.storage.file_config import FileConfigRepository
 
 
 CAPABILITY_TYPES = (
@@ -33,6 +34,8 @@ CAPABILITY_TYPES = (
     "output-mode",
     "exception-retry",
     "subagent",
+    "summarization",
+    "prompt-caching",
 )
 OUTPUT_EVENT_TYPES = (
     "assistant_text",
@@ -128,6 +131,8 @@ def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> d
         "skill": {"name": name, "skills": ["fixture-skill"]},
         "system-prompt": {"name": name, "system_prompt": "Smoke prompt."},
         "subagent": {"name": name},
+        "summarization": {"name": name},
+        "prompt-caching": {"name": name},
         "todo-list": {"name": name},
         "exception-retry": {
             "name": name,
@@ -152,7 +157,7 @@ def _request(
     response = client.request(method, path, headers=headers, json=json_body)
     if response.status_code != expected:
         raise AssertionError(
-            f"{method} {path}: expected {expected}, got {response.status_code}"
+            f"{method} {path}: expected {expected}, got {response.status_code}: {response.text}"
         )
     return response
 
@@ -193,15 +198,20 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
         for key, value in os.environ.items()
         if not key.upper().startswith("AGENT_SHELL_")
     }
-    environment.update(
-        {
-            "AGENT_SHELL_HOST": "127.0.0.1",
-            "AGENT_SHELL_PORT": str(port),
-            "AGENT_SHELL_CORS_ORIGINS": "https://console.example.invalid",
-        }
-    )
     environment["AGENT_SHELL_MANAGEMENT_TOKEN"] = management_token
-    ApiServerStore(SQLiteDatabase(database_path)).update_settings(
+    configuration = FileConfigRepository(data_dir)
+    configuration.update_system(
+        lambda system: system["settings"].update(
+            {
+                "host": "127.0.0.1",
+                "port": port,
+                "cors_origins": ["https://console.example.invalid"],
+            }
+        )
+    )
+    ApiServerStore(
+        SQLiteDatabase(database_path), configuration
+    ).update_settings(
         api_key_operation="replace",
         api_key=api_key,
     )
@@ -337,8 +347,11 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
             ).json()
             assert updated["id"] == created["id"]
             if capability_type == "model":
-                assert updated["stop"] == ["END", "STOP"]
-                assert updated["streaming"] is True
+                assert updated["provider_settings"]["stop_sequences"] == [
+                    "END",
+                    "STOP",
+                ]
+                assert updated["provider_settings"]["streaming"] is True
                 assert updated["provider_settings"]["stream_usage"] is True
 
         cleared_model_payload = _payload(
@@ -367,10 +380,6 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
                 "capability_refs": [
                     {"type": "model", "block_id": blocks["model"]["id"]},
                     {
-                        "type": "filesystem",
-                        "block_id": blocks["filesystem"]["id"],
-                    },
-                    {
                         "type": "output-mode",
                         "block_id": blocks["output-mode"]["id"],
                     },
@@ -389,7 +398,6 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
                 "description": "Handles smoke-test delegated work.",
                 "settings": {
                     "capability_overrides": [],
-                    "subagents": [],
                 },
             },
         ).json()
@@ -424,14 +432,22 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
             json_body=updated_subagent,
         )
 
+        model_id = blocks["model"]["id"]
+        model_path = data_dir / "config" / "components" / "model" / f"{model_id}.yaml"
+        model_text = model_path.read_text(encoding="utf-8")
+        assert provider_secret not in model_text
+        model_secret_name = f"AGENT_SHELL_MODEL_{model_id.replace('-', '').upper()}_API_KEY"
+        assert f"credential: ${model_secret_name}" in model_text
+        environment_text = (data_dir / "config" / "agent-shell.env").read_text(encoding="utf-8")
+        assert f"{model_secret_name}={provider_secret}" in environment_text
         with closing(sqlite3.connect(database_path)) as connection, connection:
-            block_text = "".join(
-                row[0] for row in connection.execute("SELECT payload FROM blocks")
-            )
-            assert provider_secret not in block_text
-            assert connection.execute(
-                "SELECT secret_value FROM provider_secrets"
-            ).fetchone()[0] == provider_secret
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            assert not ({"blocks", "provider_secrets", "workflows"} & tables)
         event_path = data_dir / "logs" / "security-events.jsonl"
         event_text = event_path.read_text(encoding="utf-8")
         assert provider_secret not in event_text
@@ -457,8 +473,12 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
                 f"/api/blocks/{capability_type}/{block['id']}",
                 headers=management,
             )
-        with closing(sqlite3.connect(database_path)) as connection, connection:
-            assert connection.execute("SELECT COUNT(*) FROM provider_secrets").fetchone()[0] == 0
+        assert provider_secret not in (
+            data_dir / "config" / "agent-shell.env"
+        ).read_text(encoding="utf-8")
+        assert f"{model_secret_name}=" not in (
+            data_dir / "config" / "agent-shell.env"
+        ).read_text(encoding="utf-8")
         return {
             "mode": mode,
             "capability_count": len(blocks),

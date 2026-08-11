@@ -4,10 +4,11 @@ import os
 from pathlib import Path
 
 import pytest
+import yaml
 
 from agent_shell.app import create_app
 from agent_shell.settings import get_settings
-from agent_shell.storage.permissions import PermissionStatus
+from agent_shell.storage.file_config import FileConfigRepository
 from support import API_KEY, ScopedAuthTestClient, configure_scope_tokens
 
 
@@ -66,8 +67,7 @@ def test_valid_system_settings_are_atomic_and_take_effect_after_restart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     app, client = _client(tmp_path, monkeypatch)
-    settings_path = tmp_path / "data" / "config" / "agent-shell.env"
-    settings_path.write_text("# launcher comment\n", encoding="utf-8")
+    settings_path = tmp_path / "data" / "config" / "system.yaml"
 
     response = client.put(
         "/api/system/settings",
@@ -84,10 +84,10 @@ def test_valid_system_settings_are_atomic_and_take_effect_after_restart(
     assert response.json()["langsmith_tracing_enabled"] is True
     assert response.json()["cors_origins"] == ["https://console.example:8443"]
     assert app.state.settings.port == 19100
-    text = settings_path.read_text(encoding="utf-8")
-    assert "# launcher comment" in text
-    assert "AGENT_SHELL_PORT=9123" in text
-    assert "AGENT_SHELL_LANGSMITH_TRACING_ENABLED=true" in text
+    document = yaml.safe_load(settings_path.read_text(encoding="utf-8"))
+    assert document["settings"]["port"] == 9123
+    assert document["settings"]["langsmith_tracing_enabled"] is True
+    assert document["settings"]["cors_origins"] == ["https://console.example:8443"]
     restarted = get_settings(
         application_home=tmp_path,
         include_process_environment=False,
@@ -102,7 +102,8 @@ def test_invalid_candidate_does_not_write_or_reveal_replacement_secrets(
 ) -> None:
     _, client = _client(tmp_path, monkeypatch)
     replacement = "replacement-management-secret-000000"
-    settings_path = tmp_path / "data" / "config" / "agent-shell.env"
+    settings_path = tmp_path / "data" / "config" / "system.yaml"
+    original = settings_path.read_text(encoding="utf-8")
 
     response = client.put(
         "/api/system/settings",
@@ -115,7 +116,7 @@ def test_invalid_candidate_does_not_write_or_reveal_replacement_secrets(
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "system_settings_invalid"
     assert replacement not in response.text
-    assert not settings_path.exists()
+    assert settings_path.read_text(encoding="utf-8") == original
 
 
 def test_management_password_replacement_is_write_only_and_persists(
@@ -141,6 +142,11 @@ def test_management_password_replacement_is_write_only_and_persists(
     )
     assert restarted.management_token is not None
     assert restarted.management_token.get_secret_value() == replacement
+    env_text = (tmp_path / "data" / "config" / "agent-shell.env").read_text(
+        encoding="utf-8"
+    )
+    assert replacement in env_text
+    assert "AGENT_SHELL_HOST" not in env_text
 
 
 def test_management_password_can_equal_the_api_key(
@@ -168,17 +174,12 @@ def test_permission_failure_leaves_existing_settings_unchanged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _, client = _client(tmp_path, monkeypatch)
-    settings_path = tmp_path / "data" / "config" / "agent-shell.env"
-    original = "# existing launcher comment\n"
-    settings_path.write_text(original, encoding="utf-8")
+    system_path = tmp_path / "data" / "config" / "system.yaml"
+    original = system_path.read_text(encoding="utf-8")
     monkeypatch.setattr(
-        "agent_shell.system_settings.secure_file",
-        lambda _path: PermissionStatus(
-            "file",
-            False,
-            "test-unconfirmed",
-            "The test did not confirm private permissions.",
-        ),
+        FileConfigRepository,
+        "update_system",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("write failed")),
     )
 
     response = client.put(
@@ -188,4 +189,4 @@ def test_permission_failure_leaves_existing_settings_unchanged(
 
     assert response.status_code == 500
     assert response.json()["detail"]["code"] == "system_settings_write_failed"
-    assert settings_path.read_text(encoding="utf-8") == original
+    assert system_path.read_text(encoding="utf-8") == original

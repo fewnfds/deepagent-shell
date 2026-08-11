@@ -4,11 +4,13 @@ from copy import deepcopy
 import asyncio
 
 import pytest
+from deepagents.backends import StateBackend
 from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
 
 from agent_shell.runtime.agent_builder import BuiltAgent
 from agent_shell.runtime.agent_runtime import AgentRuntime
+from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.runtime.state import AgentShellState
 from agent_shell.validation import ValidationIssue, ValidationReport
 from agent_shell.workflow import (
@@ -394,6 +396,52 @@ def test_compiler_maps_every_agent_node_to_a_compiled_subgraph() -> None:
         "first agent",
         "second agent",
     ]
+
+
+def test_workflow_agent_nodes_share_official_state_backend_files() -> None:
+    admission, document = admit_workflow_document(graph_payload(AGENT_A, AGENT_B))
+    assert admission.valid is True
+    assert document is not None
+    backend = StateBackend()
+
+    def agent_graph(*, write: bool):
+        def node(_state: AgentShellState) -> dict[str, list[AIMessage]]:
+            if write:
+                backend.write("/shared.txt", "from first Agent node")
+            else:
+                result = backend.read("/shared.txt")
+                assert result.error is None
+                assert result.file_data is not None
+                assert result.file_data["content"] == "from first Agent node"
+            return {"messages": [AIMessage(content="ok")]}
+
+        return (
+            StateGraph(
+                AgentShellState,
+                context_schema=WorkflowRuntimeContext,
+            )
+            .add_node("filesystem", node)
+            .add_edge(START, "filesystem")
+            .add_edge("filesystem", END)
+            .compile()
+        )
+
+    graph = compile_workflow(
+        document,
+        node_graphs={
+            "agent-1": agent_graph(write=True),
+            "agent-2": agent_graph(write=False),
+        },
+    )
+
+    result = asyncio.run(
+        graph.ainvoke(
+            {"messages": [], "shared_vars": {}, "files": {}},
+            context=WorkflowRuntimeContext(),
+        )
+    )
+
+    assert result["files"]["/shared.txt"]["content"] == "from first Agent node"
 
 
 def test_runtime_builds_repeated_main_agent_references_per_workflow_node() -> None:

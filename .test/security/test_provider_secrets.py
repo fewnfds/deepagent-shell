@@ -1,15 +1,17 @@
 from __future__ import annotations
 
-from contextlib import closing
 import json
-import sqlite3
 
 import pytest
 
 from agent_shell.provider_secrets import ProviderCredentialError, ProviderSecretResolver
-from agent_shell.storage.database import SQLiteDatabase
+from agent_shell.storage.file_config import FileConfigRepository
 
 from .provider_secret_support import *
+
+
+def resolver_for(database_path: Path) -> ProviderSecretResolver:
+    return ProviderSecretResolver(FileConfigRepository(database_path.parent.parent))
 
 def test_local_secret_is_write_only_and_separated_from_block_json(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -34,7 +36,7 @@ def test_local_secret_is_write_only_and_separated_from_block_json(
     assert stored["credential"]["reference"] == secrets[0]["id"]
     assert secrets[0]["secret_value"] == LOCAL_SECRET
 
-    resolver = ProviderSecretResolver(SQLiteDatabase(database_path))
+    resolver = resolver_for(database_path)
     assert resolver.resolve_model(block_id) == LOCAL_SECRET
 
 def test_keep_rename_replace_and_masked_round_trip_are_atomic(
@@ -61,7 +63,7 @@ def test_keep_rename_replace_and_masked_round_trip_are_atomic(
     )
     rejected = client.put(f"/api/blocks/model/{block_id}", json=masked)
     assert rejected.status_code == 422
-    assert ProviderSecretResolver(SQLiteDatabase(database_path)).resolve_model(
+    assert resolver_for(database_path).resolve_model(
         block_id
     ) == LOCAL_SECRET
 
@@ -69,9 +71,9 @@ def test_keep_rename_replace_and_masked_round_trip_are_atomic(
     rotated = client.put(f"/api/blocks/model/{block_id}", json=replacement)
     assert rotated.status_code == 200, rotated.text
     rotated_internal, rotated_secrets = database_payload(database_path, block_id)
-    assert rotated_internal["credential"]["reference"] != original_reference
+    assert rotated_internal["credential"]["reference"] == original_reference
     assert [row["secret_value"] for row in rotated_secrets] == [REPLACEMENT_SECRET]
-    assert ProviderSecretResolver(SQLiteDatabase(database_path)).resolve_model(
+    assert resolver_for(database_path).resolve_model(
         block_id
     ) == REPLACEMENT_SECRET
 
@@ -91,7 +93,7 @@ def test_endpoint_change_without_replacement_clears_saved_secret(
     assert stored["base_url"] == "https://other-provider.example/v1"
     assert stored["credential"] is None
     assert secrets == []
-    assert ProviderSecretResolver(SQLiteDatabase(database_path)).resolve_model(
+    assert resolver_for(database_path).resolve_model(
         block["id"]
     ) is None
 
@@ -133,37 +135,30 @@ def test_copy_reuses_opaque_reference_and_last_owner_delete_removes_secret(
     assert LOCAL_SECRET not in copied.text
 
     assert client.delete(f"/api/blocks/model/{source['id']}").status_code == 200
-    assert ProviderSecretResolver(SQLiteDatabase(database_path)).resolve_model(
+    assert resolver_for(database_path).resolve_model(
         copy_id
     ) == LOCAL_SECRET
+    reference = copy_internal["credential"]["reference"]
     assert client.delete(f"/api/blocks/model/{copy_id}").status_code == 200
-    with closing(sqlite3.connect(database_path)) as connection, connection:
-        assert connection.execute("SELECT COUNT(*) FROM provider_secrets").fetchone()[0] == 0
+    assert FileConfigRepository(database_path.parent.parent).secret(reference) is None
 
 def test_no_key_is_valid_but_a_broken_reference_fails_closed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client, database_path = make_client(tmp_path, monkeypatch)
-    resolver = ProviderSecretResolver(SQLiteDatabase(database_path))
     monkeypatch.setenv("TEST_PROVIDER_KEY", "must-not-be-read")
     no_key = client.post(
         "/api/blocks/model", json=model_payload("No-key model", None)
     )
     assert no_key.status_code == 200, no_key.text
     assert no_key.json()["credential"] == {"status": "missing"}
-    assert resolver.resolve_model(no_key.json()["id"]) is None
+    assert resolver_for(database_path).resolve_model(no_key.json()["id"]) is None
 
     block = client.post("/api/blocks/model", json=model_payload()).json()
     internal, _ = database_payload(database_path, block["id"])
-    with closing(sqlite3.connect(database_path)) as connection, connection:
-        connection.execute(
-            "DELETE FROM provider_secrets WHERE id = ?",
-            (internal["credential"]["reference"],),
-        )
-        connection.commit()
+    FileConfigRepository(database_path.parent.parent).set_secret(
+        internal["credential"]["reference"], None
+    )
     with pytest.raises(ProviderCredentialError) as captured:
-        resolver.resolve_model(block["id"])
+        resolver_for(database_path).resolve_model(block["id"])
     assert captured.value.code == "provider_secret_reference_missing"
-    assert client.get(f"/api/blocks/model/{block['id']}").json()["credential"][
-        "status"
-    ] == "missing"

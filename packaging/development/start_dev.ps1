@@ -114,10 +114,6 @@ try {
     )
     $managedEnvironmentNames = @(
         $existingAgentShellNames
-        "AGENT_SHELL_HOST"
-        "AGENT_SHELL_PORT"
-        "AGENT_SHELL_ALLOW_REMOTE"
-        "AGENT_SHELL_MANAGEMENT_TOKEN"
         "PYTHONHOME"
         "PYTHONPATH"
         "PYTHONNOUSERSITE"
@@ -144,10 +140,20 @@ try {
     else {
         New-TemporaryBearerToken
     }
-    $env:AGENT_SHELL_HOST = "127.0.0.1"
-    $env:AGENT_SHELL_PORT = [string]$backendPort
-    $env:AGENT_SHELL_ALLOW_REMOTE = "false"
-    $env:AGENT_SHELL_MANAGEMENT_TOKEN = $temporaryManagementPassword
+    $configRoot = Join-Path $dataRoot "config"
+    New-Item -ItemType Directory -Path $configRoot -Force | Out-Null
+    @"
+config_version: 1
+settings:
+  host: 127.0.0.1
+  port: $backendPort
+  allow_remote: false
+  langsmith_tracing_enabled: false
+  cors_origins: []
+  trusted_proxy_cidrs: []
+"@ | Set-Content -LiteralPath (Join-Path $configRoot "system.yaml") -Encoding utf8
+    "AGENT_SHELL_MANAGEMENT_TOKEN=$temporaryManagementPassword" |
+        Set-Content -LiteralPath (Join-Path $configRoot "agent-shell.env") -Encoding utf8
     $env:PYTHONHOME = $null
     $env:PYTHONPATH = $source
     $env:PYTHONNOUSERSITE = "1"
@@ -166,7 +172,7 @@ try {
         "-m", "agent_shell",
         "--home", ".",
         "--data-dir", ('"{0}"' -f $dataRoot),
-        "--mode", "environment",
+        "--mode", "portable",
         "--no-frontend"
     )
     $backend = Start-Process -FilePath $python `

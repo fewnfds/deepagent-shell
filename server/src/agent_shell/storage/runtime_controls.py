@@ -1,39 +1,23 @@
 from __future__ import annotations
 
-from agent_shell.storage.database import SQLiteDatabase
+from agent_shell.storage.file_config import FileConfigRepository
 
 
 class RuntimeControlSettingsStore:
-    """Persist user-selected interception and diagnostic collection settings."""
+    """Persist user-selected interception and diagnostics settings in system.yaml."""
 
-    def __init__(self, database: SQLiteDatabase) -> None:
-        self._database = database
+    def __init__(self, repository: FileConfigRepository) -> None:
+        self._repository = repository
 
     def snapshot(self) -> dict[str, bool]:
-        with self._database.transaction() as connection:
-            row = connection.execute(
-                "SELECT interception_enabled, verbose_diagnostics "
-                "FROM runtime_control_settings WHERE singleton = 1"
-            ).fetchone()
-        if row is None:
-            raise RuntimeError("runtime control settings are unavailable")
+        values = self._repository.system().get("runtime_control", {})
         return {
-            "interception_enabled": bool(row["interception_enabled"]),
-            "verbose_diagnostics": bool(row["verbose_diagnostics"]),
+            "interception_enabled": bool(values.get("interception_enabled", False)),
+            "verbose_diagnostics": bool(values.get("verbose_diagnostics", False)),
         }
 
     def set_interception_enabled(self, enabled: bool) -> None:
-        with self._database.transaction() as connection:
-            connection.execute(
-                "UPDATE runtime_control_settings SET interception_enabled = ? "
-                "WHERE singleton = 1",
-                (int(enabled),),
-            )
+        self._repository.update_system(lambda system: system.setdefault("runtime_control", {}).__setitem__("interception_enabled", bool(enabled)))
 
     def set_verbose_diagnostics(self, enabled: bool) -> None:
-        with self._database.transaction() as connection:
-            connection.execute(
-                "UPDATE runtime_control_settings SET verbose_diagnostics = ? "
-                "WHERE singleton = 1",
-                (int(enabled),),
-            )
+        self._repository.update_system(lambda system: system.setdefault("runtime_control", {}).__setitem__("verbose_diagnostics", bool(enabled)))

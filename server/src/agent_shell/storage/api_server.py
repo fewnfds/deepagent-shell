@@ -14,6 +14,7 @@ from agent_shell.storage.history_retention import (
 
 if TYPE_CHECKING:
     from agent_shell.storage.database import SQLiteDatabase
+    from agent_shell.storage.file_config import FileConfigRepository
     from agent_shell.storage.media_outputs import MediaOutputStore
 
 
@@ -29,13 +30,15 @@ class ApiServerStore:
     def __init__(
         self,
         database: SQLiteDatabase,
+        config_repository: FileConfigRepository,
         event_logger: SecurityEventLogger | None = None,
         history_retention: HistoryRetentionStore | None = None,
         media_outputs: MediaOutputStore | None = None,
     ) -> None:
         self._database = database
+        self._config_repository = config_repository
         self._events = event_logger
-        self._history_retention = history_retention or HistoryRetentionStore(database)
+        self._history_retention = history_retention or HistoryRetentionStore(config_repository)
         self._media_outputs = media_outputs
         with self._database.transaction() as connection:
             self._prune(
@@ -109,47 +112,21 @@ class ApiServerStore:
         }
 
     def settings(self) -> dict[str, object]:
-        with self._database.transaction() as connection:
-            row = connection.execute(
-                "SELECT server.enabled, server.api_key, "
-                "request.max_initial_messages "
-                "FROM api_server_settings AS server "
-                "CROSS JOIN api_server_request_settings AS request "
-                "WHERE server.singleton = 1 AND request.singleton = 1"
-            ).fetchone()
-        if row is None:
-            raise RuntimeError("api server settings are unavailable")
+        values = self._config_repository.system().get("api_server", {})
         return {
-            "enabled": bool(row["enabled"]),
-            "api_key_configured": row["api_key"] is not None,
-            "max_initial_messages": row["max_initial_messages"],
+            "enabled": bool(values.get("enabled", True)),
+            "api_key_configured": self.api_key() is not None,
+            "max_initial_messages": int(values.get("max_initial_messages", 1000)),
         }
 
     def api_key(self) -> str | None:
-        with self._database.transaction() as connection:
-            row = connection.execute(
-                "SELECT api_key FROM api_server_settings WHERE singleton = 1"
-            ).fetchone()
-        if row is None:
-            raise RuntimeError("api server settings are unavailable")
-        return row["api_key"]
+        return self._config_repository.secret("AGENT_SHELL_API_KEY")
 
     def is_enabled(self) -> bool:
-        with self._database.transaction() as connection:
-            row = connection.execute(
-                "SELECT enabled FROM api_server_settings WHERE singleton = 1"
-            ).fetchone()
-        if row is None:
-            raise RuntimeError("api server settings are unavailable")
-        return bool(row["enabled"])
+        return bool(self._config_repository.system().get("api_server", {}).get("enabled", True))
 
     def set_enabled(self, enabled: bool) -> None:
-        with self._database.transaction() as connection:
-            connection.execute(
-                "UPDATE api_server_settings SET enabled = ? WHERE singleton = 1",
-                (int(enabled),),
-            )
-            connection.commit()
+        self._config_repository.update_system(lambda system: system.setdefault("api_server", {}).__setitem__("enabled", bool(enabled)))
         self._emit_updated(state="running" if enabled else "stopped")
 
     def update_settings(
@@ -159,23 +136,14 @@ class ApiServerStore:
         api_key: str | None,
         max_initial_messages: int | None = None,
     ) -> None:
-        with self._database.transaction() as connection:
-            if api_key_operation == "replace":
-                connection.execute(
-                    "UPDATE api_server_settings SET api_key = ? WHERE singleton = 1",
-                    (api_key,),
-                )
-            elif api_key_operation == "clear":
-                connection.execute(
-                    "UPDATE api_server_settings SET api_key = NULL WHERE singleton = 1"
-                )
-            if max_initial_messages is not None:
-                connection.execute(
-                    "UPDATE api_server_request_settings "
-                    "SET max_initial_messages = ? WHERE singleton = 1",
-                    (max_initial_messages,),
-                )
-            connection.commit()
+        if api_key_operation == "replace":
+            self._config_repository.set_secret("AGENT_SHELL_API_KEY", api_key)
+        elif api_key_operation == "clear":
+            self._config_repository.set_secret("AGENT_SHELL_API_KEY", None)
+        if max_initial_messages is not None:
+            self._config_repository.update_system(
+                lambda system: system.setdefault("api_server", {}).__setitem__("max_initial_messages", max_initial_messages)
+            )
         self._emit_updated()
 
     def add_interception_record(

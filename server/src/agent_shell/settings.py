@@ -4,14 +4,17 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import re
 from typing import Annotated, Any
 from urllib.parse import urlsplit
 
+import yaml
 from pydantic import Field, PrivateAttr, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 ENV_PREFIX = "AGENT_SHELL_"
+_MODEL_SECRET_ENVIRONMENT = re.compile(r"^AGENT_SHELL_MODEL_[A-Z0-9_]+_API_KEY$", re.IGNORECASE)
 _LANGSMITH_TRACING_ENVIRONMENT = (
     "LANGSMITH_TRACING",
     "LANGCHAIN_TRACING_V2",
@@ -85,6 +88,20 @@ class Settings(BaseSettings):
     cors_origins: Annotated[tuple[str, ...], NoDecode] = ()
     trusted_proxy_cidrs: Annotated[tuple[str, ...], NoDecode] = ()
     _data_root: Path = PrivateAttr(default_factory=lambda: (Path.cwd() / "data").resolve())
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        # All non-secret settings come from system.yaml. The only Settings field
+        # allowed to come from the environment is injected explicitly by
+        # load_settings below: AGENT_SHELL_MANAGEMENT_TOKEN.
+        return init_settings,
 
     @field_validator("host")
     @classmethod
@@ -201,6 +218,10 @@ class Settings(BaseSettings):
     def environment_file(self) -> Path:
         return self.data_root / "config" / "agent-shell.env"
 
+    @property
+    def system_file(self) -> Path:
+        return self.data_root / "config" / "system.yaml"
+
     def bind_paths(self, application_home: Path, data_root: Path) -> None:
         self._application_home = application_home.resolve()
         self._data_root = data_root.resolve()
@@ -260,7 +281,10 @@ def configure_project_langsmith_tracing(enabled: bool) -> None:
 
 
 def _known_environment_keys() -> set[str]:
-    return {f"{ENV_PREFIX}{name.upper()}" for name in Settings.model_fields}
+    return {
+        "AGENT_SHELL_MANAGEMENT_TOKEN",
+        "AGENT_SHELL_API_KEY",
+    }
 
 
 def _unknown_environment_keys(environment: dict[str, str]) -> tuple[str, ...]:
@@ -269,7 +293,11 @@ def _unknown_environment_keys(environment: dict[str, str]) -> tuple[str, ...]:
         sorted(
             key
             for key in environment
-            if key.upper().startswith(ENV_PREFIX) and key.upper() not in known
+            if (
+                key.upper().startswith(ENV_PREFIX)
+                and key.upper() not in known
+                and not _MODEL_SECRET_ENVIRONMENT.fullmatch(key.upper())
+            )
         )
     )
 
@@ -295,6 +323,27 @@ def _environment_file_keys(path: Path) -> tuple[str, ...]:
     return tuple(keys)
 
 
+def _environment_file_values(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    values: dict[str, str] = {}
+    try:
+        lines = path.read_text(encoding="utf-8-sig").splitlines()
+    except (OSError, UnicodeError):
+        return {}
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.lower().startswith("export "):
+            stripped = stripped[7:].lstrip()
+        name, separator, value = stripped.partition("=")
+        name = name.strip()
+        if separator and name:
+            values[name] = value.strip().strip('"')
+    return values
+
+
 def _error_keys(exc: ValidationError) -> tuple[str, ...]:
     keys: set[str] = set()
     for error in exc.errors(include_input=False, include_url=False):
@@ -304,19 +353,6 @@ def _error_keys(exc: ValidationError) -> tuple[str, ...]:
         field = str(location[0]).upper()
         keys.add(field if field.startswith(ENV_PREFIX) else f"{ENV_PREFIX}{field}")
     return tuple(keys)
-
-
-class _PortableSettings(Settings):
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls,
-        init_settings,
-        env_settings,
-        dotenv_settings,
-        file_secret_settings,
-    ):
-        return init_settings, dotenv_settings
 
 
 def load_settings(
@@ -329,6 +365,7 @@ def load_settings(
     root = data_root or (home / "data")
     root = root.resolve() if root.is_absolute() else (home / root).resolve()
     env_path = root / "config" / "agent-shell.env"
+    system_path = root / "config" / "system.yaml"
     process_unknown = (
         _unknown_environment_keys(dict(os.environ))
         if include_process_environment
@@ -340,9 +377,27 @@ def load_settings(
     unknown = tuple(sorted(set(process_unknown) | set(file_unknown)))
     if unknown:
         raise SettingsError(unknown, "Remove or correct unknown AGENT_SHELL_* settings.")
-    settings_type = Settings if include_process_environment else _PortableSettings
     try:
-        settings = settings_type(_env_file=env_path)
+        system_values: dict[str, Any] = {}
+        if system_path.exists():
+            with system_path.open("r", encoding="utf-8") as stream:
+                document = yaml.safe_load(stream) or {}
+            if not isinstance(document, dict):
+                raise ValueError("system configuration must contain a mapping")
+            values = document.get("settings", document)
+            if not isinstance(values, dict):
+                raise ValueError("system.settings must contain a mapping")
+            system_values = dict(values)
+        system_values.pop("management_token", None)
+        environment_values = _environment_file_values(env_path)
+        management_token = (
+            os.environ["AGENT_SHELL_MANAGEMENT_TOKEN"]
+            if include_process_environment and "AGENT_SHELL_MANAGEMENT_TOKEN" in os.environ
+            else environment_values.get("AGENT_SHELL_MANAGEMENT_TOKEN")
+        )
+        if management_token is not None:
+            system_values["management_token"] = management_token
+        settings = Settings(**system_values)
     except ValidationError as exc:
         raise SettingsError(
             _error_keys(exc), "Correct the listed setting keys and restart."

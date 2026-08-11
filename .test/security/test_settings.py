@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 
 from agent_shell.app import create_app
@@ -16,6 +17,13 @@ def _write_environment_file(root: Path, content: str) -> Path:
     path = root / "data" / "config" / "agent-shell.env"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
+    return path
+
+
+def _write_system_settings(root: Path, **values: object) -> Path:
+    path = root / "data" / "config" / "system.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump({"settings": values}), encoding="utf-8")
     return path
 
 
@@ -87,7 +95,6 @@ def test_local_settings_writer_secures_environment_file(
     launcher._write_management_password(
         "management-secret",
         env_path=environment_path,
-        example_path=tmp_path / ".env.example",
     )
 
     assert secured == [environment_path]
@@ -118,7 +125,6 @@ def test_local_settings_writer_fails_when_permissions_cannot_be_secured(
         launcher._write_management_password(
             "management-secret",
             env_path=environment_path,
-            example_path=tmp_path / ".env.example",
         )
 
     assert environment_path.exists()
@@ -179,9 +185,9 @@ def test_portable_settings_ignore_host_agent_shell_environment(
 ) -> None:
     _write_environment_file(
         tmp_path,
-        "AGENT_SHELL_PORT=9123\n"
         "AGENT_SHELL_MANAGEMENT_TOKEN=portable-management-secret\n",
     )
+    _write_system_settings(tmp_path, port=9123)
     monkeypatch.setenv("AGENT_SHELL_PORT", "not-a-port")
     monkeypatch.setenv("AGENT_SHELL_MANAGMENT_TOKEN", "host-typo-secret")
 
@@ -234,19 +240,21 @@ def test_relative_paths_are_bound_to_explicit_application_home(tmp_path: Path) -
 def test_all_contract_loopback_addresses_allow_authenticated_local_mode(
     monkeypatch: pytest.MonkeyPatch,
     host: str,
+    tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("AGENT_SHELL_HOST", host)
+    _write_system_settings(tmp_path, host=host)
     monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "management-secret")
-    assert get_settings().deployment_mode == "authenticated_local"
+    assert get_settings(application_home=tmp_path).deployment_mode == "authenticated_local"
 
 
 def test_non_loopback_requires_explicit_remote_and_management_password(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("AGENT_SHELL_HOST", "0.0.0.0")
+    _write_system_settings(tmp_path, host="0.0.0.0")
 
     with pytest.raises(SettingsError) as captured:
-        get_settings()
+        get_settings(application_home=tmp_path)
 
     assert "AGENT_SHELL_ALLOW_REMOTE" in str(captured.value)
     assert "AGENT_SHELL_MANAGEMENT_TOKEN" in str(captured.value)
@@ -254,12 +262,12 @@ def test_non_loopback_requires_explicit_remote_and_management_password(
 
 def test_remote_settings_accept_a_user_chosen_management_password(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv("AGENT_SHELL_HOST", "0.0.0.0")
-    monkeypatch.setenv("AGENT_SHELL_ALLOW_REMOTE", "true")
+    _write_system_settings(tmp_path, host="0.0.0.0", allow_remote=True)
     monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "m")
 
-    settings = get_settings()
+    settings = get_settings(application_home=tmp_path)
 
     assert settings.deployment_mode == "authenticated_remote"
     assert settings.management_token is not None
@@ -281,9 +289,9 @@ def test_project_langsmith_tracing_setting_is_explicit_and_portable(
 ) -> None:
     _write_environment_file(
         tmp_path,
-        "AGENT_SHELL_LANGSMITH_TRACING_ENABLED=true\n"
         "AGENT_SHELL_MANAGEMENT_TOKEN=portable-management-secret\n",
     )
+    _write_system_settings(tmp_path, langsmith_tracing_enabled=True)
 
     settings = get_settings(
         application_home=tmp_path,
@@ -320,16 +328,17 @@ def test_bearer_tokens_reject_non_ascii_values_without_echo(
 
 def test_cors_and_proxy_lists_are_strict_and_normalized(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
-    monkeypatch.setenv(
-        "AGENT_SHELL_CORS_ORIGINS",
-        '["https://EXAMPLE.com:8443", "http://127.0.0.1:3000"]',
+    _write_system_settings(
+        tmp_path,
+        cors_origins=["https://EXAMPLE.com:8443", "http://127.0.0.1:3000"],
+        trusted_proxy_cidrs=["10.0.0.0/8", "::1/128"],
+        allow_remote=True,
     )
-    monkeypatch.setenv("AGENT_SHELL_TRUSTED_PROXY_CIDRS", "10.0.0.0/8,::1/128")
-    monkeypatch.setenv("AGENT_SHELL_ALLOW_REMOTE", "true")
     monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "m")
 
-    settings = get_settings()
+    settings = get_settings(application_home=tmp_path)
 
     assert settings.cors_origins == (
         "https://example.com:8443",
@@ -352,12 +361,14 @@ def test_invalid_network_settings_report_only_the_setting_key(
     monkeypatch: pytest.MonkeyPatch,
     key: str,
     value: str,
+    tmp_path: Path,
 ) -> None:
     monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "management-secret")
-    monkeypatch.setenv(key, value)
+    field = key.removeprefix("AGENT_SHELL_").lower()
+    _write_system_settings(tmp_path, **{field: value})
 
     with pytest.raises(SettingsError) as captured:
-        get_settings()
+        get_settings(application_home=tmp_path)
 
     assert key in str(captured.value)
     assert value not in str(captured.value)

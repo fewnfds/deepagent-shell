@@ -1,35 +1,17 @@
 from __future__ import annotations
 
-import json
-import sqlite3
-from typing import TYPE_CHECKING
+from copy import deepcopy
 
 from agent_shell.security_events import SecurityEventLogger, emit_configuration_events
-
-if TYPE_CHECKING:
-    from agent_shell.storage.database import SQLiteDatabase
+from agent_shell.storage.file_config import FileConfigRepository
 
 
 class AgentConfigStore:
-    _IDENTITY_COLUMNS = {
-        "main_agents": "name",
-        "subagents": "component_name",
-    }
+    _IDENTITY_COLUMNS = {"main_agents": "name", "subagents": "component_name"}
 
-    def __init__(
-        self,
-        database: SQLiteDatabase,
-        event_logger: SecurityEventLogger | None = None,
-    ) -> None:
-        self._database = database
+    def __init__(self, repository: FileConfigRepository, event_logger: SecurityEventLogger | None = None) -> None:
+        self._repository = repository
         self._events = event_logger
-
-    @staticmethod
-    def _from_row(row: sqlite3.Row, identity_column: str) -> dict:
-        item = json.loads(row["payload"])
-        item["id"] = row["id"]
-        item[identity_column] = row[identity_column]
-        return item
 
     def _table(self, table: str) -> str:
         if table not in self._IDENTITY_COLUMNS:
@@ -41,150 +23,91 @@ class AgentConfigStore:
 
     def list_items(self, table: str) -> list[dict]:
         table = self._table(table)
-        identity_column = self._identity_column(table)
-        with self._database.transaction() as connection:
-            rows = connection.execute(
-                f"SELECT id, {identity_column}, payload FROM {table} "
-                f"ORDER BY {identity_column} COLLATE NOCASE, id"
-            ).fetchall()
-        return [self._from_row(row, identity_column) for row in rows]
+        identity = self._identity_column(table)
+        config = self._repository.config()
+        return sorted(
+            [deepcopy(item) for item in config.get(table, [])],
+            key=lambda value: (str(value.get(identity, "")).casefold(), str(value.get("id", ""))),
+        )
 
     def get_item(self, table: str, item_id: str) -> dict | None:
         table = self._table(table)
-        identity_column = self._identity_column(table)
-        with self._database.transaction() as connection:
-            row = connection.execute(
-                f"SELECT id, {identity_column}, payload FROM {table} WHERE id = ?",
-                (item_id,),
-            ).fetchone()
-        return self._from_row(row, identity_column) if row else None
+        for item in self._repository.config().get(table, []):
+            if item.get("id") == item_id:
+                return deepcopy(item)
+        return None
 
     def get_item_by_name(self, table: str, name: str) -> dict | None:
         table = self._table(table)
-        identity_column = self._identity_column(table)
-        with self._database.transaction() as connection:
-            row = connection.execute(
-                f"SELECT id, {identity_column}, payload FROM {table} "
-                f"WHERE {identity_column} = ?",
-                (name,),
-            ).fetchone()
-        return self._from_row(row, identity_column) if row else None
+        identity = self._identity_column(table)
+        for item in self._repository.config().get(table, []):
+            if item.get(identity) == name:
+                return deepcopy(item)
+        return None
 
     def save_item(self, table: str, item_id: str, data: dict) -> None:
         table = self._table(table)
-        identity_column = self._identity_column(table)
-        name = data[identity_column]
-        payload = json.dumps(
-            {key: value for key, value in data.items() if key != identity_column},
-            ensure_ascii=False,
-        )
-        with self._database.transaction() as connection:
-            existing = connection.execute(
-                f"SELECT 1 FROM {table} WHERE id = ?", (item_id,)
-            ).fetchone()
-            duplicate = connection.execute(
-                f"SELECT id FROM {table} WHERE {identity_column} = ? AND id != ?",
-                (name, item_id),
-            ).fetchone()
-            if duplicate:
+        identity = self._identity_column(table)
+        name = data[identity]
+        existing = self.get_item(table, item_id)
+
+        def mutate(config: dict) -> None:
+            records = config.setdefault(table, [])
+            if any(item.get(identity) == name and item.get("id") != item_id for item in records):
                 raise ValueError(f"名称「{name}」已存在")
-            connection.execute(
-                f"INSERT INTO {table} (id, {identity_column}, payload) VALUES (?, ?, ?) "
-                f"ON CONFLICT(id) DO UPDATE SET {identity_column} = excluded.{identity_column}, "
-                "payload = excluded.payload",
-                (item_id, name, payload),
-            )
-            connection.commit()
-        entities = {
-            "main_agents": "main-agent",
-            "subagents": "subagent",
-        }
+            stored = deepcopy(data)
+            stored["id"] = item_id
+            for index, item in enumerate(records):
+                if item.get("id") == item_id:
+                    records[index] = stored
+                    break
+            else:
+                records.append(stored)
+
+        self._repository.update_config(mutate)
         emit_configuration_events(
             self._events,
-            action="updated" if existing else "created",
-            entity=entities[table],
+            action="updated" if existing is not None else "created",
+            entity="main-agent" if table == "main_agents" else "subagent",
             entity_id=item_id,
         )
 
     @staticmethod
-    def _detach_subagent_references(
-        connection: sqlite3.Connection,
-        target_ids: set[str],
-    ) -> None:
-        rows = connection.execute("SELECT id, payload FROM main_agents").fetchall()
-        for row in rows:
-            payload = json.loads(row["payload"])
-            references = payload.get("subagents")
-            if not isinstance(references, list):
-                continue
-            retained = [
-                reference
-                for reference in references
-                if not (
-                    isinstance(reference, dict)
-                    and reference.get("subagent_id") in target_ids
-                )
-            ]
-            if len(retained) == len(references):
-                continue
-            payload["subagents"] = retained
-            connection.execute(
-                "UPDATE main_agents SET payload = ? WHERE id = ?",
-                (json.dumps(payload, ensure_ascii=False), row["id"]),
-            )
+    def _detach_subagent_references(config: dict, target_ids: set[str]) -> None:
+        for record in config.get("main_agents", []):
+            references = record.get("subagents") if isinstance(record, dict) else None
+            if isinstance(references, list):
+                record["subagents"] = [
+                    item for item in references
+                    if not (isinstance(item, dict) and item.get("subagent_id") in target_ids)
+                ]
 
-    def delete_items(
-        self,
-        table: str,
-        item_ids: list[str],
-        *,
-        detach_references: bool = False,
-    ) -> int:
+    def delete_items(self, table: str, item_ids: list[str], *, detach_references: bool = False) -> int:
         table = self._table(table)
         unique_ids = list(dict.fromkeys(item_ids))
-        if not unique_ids:
-            return 0
-        with self._database.transaction() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            placeholders = ", ".join("?" for _ in unique_ids)
-            existing = {
-                str(row["id"])
-                for row in connection.execute(
-                    f"SELECT id FROM {table} WHERE id IN ({placeholders})",
-                    unique_ids,
-                ).fetchall()
-            }
+        removed: list[str] = []
+
+        def mutate(config: dict) -> None:
+            records = config.setdefault(table, [])
+            retained = []
+            for item in records:
+                if item.get("id") in unique_ids:
+                    removed.append(str(item.get("id")))
+                else:
+                    retained.append(item)
+            config[table] = retained
             if table == "subagents" and detach_references:
-                self._detach_subagent_references(connection, existing)
-            connection.execute(
-                f"DELETE FROM {table} WHERE id IN ({placeholders})",
-                unique_ids,
-            )
-            connection.commit()
-        for item_id in unique_ids:
-            if item_id not in existing:
-                continue
-            entities = {
-                "main_agents": "main-agent",
-                "subagents": "subagent",
-            }
+                self._detach_subagent_references(config, set(removed))
+
+        self._repository.update_config(mutate)
+        for item_id in removed:
             emit_configuration_events(
                 self._events,
                 action="deleted",
-                entity=entities[table],
+                entity="main-agent" if table == "main_agents" else "subagent",
                 entity_id=item_id,
             )
-        return len(existing)
+        return len(removed)
 
-    def delete_item(
-        self,
-        table: str,
-        item_id: str,
-        *,
-        detach_references: bool = False,
-    ) -> bool:
-        return self.delete_items(
-            table,
-            [item_id],
-            detach_references=detach_references,
-        ) == 1
+    def delete_item(self, table: str, item_id: str, *, detach_references: bool = False) -> bool:
+        return self.delete_items(table, [item_id], detach_references=detach_references) == 1

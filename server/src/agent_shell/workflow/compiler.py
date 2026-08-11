@@ -6,6 +6,7 @@ from typing import Any
 from langgraph.graph import END, START, StateGraph
 
 from agent_shell.runtime.errors import AgentRuntimeError
+from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.runtime.state import AgentShellState
 from agent_shell.workflow.catalog import node_type_spec
 from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
@@ -48,7 +49,10 @@ def compile_workflow(
         else:
             executable_nodes.append(node)
 
-    builder = StateGraph(AgentShellState)
+    builder = StateGraph(
+        AgentShellState,
+        context_schema=WorkflowRuntimeContext,
+    )
     for node in executable_nodes:
         node_graph = node_graphs.get(node.id)
         if node_graph is None:

@@ -45,6 +45,7 @@ from agent_shell.runtime.agent_compilation import (
     validate_middleware_names,
     validate_model_visible_tool_names,
 )
+from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.input_messages import validate_client_messages
 from agent_shell.runtime.limits import (
@@ -122,6 +123,7 @@ class BuiltAgent:
     agent_name: str
     subagent_profile_ids: dict[str, str]
     middleware_runtime: MiddlewarePackageRuntime
+    workspace: DeepAgentsWorkspace | None = None
 
 
 class AgentBuilder:
@@ -429,6 +431,7 @@ class AgentBuilder:
         model_response_observer: Callable[[ModelResponse], Any] | None = None,
         request_id: str = "",
         workflow_filesystem_id: str | None = None,
+        workspace: DeepAgentsWorkspace | None = None,
     ) -> BuiltAgent:
         # Validate the immutable request snapshot before any selected user module
         # can be imported or any optional capability can be materialized.
@@ -471,7 +474,6 @@ class AgentBuilder:
         main_agent_name = str(main_agent["name"])
         middleware_runtime = MiddlewarePackageRuntime.from_assembly(
             assembly,
-            messages,
             main_agent_id=main_agent_id,
             request_id=request_id,
             packages_dir=self._middleware_packages_dir,
@@ -485,11 +487,13 @@ class AgentBuilder:
             scope="main_agent",
             owner_id=main_agent_id,
             owner_name=main_agent_name,
+            workspace=workspace,
         )
         constructor: dict[str, object] = {
             "model": materialized.model,
             "name": str(main_agent["name"]),
             "state_schema": AgentShellState,
+            "context_schema": WorkflowRuntimeContext,
         }
         if materialized.system_prompt is not None:
             constructor["system_prompt"] = materialized.system_prompt
@@ -639,4 +643,5 @@ class AgentBuilder:
                 node.name: node.key for node in assembly.subagent_nodes.values()
             },
             middleware_runtime=middleware_runtime,
+            workspace=materialized.workspace,
         )

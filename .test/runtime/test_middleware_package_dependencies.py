@@ -32,7 +32,7 @@ def write_package(root: Path, package_id: str) -> Path:
     )
     (folder / "main.py").write_text(
         "from langchain.agents.middleware import AgentMiddleware\n"
-        "def create_middleware(ctx):\n"
+        "def create_middleware(config, agent):\n"
         "    return AgentMiddleware()\n",
         encoding="utf-8",
     )

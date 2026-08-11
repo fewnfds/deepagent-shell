@@ -20,8 +20,9 @@ CORS 只接受明确的 `http://` 或 `https://` origin，不支持 `*`、userin
 
 ## Secret 与用户内容
 
-Provider credential、API Key 和管理密码保存在实例 `data/` 中；当前 SQLite 不是加密 vault。保护整个
-`data/` 的磁盘权限、备份和传输，不要提交 Git 或公开分享。
+Provider credential、API Key 和管理密码保存在实例 `data/config/` 中：YAML 只保存模型 key 的变量引用，
+`agent-shell.env` 保存三类敏感值；当前文件不是加密 vault。保护整个 `data/` 的磁盘权限、备份和传输，
+不要提交 Git 或公开分享。
 
 普通 API、DOM、系统日志和运行诊断不回显 credential、Bearer token、宿主敏感路径、traceback 或
 Provider 原始错误正文。以下 management-only 功能会按产品用途保存用户内容：
@@ -57,22 +58,31 @@ Middleware 包没有 sandbox，以 Agent Shell 服务进程权限运行。它可
 采用流式处理，但不构成实例配额。API 调用、拦截、运行日志和历史会话使用可配置保存条数，系统日志
 使用文件大小上限。降低上限会永久裁剪旧数据。
 
-## 环境设置
+## 系统配置与变量
 
-主要启动字段位于 `data/config/agent-shell.env`：
+非敏感系统字段位于 `data/config/system.yaml`：
 
-```dotenv
-AGENT_SHELL_HOST=127.0.0.1
-AGENT_SHELL_PORT=19100
-AGENT_SHELL_ALLOW_REMOTE=false
-AGENT_SHELL_LANGSMITH_TRACING_ENABLED=false
-AGENT_SHELL_CORS_ORIGINS=[]
-AGENT_SHELL_TRUSTED_PROXY_CIDRS=[]
-AGENT_SHELL_MANAGEMENT_TOKEN=<management password>
+```yaml
+settings:
+  host: 127.0.0.1
+  port: 19100
+  allow_remote: false
+  langsmith_tracing_enabled: false
+  cors_origins: []
+  trusted_proxy_cidrs: []
 ```
 
-`AGENT_SHELL_LANGSMITH_TRACING_ENABLED` 默认关闭。关闭时，正式进程会在本项目自己的进程环境中覆盖
+`data/config/agent-shell.env` 只保存三类敏感变量：
+
+```dotenv
+AGENT_SHELL_MANAGEMENT_TOKEN=<management password>
+AGENT_SHELL_API_KEY=<FastAPI/OpenAI shell key>
+AGENT_SHELL_MODEL_<id>_API_KEY=<model API key>
+```
+
+模型 YAML 使用 `$AGENT_SHELL_MODEL_<id>_API_KEY` 形式引用对应变量；其他字段（包括 prompt、base URL、filesystem、
+middleware 和 tool 配置）直接写入 YAML。`AGENT_SHELL_LANGSMITH_TRACING_ENABLED` 默认关闭。关闭时，正式进程会在本项目自己的进程环境中覆盖
 LangSmith/LangChain tracing 开关为 `false`；不会修改宿主机或其他进程的环境变量。开启后，LangSmith
 凭据、Endpoint、项目名和其他 tracing 选项仍由部署者自行配置，并应按敏感数据策略控制上传内容。
 
-未知 `AGENT_SHELL_*` 键会使启动失败。Windows 源码启动器读取当前 Clone 的 data 配置；启动和维护方式见[开发与版本](development-and-release.md)。
+非敏感 `AGENT_SHELL_*` 启动变量不再作为配置来源；未知键和误放入环境文件的键会使启动失败。Windows 源码启动器读取当前 Clone 的 data 配置；启动和维护方式见[开发与版本](development-and-release.md)。

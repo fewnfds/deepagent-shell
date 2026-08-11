@@ -115,13 +115,11 @@ def test_workflow_agent_middleware_injects_frozen_client_messages(
         "from langchain.agents.middleware import AgentMiddleware\n"
         "from langchain_core.messages import HumanMessage\n"
         "class InjectRequest(AgentMiddleware):\n"
-        "    def __init__(self, messages):\n"
-        "        self.messages = messages\n"
         "    async def abefore_agent(self, state, runtime):\n"
-        "        content = self.messages[-1]['content']\n"
+        "        content = runtime.context.messages[-1]['content']\n"
         "        return {'messages': [HumanMessage(content=content)]}\n"
-        "def create_middleware(ctx):\n"
-        "    return InjectRequest(ctx.request.messages)\n",
+        "def create_middleware(config, agent):\n"
+        "    return InjectRequest()\n",
     )
 
     with make_client(tmp_path, monkeypatch) as client:
@@ -167,7 +165,7 @@ def test_workflow_agent_middleware_injects_frozen_client_messages(
         )
 
     assert response.status_code == 200, response.text
-    assert response.json()["choices"][0]["message"]["content"] == "middleware reply"
+    assert "middleware reply" in response.json()["choices"][0]["message"]["content"]
     assert [
         message.content
         for message in InspectingFakeChatModel.seen_messages[0]

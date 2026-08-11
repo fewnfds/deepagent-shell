@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from agent_shell.storage.api_server import ApiServerStore
 from agent_shell.storage.database import SQLiteDatabase
+from agent_shell.storage.file_config import FileConfigRepository
 
 
 MANAGEMENT_TOKEN = "test-management-token"
@@ -19,7 +20,8 @@ def configure_scope_tokens(monkeypatch, root: Path) -> None:
     database = SQLiteDatabase(
         root / "data" / "state" / "agent-shell.sqlite3"
     )
-    store = ApiServerStore(database)
+    configuration = FileConfigRepository(root / "data")
+    store = ApiServerStore(database, configuration)
     if store.api_key() is None:
         store.update_settings(
             api_key_operation="replace",

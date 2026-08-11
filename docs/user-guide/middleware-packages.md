@@ -22,7 +22,7 @@ request-context/
   "api_version": 1,
   "id": "request-context",
   "name": "Request context",
-  "description": "Inject normalized request messages.",
+  "description": "Read the immutable request context from an official Middleware hook.",
   "config_schema": {
     "type": "object",
     "properties": {},
@@ -41,10 +41,13 @@ from langchain.agents.middleware import AgentMiddleware
 
 class RequestContextMiddleware(AgentMiddleware):
     async def abefore_agent(self, state, runtime):
+        request_messages = runtime.context.messages
+        # Select and normalize messages for this Agent here, then return a
+        # normal LangGraph state update when the Agent needs them.
         return None
 
 
-def create_middleware(ctx):
+def create_middleware(config, agent):
     return RequestContextMiddleware()
 ```
 
@@ -72,24 +75,17 @@ Main Agent 选择该组件后使用这些包。直接 Subagent 按普通 capabil
 Middleware 包列表。禁用项不导入、不执行；包不存在、格式无效、依赖未准备或配置不满足 Schema 时，保存或
 请求装配会被拒绝。
 
-## `ctx` 与 Graph State
+## Runtime context 与 Graph State
 
-`create_middleware(ctx)` 的 `ctx` 是 request-local 构造信息，不是业务 state：
+`create_middleware` 的 `config` 和 `agent` 是构造期的普通配置值，不是 LangChain 的运行时对象。
+执行时，Middleware 使用 LangChain 官方 hook 参数读取数据：
 
-- `ctx.request.id/messages`：不可变请求标识和规范化 OpenAI `messages[]`；
-- `ctx.agent`：当前 Main Agent 或 Subagent 身份；
-- `ctx.package`：包 ID 和 binding 顺序；
-- `ctx.config`：当前 binding 的只读配置；
-- `ctx.paths.package_dir/runtime_dir/mapped`：包目录、临时目录和配置的 mapped paths；
-- `ctx.log(message)`：写入受控系统日志。
+- `runtime.context.messages`：本次请求冻结的规范化 OpenAI `messages[]`；它不会自动进入提示词；
+- `runtime.context.workflow`：当前 Workflow 的冻结元数据和 Graph 文档；
+- `state` / `request.state`：当前 Agent graph 的可变 state，按官方 reducer 和 state update 语义读写。
 
-需要 checkpoint 保护的数据必须通过官方 Middleware Hook 从 `state` 读取，并以 state update 或 `Command` 写回。
-公共业务字段为 `state["shared_vars"]`。不要把可恢复业务数据保存在 Middleware 实例属性、模块全局变量或
-`ctx.paths.runtime_dir`。
-
-完整客户端输入不会自动成为 Main Agent 的活动消息。需要注入或改写输入时，在 `before_agent`/
-`abefore_agent` 中从 `ctx.request.messages` 派生消息并返回 `messages` state update。直接 Subagent 默认接收 Deep
-Agents 的 delegated messages，不需要 Shell 重建 child state。
+用户消息应由 Middleware 按 Main Agent/Subagent 身份切分、整理，再从 `before_agent`/`abefore_agent` 返回
+`{"messages": [...]}` 等官方 state update。不要把可恢复业务数据保存在 Middleware 实例属性或模块全局变量。
 
 ## Python 依赖与安全
 

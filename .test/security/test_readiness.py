@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from agent_shell.app import create_app
 from agent_shell.storage.api_server import ApiServerStore
 from agent_shell.storage.database import SQLiteDatabase
+from agent_shell.storage.file_config import FileConfigRepository
 
 
 MANAGEMENT_TOKEN = "readiness-management-token"
@@ -31,7 +32,7 @@ def _auth(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _paths(monkeypatch, tmp_path)
     monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", MANAGEMENT_TOKEN)
     database = SQLiteDatabase(tmp_path / "data" / "state" / "agent-shell.sqlite3")
-    ApiServerStore(database).update_settings(
+    ApiServerStore(database, FileConfigRepository(tmp_path / "data")).update_settings(
         api_key_operation="replace",
         api_key=API_KEY,
     )

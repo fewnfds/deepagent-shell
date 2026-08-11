@@ -6,7 +6,13 @@
 
 ```text
 data/
-  config/agent-shell.env
+  config/
+    components/<type>/<uuid>.yaml
+    agents/main/<uuid>.yaml
+    agents/subagent/<uuid>.yaml
+    workflows/<uuid>.yaml
+    system.yaml
+    agent-shell.env
   state/agent-shell.sqlite3*
   files/
   resources/{skills,custom_tools,custom_middlewares}/
@@ -14,8 +20,8 @@ data/
 ```
 
 它包含管理密码、API Key、Provider credential、Workflow、Agent/组件配置、用户文件和历史，应作为敏感数据
-整体备份。迁移时先完全停止服务，再复制完整 `data/`，包括 SQLite WAL/SHM。外部 filesystem 映射需要单独
-迁移并更新路径。
+整体备份。配置文件位于 `data/config/`；SQLite 只保存运行历史、会话、诊断和媒体元数据。迁移时先完全停止服务，
+再复制完整 `data/`，包括 SQLite WAL/SHM。外部 filesystem 映射需要单独迁移并更新路径。
 
 自定义 Middleware 包的可选 `requirements.txt` 保存在 `data/resources/custom_middlewares/`；Windows 生成的共享
 依赖位于 `runtime/middleware_packages/`，属于可重建运行态，不进入备份。

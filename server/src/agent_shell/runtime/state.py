@@ -4,6 +4,7 @@ from typing import Annotated
 from typing_extensions import NotRequired
 
 from deepagents import DeepAgentState
+from deepagents.middleware.filesystem import FilesystemState
 from langchain.agents.middleware import AgentMiddleware
 from pydantic import JsonValue
 
@@ -17,8 +18,8 @@ def merge_shared_vars(
     return {**(current or {}), **(update or {})}
 
 
-class AgentShellState(DeepAgentState):
-    """Checkpointed public state shared by Main Agent and direct Subagents."""
+class AgentShellState(DeepAgentState, FilesystemState):
+    """Official Agent state plus the Deep Agents filesystem state channel."""
 
     shared_vars: NotRequired[Annotated[dict[str, JsonValue], merge_shared_vars]]
 

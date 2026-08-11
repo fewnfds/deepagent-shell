@@ -70,7 +70,7 @@ def test_remote_mode_requires_the_single_persisted_api_key(
     from agent_shell.settings import SettingsError
 
     _configure_paths(monkeypatch, tmp_path)
-    monkeypatch.setenv("AGENT_SHELL_ALLOW_REMOTE", "true")
+    _write_system_settings(tmp_path, allow_remote=True)
     with pytest.raises(SettingsError) as captured:
         create_app()
 
@@ -82,7 +82,7 @@ def test_remote_mode_cannot_clear_the_persisted_api_key(
     tmp_path: Path,
 ) -> None:
     _configure_auth(monkeypatch, tmp_path)
-    monkeypatch.setenv("AGENT_SHELL_ALLOW_REMOTE", "true")
+    _write_system_settings(tmp_path, allow_remote=True)
 
     with TestClient(create_app()) as client:
         response = client.put(
@@ -222,7 +222,7 @@ def test_valid_cors_preflight_does_not_require_bearer_token(
     tmp_path: Path,
 ) -> None:
     _configure_auth(monkeypatch, tmp_path)
-    monkeypatch.setenv("AGENT_SHELL_CORS_ORIGINS", "https://console.example")
+    _write_system_settings(tmp_path, cors_origins=["https://console.example"])
 
     with TestClient(create_app()) as client:
         response = client.options(
@@ -243,7 +243,7 @@ def test_allowed_cors_origin_can_read_authentication_failure(
     tmp_path: Path,
 ) -> None:
     _configure_auth(monkeypatch, tmp_path)
-    monkeypatch.setenv("AGENT_SHELL_CORS_ORIGINS", "https://console.example")
+    _write_system_settings(tmp_path, cors_origins=["https://console.example"])
 
     with TestClient(create_app()) as client:
         response = client.get(

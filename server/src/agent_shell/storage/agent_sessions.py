@@ -156,11 +156,11 @@ class AgentSessionStore:
     def __init__(
         self,
         database: SQLiteDatabase,
-        history_retention: HistoryRetentionStore | None = None,
+        history_retention: HistoryRetentionStore,
         media_outputs: MediaOutputStore | None = None,
     ) -> None:
         self._database = database
-        self._history_retention = history_retention or HistoryRetentionStore(database)
+        self._history_retention = history_retention
         self._media_outputs = media_outputs
         with self._database.transaction() as connection:
             self._prune(

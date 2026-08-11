@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from agent_shell.runtime.agent_builder import AgentBuilder, BuiltAgent
+from agent_shell.runtime.capabilities import DeepAgentsWorkspace
+from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.middleware_packages.runtime import MiddlewarePackageRuntime
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.errors import AgentRuntimeError
@@ -40,6 +42,7 @@ class AgentExecution:
     media_response: MainAgentMediaResponse
     middleware_runtimes: tuple[MiddlewarePackageRuntime, ...] = ()
     event_observers: tuple[Callable[[OutputEvent], None], ...] = ()
+    context: WorkflowRuntimeContext | None = None
     final_state: dict[str, Any] | None = None
     _started: bool = False
 
@@ -114,11 +117,16 @@ class AgentExecution:
                             r"The v3 streaming protocol on Pregel is experimental\."
                         ),
                     )
+                    stream_kwargs: dict[str, Any] = {
+                        "config": {"recursion_limit": GRAPH_RECURSION_LIMIT},
+                        "version": "v3",
+                        "transformers": (RawCustomEventTransformer,),
+                    }
+                    if self.context is not None:
+                        stream_kwargs["context"] = self.context
                     stream = await self.graph.astream_events(
                         self.input_state,
-                        config={"recursion_limit": GRAPH_RECURSION_LIMIT},
-                        version="v3",
-                        transformers=(RawCustomEventTransformer,),
+                        **stream_kwargs,
                     )
                 # The v3 run stream owns the graph iterator. Its async context
                 # manager aborts in-flight provider/tool work when an OpenAI
@@ -253,6 +261,7 @@ class AgentRuntime:
         model_response_observer: Callable[[ModelResponse], None] | None = None,
         request_id: str = "",
         workflow_filesystem_id: str | None = None,
+        workspace: DeepAgentsWorkspace | None = None,
     ) -> BuiltAgent:
         try:
             return await self._builder.build(
@@ -263,6 +272,7 @@ class AgentRuntime:
                 model_response_observer=model_response_observer,
                 request_id=request_id,
                 workflow_filesystem_id=workflow_filesystem_id,
+                workspace=workspace,
             )
         except Exception:
             await self._builder.close_failed_build()
@@ -280,6 +290,7 @@ class AgentRuntime:
         public_model: str = "",
         workflow_built: tuple[tuple[str, BuiltAgent], ...] = (),
         workflow_non_agent_filter: Callable[[OutputEvent], bool] | None = None,
+        context: WorkflowRuntimeContext | None = None,
     ) -> AgentExecution:
         observers = []
         if event_observer is not None:
@@ -337,6 +348,7 @@ class AgentRuntime:
                 agent.middleware_runtime
                 for _, agent in workflow_agents[1:]
             ),
+            context=context,
         )
 
     async def start(
@@ -352,6 +364,13 @@ class AgentRuntime:
         public_model: str = "",
         workflow_filesystem_id: str | None = None,
     ) -> AgentExecution:
+        context = WorkflowRuntimeContext.from_request(
+            raw_messages,
+            request_id=request_id,
+            workflow={
+                "filesystem_id": workflow_filesystem_id or "",
+            },
+        )
         built = await self.build_agent(
             main_agent_id,
             raw_messages,
@@ -367,6 +386,7 @@ class AgentRuntime:
             model_response_observer=model_response_observer,
             request_id=request_id,
             public_model=public_model,
+            context=context,
         )
 
     async def start_workflow(
@@ -375,6 +395,7 @@ class AgentRuntime:
         raw_messages: object,
         *,
         workflow_filesystem_id: str,
+        workflow_snapshot: Mapping[str, Any] | None = None,
         model_request_interceptor: Callable[[dict[str, Any]], Any] | None = None,
         model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
         model_response_observer: Callable[[ModelResponse], None] | None = None,
@@ -389,24 +410,35 @@ class AgentRuntime:
         agent_nodes = [
             node for node in document.definition.nodes if node.type == "agent"
         ]
+        context = WorkflowRuntimeContext.from_request(
+            raw_messages,
+            request_id=request_id,
+            workflow={
+                **dict(workflow_snapshot or {}),
+                "filesystem_id": workflow_filesystem_id,
+                "graph": document.model_dump(mode="json"),
+            },
+        )
         built_agents: list[tuple[str, BuiltAgent]] = []
+        workspace = None
         try:
             for agent_node in agent_nodes:
                 main_agent_id = str(
                     AgentNodeConfig.model_validate(agent_node.config).main_agent_id
                 )
-                built_agents.append((
-                    agent_node.id,
-                    await self.build_agent(
-                        main_agent_id,
-                        raw_messages,
-                        model_request_interceptor=model_request_interceptor,
-                        model_request_observer=model_request_observer,
-                        model_response_observer=model_response_observer,
-                        request_id=request_id,
-                        workflow_filesystem_id=workflow_filesystem_id,
-                    ),
-                ))
+                built = await self.build_agent(
+                    main_agent_id,
+                    raw_messages,
+                    model_request_interceptor=model_request_interceptor,
+                    model_request_observer=model_request_observer,
+                    model_response_observer=model_response_observer,
+                    request_id=request_id,
+                    workflow_filesystem_id=workflow_filesystem_id,
+                    workspace=workspace,
+                )
+                built_agents.append((agent_node.id, built))
+                if workspace is None:
+                    workspace = built.workspace
             if not built_agents:
                 raise AgentRuntimeError(
                     "workflow.node_runtime_missing",
@@ -432,4 +464,5 @@ class AgentRuntime:
             request_id=request_id,
             public_model=public_model,
             workflow_non_agent_filter=workflow_non_agent_filter,
+            context=context,
         )

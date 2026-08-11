@@ -49,6 +49,7 @@ from agent_shell.storage.agent_sessions import AgentSessionStore
 from agent_shell.storage.api_server import ApiServerStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.database import SQLiteDatabase
+from agent_shell.storage.file_config import FileConfigRepository
 from agent_shell.storage.history_retention import HistoryRetentionStore
 from agent_shell.storage.media_outputs import MediaOutputStore
 from agent_shell.storage.runtime_controls import RuntimeControlSettingsStore
@@ -103,19 +104,20 @@ def create_app(
         )
     )
     database = SQLiteDatabase(settings.resolved_database_path())
+    configuration = FileConfigRepository(settings.data_root)
     media_outputs = MediaOutputStore(database, settings.resolved_media_outputs_dir())
-    system_log_settings = SystemLogSettingsStore(database)
+    system_log_settings = SystemLogSettingsStore(configuration)
     event_logger = SecurityEventLogger(
         logs_dir,
         max_bytes=system_log_settings.snapshot()["max_size_mib"] * MIB_BYTES,
     )
-    history_retention = HistoryRetentionStore(database)
-    runtime_control_settings = RuntimeControlSettingsStore(database)
-    configuration_validation_settings = ConfigurationValidationSettingsStore(database)
+    history_retention = HistoryRetentionStore(configuration)
+    runtime_control_settings = RuntimeControlSettingsStore(configuration)
+    configuration_validation_settings = ConfigurationValidationSettingsStore(configuration)
     runtime_diagnostic_store = RuntimeDiagnosticStore(database, history_retention)
-    block_store = BlockStore(database, event_logger)
-    config_store = AgentConfigStore(database, event_logger)
-    workflow_store = WorkflowStore(database, event_logger)
+    block_store = BlockStore(configuration, event_logger)
+    config_store = AgentConfigStore(configuration, event_logger)
+    workflow_store = WorkflowStore(configuration, event_logger)
     middleware_package_validation = MiddlewarePackageValidationService(
         packages_dir=custom_middlewares_dir,
         runtime_root=runtime_dir,
@@ -127,7 +129,7 @@ def create_app(
         custom_tools_dir=custom_tools_dir,
     )
     api_server_store = ApiServerStore(
-        database, event_logger, history_retention, media_outputs
+        database, configuration, event_logger, history_retention, media_outputs
     )
     try:
         validate_api_key_policy(settings, api_server_store.api_key())
@@ -161,7 +163,7 @@ def create_app(
         runtime_diagnostics,
         system_log_settings,
     )
-    secret_resolver = ProviderSecretResolver(database)
+    secret_resolver = ProviderSecretResolver(configuration)
     provider_http_clients = ProviderHttpClients()
     file_manager = FileManagerService(
         {
@@ -172,9 +174,9 @@ def create_app(
         },
         settings.resolved_runtime_dir() / "tmp",
     )
-    system_settings = SystemSettingsService(settings, api_server_store.api_key)
+    system_settings = SystemSettingsService(settings, api_server_store.api_key, configuration)
     agent_runtime = RequestSnapshotRuntime(
-        database,
+        configuration,
         custom_tools_dir=custom_tools_dir,
         middleware_packages_dir=custom_middlewares_dir,
         runtime_dir=runtime_dir,
