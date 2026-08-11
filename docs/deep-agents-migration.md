@@ -25,6 +25,10 @@ model/tool/agent Hook。需要 checkpoint 的业务数据通过官方 state upda
 - 同一次 Workflow 请求共享 Deep Agents workspace/backend，各 Main Agent/Subagent 的 `filesystem-permissions` 与文件
   tool override 按身份显式装配；
 - Summarization 与 Prompt Caching 是两个独立 capability，每个身份显式物化自己的官方 middleware；
+- Agent Shell 传给 `create_deep_agent(middleware=...)` 的 caller 列表中，Shell 预设 Middleware 在前，用户
+  `custom-middleware` package 产生的 Middleware 保持 binding 与包内返回顺序并统一位于末尾；
+- 上述末尾只属于 Shell 可控的 caller 列表；Deep Agents 仍按固定 stack 合并，同名项在内置位置 replacement，
+  新名称进入官方 caller slot，不能越过 profile、prompt caching、memory 或 HITL 等官方 tail；
 - Main Agent 未选择、或 Subagent 选择 `disabled` 的可选默认 Middleware，必须保留为主动禁用状态，并以官方支持的同名
   no-op replacement 阻止 Deep Agents 默认 stack 回填；仅省略 constructor 参数不表示禁用；
 - `AgentShellState.shared_vars` 是公共 checkpointed 业务变量，Middleware 实例属性不是。

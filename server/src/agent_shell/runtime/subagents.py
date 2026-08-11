@@ -66,7 +66,6 @@ def _build_subagent_spec(
         AgentShellStateMiddleware(),
         ToolErrorBoundaryMiddleware(),
         *child.middleware,
-        *child.package_middleware,
     ]
     if child.tool_choice is not None or child.model_settings:
         middleware.append(
@@ -79,6 +78,7 @@ def _build_subagent_spec(
     middleware.append(ProviderErrorBoundaryMiddleware())
     if child.exception_retry is not None:
         middleware.extend(child.exception_retry.after_provider_boundary)
+    middleware.extend(child.package_middleware)
 
     try:
         validate_middleware_names(middleware, owner=f"Subagent {node.name}")

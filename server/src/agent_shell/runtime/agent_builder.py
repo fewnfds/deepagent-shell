@@ -533,7 +533,6 @@ class AgentBuilder:
         middleware = [
             ToolErrorBoundaryMiddleware(),
             *materialized.middleware,
-            *materialized.package_middleware,
         ]
         if materialized.tool_choice is not None or materialized.model_settings:
             middleware.append(
@@ -608,10 +607,11 @@ class AgentBuilder:
                     backend=materialized.backend,
                     subagents=compiled_subagents,
                     task_description=task_description_override,
-                    middleware=middleware,
+                    middleware=(*middleware, *materialized.package_middleware),
                 )
                 if replacement is not None:
                     middleware.append(replacement)
+            middleware.extend(materialized.package_middleware)
             validate_middleware_names(middleware, owner="Main Agent")
             main_agent_middleware_names = {
                 getattr(item, "name", None) for item in middleware
