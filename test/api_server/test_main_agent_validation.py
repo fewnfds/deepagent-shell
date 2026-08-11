@@ -61,7 +61,7 @@ def test_subagent_entity_owns_routing_identity_contract(
                 "component_name": "Invalid routing identity",
                 "name": "中文名称",
                 "description": "",
-                "settings": {"capability_overrides": [], "subagents": []},
+                "settings": {"capability_overrides": []},
             },
         )
 

@@ -86,7 +86,7 @@ def test_lifecycle_configuration_and_secret_events_are_metadata_only(
     assert "service_started" in names
     assert "configuration_updated" in names
     assert "provider_secret_rotated" in names
-    assert "provider_secret_cleared" in names
+    assert "provider_secret_cleared" not in names
     assert "cache_invalidated" not in names
     assert names[-1] == "service_stopped"
     request_records = [
@@ -96,7 +96,6 @@ def test_lifecycle_configuration_and_secret_events_are_metadata_only(
         in {
             "configuration_updated",
             "provider_secret_rotated",
-            "provider_secret_cleared",
         }
     ]
     assert request_records

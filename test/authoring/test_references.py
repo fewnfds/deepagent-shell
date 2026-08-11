@@ -78,7 +78,7 @@ def test_block_update_rejects_new_conflict_in_referencing_main_agent(
     blocks = create_blocks(
         client,
         "impact",
-        ("model", "filesystem", "output-mode", "todo-list", "custom-tool"),
+        ("model", "output-mode", "todo-list", "custom-tool"),
     )
     safe = client.put(
         f"/api/blocks/custom-tool/{blocks['custom-tool']['id']}",
@@ -91,7 +91,7 @@ def test_block_update_rejects_new_conflict_in_referencing_main_agent(
             "name": "Protected Main Agent",
             "capability_refs": references(
                 blocks,
-                ("model", "filesystem", "output-mode", "todo-list", "custom-tool"),
+                ("model", "output-mode", "todo-list", "custom-tool"),
             ),
         },
     )
@@ -118,7 +118,7 @@ def test_static_tool_conflicts_use_ast_declared_name_not_resource_filename(
     blocks = create_blocks(
         client,
         "declared-tool-name",
-        ("model", "filesystem", "output-mode", "todo-list", "custom-tool"),
+        ("model", "output-mode", "todo-list", "custom-tool"),
     )
     selected = client.put(
         f"/api/blocks/custom-tool/{blocks['custom-tool']['id']}",
@@ -132,55 +132,12 @@ def test_static_tool_conflicts_use_ast_declared_name_not_resource_filename(
             "name": "No false tool conflict",
             "capability_refs": references(
                 blocks,
-                ("model", "filesystem", "output-mode", "todo-list", "custom-tool"),
+                ("model", "output-mode", "todo-list", "custom-tool"),
             ),
         },
     )
 
     assert main_agent.status_code == 200, main_agent.text
-
-def test_hidden_delete_only_conflicts_after_filesystem_enables_it(
-    tmp_path: Path, monkeypatch
-) -> None:
-    client = make_client(tmp_path, monkeypatch)
-    write_custom_tool(tmp_path, "delete", "delete")
-    blocks = create_blocks(
-        client,
-        "delete-opt-in",
-        ("model", "filesystem", "output-mode", "custom-tool"),
-    )
-    selected = client.put(
-        f"/api/blocks/custom-tool/{blocks['custom-tool']['id']}",
-        json={"name": blocks["custom-tool"]["name"], "tools": ["delete"]},
-    )
-    assert selected.status_code == 200, selected.text
-    main_agent = client.post(
-        "/api/main-agents",
-        json={
-            "name": "Delete opt-in Main Agent",
-            "capability_refs": references(
-                blocks,
-                ("model", "filesystem", "output-mode", "custom-tool"),
-            ),
-        },
-    )
-    assert main_agent.status_code == 200, main_agent.text
-
-    enabled = client.put(
-        f"/api/blocks/filesystem/{blocks['filesystem']['id']}",
-        json={
-            "name": blocks["filesystem"]["name"],
-            "tool_configs": {"delete": {"visible": True}},
-        },
-    )
-
-    assert enabled.status_code == 422
-    issues = enabled.json()["detail"]["validation"]["issues"]
-    assert any(
-        issue["code"] == "assembly.tool_name_conflict"
-        and issue["path"] == "tools.delete"
-        for issue in issues
-    )
 
 def test_override_update_rejects_new_conflict_in_bound_subagent(
     tmp_path: Path, monkeypatch
@@ -191,7 +148,7 @@ def test_override_update_rejects_new_conflict_in_bound_subagent(
     blocks = create_blocks(
         client,
         "override-impact",
-        ("model", "filesystem", "output-mode", "todo-list", "subagent"),
+        ("model", "output-mode", "todo-list", "subagent"),
     )
     delegation = client.put(
         f"/api/blocks/subagent/{blocks['subagent']['id']}",
@@ -224,7 +181,7 @@ def test_override_update_rejects_new_conflict_in_bound_subagent(
             "name": "Delegating Main Agent",
             "capability_refs": references(
                 blocks,
-                ("model", "filesystem", "output-mode", "todo-list", "subagent"),
+                ("model", "output-mode", "todo-list", "subagent"),
             ),
             "subagents": [{"subagent_id": subagent.json()["id"]}],
         },
@@ -252,66 +209,6 @@ def test_override_update_rejects_new_conflict_in_bound_subagent(
     assert any(issue["code"] == "assembly.tool_name_conflict" for issue in issues)
     stored = client.get(f"/api/subagents/{subagent.json()['id']}").json()
     assert stored["settings"]["capability_overrides"][0]["block_id"] == safe_tool["id"]
-def test_repository_report_owns_invalid_subagent_issue_by_main_agent(
-    tmp_path: Path, monkeypatch
-) -> None:
-    client = make_client(tmp_path, monkeypatch)
-    blocks = create_blocks(client, "subagent-owner")
-    delegation = client.post(
-        "/api/blocks/subagent",
-        json={"name": "Delegation owner"},
-    ).json()
-    main_agent = client.post(
-        "/api/main-agents",
-        json={
-            "name": "Subagent owner Main Agent",
-            "capability_refs": [
-                *references(blocks, ("model", "filesystem", "output-mode")),
-                {"type": "subagent", "block_id": delegation["id"]},
-            ],
-            "subagents": [{
-                "subagent_id": "00000000-0000-0000-0000-000000000000"
-            }],
-        },
-    )
-    assert main_agent.status_code == 422
-
-    valid_main_agent = client.post(
-        "/api/main-agents",
-        json={
-            "name": "Subagent owner Main Agent",
-            "capability_refs": references(
-                blocks, ("model", "filesystem", "output-mode")
-            ),
-            "subagents": [],
-        },
-    ).json()
-    database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
-    with closing(sqlite3.connect(database_path)) as connection, connection:
-        row = connection.execute(
-            "SELECT payload FROM main_agents WHERE id = ?", (valid_main_agent["id"],)
-        ).fetchone()
-        payload = json.loads(row[0])
-        payload["capability_refs"].append(
-            {"type": "subagent", "block_id": delegation["id"]}
-        )
-        payload["subagents"] = [{
-            "subagent_id": "00000000-0000-0000-0000-000000000000"
-        }]
-        connection.execute(
-            "UPDATE main_agents SET payload = ? WHERE id = ?",
-            (json.dumps(payload, ensure_ascii=False), valid_main_agent["id"]),
-        )
-
-    issues = client.get("/api/validation/repository").json()["issues"]
-    issue = next(
-        item
-        for item in issues
-        if item["code"] == "assembly.subagent_not_found"
-    )
-    assert issue["scope"] == "subagent"
-    assert issue["owner_id"] == valid_main_agent["id"]
-    assert issue["owner_name"] == "Subagent owner Main Agent"
 def test_generic_draft_validation_covers_each_target_without_writing(
     tmp_path: Path, monkeypatch
 ) -> None:

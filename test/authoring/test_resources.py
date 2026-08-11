@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from .app_support import *
 
 def test_custom_tool_catalog_scans_source_without_importing_it(
@@ -143,40 +145,60 @@ def test_custom_middleware_catalog_scans_recipes_without_executing_them(
     middlewares_dir = tmp_path / "data" / "resources" / "custom_middlewares"
     marker = tmp_path / "middleware-must-not-exist.txt"
     source = (
-        '"""Safe middleware recipe."""\n'
+        '"""Safe middleware package."""\n'
         "from pathlib import Path\n"
         f"Path({str(marker)!r}).write_text('executed')\n"
-        "middleware = object()\n"
+        "def create_middleware(config, agent):\n"
+        "    return object()\n"
     )
-    (middlewares_dir / "safe_recipe.py").write_text(source, encoding="utf-8")
-    (middlewares_dir / "missing_output.py").write_text(
-        "value = object()\n", encoding="utf-8"
+    package_dir = middlewares_dir / "safe-recipe"
+    package_dir.mkdir(parents=True, exist_ok=True)
+    (package_dir / "middleware.json").write_text(
+        json.dumps(
+            {
+                "api_version": 1,
+                "id": "safe-recipe",
+                "name": "Safe recipe",
+                "description": "Safe middleware package.",
+                "config_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+            }
+        ),
+        encoding="utf-8",
     )
-    (middlewares_dir / "bad_syntax.py").write_text(
-        "middleware = (\n", encoding="utf-8"
-    )
+    (package_dir / "main.py").write_text(source, encoding="utf-8")
+    broken_dir = middlewares_dir / "broken-package"
+    broken_dir.mkdir()
+    (broken_dir / "middleware.json").write_text("{}", encoding="utf-8")
 
     response = client.get("/api/middlewares/custom")
 
     assert response.status_code == 200
     result = response.json()
-    assert result["catalog"] == [
-        {
-            "name": "safe_recipe",
-            "filename": "safe_recipe.py",
-            "description": "Safe middleware recipe.",
-            "source": source,
-        }
-    ]
-    assert set(result["errors"]) == {"bad_syntax.py", "missing_output.py"}
-    assert result["errors"]["bad_syntax.py"] == {
-        "message_key": "resource.error.customMiddleware.syntax",
-        "message_args": {"line": 1},
+    assert len(result["catalog"]) == 1
+    item = result["catalog"][0]
+    assert item["api_version"] == 1
+    assert item["id"] == "safe-recipe"
+    assert item["name"] == "Safe recipe"
+    assert item["description"] == "Safe middleware package."
+    assert item["config_schema"] == {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": False,
     }
-    assert result["errors"]["missing_output.py"] == {
-        "message_key": "resource.error.customMiddleware.bindingRequired",
-        "message_args": {},
-    }
+    assert item["folder"] == "safe-recipe"
+    assert item["python_requirements"] == []
+    assert len(item["requirements_fingerprint"]) == 64
+    assert item["dependency_status"] == "ready"
+    assert item["dependency_error_code"] == ""
+    assert set(result["errors"]) == {"broken-package"}
+    assert result["errors"]["broken-package"]["message_key"] == (
+        "resource.error.middlewarePackage.filesRequired"
+    )
     assert not marker.exists()
 
 def test_resource_catalogs_only_scan_the_data_root(
@@ -215,19 +237,43 @@ def test_saving_custom_middleware_source_does_not_execute_it(
     source = (
         "from pathlib import Path\n"
         f"Path({str(marker)!r}).write_text('executed')\n"
-        "middleware = object()\n"
+        "def create_middleware(config, agent):\n"
+        "    return object()\n"
     )
+    package_dir = tmp_path / "data" / "resources" / "custom_middlewares" / "side-effect"
+    package_dir.mkdir(parents=True, exist_ok=True)
+    (package_dir / "middleware.json").write_text(
+        json.dumps(
+            {
+                "api_version": 1,
+                "id": "side-effect",
+                "name": "Side effect",
+                "description": "Static package.",
+                "config_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (package_dir / "main.py").write_text(source, encoding="utf-8")
 
     response = client.post(
         "/api/blocks/custom-middleware",
         json={
             "name": "Static only",
             "middlewares": [
-                {"name": "side effect recipe", "enabled": True, "source": source}
+                {"package_id": "side-effect", "enabled": True, "config": {}}
             ],
         },
     )
 
     assert response.status_code == 200, response.text
-    assert response.json()["middlewares"][0]["source"] == source.strip()
+    assert response.json()["middlewares"][0] == {
+        "package_id": "side-effect",
+        "enabled": True,
+        "config": {},
+    }
     assert not marker.exists()

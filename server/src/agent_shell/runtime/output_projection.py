@@ -161,6 +161,8 @@ class WorkflowOutputProjector:
         return value if self._passthrough(event) else ""
 
     def _passthrough(self, event: OutputEvent) -> bool:
+        # Development TBD: non-Agent Workflow events stay visible while the
+        # Workflow-level filter is still being tested. This is temporary.
         return (
             event.source_type not in {"agent", "subagent"}
             and (

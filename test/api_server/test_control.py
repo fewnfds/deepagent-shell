@@ -36,7 +36,7 @@ def test_api_key_is_write_only_and_takes_effect_immediately(
     assert persisted.status_code == 200
     assert secret not in status.text
 
-def test_start_stop_and_known_workflow_tbd_boundary(
+def test_start_stop_and_known_workflow_runs_after_restart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
@@ -45,12 +45,12 @@ def test_start_stop_and_known_workflow_tbd_boundary(
         unavailable = client.get("/v1/models")
         started = client.post("/api/api-server/start")
         models = client.get("/v1/models")
-        tbd = client.post(
+        completion = client.post(
             "/v1/chat/completions",
             json={
                 "model": workflow["name"],
                 "messages": [{"role": "user", "content": "stream"}],
-                "stream": True,
+                "stream": False,
             },
         )
 
@@ -59,8 +59,8 @@ def test_start_stop_and_known_workflow_tbd_boundary(
     assert unavailable.json()["error"]["code"] == "api_server_stopped"
     assert started.json()["enabled"] is True
     assert [item["id"] for item in models.json()["data"]] == [workflow["name"]]
-    assert tbd.status_code == 501
-    assert tbd.json()["error"]["code"] == "workflow_not_implemented"
+    assert completion.status_code == 422
+    assert completion.json()["error"]["code"] == "workflow.node_runtime_missing"
 
 def test_event_hub_pushes_interception_notifications_without_bodies() -> None:
     async def scenario() -> str:

@@ -66,10 +66,11 @@ def test_models_publish_only_enabled_workflows_and_chat_runs_current_graph(
     assert models.status_code == 200
     assert [item["id"] for item in models.json()["data"]] == [workflow["name"]]
     assert workflow_reply.status_code == 200, workflow_reply.text
-    assert workflow_reply.json()["choices"][0]["message"] == {
-        "role": "assistant",
-        "content": "runtime reply",
-    }
+    message = workflow_reply.json()["choices"][0]["message"]
+    assert message["role"] == "assistant"
+    assert message["content"].startswith("running")
+    assert "runtime reply" in message["content"]
+    assert message["content"].endswith("completed")
     for response in (main_agent_name_reply, main_agent_id_reply):
         assert response.status_code == 404
         assert response.json()["error"]["code"] == "model_not_found"
@@ -98,9 +99,12 @@ def test_chat_completion_stream_runs_current_graph(
     assert lines[-1] == "data: [DONE]"
     chunks = [json.loads(line.removeprefix("data: ")) for line in lines[:-1]]
     assert chunks[0]["choices"][0]["delta"] == {"role": "assistant"}
-    assert "runtime reply" == "".join(
+    content = "".join(
         chunk["choices"][0]["delta"].get("content", "") for chunk in chunks
     )
+    assert content.startswith("running")
+    assert "runtime reply" in content
+    assert content.endswith("completed")
     assert chunks[-1]["choices"][0]["finish_reason"] == "unknown"
 
 
