@@ -14,6 +14,11 @@ from support import ScopedAuthTestClient, configure_scope_tokens
 
 
 PUBLIC_TYPES = tuple(manifest.type for manifest in CAPABILITY_MANIFESTS)
+MAIN_AGENT_TYPES = tuple(
+    capability_type
+    for capability_type in PUBLIC_TYPES
+    if capability_type != "filesystem"
+)
 OVERRIDEABLE_TYPES = tuple(
     manifest.type for manifest in CAPABILITY_MANIFESTS if manifest.subagent_overrideable
 )
@@ -28,7 +33,6 @@ def subagent_payload(
     name: str = "worker",
     description: str = "Handles delegated work.",
     capability_overrides: list[dict[str, object]] | None = None,
-    subagents: list[dict[str, str]] | None = None,
 ) -> dict[str, object]:
     return {
         "component_name": component_name,
@@ -36,7 +40,6 @@ def subagent_payload(
         "description": description,
         "settings": {
             "capability_overrides": capability_overrides or [],
-            "subagents": subagents or [],
         },
     }
 OUTPUT_EVENT_TYPES = (

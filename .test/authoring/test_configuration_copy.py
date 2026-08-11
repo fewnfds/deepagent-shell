@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import json
-import sqlite3
 from uuid import UUID
+
+from agent_shell.storage.file_config import FileConfigRepository
 
 from .reference_support import *
 
@@ -12,7 +12,7 @@ def test_main_agent_and_subagent_copy_create_server_ids_and_preserve_sources(
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
     required = create_blocks(
-        client, "copy-required", ("model", "filesystem", "output-mode")
+        client, "copy-required", ("model", "output-mode")
     )
     subagent = client.post(
         "/api/subagents",
@@ -22,9 +22,7 @@ def test_main_agent_and_subagent_copy_create_server_ids_and_preserve_sources(
         "/api/main-agents",
         json={
             "name": "Copy source Main Agent",
-            "capability_refs": references(
-                required, ("model", "filesystem", "output-mode")
-            ),
+            "capability_refs": references(required, ("model", "output-mode")),
             "subagents": [{"subagent_id": subagent["id"]}],
         },
     ).json()
@@ -59,34 +57,34 @@ def test_component_bulk_delete_detaches_optional_references(
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
     required = create_blocks(
-        client, "bulk-required", ("model", "filesystem", "output-mode")
+        client, "bulk-required", ("model", "output-mode", "system-prompt")
     )
     second = client.post(
-        "/api/blocks/filesystem",
-        json=block_payload("filesystem", "bulk-second-filesystem"),
+        "/api/blocks/system-prompt",
+        json=block_payload("system-prompt", "bulk-second-system-prompt"),
     ).json()
     main_agent = client.post(
         "/api/main-agents",
         json={
             "name": "Bulk owner",
             "capability_refs": references(
-                required, ("model", "filesystem", "output-mode")
+                required, ("model", "output-mode", "system-prompt")
             ),
         },
     ).json()
-    ids = [required["filesystem"]["id"], second["id"]]
+    ids = [required["system-prompt"]["id"], second["id"]]
 
-    deleted = client.post("/api/blocks/filesystem/delete", json={"ids": ids})
+    deleted = client.post("/api/blocks/system-prompt/delete", json={"ids": ids})
     assert deleted.json() == {"deleted": 2}
     assert all(
-        client.get(f"/api/blocks/filesystem/{item_id}").status_code == 404
+        client.get(f"/api/blocks/system-prompt/{item_id}").status_code == 404
         for item_id in ids
     )
     stored = client.get(f"/api/main-agents/{main_agent['id']}").json()
-    assert all(item["type"] != "filesystem" for item in stored["capability_refs"])
+    assert all(item["type"] != "system-prompt" for item in stored["capability_refs"])
 
     assert client.delete(f"/api/main-agents/{main_agent['id']}").status_code == 200
-    assert client.get("/api/blocks/filesystem").json() == []
+    assert client.get("/api/blocks/system-prompt").json() == []
 
 
 def test_agent_configuration_bulk_delete_uses_one_command_per_category(
@@ -94,7 +92,7 @@ def test_agent_configuration_bulk_delete_uses_one_command_per_category(
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
     required = create_blocks(
-        client, "bulk-agents", ("model", "filesystem", "output-mode")
+        client, "bulk-agents", ("model", "output-mode")
     )
     main_agent_ids = []
     subagent_ids = []
@@ -103,9 +101,7 @@ def test_agent_configuration_bulk_delete_uses_one_command_per_category(
             "/api/main-agents",
             json={
                 "name": f"Bulk Main Agent {index}",
-                "capability_refs": references(
-                    required, ("model", "filesystem", "output-mode")
-                ),
+                "capability_refs": references(required, ("model", "output-mode")),
             },
         ).json()["id"])
         subagent_ids.append(client.post(
@@ -131,15 +127,13 @@ def test_agent_config_copy_rejects_duplicate_names_without_writing(
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
     required = create_blocks(
-        client, "duplicate-copy", ("model", "filesystem", "output-mode")
+        client, "duplicate-copy", ("model", "output-mode")
     )
     main_agent = client.post(
         "/api/main-agents",
         json={
             "name": "Duplicate Main Agent",
-            "capability_refs": references(
-                required, ("model", "filesystem", "output-mode")
-            ),
+            "capability_refs": references(required, ("model", "output-mode")),
         },
     ).json()
     subagent = client.post(
@@ -186,45 +180,34 @@ def test_agent_config_copy_revalidates_invalid_stored_sources_before_writing(
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
     required = create_blocks(
-        client, "invalid-copy", ("model", "filesystem", "output-mode")
+        client, "invalid-copy", ("model", "output-mode")
     )
     main_agent = client.post(
         "/api/main-agents",
         json={
             "name": "Invalid stored Main Agent",
-            "capability_refs": references(
-                required, ("model", "filesystem", "output-mode")
-            ),
+            "capability_refs": references(required, ("model", "output-mode")),
         },
     ).json()
     subagent = client.post(
         "/api/subagents",
         json=subagent_payload("Invalid stored Subagent", name="invalid_worker"),
     ).json()
-    database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
-    with closing(sqlite3.connect(database_path)) as connection, connection:
-        main_agent_payload = json.loads(
-            connection.execute(
-                "SELECT payload FROM main_agents WHERE id = ?", (main_agent["id"],)
-            ).fetchone()[0]
-        )
-        main_agent_payload["capability_refs"][0]["block_id"] = "missing-block"
-        subagent_payload_json = json.loads(
-            connection.execute(
-                "SELECT payload FROM subagents WHERE id = ?", (subagent["id"],)
-            ).fetchone()[0]
-        )
-        subagent_payload_json["settings"]["capability_overrides"] = [
-            {"type": "model", "mode": "replace", "block_id": "missing-block"}
-        ]
-        connection.execute(
-            "UPDATE main_agents SET payload = ? WHERE id = ?",
-            (json.dumps(main_agent_payload), main_agent["id"]),
-        )
-        connection.execute(
-            "UPDATE subagents SET payload = ? WHERE id = ?",
-            (json.dumps(subagent_payload_json), subagent["id"]),
-        )
+    client.close()
+    configuration = FileConfigRepository(tmp_path / "data")
+
+    def corrupt_stored_sources(config: dict) -> None:
+        for record in config["main_agents"]:
+            if record.get("id") == main_agent["id"]:
+                record["capability_refs"][0]["block_id"] = "missing-block"
+        for record in config["subagents"]:
+            if record.get("id") == subagent["id"]:
+                record["settings"]["capability_overrides"] = [
+                    {"type": "model", "mode": "replace", "block_id": "missing-block"}
+                ]
+
+    configuration.update_config(corrupt_stored_sources)
+    client = make_client(tmp_path, monkeypatch)
 
     before_main_agent = client.get(f"/api/main-agents/{main_agent['id']}").json()
     before_subagent = client.get(f"/api/subagents/{subagent['id']}").json()

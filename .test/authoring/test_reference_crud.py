@@ -25,13 +25,15 @@ def test_main_agent_reference_delete_detaches_optional_and_protects_required_typ
         "/api/main-agents",
         json={
             "name": "Main Agent matrix",
-            "capability_refs": references(original),
+            "capability_refs": references(original, MAIN_AGENT_TYPES),
             "subagents": [{"subagent_id": subagent["id"]}],
         },
     )
     assert response.status_code == 200, response.text
     main_agent = response.json()
-    assert [item["type"] for item in main_agent["capability_refs"]] == list(PUBLIC_TYPES)
+    assert [item["type"] for item in main_agent["capability_refs"]] == list(
+        MAIN_AGENT_TYPES
+    )
 
     for capability_type, block in original.items():
         deleted = client.delete(f"/api/blocks/{capability_type}/{block['id']}")
@@ -42,7 +44,7 @@ def test_main_agent_reference_delete_detaches_optional_and_protects_required_typ
         f"/api/main-agents/{main_agent['id']}",
         json={
             "name": main_agent["name"],
-            "capability_refs": references(replacement),
+            "capability_refs": references(replacement, MAIN_AGENT_TYPES),
             "subagents": main_agent["subagents"],
         },
     )
@@ -126,8 +128,8 @@ def test_subagent_delete_detaches_entity_references(
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
     required_refs = references(
-        create_blocks(client, "binding-required", ("model", "filesystem", "output-mode")),
-        ("model", "filesystem", "output-mode"),
+        create_blocks(client, "binding-required", ("model", "output-mode")),
+        ("model", "output-mode"),
     )
     subagent_response = client.post(
         "/api/subagents",
