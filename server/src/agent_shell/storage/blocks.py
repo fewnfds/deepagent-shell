@@ -4,6 +4,7 @@ from copy import deepcopy
 
 from agent_shell.security_events import SecurityEventLogger, emit_configuration_events
 from agent_shell.storage.file_config import FileConfigRepository
+from agent_shell.storage.reference_mutations import detach_agent_block_references
 
 
 class BlockStore:
@@ -198,31 +199,6 @@ class BlockStore:
         )
         return self.get_block(block_type, new_id)
 
-    @staticmethod
-    def _detach_agent_block_references(config: dict, block_type: str, block_ids: set[str]) -> None:
-        for key in ("main_agents", "subagents"):
-            records = config.get(key, [])
-            if not isinstance(records, list):
-                continue
-            for record in records:
-                if not isinstance(record, dict):
-                    continue
-                if key == "main_agents":
-                    refs = record.get("capability_refs")
-                    if isinstance(refs, list):
-                        record["capability_refs"] = [
-                            item for item in refs
-                            if not (isinstance(item, dict) and item.get("type") == block_type and item.get("block_id") in block_ids)
-                        ]
-                else:
-                    settings = record.get("settings")
-                    overrides = settings.get("capability_overrides") if isinstance(settings, dict) else None
-                    if isinstance(overrides, list) and isinstance(settings, dict):
-                        settings["capability_overrides"] = [
-                            item for item in overrides
-                            if not (isinstance(item, dict) and item.get("type") == block_type and item.get("block_id") in block_ids)
-                        ]
-
     def delete_blocks(self, block_type: str, block_ids: list[str], *, detach_references: bool = False) -> int:
         unique_ids = list(dict.fromkeys(block_ids))
         if not unique_ids:
@@ -239,7 +215,7 @@ class BlockStore:
                     retained.append(record)
             config.setdefault("components", {})[block_type] = retained
             if detach_references:
-                self._detach_agent_block_references(config, block_type, set(unique_ids))
+                detach_agent_block_references(config, block_type, set(unique_ids))
 
         self._repository.update_config(mutate)
         active_refs = {

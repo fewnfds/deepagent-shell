@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +26,12 @@ from agent_shell.registries.custom_tools import (
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.middleware_packages.validation import MiddlewarePackageValidationService
+from agent_shell.validation.assembly import (
+    ResolvedSubagent,
+    ResolvedSubagentEdge,
+    StaticAssembly,
+    SubagentNodeKey,
+)
 from agent_shell.validation.capability_assembly import (
     CapabilityAssemblySubject,
     FilesystemMode,
@@ -38,37 +43,6 @@ from agent_shell.validation.filesystem_permissions import (
 )
 from agent_shell.validation.models import ValidationIssue, ValidationReport
 from agent_shell.validation.subagent_references import subagent_reference_issues
-
-
-SubagentNodeKey = str
-
-
-@dataclass(frozen=True, slots=True)
-class ResolvedSubagentEdge:
-    target_key: SubagentNodeKey
-
-
-@dataclass(frozen=True, slots=True)
-class ResolvedSubagent:
-    key: SubagentNodeKey
-    component_name: str
-    name: str
-    description: str
-    references: dict[str, str]
-    blocks: dict[str, dict[str, Any]]
-    filesystem_mode: FilesystemMode
-    disabled_capabilities: frozenset[str] = frozenset()
-
-
-@dataclass(frozen=True, slots=True)
-class StaticAssembly:
-    main_agent: dict[str, Any]
-    references: dict[str, str]
-    blocks: dict[str, dict[str, Any]]
-    filesystem_mode: FilesystemMode
-    disabled_capabilities: frozenset[str]
-    subagents: tuple[ResolvedSubagentEdge, ...]
-    subagent_nodes: dict[SubagentNodeKey, ResolvedSubagent]
 
 
 _MAIN_AGENT_REQUIRED_CAPABILITY_TYPES = frozenset(

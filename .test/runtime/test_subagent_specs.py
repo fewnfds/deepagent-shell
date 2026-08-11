@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 from agent_shell.runtime.state import AgentShellStateMiddleware
 from agent_shell.runtime.subagents import build_subagent_specs
-from agent_shell.validation.service import ResolvedSubagent, ResolvedSubagentEdge
+from agent_shell.validation.assembly import ResolvedSubagent, ResolvedSubagentEdge
 
 
 def test_direct_subagents_become_official_dictionary_specs_with_shared_workspace() -> None:

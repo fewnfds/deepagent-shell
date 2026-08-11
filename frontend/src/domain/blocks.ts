@@ -1,3 +1,20 @@
+import type { MiddlewareConfigSchema } from '@/api'
+
+import {
+  cleanName,
+  identity,
+  isRecord,
+  stringValue,
+  type BlockDraftBase,
+} from './blocks/shared'
+import {
+  systemPromptAdapter,
+  type SystemPromptDraft,
+} from './blocks/systemPrompt'
+
+export { systemPromptAdapter }
+export type { BlockDraftBase, SystemPromptDraft }
+
 export const blockTypes = [
   'model',
   'custom-tool',
@@ -14,11 +31,6 @@ export const blockTypes = [
   'prompt-caching',
   'workflow-input-context',
 ] as const
-
-export interface BlockDraftBase {
-  id: string
-  name: string
-}
 
 interface BlockPayloadBase {
   name: string
@@ -415,13 +427,6 @@ export interface SkillCatalogItem {
   description?: string
 }
 
-export interface SystemPromptDraft extends BlockDraftBase {
-  system_prompt: string
-}
-
-type SystemPromptApiRecord = SystemPromptDraft
-interface SystemPromptPayload extends BlockPayloadBase { system_prompt: string }
-
 export interface SubagentDraft extends BlockDraftBase {
   instruction_override: string
   task_description_override: string
@@ -475,10 +480,6 @@ function nextWorkflowSlotKey(): string {
   return `workflow-input-slot-${workflowSlotSequence}`
 }
 
-function cleanName(value: string): string {
-  return value.trim()
-}
-
 function uniqueStrings(values: readonly string[]): string[] {
   const seen = new Set<string>()
   return values.flatMap((value) => {
@@ -507,23 +508,10 @@ function editableText(value: unknown, defaultValue: string): string {
   return typeof value === 'string' ? value : defaultValue
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-}
-
-function stringValue(value: unknown, fallback = ''): string {
-  return typeof value === 'string' ? value : fallback
-}
-
 function stringList(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
     : []
-}
-
-function identity(value: unknown): BlockDraftBase {
-  const source = isRecord(value) ? value : {}
-  return { id: stringValue(source.id), name: stringValue(source.name) }
 }
 
 function jsonObjectEditorValue(value: unknown, fallback: string): string {
@@ -1193,18 +1181,6 @@ export const skillAdapter = {
   },
 }
 
-export const systemPromptAdapter = {
-  blank(): SystemPromptDraft {
-    return { id: '', name: '', system_prompt: '' }
-  },
-  fromApi(value: SystemPromptApiRecord): SystemPromptDraft {
-    return { ...identity(value), system_prompt: stringValue(value.system_prompt) }
-  },
-  toPayload(value: SystemPromptDraft): SystemPromptPayload {
-    return { name: cleanName(value.name), system_prompt: value.system_prompt.trim() }
-  },
-}
-
 export const subagentAdapter = {
   blank(defaults: SubagentDefaults): SubagentDraft {
     return {
@@ -1269,4 +1245,3 @@ export const blockAdapters = {
   'prompt-caching': promptCachingAdapter,
   'workflow-input-context': workflowInputContextAdapter,
 } as const
-import type { MiddlewareConfigSchema } from '@/api'

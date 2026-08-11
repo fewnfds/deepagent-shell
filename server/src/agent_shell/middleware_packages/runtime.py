@@ -11,7 +11,7 @@ from langchain.agents.middleware import AgentMiddleware
 
 from agent_shell.middleware_packages.loader import MiddlewarePackageLoader
 from agent_shell.runtime.errors import AgentRuntimeError
-from agent_shell.validation.service import StaticAssembly
+from agent_shell.validation.assembly import StaticAssembly
 
 
 @dataclass(frozen=True, slots=True)

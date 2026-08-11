@@ -4,6 +4,7 @@ from copy import deepcopy
 
 from agent_shell.security_events import SecurityEventLogger, emit_configuration_events
 from agent_shell.storage.file_config import FileConfigRepository
+from agent_shell.storage.reference_mutations import detach_subagent_references
 
 
 class AgentConfigStore:
@@ -72,16 +73,6 @@ class AgentConfigStore:
             entity_id=item_id,
         )
 
-    @staticmethod
-    def _detach_subagent_references(config: dict, target_ids: set[str]) -> None:
-        for record in config.get("main_agents", []):
-            references = record.get("subagents") if isinstance(record, dict) else None
-            if isinstance(references, list):
-                record["subagents"] = [
-                    item for item in references
-                    if not (isinstance(item, dict) and item.get("subagent_id") in target_ids)
-                ]
-
     def delete_items(self, table: str, item_ids: list[str], *, detach_references: bool = False) -> int:
         table = self._table(table)
         unique_ids = list(dict.fromkeys(item_ids))
@@ -97,7 +88,7 @@ class AgentConfigStore:
                     retained.append(item)
             config[table] = retained
             if table == "subagents" and detach_references:
-                self._detach_subagent_references(config, set(removed))
+                detach_subagent_references(config, set(removed))
 
         self._repository.update_config(mutate)
         for item_id in removed:

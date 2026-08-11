@@ -30,13 +30,16 @@ def _threshold(
 
 
 def materialize_summarization_middleware(
-    block: SummarizationBlock,
+    capability: dict[str, Any],
     *,
     model: Any,
     backend: Any,
 ) -> AgentMiddleware:
     """Build the explicit Deep Agents summarization override for one profile."""
 
+    block = SummarizationBlock.model_validate(
+        {key: value for key, value in capability.items() if key != "id"}
+    )
     if not block.enabled:
         return _DisabledSummarizationMiddleware()
 

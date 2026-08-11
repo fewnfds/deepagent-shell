@@ -15,8 +15,9 @@ from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.file_config import FileConfigRepository
 from agent_shell.storage.media_outputs import MediaOutputStore
 from agent_shell.storage.workflows import WorkflowStore
+from agent_shell.validation.assembly import StaticAssembly
 from agent_shell.validation.models import ValidationReport
-from agent_shell.validation.service import ConfigurationValidationService, StaticAssembly
+from agent_shell.validation.service import ConfigurationValidationService
 
 
 @dataclass(slots=True)

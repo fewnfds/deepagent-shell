@@ -20,7 +20,7 @@ from agent_shell.runtime.model_request_settings import (
     make_model_request_settings_middleware,
 )
 from agent_shell.runtime.state import AgentShellStateMiddleware
-from agent_shell.validation.service import (
+from agent_shell.validation.assembly import (
     ResolvedSubagent,
     ResolvedSubagentEdge,
     SubagentNodeKey,

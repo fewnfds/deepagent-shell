@@ -14,9 +14,7 @@ from agent_shell.contracts import (
     FilesystemBlock,
     FilesystemPermissionsBlock,
     OutputModeBlock,
-    PromptCachingBlock,
     SkillBlock,
-    SummarizationBlock,
 )
 from agent_shell.provider_http import PROVIDER_HTTP_TIMEOUT, ProviderHttpClients
 from agent_shell.provider_secrets import ProviderCredentialError, ProviderSecretResolver
@@ -42,7 +40,10 @@ from agent_shell.runtime.capabilities.summarization import (
     disabled_summarization_middleware,
     materialize_summarization_middleware,
 )
-from agent_shell.runtime.capabilities.todo_list import disabled_todo_list_middleware
+from agent_shell.runtime.capabilities.todo_list import (
+    disabled_todo_list_middleware,
+    materialize_todo_list_middleware,
+)
 from agent_shell.runtime.agent_compilation import (
     MaterializedAgentProfile,
     configuration_error,
@@ -240,14 +241,7 @@ class AgentBuilder:
         todo = selected_blocks.get("todo-list")
         if todo is not None:
             try:
-                from langchain.agents.middleware import TodoListMiddleware
-
-                todo_kwargs: dict[str, str] = {}
-                if todo["system_prompt_override"] is not None:
-                    todo_kwargs["system_prompt"] = todo["system_prompt_override"]
-                if todo["tool_description_override"] is not None:
-                    todo_kwargs["tool_description"] = todo["tool_description_override"]
-                middleware.append(TodoListMiddleware(**todo_kwargs))
+                middleware.append(materialize_todo_list_middleware(todo))
             except Exception as exc:
                 raise configuration_error(
                     "middleware_materialization_failed",
@@ -368,16 +362,9 @@ class AgentBuilder:
         summarization = selected_blocks.get("summarization")
         if summarization is not None:
             try:
-                summarization_block = SummarizationBlock.model_validate(
-                    {
-                        key: value
-                        for key, value in summarization.items()
-                        if key != "id"
-                    }
-                )
                 extra_middleware.append(
                     materialize_summarization_middleware(
-                        summarization_block,
+                        summarization,
                         model=model,
                         backend=backend,
                     )
@@ -398,15 +385,8 @@ class AgentBuilder:
         prompt_caching = selected_blocks.get("prompt-caching")
         if prompt_caching is not None:
             try:
-                prompt_caching_block = PromptCachingBlock.model_validate(
-                    {
-                        key: value
-                        for key, value in prompt_caching.items()
-                        if key != "id"
-                    }
-                )
                 extra_middleware.append(
-                    materialize_prompt_caching_middleware(prompt_caching_block)
+                    materialize_prompt_caching_middleware(prompt_caching)
                 )
             except Exception as exc:
                 raise configuration_error(

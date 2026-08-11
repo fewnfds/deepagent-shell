@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from langchain.agents.middleware import AgentMiddleware
 
 from agent_shell.contracts import PromptCachingBlock
@@ -18,10 +20,13 @@ def disabled_prompt_caching_middleware() -> AgentMiddleware:
 
 
 def materialize_prompt_caching_middleware(
-    block: PromptCachingBlock,
+    capability: dict[str, Any],
 ) -> AgentMiddleware:
     """Build the explicit Anthropic prompt-caching override for one profile."""
 
+    block = PromptCachingBlock.model_validate(
+        {key: value for key, value in capability.items() if key != "id"}
+    )
     if not block.enabled:
         return _DisabledAnthropicPromptCachingMiddleware()
 
