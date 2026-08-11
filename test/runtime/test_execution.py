@@ -272,7 +272,19 @@ def test_tool_error_boundary_preserves_successful_result() -> None:
     assert returned.content == result.content
 
 def test_unclassified_graph_failure_is_not_mislabeled_as_provider() -> None:
-    async def scenario() -> str:
+    async def scenario() -> tuple[str, str]:
+        class RecordingDiagnostics:
+            debug_exception: BaseException | None = None
+
+            def runtime_error(
+                self,
+                _exc,
+                *,
+                debug_exception: BaseException | None = None,
+                **_kwargs,
+            ) -> None:
+                self.debug_exception = debug_exception
+
         class Graph:
             async def astream_events(
                 self, _input, *, config: dict, version: str, transformers: tuple = ()
@@ -286,6 +298,7 @@ def test_unclassified_graph_failure_is_not_mislabeled_as_provider() -> None:
             "enabled": True,
             "template": "{{message}}",
         }
+        diagnostics = RecordingDiagnostics()
         execution = AgentExecution(
             graph=Graph(),
             input_state={"messages": [{"role": "user", "content": "fail"}]},
@@ -293,6 +306,7 @@ def test_unclassified_graph_failure_is_not_mislabeled_as_provider() -> None:
             normalizer=V3EventNormalizer("Main Agent"),
             middleware_runtime=noop_middleware_runtime(),
             media_response=noop_media_response(),
+            runtime_diagnostics=diagnostics,  # type: ignore[arg-type]
         )
         stream = execution.stream_text()
         assert await anext(stream) == "running"
@@ -300,9 +314,12 @@ def test_unclassified_graph_failure_is_not_mislabeled_as_provider() -> None:
         with pytest.raises(AgentRuntimeError) as captured:
             await anext(stream)
         assert "private middleware or graph details" not in captured.value.safe_message
-        return captured.value.code
+        return captured.value.code, str(diagnostics.debug_exception)
 
-    assert asyncio.run(scenario()) == "agent_execution_failed"
+    assert asyncio.run(scenario()) == (
+        "agent_execution_failed",
+        "private middleware or graph details",
+    )
 
 def test_classified_graph_failure_emits_matching_lifecycle_error() -> None:
     async def scenario() -> str:

@@ -4,11 +4,13 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 import hashlib
 import json
+from pathlib import Path
 from typing import Literal
 
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.security_events import SecurityEventLogger
 from agent_shell.storage.event_feed import EventFeedStore
+from agent_shell.storage.runtime_diagnostics import runtime_diagnostic_id
 from agent_shell.storage.system_log_settings import MIB_BYTES, SystemLogSettingsStore
 
 
@@ -144,9 +146,8 @@ class EventFeedService:
             "download_available": size > EVENT_DOWNLOAD_THRESHOLD_BYTES,
         }
 
-    @staticmethod
-    def _runtime_item(record: dict[str, object]) -> dict[str, object]:
-        item_id = _public_id(record)
+    def _runtime_item(self, record: dict[str, object]) -> dict[str, object]:
+        item_id = runtime_diagnostic_id(record)
         content = _detail_json("runtime", record)
         size = len(content.encode("utf-8"))
         detail = (
@@ -163,7 +164,10 @@ class EventFeedService:
             "summary": _summary(record.get("agent_name", ""), detail),
             "inline_content": content if size <= EVENT_DOWNLOAD_THRESHOLD_BYTES else None,
             "matched_in_content": False,
-            "download_available": size > EVENT_DOWNLOAD_THRESHOLD_BYTES,
+            "download_available": (
+                size > EVENT_DOWNLOAD_THRESHOLD_BYTES
+                or self._diagnostics.debug_log_path(item_id) is not None
+            ),
         }
 
     @classmethod
@@ -329,7 +333,7 @@ class EventFeedService:
             (
                 dict(record)
                 for record in self._diagnostics.snapshot()["entries"]
-                if _public_id(record) == item_id
+                if runtime_diagnostic_id(record) == item_id
             ),
             None,
         )
@@ -338,7 +342,7 @@ class EventFeedService:
         self,
         source: EventSource,
         item_id: str,
-    ) -> tuple[bytes, str] | None:
+    ) -> tuple[bytes | Path, str, str] | None:
         if source == "interception":
             entry = self._store.get_interception(item_id)
             timestamp_key = "intercepted_at"
@@ -350,8 +354,13 @@ class EventFeedService:
             timestamp_key = "timestamp"
         if entry is None:
             return None
-        content = (_detail_json(source, entry) + "\n").encode("utf-8")
         timestamp = datetime.fromisoformat(str(entry[timestamp_key])).astimezone(timezone.utc)
         stamp = timestamp.strftime("%Y%m%dT%H%M%S%f")[:-3] + "Z"
+        if source == "runtime":
+            debug_path = self._diagnostics.debug_log_path(item_id)
+            if debug_path is not None:
+                filename = f"agent-shell-debug-{stamp}-{item_id[:8]}.log"
+                return debug_path, filename, "text/plain; charset=utf-8"
+        content = (_detail_json(source, entry) + "\n").encode("utf-8")
         filename = f"agent-shell-event-{source}-{stamp}-{item_id[:8]}.json"
-        return content, filename
+        return content, filename, "application/json; charset=utf-8"

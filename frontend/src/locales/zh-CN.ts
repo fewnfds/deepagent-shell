@@ -211,6 +211,10 @@ export const zhCN = {
     download: '下载完整条目',
     matchedInContent: '查询词命中了未在列表中展示的完整内容。',
     interceptionWarning: '拦截测试已开启，Provider 调用会被短路。',
+    debug: {
+      label: 'DEBUG 完整日志',
+      active: 'DEBUG 已开启，完整异常日志正在写入 data/logs/debug。',
+    },
     sources: {
       interception: '拦截记录',
       system: '系统日志',
@@ -238,7 +242,7 @@ export const zhCN = {
       interception: '拦截测试',
     },
     retention: {
-      title: '保存策略',
+      title: '日志设置',
       systemMaxSize: '系统日志容量',
       systemConfirmTitle: '降低系统日志大小上限',
       systemConfirmDescription: '将最大保存大小降低到 {count} MiB？超过新上限时，当前日志会清空并从新事件继续记录。',
@@ -269,6 +273,9 @@ export const zhCN = {
       retentionFailed: '保存上限更新失败',
       systemLogSizeSaved: '系统日志容量已更新为 {count} MiB。',
       systemLogSizeFailed: '系统日志大小上限更新失败',
+      debugEnabled: 'DEBUG 完整日志已开启。',
+      debugDisabled: 'DEBUG 完整日志已关闭。',
+      debugFailed: 'DEBUG 设置更新失败',
     },
   },
   fileManager: {

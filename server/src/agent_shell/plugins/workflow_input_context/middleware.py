@@ -9,7 +9,7 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.messages.utils import convert_to_messages
 from langgraph.runtime import Runtime
 
-from agent_shell.runtime.input_messages import validate_prepared_messages
+from agent_shell.middleware_packages.messages import mutable_request_messages
 
 from .contracts import WorkflowInputContextBlock, validate_virtual_path
 
@@ -32,7 +32,7 @@ def _text_length(content: object) -> int:
 
 def _copy_messages(value: object) -> list[dict[str, Any]]:
     try:
-        messages = validate_prepared_messages(deepcopy(value))
+        messages = mutable_request_messages(value)
     except Exception as exc:
         raise WorkflowInputContextError("input context messages are invalid") from exc
     return messages

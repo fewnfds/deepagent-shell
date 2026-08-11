@@ -431,6 +431,7 @@ interface RuntimeDiagnosticEntry {
 export interface RuntimeDiagnostics {
   retention_limit: number
   max_retention_limit: number
+  debug_enabled: boolean
 }
 
 export type ManagementEvent =

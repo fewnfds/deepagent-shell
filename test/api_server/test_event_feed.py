@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import json
 
+from agent_shell.runtime.errors import AgentRuntimeError
+
 from .support import *
 
 
@@ -131,3 +133,70 @@ def test_event_feed_downloads_long_public_records_and_retention_is_scoped(
     assert retention.json()["retention_limit"] == 10_000
     assert runtime_retention.json()["retention_limit"] == 10_000
     assert obsolete.status_code == 404
+
+
+def test_runtime_debug_download_keeps_full_exception_out_of_summary(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    request_id = "request-full-debug"
+    private_detail = "private-debug-detail"
+    with make_client(tmp_path, monkeypatch) as client:
+        initial = client.get("/api/runtime-diagnostics")
+        enabled = client.put(
+            "/api/runtime-diagnostics/debug",
+            json={"enabled": True},
+        )
+
+        try:
+            try:
+                raise TypeError(private_detail)
+            except TypeError as cause:
+                raise RuntimeError("outer debug failure") from cause
+        except RuntimeError as full_exception:
+            client.app.state.runtime_diagnostics.runtime_error(
+                AgentRuntimeError(
+                    "agent_execution_failed",
+                    "The Agent failed during graph execution.",
+                    status_code=502,
+                ),
+                request_id=request_id,
+                model="published-model",
+                agent_name="Published Main Agent",
+                code="agent_execution_failed",
+                debug_exception=full_exception,
+            )
+
+        listing = client.get(
+            "/api/event-feed",
+            params=event_feed_params(source="runtime", query=request_id),
+        ).json()
+        item = listing["items"][0]
+        download = client.get(
+            f"/api/event-feed/runtime/{item['id']}/download"
+        )
+        deleted = client.post(
+            "/api/event-feed/delete",
+            json={
+                **EVENT_FEED_TEST_WINDOW,
+                "source": ["runtime"],
+                "level": [],
+                "query": request_id,
+            },
+        )
+        missing = client.get(
+            f"/api/event-feed/runtime/{item['id']}/download"
+        )
+
+    assert initial.json()["debug_enabled"] is False
+    assert enabled.json()["debug_enabled"] is True
+    assert item["download_available"] is True
+    assert private_detail not in item["inline_content"]
+    assert download.status_code == 200
+    assert download.headers["content-type"].startswith("text/plain")
+    assert download.headers["content-disposition"].endswith('.log"')
+    debug_text = download.content.decode("utf-8")
+    assert "TypeError: private-debug-detail" in debug_text
+    assert "RuntimeError: outer debug failure" in debug_text
+    assert deleted.json() == {"deleted": 1}
+    assert missing.status_code == 404
+    assert list((tmp_path / "data" / "logs" / "debug").glob("*.log")) == []

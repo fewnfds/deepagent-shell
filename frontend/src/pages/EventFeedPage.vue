@@ -41,6 +41,7 @@ interface EventFeedApi {
   updateInterceptionRetention(value: number): Promise<RetentionSettings>
   getRuntimeDiagnostics(): Promise<RuntimeDiagnostics>
   updateRuntimeLogRetention(value: number): Promise<RuntimeDiagnostics>
+  updateRuntimeDebug(enabled: boolean): Promise<RuntimeDiagnostics>
   getSystemLogSettings(): Promise<SystemLogSettings>
   updateSystemLogSettings(value: number): Promise<SystemLogSettings>
   deleteMatchingEventFeed(filters: EventFeedFilters): Promise<{ deleted: number }>
@@ -92,6 +93,7 @@ const interceptionEnabled = ref(false)
 const retentionDrafts = ref({ interception: 20, runtime: 20 })
 const savedRetentions = ref({ interception: 20, runtime: 20 })
 const maxRetention = ref(1)
+const runtimeDebugEnabled = ref(false)
 const systemLogSizeDraft = ref(5)
 const savedSystemLogSize = ref(5)
 const systemLogSizeMin = ref(1)
@@ -139,17 +141,20 @@ function displaySummary(item: EventFeedItem): string {
   return item.source === 'system' && te(key) ? t(key) : item.summary
 }
 
-function downloadFilename(item: EventFeedItem): string {
+function downloadFilename(item: EventFeedItem, blob: Blob): string {
   const parsed = new Date(item.occurred_at)
   const stamp = Number.isNaN(parsed.getTime())
     ? 'unknown-time'
     : parsed.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
-  return `agent-shell-event-${item.source}-${stamp}-${item.id.slice(0, 8)}.json`
+  const extension = item.source === 'runtime' && blob.type.startsWith('text/plain')
+    ? 'log'
+    : 'json'
+  return `agent-shell-event-${item.source}-${stamp}-${item.id.slice(0, 8)}.${extension}`
 }
 
 async function download(item: EventFeedItem): Promise<void> {
   const blob = await api.downloadEvent(item.source, item.id)
-  triggerBrowserDownload(blob, downloadFilename(item))
+  triggerBrowserDownload(blob, downloadFilename(item, blob))
 }
 
 const eventTableConfig: DataTableConfig<EventFeedItem> = {
@@ -284,6 +289,7 @@ async function loadControls(): Promise<void> {
       interceptionRetention.max_retention_limit,
       diagnostics.max_retention_limit,
     )
+    runtimeDebugEnabled.value = diagnostics.debug_enabled
     systemLogSizeDraft.value = systemLog.max_size_mib
     savedSystemLogSize.value = systemLog.max_size_mib
     systemLogSizeMin.value = systemLog.min_size_mib
@@ -293,6 +299,26 @@ async function loadControls(): Promise<void> {
     controlsError.value = describeFailure(error)
   } finally {
     controlsLoading.value = false
+  }
+}
+
+async function saveRuntimeDebug(): Promise<void> {
+  const enabled = runtimeDebugEnabled.value
+  savingControl.value = 'runtime-debug'
+  try {
+    const result = await api.updateRuntimeDebug(enabled)
+    runtimeDebugEnabled.value = result.debug_enabled
+    notify({
+      tone: 'success',
+      title: t(result.debug_enabled
+        ? 'eventFeed.feedback.debugEnabled'
+        : 'eventFeed.feedback.debugDisabled'),
+    })
+  } catch (error) {
+    runtimeDebugEnabled.value = !enabled
+    notifyFailure(t('eventFeed.feedback.debugFailed'), error)
+  } finally {
+    savingControl.value = ''
   }
 }
 
@@ -397,6 +423,7 @@ onMounted(() => { void loadControls() })
         {{ controlsError }}
       </LteAlert>
       <LteAlert v-if="interceptionEnabled" theme="warning" :title="t('eventFeed.interceptionWarning')" />
+      <LteAlert v-if="runtimeDebugEnabled" theme="warning" :title="t('eventFeed.debug.active')" />
     </template>
 
     <LteCard class="mb-3" :title="t('eventFeed.retention.title')">
@@ -450,6 +477,22 @@ onMounted(() => { void loadControls() })
               </LteButton>
             </div>
           </form>
+          <div class="col-lg-3 d-flex align-items-center" data-testid="runtime-debug">
+            <div class="form-check form-switch">
+              <input
+                id="runtime-debug-enabled"
+                v-model="runtimeDebugEnabled"
+                class="form-check-input"
+                :disabled="savingControl === 'runtime-debug'"
+                role="switch"
+                type="checkbox"
+                @change="saveRuntimeDebug"
+              >
+              <label class="form-check-label" for="runtime-debug-enabled">
+                {{ t('eventFeed.debug.label') }}
+              </label>
+            </div>
+          </div>
         </div>
       </div>
     </LteCard>

@@ -47,6 +47,7 @@ def _default_system() -> dict[str, Any]:
         },
         "runtime_control": {
             "interception_enabled": False,
+            "debug_logging_enabled": False,
         },
         "configuration_validation": {"debounce_ms": 1000},
         "system_log": {"max_size_mib": 5},

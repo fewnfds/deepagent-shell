@@ -4,7 +4,7 @@ from agent_shell.storage.file_config import FileConfigRepository
 
 
 class RuntimeControlSettingsStore:
-    """Persist the Provider-boundary interception test switch."""
+    """Persist runtime switches managed from the log center."""
 
     def __init__(self, repository: FileConfigRepository) -> None:
         self._repository = repository
@@ -13,7 +13,11 @@ class RuntimeControlSettingsStore:
         values = self._repository.system().get("runtime_control", {})
         return {
             "interception_enabled": bool(values.get("interception_enabled", False)),
+            "debug_logging_enabled": bool(values.get("debug_logging_enabled", False)),
         }
 
     def set_interception_enabled(self, enabled: bool) -> None:
         self._repository.update_system(lambda system: system.setdefault("runtime_control", {}).__setitem__("interception_enabled", bool(enabled)))
+
+    def set_debug_logging_enabled(self, enabled: bool) -> None:
+        self._repository.update_system(lambda system: system.setdefault("runtime_control", {}).__setitem__("debug_logging_enabled", bool(enabled)))

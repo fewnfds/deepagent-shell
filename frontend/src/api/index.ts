@@ -477,4 +477,11 @@ export const managementApi = {
     })
   },
 
+  updateRuntimeDebug(enabled: boolean): Promise<RuntimeDiagnostics> {
+    return managementRequest('/api/runtime-diagnostics/debug', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    })
+  },
+
 }

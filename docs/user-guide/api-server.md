@@ -44,8 +44,8 @@ fan-out、fan-in 或形成 LangGraph 支持的循环。画布 Start/End 直接�
 - 当前不支持 conditional edge、可编程路由 Node、动态 worker、Interrupt 或 Subworkflow；多个 normal 出边会按
   LangGraph super-step 语义并行激活目标；
 - 图不完整、引用失效、Agent 装配失败或 Provider 失败时，本次请求直接返回错误；
-- Workflow Debug 管理 API 提供有界运行索引、结构运行树和 checkpoint 摘要；日志中心仍只保留系统事件、请求级
-  错误诊断和显式 interception test。当前不提供 Resume 或旧 Main Agent 直连兼容。
+- Workflow Debug 管理 API 提供有界运行索引、结构运行树和 checkpoint 摘要；日志中心展示系统事件、请求级
+  错误诊断和显式 interception test，并可按开关保存完整异常文件。当前不提供 Resume 或旧 Main Agent 直连兼容。
 
 ## API Key 与状态
 
@@ -53,4 +53,5 @@ API Key 是 write-only 设置，用于 `/v1/*`；管理密码用于管理台和 
 API Server 启停不扫描未被 Workflow 引用的 Main Agent；完整 repository validation 只用于管理诊断，单次 Chat 请求
 只解析所选 Workflow 的当前图和可达装配。
 
-Provider secret、Bearer token、宿主敏感路径、traceback 和 Provider 原始响应不得进入普通 API、DOM 或日志。
+普通 API、DOM 和日志摘要不返回 Provider secret、Bearer token、宿主敏感路径、traceback 或 Provider 原始响应；
+显式开启的本地 DEBUG 文件除外。

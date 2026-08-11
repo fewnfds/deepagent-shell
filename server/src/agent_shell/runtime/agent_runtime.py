@@ -114,7 +114,12 @@ class AgentExecution:
                         code="workflow_debug_record_failed",
                     )
 
-        def record_runtime_error(exc: BaseException, code: str) -> None:
+        def record_runtime_error(
+            exc: BaseException,
+            code: str,
+            *,
+            debug_exception: BaseException | None = None,
+        ) -> None:
             if self.runtime_diagnostics is not None:
                 self.runtime_diagnostics.runtime_error(
                     exc,
@@ -122,6 +127,7 @@ class AgentExecution:
                     model=self.public_model,
                     agent_name=self.agent_name,
                     code=code,
+                    debug_exception=debug_exception,
                 )
 
         def project_event(event: OutputEvent) -> list[str]:
@@ -255,7 +261,7 @@ class AgentExecution:
             )
             for rendered in failure_output(error.code):
                 yield rendered
-            record_runtime_error(error, error.code)
+            record_runtime_error(error, error.code, debug_exception=exc)
             await finish_debug("failed", error_code=error.code, error=error)
             raise error from exc
         except AgentRuntimeError as exc:
@@ -279,7 +285,7 @@ class AgentExecution:
                 )
             for rendered in failure_output(error.code):
                 yield rendered
-            record_runtime_error(error, error.code)
+            record_runtime_error(error, error.code, debug_exception=exc)
             await finish_debug("failed", error_code=error.code, error=error)
             raise error from exc
         await finish_debug("completed")

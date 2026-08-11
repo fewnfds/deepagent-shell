@@ -24,14 +24,14 @@ Provider credential、API Key、管理密码和 LangSmith API Key 保存在实�
 的变量引用，`agent-shell.env` 保存实际敏感值；当前文件不是加密 vault。保护整个 `data/` 的磁盘权限、备份和传输，
 不要提交 Git 或公开分享。
 
-普通 API、DOM、系统日志和运行诊断不回显 credential、Bearer token、宿主敏感路径、traceback 或
-Provider 原始错误正文。以下 management-only 功能会按产品用途保存用户内容：
+普通 API、DOM、系统日志和运行诊断摘要不回显 credential、Bearer token、宿主敏感路径、traceback 或
+Provider 原始错误正文。以下 management-only 功能会按产品用途保存完整内容：
 
 - Provider 前拦截记录；
+- 日志中心显式开启后写入 `data/logs/debug/` 的完整异常日志；
 - 用户创建的组件、文件和 Python 资源。
 
-这些内容应按敏感数据处理。系统日志和请求级运行诊断只保存白名单 metadata，不保存逐 token 输出、
-工具参数/结果或 reasoning 正文。
+运行诊断列表仍只保存固定摘要字段。DEBUG 文件不经过摘要白名单或脱敏，并可从对应运行日志行下载。
 
 ## 用户代码与文件系统
 
@@ -54,7 +54,7 @@ Middleware 包没有 sandbox，以 Agent Shell 服务进程权限运行。它可
 
 部署者负责磁盘、内存、上传大小、外部映射和并发限制。文件管理文本编辑限制为 2 MiB；其他文件传输
 采用流式处理，但不构成实例配额。拦截记录和运行诊断使用可配置保存条数，系统日志使用文件大小上限。
-降低上限会永久裁剪旧数据。Workflow Debug 运行索引有界保存；官方 checkpoint 与索引共用实例 SQLite，删除运行
+降低上限会永久裁剪旧数据；裁剪 runtime 诊断时同步删除对应 DEBUG 文件。Workflow Debug 运行索引有界保存；官方 checkpoint 与索引共用实例 SQLite，删除运行
 记录时同步调用 checkpointer 删除对应 thread。
 
 ## 系统配置与变量

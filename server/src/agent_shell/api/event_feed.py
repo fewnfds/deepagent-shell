@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Query, Response
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent_shell.api.errors import management_error
@@ -134,10 +136,16 @@ def build_event_feed_router(
                 message_key="errors.eventFeedItemNotFound",
                 message="The event feed item does not exist.",
             )
-        content, filename = result
+        content, filename, media_type = result
+        if isinstance(content, Path):
+            return FileResponse(
+                content,
+                filename=filename,
+                media_type=media_type,
+            )
         return Response(
             content=content,
-            media_type="application/json; charset=utf-8",
+            media_type=media_type,
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 

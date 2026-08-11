@@ -53,6 +53,7 @@ from agent_shell.storage.file_config import FileConfigRepository
 from agent_shell.storage.history_retention import HistoryRetentionStore
 from agent_shell.storage.media_outputs import MediaOutputStore
 from agent_shell.storage.runtime_controls import RuntimeControlSettingsStore
+from agent_shell.storage.runtime_debug_logs import RuntimeDebugLogStore
 from agent_shell.storage.runtime_diagnostics import RuntimeDiagnosticStore
 from agent_shell.storage.system_log_settings import MIB_BYTES, SystemLogSettingsStore
 from agent_shell.storage.validation_settings import ConfigurationValidationSettingsStore
@@ -121,6 +122,10 @@ def create_app(
         langsmith_project=settings.langsmith_project,
     )
     runtime_control_settings = RuntimeControlSettingsStore(configuration)
+    runtime_debug_logs = RuntimeDebugLogStore(
+        logs_dir / "debug",
+        runtime_control_settings,
+    )
     configuration_validation_settings = ConfigurationValidationSettingsStore(configuration)
     runtime_diagnostic_store = RuntimeDiagnosticStore(database, history_retention)
     block_store = BlockStore(configuration, event_logger)
@@ -150,6 +155,7 @@ def create_app(
     runtime_diagnostics = RuntimeDiagnostics(
         api_server_events.publish_nowait,
         store=runtime_diagnostic_store,
+        debug_logs=runtime_debug_logs,
     )
     event_logger.set_failure_reporter(
         lambda exc, request_id: runtime_diagnostics.observation_error(
@@ -210,6 +216,7 @@ def create_app(
         *database.file_permissions,
         media_outputs.directory_permission,
         *event_logger.permission_statuses,
+        runtime_debug_logs.directory_permission,
     )
     readiness = ReadinessService(
         settings=settings,
@@ -401,6 +408,7 @@ def create_app(
     app.state.interception_tests = interception_tests
     app.state.runtime_diagnostics = runtime_diagnostics
     app.state.runtime_diagnostic_store = runtime_diagnostic_store
+    app.state.runtime_debug_logs = runtime_debug_logs
     app.state.api_server_store = api_server_store
     app.state.media_outputs = media_outputs
     app.state.provider_http_clients = provider_http_clients

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import pytest
 from deepagents import create_deep_agent
 from deepagents.backends import StateBackend
@@ -16,14 +14,7 @@ from agent_shell.plugins.workflow_input_context.middleware import (
     WorkflowInputContextError,
     WorkflowInputContextMiddleware,
 )
-
-
-@dataclass
-class RuntimeContext:
-    messages: tuple[dict[str, object], ...]
-    request_id: str = "test-request"
-    messages_sha: str = ""
-    workflow: dict[str, object] | None = None
+from agent_shell.runtime.context import WorkflowRuntimeContext
 
 
 class ToolCapableFakeModel(FakeListChatModel):
@@ -55,7 +46,11 @@ def run_agent(
         input_state["files"] = files
     return agent.invoke(
         input_state,
-        context=RuntimeContext(context_messages, workflow={}),
+        context=WorkflowRuntimeContext.from_request(
+            context_messages,
+            request_id="test-request",
+            workflow={},
+        ),
     )
 
 

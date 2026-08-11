@@ -16,7 +16,8 @@ data/
   state/agent-shell.sqlite3*
   files/
   resources/{skills,custom_tools,custom_middlewares}/
-  logs/
+  logs/security-events.jsonl
+  logs/debug/*.log
 ```
 
 它包含管理密码、API Key、Provider credential、Workflow、Agent/组件配置、用户文件和历史，应作为敏感数据
@@ -44,3 +45,6 @@ CIDR。secret 只显示是否配置，不回显明文。
 
 API Key、消息上限和拦截测试立即生效；host、端口、远程访问、管理密码、LangSmith、CORS 和可信代理重启后生效。
 远程部署要求见[安全与部署](../security-and-deployment.md)。
+
+【系统 / 日志中心】的 DEBUG 开关立即生效。开启后，完整异常 traceback 写入 `data/logs/debug/`，并从对应运行
+日志行下载。

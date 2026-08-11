@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import hashlib
+import json
 import sqlite3
 
 from agent_shell.storage.database import SQLiteDatabase
@@ -8,6 +10,16 @@ from agent_shell.storage.history_retention import (
     HistoryRetentionStore,
     MAX_HISTORY_RETENTION_LIMIT,
 )
+
+
+def runtime_diagnostic_id(entry: dict[str, object]) -> str:
+    payload = json.dumps(
+        entry,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 class RuntimeDiagnosticStore:
@@ -147,3 +159,6 @@ class RuntimeDiagnosticStore:
             "retention_limit": retention_limit,
             "max_retention_limit": MAX_HISTORY_RETENTION_LIMIT,
         }
+
+
+__all__ = ["RuntimeDiagnosticStore", "runtime_diagnostic_id"]

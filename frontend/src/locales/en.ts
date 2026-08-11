@@ -213,6 +213,10 @@ export const en: MessageSchema = {
     download: 'Download full entry',
     matchedInContent: 'The query matched full content that is not shown in the list.',
     interceptionWarning: 'Interception testing is enabled and Provider calls are short-circuited.',
+    debug: {
+      label: 'Full DEBUG logs',
+      active: 'DEBUG is enabled. Full exception logs are being written to data/logs/debug.',
+    },
     sources: {
       interception: 'Interception record',
       system: 'System log',
@@ -240,7 +244,7 @@ export const en: MessageSchema = {
       interception: 'Interception test',
     },
     retention: {
-      title: 'Retention policy',
+      title: 'Log settings',
       systemMaxSize: 'System log capacity',
       systemConfirmTitle: 'Lower the system log size limit',
       systemConfirmDescription: 'Lower the maximum saved size to {count} MiB? Once the new limit is exceeded, the current log is cleared and recording continues with new events.',
@@ -271,6 +275,9 @@ export const en: MessageSchema = {
       retentionFailed: 'Could not update the retention limit',
       systemLogSizeSaved: 'The system log capacity is now {count} MiB.',
       systemLogSizeFailed: 'Could not update the system log size limit',
+      debugEnabled: 'Full DEBUG logs are enabled.',
+      debugDisabled: 'Full DEBUG logs are disabled.',
+      debugFailed: 'Could not update the DEBUG setting',
     },
   },
   fileManager: {

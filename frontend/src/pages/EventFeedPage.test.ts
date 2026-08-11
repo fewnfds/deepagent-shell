@@ -30,10 +30,17 @@ function api() {
     getRuntimeDiagnostics: vi.fn(async () => ({
       retention_limit: 20,
       max_retention_limit: 10_000,
+      debug_enabled: false,
     })),
     updateRuntimeLogRetention: vi.fn(async (retentionLimit: number) => ({
       retention_limit: retentionLimit,
       max_retention_limit: 10_000,
+      debug_enabled: false,
+    })),
+    updateRuntimeDebug: vi.fn(async (enabled: boolean) => ({
+      retention_limit: 20,
+      max_retention_limit: 10_000,
+      debug_enabled: enabled,
     })),
     getSystemLogSettings: vi.fn(async () => ({
       max_size_mib: 5,
@@ -71,14 +78,18 @@ async function mountPage(mockApi: ReturnType<typeof api>) {
 }
 
 describe('EventFeedPage', () => {
-  it('shows only the supported retention controls', async () => {
+  it('shows the supported log controls and saves the debug switch', async () => {
     const mockApi = api()
     const wrapper = await mountPage(mockApi)
 
     expect(wrapper.find('[data-testid="retention-interception"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="retention-runtime"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="retention-api_call"]').exists()).toBe(false)
-    expect(wrapper.find('#verbose-diagnostics').exists()).toBe(false)
+    const debugSwitch = wrapper.get<HTMLInputElement>('#runtime-debug-enabled')
+    expect(debugSwitch.element.checked).toBe(false)
+    await debugSwitch.setValue(true)
+    await flushPromises()
+    expect(mockApi.updateRuntimeDebug).toHaveBeenCalledWith(true)
     expect(mockApi.listEventFeed).toHaveBeenCalledWith(expect.objectContaining({
       source: ['runtime'],
     }))
