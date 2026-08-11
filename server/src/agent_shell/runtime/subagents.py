@@ -60,6 +60,7 @@ def _build_subagent_spec(
         owner_id=node.key,
         owner_name=node.name,
         workspace=workspace,
+        disabled_capabilities=node.disabled_capabilities,
     )
     middleware: list[Any] = [
         AgentShellStateMiddleware(),

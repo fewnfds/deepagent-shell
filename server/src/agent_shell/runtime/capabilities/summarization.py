@@ -13,6 +13,12 @@ class _DisabledSummarizationMiddleware(AgentMiddleware):
         return "SummarizationMiddleware"
 
 
+def disabled_summarization_middleware() -> AgentMiddleware:
+    """Return the same-name no-op replacement for the upstream default."""
+
+    return _DisabledSummarizationMiddleware()
+
+
 def _threshold(
     value: SummarizationThreshold,
     fallback: tuple[str, int | float],
@@ -68,4 +74,7 @@ def materialize_summarization_middleware(
     return SummarizationMiddleware(**kwargs)
 
 
-__all__ = ["materialize_summarization_middleware"]
+__all__ = [
+    "disabled_summarization_middleware",
+    "materialize_summarization_middleware",
+]

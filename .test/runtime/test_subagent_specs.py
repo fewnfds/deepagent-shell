@@ -20,10 +20,12 @@ def test_direct_subagents_become_official_dictionary_specs_with_shared_workspace
         owner_id,
         owner_name,
         workspace,
+        disabled_capabilities,
     ):
         assert filesystem_mode == "configured-shared"
         assert scope == "subagent"
         assert owner_id in {"reader-id", "writer-id"}
+        assert disabled_capabilities == frozenset()
         materialized_workspaces.append(workspace)
         return SimpleNamespace(
             model=object(),

@@ -23,6 +23,13 @@ FILESYSTEM_TOOL_NAMES = (
     "execute",
 )
 
+# Deep Agents installs these middleware slots even when Agent Shell has no
+# corresponding capability reference. The runtime uses this catalog to keep
+# an explicit "not attached" selection from falling back to those defaults.
+DEFAULT_MIDDLEWARE_CAPABILITY_TYPES = frozenset(
+    {"todo-list", "summarization", "prompt-caching"}
+)
+
 
 @dataclass(frozen=True, slots=True)
 class CapabilityManifest:

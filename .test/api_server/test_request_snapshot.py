@@ -138,3 +138,67 @@ def test_snapshot_keeps_agent_identity_on_one_committed_view(
         assert captured["id"] == main_agent["id"]
         assert snapshot.main_agent_by_name("Renamed after capture") is None
         snapshot.close()
+
+
+def test_assembly_preserves_not_attached_middleware_semantics_per_agent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        main_agent = create_main_agent(client)
+        summarization = client.post(
+            "/api/blocks/summarization",
+            json={"name": "Main summarization"},
+        ).json()
+        delegation = client.post(
+            "/api/blocks/subagent",
+            json={"name": "Review delegation"},
+        ).json()
+        subagent = client.post(
+            "/api/subagents",
+            json=subagent_payload(
+                "reviewer-profile",
+                name="reviewer",
+                capability_overrides=[
+                    {
+                        "type": "summarization",
+                        "mode": "disabled",
+                        "block_id": "",
+                    }
+                ],
+            ),
+        ).json()
+        updated = client.put(
+            f"/api/main-agents/{main_agent['id']}",
+            json={
+                "name": main_agent["name"],
+                "capability_refs": [
+                    *main_agent["capability_refs"],
+                    {
+                        "type": "summarization",
+                        "block_id": summarization["id"],
+                    },
+                    {"type": "subagent", "block_id": delegation["id"]},
+                ],
+                "subagents": [{"subagent_id": subagent["id"]}],
+            },
+        )
+        assert updated.status_code == 200, updated.text
+        workflow = create_workflow(client, name="Middleware assembly")
+
+        snapshot = client.app.state.agent_runtime.capture()
+        report, assembly = snapshot.resolve_main_agent(
+            main_agent["id"],
+            workflow_filesystem_id=workflow["filesystem_id"],
+        )
+        snapshot.close()
+
+    assert report.valid is True
+    assert assembly is not None
+    assert assembly.disabled_capabilities == frozenset(
+        {"todo-list", "prompt-caching"}
+    )
+    child = assembly.subagent_nodes[subagent["id"]]
+    assert child.disabled_capabilities == frozenset(
+        {"todo-list", "summarization", "prompt-caching"}
+    )
+    assert "summarization" not in child.references

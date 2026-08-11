@@ -32,11 +32,14 @@ from agent_shell.runtime.capabilities.exception_retry import (
     model_block_with_retry_overrides,
 )
 from agent_shell.runtime.capabilities.prompt_caching import (
+    disabled_prompt_caching_middleware,
     materialize_prompt_caching_middleware,
 )
 from agent_shell.runtime.capabilities.summarization import (
+    disabled_summarization_middleware,
     materialize_summarization_middleware,
 )
+from agent_shell.runtime.capabilities.todo_list import disabled_todo_list_middleware
 from agent_shell.runtime.agent_compilation import (
     MaterializedAgentProfile,
     configuration_error,
@@ -162,6 +165,7 @@ class AgentBuilder:
         owner_id: str,
         owner_name: str,
         workspace: DeepAgentsWorkspace | None = None,
+        disabled_capabilities: frozenset[str] = frozenset(),
     ) -> MaterializedAgentProfile:
         model_id = references["model"]
         model_block = selected_blocks["model"]
@@ -251,6 +255,9 @@ class AgentBuilder:
                     owner_name=owner_name,
                     path="capability_refs.todo-list",
                 ) from exc
+
+        elif "todo-list" in disabled_capabilities:
+            middleware.append(disabled_todo_list_middleware())
 
         backend = None
         initial_files: dict[str, Any] = {}
@@ -357,6 +364,9 @@ class AgentBuilder:
                     owner_name=owner_name,
                     path="capability_refs.summarization",
                 ) from exc
+        elif "summarization" in disabled_capabilities:
+            extra_middleware.append(disabled_summarization_middleware())
+
         prompt_caching = selected_blocks.get("prompt-caching")
         if prompt_caching is not None:
             try:
@@ -380,6 +390,9 @@ class AgentBuilder:
                     owner_name=owner_name,
                     path="capability_refs.prompt-caching",
                 ) from exc
+        elif "prompt-caching" in disabled_capabilities:
+            extra_middleware.append(disabled_prompt_caching_middleware())
+
         package_middleware: tuple[Any, ...] = ()
         if self._middleware_runtime is not None:
             try:
@@ -488,6 +501,7 @@ class AgentBuilder:
             owner_id=main_agent_id,
             owner_name=main_agent_name,
             workspace=workspace,
+            disabled_capabilities=assembly.disabled_capabilities,
         )
         constructor: dict[str, object] = {
             "model": materialized.model,

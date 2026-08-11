@@ -42,6 +42,7 @@ class ProfileMaterializer(Protocol):
         owner_id: str,
         owner_name: str,
         workspace: DeepAgentsWorkspace | None = None,
+        disabled_capabilities: frozenset[str] = frozenset(),
     ) -> MaterializedAgentProfile: ...
 
 

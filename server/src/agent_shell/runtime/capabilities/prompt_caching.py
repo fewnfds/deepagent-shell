@@ -11,6 +11,12 @@ class _DisabledAnthropicPromptCachingMiddleware(AgentMiddleware):
         return "AnthropicPromptCachingMiddleware"
 
 
+def disabled_prompt_caching_middleware() -> AgentMiddleware:
+    """Return the same-name no-op replacement for the upstream default."""
+
+    return _DisabledAnthropicPromptCachingMiddleware()
+
+
 def materialize_prompt_caching_middleware(
     block: PromptCachingBlock,
 ) -> AgentMiddleware:
@@ -29,4 +35,7 @@ def materialize_prompt_caching_middleware(
     )
 
 
-__all__ = ["materialize_prompt_caching_middleware"]
+__all__ = [
+    "disabled_prompt_caching_middleware",
+    "materialize_prompt_caching_middleware",
+]

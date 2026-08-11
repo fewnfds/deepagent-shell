@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from agent_shell.capability_manifest import (
     CAPABILITY_BY_TYPE,
     CAPABILITY_MANIFESTS,
+    DEFAULT_MIDDLEWARE_CAPABILITY_TYPES,
     FILESYSTEM_TOOL_NAMES,
     MINIMAL_FILESYSTEM_TOOL_NAMES,
 )
@@ -56,6 +57,7 @@ class ResolvedSubagent:
     references: dict[str, str]
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
+    disabled_capabilities: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,6 +66,7 @@ class StaticAssembly:
     references: dict[str, str]
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
+    disabled_capabilities: frozenset[str]
     subagents: tuple[ResolvedSubagentEdge, ...]
     subagent_nodes: dict[SubagentNodeKey, ResolvedSubagent]
 
@@ -812,6 +815,9 @@ class ConfigurationValidationService:
             owner_name=owner_name,
             block_overrides=block_overrides,
         )
+        disabled_capabilities = frozenset(
+            DEFAULT_MIDDLEWARE_CAPABILITY_TYPES.difference(references)
+        )
         custom_middleware = selected.get("custom-middleware")
         if custom_middleware is not None:
             issues.extend(
@@ -884,12 +890,18 @@ class ConfigurationValidationService:
                     or CAPABILITY_BY_TYPE[capability_type].subagent_policy == "inherit"
                 )
             }
+            child_disabled_capabilities = set(
+                disabled_capabilities & DEFAULT_MIDDLEWARE_CAPABILITY_TYPES
+            )
             for selection in settings["capability_overrides"]:
                 capability_type = selection["type"]
                 if selection["mode"] == "replace":
                     child_references[capability_type] = selection["block_id"]
+                    child_disabled_capabilities.discard(capability_type)
                 elif selection["mode"] == "disabled":
                     child_references.pop(capability_type, None)
+                    if capability_type in DEFAULT_MIDDLEWARE_CAPABILITY_TYPES:
+                        child_disabled_capabilities.add(capability_type)
 
             subagent_name = str(profile["name"])
             child_blocks, child_issues, child_filesystem_mode = (
@@ -935,6 +947,7 @@ class ConfigurationValidationService:
                 references=child_references,
                 blocks=child_blocks,
                 filesystem_mode=child_filesystem_mode,
+                disabled_capabilities=frozenset(child_disabled_capabilities),
             )
             resolved_edges.append(ResolvedSubagentEdge(target_key=profile_id))
 
@@ -989,6 +1002,7 @@ class ConfigurationValidationService:
             references=references,
             blocks=selected,
             filesystem_mode=filesystem_mode,
+            disabled_capabilities=disabled_capabilities,
             subagents=resolved_subagents,
             subagent_nodes=subagent_nodes,
         )

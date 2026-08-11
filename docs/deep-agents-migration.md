@@ -25,7 +25,33 @@ model/tool/agent Hook。需要 checkpoint 的业务数据通过官方 state upda
 - 同一次 Workflow 请求共享 Deep Agents workspace/backend，各 Main Agent/Subagent 的 `filesystem-permissions` 与文件
   tool override 按身份显式装配；
 - Summarization 与 Prompt Caching 是两个独立 capability，每个身份显式物化自己的官方 middleware；
+- Main Agent 未选择、或 Subagent 选择 `disabled` 的可选默认 Middleware，必须保留为主动禁用状态，并以官方支持的同名
+  no-op replacement 阻止 Deep Agents 默认 stack 回填；仅省略 constructor 参数不表示禁用；
 - `AgentShellState.shared_vars` 是公共 checkpointed 业务变量，Middleware 实例属性不是。
+
+### Middleware 禁用装配查证表（deepagents 0.7.5）
+
+以下是当前 Agent Shell 装配中会使用“同名、无行为 replacement”的能力。replacement 是通过
+`create_deep_agent(middleware=...)` 的官方同名覆盖规则生效的；它会替换默认实例，但不会让该名称从最终
+middleware 列表中消失。
+
+| Agent Shell capability | Deep Agents middleware name | 触发 replacement 的情况 | 最终是否物理移除 |
+| --- | --- | --- | --- |
+| `todo-list` | `TodoListMiddleware` | Main 未选择；或 Subagent 选择 `disabled`；也覆盖当前 Codex harness profile 的额外 Todo | 否，保留无行为 placeholder |
+| `summarization` | `SummarizationMiddleware` | Main 未选择；或 Subagent 选择 `disabled`；或 block 自身 `enabled=false` | 否，保留无行为 placeholder |
+| `prompt-caching` | `AnthropicPromptCachingMiddleware` | Main 未选择；或 Subagent 选择 `disabled`；或 block 自身 `enabled=false` | 否，保留无行为 placeholder |
+
+当前核心依赖只装配 Anthropic Prompt Caching replacement；如果未来启用 Deep Agents 的 Bedrock、Fireworks 等
+额外 provider middleware，必须为新增的 middleware name 增加对应 replacement 和回归测试。
+
+下列项目不走这套 replacement：
+
+- `SubAgentMiddleware`：通过官方 `GeneralPurposeSubagentProfile(enabled=False)` 且不传同步 Subagent，真正不装配；
+- `FilesystemMiddleware`：官方要求的 protected scaffolding，不能移除，只能限制其工具或权限；
+- `PatchToolCallsMiddleware`：当前是 Deep Agents 核心修复 middleware，没有 Agent Shell 的可选禁用开关。
+
+Deep Agents 也支持 `HarnessProfile.excluded_middleware` 物理移除普通 middleware，但它是按 model/provider profile
+生效，无法表达同一模型下每个 Agent 独立的 capability 选择，因此当前运行时没有用它承载上述 per-agent 设置。
 
 当前项目仍支持把 Workflow 的 mapped directories 接到 Deep Agents `FilesystemBackend`。LangChain 官方文档明确把
 `FilesystemBackend` 列为不适合 Web server/HTTP API 的 backend；这是一条官方限制记录，不是 Shell 自己声称的安全保证。
