@@ -7,9 +7,6 @@ import {
   watchManagementEvents,
 } from './transport'
 import type {
-  AgentSessionTimeline,
-  AgentSessionFilters,
-  AgentSessionSummary,
   ApiServerSettings,
   ApiServerSettingsUpdate,
   BlockPayload,
@@ -20,7 +17,6 @@ import type {
   CustomToolResource,
   DraftValidationRequest,
   EventFeedFilters,
-  EventFeedPreviewResponse,
   EventFeedResponse,
   EventSource,
   HealthResponse,
@@ -422,15 +418,9 @@ export const managementApi = {
     })}`)
   },
 
-  downloadEvent(source: EventSource, id: string, view: 'raw' | 'debug' = 'raw'): Promise<Blob> {
+  downloadEvent(source: EventSource, id: string): Promise<Blob> {
     const path = `/api/event-feed/${source}/${encodeURIComponent(id)}/download`
-    return managementDownload(
-      view === 'raw' ? path : `${path}${buildQuery({ view })}`,
-    )
-  },
-
-  getApiEventPreview(id: string): Promise<EventFeedPreviewResponse> {
-    return managementRequest(`/api/event-feed/api_call/${encodeURIComponent(id)}/preview`)
+    return managementDownload(path)
   },
 
   getSystemLogSettings(): Promise<SystemLogSettings> {
@@ -452,17 +442,6 @@ export const managementApi = {
       level: filters.level ?? [],
       query: filters.query ?? '',
     }))
-  },
-
-  getApiHistoryRetention(): Promise<RetentionSettings> {
-    return managementRequest('/api/api-server/history/retention')
-  },
-
-  updateApiHistoryRetention(retentionLimit: number): Promise<RetentionSettings> {
-    return managementRequest('/api/api-server/history/retention', {
-      method: 'PUT',
-      body: JSON.stringify({ retention_limit: retentionLimit }),
-    })
   },
 
   getInterceptionTest(): Promise<{ enabled: boolean }> {
@@ -491,13 +470,6 @@ export const managementApi = {
     return managementRequest('/api/runtime-diagnostics')
   },
 
-  updateRuntimeDiagnostics(verbose: boolean): Promise<RuntimeDiagnostics> {
-    return managementRequest('/api/runtime-diagnostics', {
-      method: 'PUT',
-      body: JSON.stringify({ verbose }),
-    })
-  },
-
   updateRuntimeLogRetention(retentionLimit: number): Promise<RuntimeDiagnostics> {
     return managementRequest('/api/runtime-diagnostics/retention', {
       method: 'PUT',
@@ -505,60 +477,4 @@ export const managementApi = {
     })
   },
 
-  listAgentSessions(
-    filters: AgentSessionFilters = {},
-  ): Promise<PaginationResponse<AgentSessionSummary>> {
-    return managementRequest(`/api/agent-sessions${buildQuery({
-      page: filters.page,
-      page_size: filters.page_size,
-      query: filters.query,
-      agent: filters.agent,
-      status: filters.status,
-    })}`)
-  },
-
-  getAgentSession(sessionId: string): Promise<Record<string, unknown>> {
-    return managementRequest(recordPath('/api/agent-sessions', sessionId))
-  },
-
-  getAgentSessionTimeline(sessionId: string): Promise<AgentSessionTimeline> {
-    return managementRequest(`${recordPath('/api/agent-sessions', sessionId)}/timeline`)
-  },
-
-  getAgentSessionStep(
-    sessionId: string,
-    runId: string,
-    stepId: string,
-  ): Promise<Record<string, unknown>> {
-    return managementRequest(
-      `${recordPath('/api/agent-sessions', sessionId)}/runs/${encodeURIComponent(runId)}/steps/${encodeURIComponent(stepId)}`,
-    )
-  },
-
-  deleteAgentSession(sessionId: string): Promise<{ deleted: boolean }> {
-    return managementRequest(recordPath('/api/agent-sessions', sessionId), {
-      method: 'DELETE',
-    })
-  },
-
-  deleteMatchingAgentSessions(
-    filters: AgentSessionFilters,
-  ): Promise<{ deleted: number }> {
-    return managementRequest('/api/agent-sessions/delete', jsonBody({
-      query: filters.query ?? '',
-      agent: filters.agent ?? '',
-      status: filters.status ?? '',
-    }))
-  },
-
-  getAgentSessionRetention(): Promise<RetentionSettings> {
-    return managementRequest('/api/agent-sessions/retention')
-  },
-
-  updateAgentSessionRetention(retentionLimit: number): Promise<RetentionSettings> {
-    return managementRequest('/api/agent-sessions/retention', {
-      method: 'PUT',
-      body: JSON.stringify({ retention_limit: retentionLimit }),
-    })
-  },
 }

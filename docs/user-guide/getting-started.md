@@ -14,7 +14,7 @@ Windows 源码 Clone 从项目根运行：
 ## 管理台入口
 
 - 【Workflow】：管理公开 model、共享 Filesystem 和 Vue Flow 画布；
-- 【系统】：系统配置、文件管理、日志中心和历史会话；
+- 【系统】：系统配置、文件管理和日志中心；
 - 【Agent】：Main Agent 与一层可复用 Subagent；
 - 【组件】：十四类可复用能力，包括 Filesystem、权限和独立 Middleware 装配；
 - 【配置仓库】：查看、复制、编辑和删除配置；

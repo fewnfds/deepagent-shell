@@ -37,14 +37,11 @@ def _default_system() -> dict[str, Any]:
         },
         "api_server": {"enabled": True, "max_initial_messages": 1000},
         "history_retention": {
-            "api_history": 20,
             "interception_history": 20,
-            "agent_session_runs": 20,
             "runtime_log": 20,
         },
         "runtime_control": {
             "interception_enabled": False,
-            "verbose_diagnostics": False,
         },
         "configuration_validation": {"debounce_ms": 1000},
         "system_log": {"max_size_mib": 5},

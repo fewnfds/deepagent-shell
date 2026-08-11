@@ -32,7 +32,6 @@ const sectionNavigationGroups: SectionNavigationGroup[] = [
       { path: '/system/config', labelKey: 'navigation.sections.systemSettings' },
       { path: '/system/files', labelKey: 'navigation.sections.fileManager' },
       { path: '/system/events', labelKey: 'navigation.sections.eventFeed' },
-      { path: '/system/agent-sessions', labelKey: 'navigation.sections.agentSessions' },
     ],
   },
   {

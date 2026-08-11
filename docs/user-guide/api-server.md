@@ -44,7 +44,8 @@ fan-out、fan-in 或形成 LangGraph 支持的循环。画布 Start/End 直接�
 - 当前不支持 conditional edge、可编程路由 Node、动态 worker、Interrupt 或 Subworkflow；多个 normal 出边会按
   LangGraph super-step 语义并行激活目标；
 - 图不完整、引用失效、Agent 装配失败或 Provider 失败时，本次请求直接返回错误；
-- session/history、拦截和其他观察能力只有在重新接入 Workflow 生命周期后才会写入，不提供旧 Main Agent 直连兼容。
+- Workflow execution history、thread、checkpoint/resume 和内部运行树当前为 TBD；日志中心只保留系统事件、请求级
+  错误诊断和显式 interception test，不提供旧 Main Agent 直连兼容。
 
 ## API Key 与状态
 

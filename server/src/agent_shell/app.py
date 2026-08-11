@@ -11,7 +11,6 @@ from fastapi.staticfiles import StaticFiles
 
 from agent_shell.api.routes import build_router
 from agent_shell.api.agent_configs import build_agent_config_router
-from agent_shell.api.agent_sessions import build_agent_session_router
 from agent_shell.api.middleware_packages import build_middleware_package_router
 from agent_shell.api.errors import localized_error_detail
 from agent_shell.api.system import build_system_router
@@ -45,7 +44,6 @@ from agent_shell.security import (
     validate_api_key_policy,
 )
 from agent_shell.storage.agent_configs import AgentConfigStore
-from agent_shell.storage.agent_sessions import AgentSessionStore
 from agent_shell.storage.api_server import ApiServerStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.database import SQLiteDatabase
@@ -129,7 +127,7 @@ def create_app(
         custom_tools_dir=custom_tools_dir,
     )
     api_server_store = ApiServerStore(
-        database, configuration, event_logger, history_retention, media_outputs
+        database, configuration, event_logger, history_retention
     )
     try:
         validate_api_key_policy(settings, api_server_store.api_key())
@@ -137,15 +135,11 @@ def create_app(
         raise SettingsError(
             ("API Server API Key",), exc.safe_message
         ) from None
-    agent_session_store = AgentSessionStore(
-        database, history_retention, media_outputs
-    )
     api_server_events = ApiServerEventHub()
     event_logger.set_publisher(api_server_events.publish_nowait)
     runtime_diagnostics = RuntimeDiagnostics(
         api_server_events.publish_nowait,
         store=runtime_diagnostic_store,
-        control_settings=runtime_control_settings,
     )
     event_logger.set_failure_reporter(
         lambda exc, request_id: runtime_diagnostics.observation_error(
@@ -158,7 +152,7 @@ def create_app(
     )
     interception_tests = InterceptionTestController(runtime_control_settings)
     event_feed = EventFeedService(
-        EventFeedStore(database, media_outputs),
+        EventFeedStore(database),
         event_logger,
         runtime_diagnostics,
         system_log_settings,
@@ -181,7 +175,6 @@ def create_app(
         middleware_packages_dir=custom_middlewares_dir,
         runtime_dir=runtime_dir,
         skills_dir=skills_dir,
-        diagnostics=runtime_diagnostics,
         provider_http_clients=provider_http_clients,
         media_outputs=media_outputs,
     )
@@ -392,7 +385,6 @@ def create_app(
     app.state.interception_tests = interception_tests
     app.state.runtime_diagnostics = runtime_diagnostics
     app.state.runtime_diagnostic_store = runtime_diagnostic_store
-    app.state.agent_sessions = agent_session_store
     app.state.api_server_store = api_server_store
     app.state.media_outputs = media_outputs
     app.state.provider_http_clients = provider_http_clients
@@ -416,9 +408,9 @@ def create_app(
             allow_credentials=False,
             allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
             allow_headers=[
-                "Authorization", "Content-Type", "X-Request-ID", "X-Agent-Session-ID"
+                "Authorization", "Content-Type", "X-Request-ID"
             ],
-            expose_headers=["X-Request-ID", "X-Agent-Session-ID"],
+            expose_headers=["X-Request-ID"],
             max_age=600,
         )
     app.include_router(build_system_router(readiness))
@@ -453,7 +445,6 @@ def create_app(
             runtime_dir,
         )
     )
-    app.include_router(build_agent_session_router(agent_session_store))
     app.include_router(build_runtime_diagnostics_router(runtime_diagnostics))
     app.include_router(
         build_event_feed_router(

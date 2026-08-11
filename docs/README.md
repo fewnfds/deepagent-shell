@@ -10,7 +10,7 @@
 4. [使用自定义 Middleware 包](user-guide/middleware-packages.md)
 5. [管理配置仓库](user-guide/configuration-library.md)
 6. [调用 API Server](user-guide/api-server.md)
-7. [查看日志与历史会话](user-guide/runtime-observability.md)
+7. [查看日志中心与 Workflow 观测边界](user-guide/runtime-observability.md)
 8. [管理数据、文件与系统设置](user-guide/system-management.md)
 9. [安全与部署](security-and-deployment.md)
 

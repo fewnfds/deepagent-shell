@@ -5,6 +5,12 @@ PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 PRAGMA secure_delete = ON;
 
+-- Removed legacy single-agent/API history. There is no user data contract to migrate yet.
+DROP TABLE IF EXISTS agent_session_run_outputs;
+DROP TABLE IF EXISTS agent_session_runs;
+DROP TABLE IF EXISTS api_message_history_outputs;
+DROP TABLE IF EXISTS api_message_history;
+
 CREATE TABLE IF NOT EXISTS interception_test_records (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -21,40 +27,6 @@ ON interception_test_records(intercepted_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_interception_test_records_model
 ON interception_test_records(model);
-
-CREATE TABLE IF NOT EXISTS api_message_history (
-    id TEXT PRIMARY KEY,
-    request_id TEXT NOT NULL,
-    model TEXT NOT NULL,
-    agent_name TEXT NOT NULL,
-    started_at TEXT NOT NULL,
-    finished_at TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (
-        status IN (
-            'completed', 'failed', 'client_disconnected'
-        )
-    ),
-    request_body TEXT NOT NULL,
-    response_body TEXT,
-    response_content_type TEXT,
-    http_status INTEGER,
-    error_code TEXT
-);
-
-CREATE INDEX IF NOT EXISTS idx_api_message_history_started
-ON api_message_history(started_at DESC);
-
-CREATE INDEX IF NOT EXISTS idx_api_message_history_model
-ON api_message_history(model);
-
-CREATE INDEX IF NOT EXISTS idx_api_message_history_status
-ON api_message_history(status);
-
-CREATE TABLE IF NOT EXISTS api_message_history_outputs (
-    history_id TEXT PRIMARY KEY REFERENCES api_message_history(id) ON DELETE CASCADE,
-    response_blocks_json TEXT NOT NULL,
-    media_assets_json TEXT NOT NULL
-);
 
 CREATE TABLE IF NOT EXISTS runtime_diagnostics (
     sequence INTEGER PRIMARY KEY,
@@ -75,35 +47,6 @@ ON runtime_diagnostics(timestamp DESC);
 
 CREATE INDEX IF NOT EXISTS idx_runtime_diagnostics_request
 ON runtime_diagnostics(request_id);
-
-CREATE TABLE IF NOT EXISTS agent_session_runs (
-    id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    request_id TEXT NOT NULL,
-    model TEXT NOT NULL,
-    agent_name TEXT NOT NULL,
-    started_at TEXT NOT NULL,
-    finished_at TEXT,
-    status TEXT NOT NULL CHECK (
-        status IN ('completed', 'failed', 'client_disconnected')
-    ),
-    error_code TEXT,
-    input_messages_json TEXT NOT NULL,
-    timeline_json TEXT NOT NULL,
-    response_text TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_agent_session_runs_session
-ON agent_session_runs(session_id, started_at);
-
-CREATE INDEX IF NOT EXISTS idx_agent_session_runs_started
-ON agent_session_runs(started_at DESC);
-
-CREATE TABLE IF NOT EXISTS agent_session_run_outputs (
-    run_id TEXT PRIMARY KEY REFERENCES agent_session_runs(id) ON DELETE CASCADE,
-    response_blocks_json TEXT NOT NULL,
-    media_assets_json TEXT NOT NULL
-);
 
 CREATE TABLE IF NOT EXISTS media_output_assets (
     id TEXT PRIMARY KEY,

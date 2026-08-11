@@ -57,7 +57,7 @@ class MediaProjection:
 
 
 class MediaOutputStore:
-    """Persist private response media and collect references for retention."""
+    """Persist private response media and clean up finalized request assets."""
 
     def __init__(self, database: SQLiteDatabase, root: Path) -> None:
         self._database = database
@@ -241,16 +241,8 @@ class MediaOutputStore:
     def cleanup_unreferenced(self) -> None:
         with self._database.transaction() as connection:
             rows = connection.execute(
-                "SELECT id, relative_path FROM media_output_assets AS asset "
-                "WHERE finalized = 1 AND NOT EXISTS ("
-                "SELECT 1 FROM api_message_history_outputs AS output, "
-                "json_each(output.media_assets_json) AS reference "
-                "WHERE json_extract(reference.value, '$.id') = asset.id"
-                ") AND NOT EXISTS ("
-                "SELECT 1 FROM agent_session_run_outputs AS output, "
-                "json_each(output.media_assets_json) AS reference "
-                "WHERE json_extract(reference.value, '$.id') = asset.id"
-                ")"
+                "SELECT id, relative_path FROM media_output_assets "
+                "WHERE finalized = 1"
             ).fetchall()
         deleted_ids = []
         for row in rows:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from contextlib import closing
-from datetime import datetime, timedelta, timezone
 import json
 import os
 import asyncio
@@ -32,33 +31,6 @@ def event_feed_params(**filters: object) -> dict[str, object]:
 
 def event_feed_query_pairs(*filters: tuple[str, object]) -> list[tuple[str, object]]:
     return [*EVENT_FEED_TEST_WINDOW.items(), *filters]
-
-
-def add_api_event(
-    client: TestClient,
-    *,
-    offset: int,
-    body: str,
-    status: str = "completed",
-    response_body: str = '{"result":"ok"}',
-) -> str:
-    started = datetime.now(timezone.utc) + timedelta(seconds=offset)
-    item = client.app.state.api_server_store.add_message_history(
-        request_id=f"request-{offset}",
-        model="published-model",
-        agent_name="Published Main Agent",
-        started_at=started.isoformat(timespec="milliseconds"),
-        finished_at=(started + timedelta(milliseconds=10)).isoformat(
-            timespec="milliseconds"
-        ),
-        status=status,
-        request_body=body,
-        response_body=response_body,
-        response_content_type="application/json",
-        http_status=200 if status == "completed" else 500,
-        error_code=None if status == "completed" else "runtime_failed",
-    )
-    return str(item["id"])
 
 
 class ToolCompatibleFakeListChatModel(FakeListChatModel):

@@ -246,12 +246,6 @@ pre code {
   }
 }
 
-.session-timeline-json {
-  height: 200px;
-  min-height: 200px;
-  resize: vertical;
-}
-
 .collection-filter-form {
   display: grid;
   gap: 1rem;

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 from datetime import datetime, timezone
-import json
 from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
@@ -15,17 +13,9 @@ from agent_shell.storage.history_retention import (
 if TYPE_CHECKING:
     from agent_shell.storage.database import SQLiteDatabase
     from agent_shell.storage.file_config import FileConfigRepository
-    from agent_shell.storage.media_outputs import MediaOutputStore
 
 
 ApiKeyOperation = Literal["keep", "replace", "clear"]
-MessageHistoryStatus = Literal[
-    "completed",
-    "failed",
-    "client_disconnected",
-]
-
-
 class ApiServerStore:
     def __init__(
         self,
@@ -33,22 +23,12 @@ class ApiServerStore:
         config_repository: FileConfigRepository,
         event_logger: SecurityEventLogger | None = None,
         history_retention: HistoryRetentionStore | None = None,
-        media_outputs: MediaOutputStore | None = None,
     ) -> None:
         self._database = database
         self._config_repository = config_repository
         self._events = event_logger
         self._history_retention = history_retention or HistoryRetentionStore(config_repository)
-        self._media_outputs = media_outputs
         with self._database.transaction() as connection:
-            self._prune(
-                connection,
-                table="api_message_history",
-                order_column="started_at",
-                retention_limit=self._history_retention.get_limit_in(
-                    connection, "api_history"
-                ),
-            )
             self._prune(
                 connection,
                 table="interception_test_records",
@@ -58,8 +38,6 @@ class ApiServerStore:
                 ),
             )
             connection.commit()
-        if self._media_outputs is not None:
-            self._media_outputs.cleanup_unreferenced()
 
     @staticmethod
     def _prune(
@@ -77,6 +55,8 @@ class ApiServerStore:
         )
 
     def history_retention(self, history_type: str) -> dict[str, int]:
+        if history_type != "interception_history":
+            raise ValueError(f"unsupported history type: {history_type}")
         return {
             "retention_limit": self._history_retention.get_limit(history_type),
             "max_retention_limit": MAX_HISTORY_RETENTION_LIMIT,
@@ -85,8 +65,9 @@ class ApiServerStore:
     def set_history_retention(
         self, history_type: str, retention_limit: int
     ) -> dict[str, int]:
+        if history_type != "interception_history":
+            raise ValueError(f"unsupported history type: {history_type}")
         targets = {
-            "api_history": ("api_message_history", "started_at"),
             "interception_history": (
                 "interception_test_records",
                 "intercepted_at",
@@ -104,8 +85,6 @@ class ApiServerStore:
                 retention_limit=retention_limit,
             )
             connection.commit()
-        if self._media_outputs is not None and history_type == "api_history":
-            self._media_outputs.cleanup_unreferenced()
         return {
             "retention_limit": retention_limit,
             "max_retention_limit": MAX_HISTORY_RETENTION_LIMIT,
@@ -192,88 +171,6 @@ class ApiServerStore:
                 ),
             )
             connection.commit()
-        return item
-
-    def add_message_history(
-        self,
-        *,
-        request_id: str,
-        model: str,
-        agent_name: str,
-        started_at: str,
-        finished_at: str | None,
-        status: MessageHistoryStatus,
-        request_body: str,
-        response_body: str | None,
-        response_content_type: str | None,
-        http_status: int | None,
-        error_code: str | None,
-        response_blocks: Sequence[dict[str, object]] = (),
-        media_assets: Sequence[dict[str, object]] = (),
-    ) -> dict[str, object]:
-        item: dict[str, object] = {
-            "id": str(uuid4()),
-            "request_id": request_id,
-            "model": model,
-            "agent_name": agent_name,
-            "started_at": started_at,
-            "finished_at": finished_at,
-            "status": status,
-            "request_body": request_body,
-            "response_body": response_body,
-            "response_content_type": response_content_type,
-            "http_status": http_status,
-            "error_code": error_code,
-            "response_blocks_json": json.dumps(
-                response_blocks, ensure_ascii=False, separators=(",", ":")
-            ),
-            "media_assets_json": json.dumps(
-                media_assets, ensure_ascii=False, separators=(",", ":")
-            ),
-        }
-        with self._database.transaction() as connection:
-            connection.execute(
-                "INSERT INTO api_message_history "
-                "(id, request_id, model, agent_name, started_at, finished_at, "
-                "status, request_body, response_body, response_content_type, "
-                "http_status, error_code) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                tuple(item[key] for key in (
-                    "id",
-                    "request_id",
-                    "model",
-                    "agent_name",
-                    "started_at",
-                    "finished_at",
-                    "status",
-                    "request_body",
-                    "response_body",
-                    "response_content_type",
-                    "http_status",
-                    "error_code",
-                )),
-            )
-            connection.execute(
-                "INSERT INTO api_message_history_outputs "
-                "(history_id, response_blocks_json, media_assets_json) "
-                "VALUES (?, ?, ?)",
-                (
-                    item["id"],
-                    item["response_blocks_json"],
-                    item["media_assets_json"],
-                ),
-            )
-            self._prune(
-                connection,
-                table="api_message_history",
-                order_column="started_at",
-                retention_limit=self._history_retention.get_limit_in(
-                    connection, "api_history"
-                ),
-            )
-            connection.commit()
-        if self._media_outputs is not None:
-            self._media_outputs.cleanup_unreferenced()
         return item
 
     def _emit_updated(self, *, state: str = "") -> None:

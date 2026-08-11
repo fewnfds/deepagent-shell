@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_shell.api.errors import management_error
 from agent_shell.event_feed import (
-    EventDownloadView,
     EventFeedService,
     EventLevel,
     EventSource,
@@ -126,9 +125,8 @@ def build_event_feed_router(
     async def download_event(
         source: EventSource,
         item_id: str,
-        view: EventDownloadView = Query(default="raw"),
     ) -> Response:
-        result = service.download(source, item_id, view)
+        result = service.download(source, item_id)
         if result is None:
             raise management_error(
                 404,
@@ -142,18 +140,6 @@ def build_event_feed_router(
             media_type="application/json; charset=utf-8",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
-
-    @router.get("/api/event-feed/api_call/{item_id}/preview")
-    async def preview_api_event(item_id: str) -> dict[str, str]:
-        content = service.api_preview(item_id)
-        if content is None:
-            raise management_error(
-                404,
-                code="event_feed_item_not_found",
-                message_key="errors.eventFeedItemNotFound",
-                message="The event feed item does not exist.",
-            )
-        return {"content": content}
 
     @router.get("/api/event-feed/system/settings")
     async def get_system_log_settings() -> dict[str, int]:
@@ -191,18 +177,6 @@ def build_event_feed_router(
             "interception_history", payload.retention_limit
         )
         await events.publish({"type": "interception_changed"})
-        return result
-
-    @router.get("/api/api-server/history/retention")
-    async def get_message_history_retention() -> dict[str, int]:
-        return store.history_retention("api_history")
-
-    @router.put("/api/api-server/history/retention")
-    async def update_message_history_retention(
-        payload: HistoryRetentionUpdate,
-    ) -> dict[str, int]:
-        result = store.set_history_retention("api_history", payload.retention_limit)
-        await events.publish({"type": "history_changed"})
         return result
 
     return router

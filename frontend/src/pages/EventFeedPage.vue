@@ -8,7 +8,6 @@ import {
   managementApi,
   type EventFeedFilters,
   type EventFeedItem,
-  type EventFeedPreviewResponse,
   type EventFeedResponse,
   type EventLevel,
   type EventSource,
@@ -31,20 +30,16 @@ import { useManagementEvents } from '@/composables/useManagementEvents'
 import { useToasts } from '@/composables/useToasts'
 import { triggerBrowserDownload } from '@/utils/download'
 
-const sources: EventSource[] = ['api_call', 'interception', 'system', 'runtime']
+const sources: EventSource[] = ['interception', 'system', 'runtime']
 const levels: EventLevel[] = ['debug', 'info', 'warning', 'error']
 
 interface EventFeedApi {
   listEventFeed(filters: EventFeedFilters): Promise<EventFeedResponse>
-  getApiEventPreview(id: string): Promise<EventFeedPreviewResponse>
-  downloadEvent(source: EventSource, id: string, view?: 'raw' | 'debug'): Promise<Blob>
+  downloadEvent(source: EventSource, id: string): Promise<Blob>
   getInterceptionTest(): Promise<{ enabled: boolean }>
-  getApiHistoryRetention(): Promise<RetentionSettings>
-  updateApiHistoryRetention(value: number): Promise<RetentionSettings>
   getInterceptionRetention(): Promise<RetentionSettings>
   updateInterceptionRetention(value: number): Promise<RetentionSettings>
   getRuntimeDiagnostics(): Promise<RuntimeDiagnostics>
-  updateRuntimeDiagnostics(enabled: boolean): Promise<RuntimeDiagnostics>
   updateRuntimeLogRetention(value: number): Promise<RuntimeDiagnostics>
   getSystemLogSettings(): Promise<SystemLogSettings>
   updateSystemLogSettings(value: number): Promise<SystemLogSettings>
@@ -94,18 +89,14 @@ const controlsReady = ref(false)
 const controlsError = ref('')
 const stale = ref(false)
 const interceptionEnabled = ref(false)
-const verboseDiagnostics = ref(false)
-const retentionDrafts = ref({ api_call: 20, interception: 20, runtime: 20 })
-const savedRetentions = ref({ api_call: 20, interception: 20, runtime: 20 })
+const retentionDrafts = ref({ interception: 20, runtime: 20 })
+const savedRetentions = ref({ interception: 20, runtime: 20 })
 const maxRetention = ref(1)
 const systemLogSizeDraft = ref(5)
 const savedSystemLogSize = ref(5)
 const systemLogSizeMin = ref(1)
 const systemLogSizeMax = ref(1024)
 const savingControl = ref('')
-const previewContent = ref<Record<string, string>>({})
-const previewErrors = ref<Record<string, string>>({})
-const previewLoading = ref<Record<string, boolean>>({})
 
 function describeFailure(error: unknown): string {
   return managementError.describe(error).display
@@ -148,37 +139,17 @@ function displaySummary(item: EventFeedItem): string {
   return item.source === 'system' && te(key) ? t(key) : item.summary
 }
 
-function downloadFilename(item: EventFeedItem, view: 'raw' | 'debug'): string {
+function downloadFilename(item: EventFeedItem): string {
   const parsed = new Date(item.occurred_at)
   const stamp = Number.isNaN(parsed.getTime())
     ? 'unknown-time'
     : parsed.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
-  const suffix = view === 'debug' ? '-debug' : ''
-  return `agent-shell-event-${item.source}-${stamp}-${item.id.slice(0, 8)}${suffix}.json`
+  return `agent-shell-event-${item.source}-${stamp}-${item.id.slice(0, 8)}.json`
 }
 
-async function download(item: EventFeedItem, view: 'raw' | 'debug' = 'raw'): Promise<void> {
-  const blob = await api.downloadEvent(item.source, item.id, view)
-  triggerBrowserDownload(blob, downloadFilename(item, view))
-}
-
-async function loadPreview(item: EventFeedItem, expanded: boolean): Promise<void> {
-  if (
-    !expanded
-    || item.source !== 'api_call'
-    || previewContent.value[item.id]
-    || previewLoading.value[item.id]
-  ) return
-  previewLoading.value = { ...previewLoading.value, [item.id]: true }
-  previewErrors.value = { ...previewErrors.value, [item.id]: '' }
-  try {
-    const result = await api.getApiEventPreview(item.id)
-    previewContent.value = { ...previewContent.value, [item.id]: result.content }
-  } catch (error) {
-    previewErrors.value = { ...previewErrors.value, [item.id]: describeFailure(error) }
-  } finally {
-    previewLoading.value = { ...previewLoading.value, [item.id]: false }
-  }
+async function download(item: EventFeedItem): Promise<void> {
+  const blob = await api.downloadEvent(item.source, item.id)
+  triggerBrowserDownload(blob, downloadFilename(item))
 }
 
 const eventTableConfig: DataTableConfig<EventFeedItem> = {
@@ -257,20 +228,11 @@ const eventTableConfig: DataTableConfig<EventFeedItem> = {
   rowActions: [
     {
       key: 'download-event',
-      label: (item) => item.source === 'api_call' ? t('eventFeed.downloadRaw') : t('eventFeed.download'),
+      label: () => t('eventFeed.download'),
       tone: 'primary',
       icon: 'download',
-      visible: (item) => item.source === 'api_call' || item.download_available,
-      run: (item) => download(item, 'raw'),
-      failureTitle: () => t('eventFeed.feedback.downloadFailed'),
-    },
-    {
-      key: 'download-event-debug',
-      label: () => t('eventFeed.downloadDebug'),
-      tone: 'primary',
-      icon: 'download',
-      visible: (item) => item.source === 'api_call',
-      run: (item) => download(item, 'debug'),
+      visible: (item) => item.download_available,
+      run: (item) => download(item),
       failureTitle: () => t('eventFeed.feedback.downloadFailed'),
     },
   ],
@@ -305,24 +267,20 @@ async function loadControls(): Promise<void> {
   controlsLoading.value = true
   controlsError.value = ''
   try {
-    const [interception, apiRetention, interceptionRetention, diagnostics, systemLog] = await Promise.all([
+    const [interception, interceptionRetention, diagnostics, systemLog] = await Promise.all([
       api.getInterceptionTest(),
-      api.getApiHistoryRetention(),
       api.getInterceptionRetention(),
       api.getRuntimeDiagnostics(),
       api.getSystemLogSettings(),
     ])
     interceptionEnabled.value = interception.enabled
-    verboseDiagnostics.value = diagnostics.verbose
     const loadedRetentions = {
-      api_call: apiRetention.retention_limit,
       interception: interceptionRetention.retention_limit,
       runtime: diagnostics.retention_limit,
     }
     retentionDrafts.value = loadedRetentions
     savedRetentions.value = { ...loadedRetentions }
     maxRetention.value = Math.min(
-      apiRetention.max_retention_limit,
       interceptionRetention.max_retention_limit,
       diagnostics.max_retention_limit,
     )
@@ -338,24 +296,6 @@ async function loadControls(): Promise<void> {
   }
 }
 
-async function saveVerboseDiagnostics(): Promise<void> {
-  const requested = verboseDiagnostics.value
-  savingControl.value = 'verbose-diagnostics'
-  try {
-    const result = await api.updateRuntimeDiagnostics(requested)
-    verboseDiagnostics.value = result.verbose
-    notify({
-      tone: 'success',
-      title: t('eventFeed.feedback.diagnosticsSaved'),
-    })
-  } catch (error) {
-    verboseDiagnostics.value = !requested
-    notifyFailure(t('eventFeed.feedback.diagnosticsFailed'), error)
-  } finally {
-    savingControl.value = ''
-  }
-}
-
 async function refreshWindow(): Promise<void> {
   stale.value = false
   await eventTable.value?.setQuery({
@@ -367,7 +307,7 @@ async function refreshAll(): Promise<void> {
   await Promise.all([refreshWindow(), loadControls()])
 }
 
-async function saveRetention(source: 'api_call' | 'interception' | 'runtime'): Promise<void> {
+async function saveRetention(source: 'interception' | 'runtime'): Promise<void> {
   const value = retentionDrafts.value[source]
   if (value < savedRetentions.value[source]) {
     const accepted = await confirmation.confirm({
@@ -381,11 +321,9 @@ async function saveRetention(source: 'api_call' | 'interception' | 'runtime'): P
   }
   savingControl.value = `${source}-retention`
   try {
-    const result = source === 'api_call'
-      ? await api.updateApiHistoryRetention(value)
-      : source === 'interception'
-        ? await api.updateInterceptionRetention(value)
-        : await api.updateRuntimeLogRetention(value)
+    const result = source === 'interception'
+      ? await api.updateInterceptionRetention(value)
+      : await api.updateRuntimeLogRetention(value)
     retentionDrafts.value[source] = result.retention_limit
     savedRetentions.value[source] = result.retention_limit
     maxRetention.value = result.max_retention_limit
@@ -468,23 +406,9 @@ onMounted(() => { void loadControls() })
       </div>
 
       <div v-if="controlsReady">
-        <div class="form-check form-switch mb-3">
-          <input
-            id="verbose-diagnostics"
-            v-model="verboseDiagnostics"
-            class="form-check-input"
-            :disabled="savingControl === 'verbose-diagnostics'"
-            role="switch"
-            type="checkbox"
-            @change="saveVerboseDiagnostics"
-          >
-          <label class="form-check-label" for="verbose-diagnostics">
-            {{ t('eventFeed.controls.verbose') }}
-          </label>
-        </div>
         <div class="row g-3">
           <form
-            v-for="source in (['api_call', 'interception', 'runtime'] as const)"
+            v-for="source in (['interception', 'runtime'] as const)"
             :key="source"
             class="col-lg-3"
             :data-testid="`retention-${source}`"
@@ -533,7 +457,6 @@ onMounted(() => { void loadControls() })
     <DataTableWorkbench
       ref="eventTable"
       :config="eventTableConfig"
-      @detail-toggled="loadPreview"
       @query-applied="stale = false"
     >
       <template #filter-actions>
@@ -545,17 +468,7 @@ onMounted(() => { void loadControls() })
       <template #cell-summary="{ value }"><span class="text-break">{{ value }}</span></template>
       <template #detail="{ row }">
         <article>
-          <p v-if="row.source === 'api_call' && previewLoading[row.id]" class="text-body-secondary mb-0">
-            {{ t('eventFeed.previewLoading') }}
-          </p>
-          <pre
-            v-else-if="row.source === 'api_call' && previewContent[row.id]"
-            class="bg-body-tertiary border rounded p-3 overflow-auto mb-0"
-          >{{ previewContent[row.id] }}</pre>
-          <p v-else-if="row.source === 'api_call' && previewErrors[row.id]" class="text-danger mb-0">
-            {{ t('eventFeed.previewFailed') }} {{ previewErrors[row.id] }}
-          </p>
-          <pre v-else-if="row.inline_content" class="bg-body-tertiary border rounded p-3 overflow-auto mb-0">{{ row.inline_content }}</pre>
+          <pre v-if="row.inline_content" class="bg-body-tertiary border rounded p-3 overflow-auto mb-0">{{ row.inline_content }}</pre>
           <p v-if="row.matched_in_content" class="text-body-secondary mb-0">
             {{ t('eventFeed.matchedInContent') }}
           </p>

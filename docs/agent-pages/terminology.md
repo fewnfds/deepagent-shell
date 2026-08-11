@@ -13,4 +13,4 @@
 | 自定义工具 | 从 Python `@tool` 资源物化的 LangChain Tool |
 | 自定义 Middleware | 从本地包加载的官方 LangChain `AgentMiddleware` |
 | 输出模式 | Main Agent 拥有的 v3 运行事件到响应文本投影规则；Workflow 按稳定 node/Agent 来源选择规则 |
-| 历史会话 | 按 `X-Agent-Session-ID` 聚合的只读运行记录 |
+| Workflow 执行历史 | TBD；当前不收集多 Agent、多脚本 node 或并发运行树 |

@@ -123,7 +123,6 @@ def test_interception_switch_restores_the_persisted_setting() -> None:
         def snapshot(self) -> dict[str, bool]:
             return {
                 "interception_enabled": self.enabled,
-                "verbose_diagnostics": False,
             }
 
         def set_interception_enabled(self, enabled: bool) -> None:

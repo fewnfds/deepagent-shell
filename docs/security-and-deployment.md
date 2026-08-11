@@ -27,12 +27,10 @@ Provider credential、API Key 和管理密码保存在实例 `data/config/` 中�
 普通 API、DOM、系统日志和运行诊断不回显 credential、Bearer token、宿主敏感路径、traceback 或
 Provider 原始错误正文。以下 management-only 功能会按产品用途保存用户内容：
 
-- API 调用 RAW/DEBUG 下载；
 - Provider 前拦截记录；
-- 历史会话的客户端输入与最终响应；
 - 用户创建的组件、文件和 Python 资源。
 
-这些内容应按敏感数据处理。系统和运行日志只保存白名单 metadata；详细诊断也不保存逐 token 输出、
+这些内容应按敏感数据处理。系统日志和请求级运行诊断只保存白名单 metadata，不保存逐 token 输出、
 工具参数/结果或 reasoning 正文。
 
 ## 用户代码与文件系统
@@ -55,8 +53,8 @@ Middleware 包没有 sandbox，以 Agent Shell 服务进程权限运行。它可
 ## 容量与保留
 
 部署者负责磁盘、内存、上传大小、外部映射和并发限制。文件管理文本编辑限制为 2 MiB；其他文件传输
-采用流式处理，但不构成实例配额。API 调用、拦截、运行日志和历史会话使用可配置保存条数，系统日志
-使用文件大小上限。降低上限会永久裁剪旧数据。
+采用流式处理，但不构成实例配额。拦截记录和运行诊断使用可配置保存条数，系统日志使用文件大小上限。
+降低上限会永久裁剪旧数据。Workflow 执行历史和 checkpoint 当前为 TBD，暂不产生持久运行树。
 
 ## 系统配置与变量
 

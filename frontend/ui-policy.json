@@ -273,11 +273,6 @@
         "classes": ["validation-sidebar"]
       },
       {
-        "name": "session-timeline",
-        "paths": ["src/pages/AgentSessionsPage.vue"],
-        "classes": ["session-timeline-json"]
-      },
-      {
         "name": "workflow-editor",
         "paths": ["src/pages/WorkflowEditorPage.vue", "src/components/workflow/*.vue"],
         "classes": [
@@ -363,7 +358,6 @@
         "callers": [
           "src/components/ConfirmDialog.vue",
           "src/components/AuthGate.vue",
-          "src/pages/AgentSessionsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/FileManagerPage.vue",
           "src/pages/WorkflowsPage.vue"
@@ -375,7 +369,6 @@
         "kind": "layout-composition",
         "reason": "Owns grouped child-page navigation, page actions and the AdminLTE content recipe beneath the AppShell title",
         "callers": [
-          "src/pages/AgentSessionsPage.vue",
           "src/pages/ApiServerSettingsPage.vue",
           "src/pages/ComponentsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
@@ -501,7 +494,6 @@
         "kind": "product-behavior",
         "reason": "Owns shared data query, filtering, local/numbered pagination, result states, table rendering and optional row or bulk commands",
         "callers": [
-          "src/pages/AgentSessionsPage.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/EventFeedPage.vue",
           "src/pages/TerminologyPage.vue",

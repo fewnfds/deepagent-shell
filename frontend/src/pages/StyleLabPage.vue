@@ -294,7 +294,7 @@ function remix(): void {
             <div class="lab-card__body">
               <p>{{ t('styleLab.cards.railDetail') }}</p>
               <div class="lab-mini-field">
-                <span>{{ t('eventFeed.controls.verbose') }}</span>
+                <span>{{ t('eventFeed.retention.title') }}</span>
                 <strong>ON</strong>
               </div>
             </div>

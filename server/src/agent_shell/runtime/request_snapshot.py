@@ -10,7 +10,6 @@ from agent_shell.provider_http import ProviderHttpClients
 from agent_shell.provider_secrets import ProviderSecretResolver
 from agent_shell.runtime.agent_builder import AgentBuilder
 from agent_shell.runtime.agent_runtime import AgentExecution, AgentRuntime
-from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.file_config import FileConfigRepository
@@ -85,7 +84,6 @@ class RequestSnapshotRuntime:
         middleware_packages_dir: Path,
         runtime_dir: Path,
         skills_dir: Path,
-        diagnostics: RuntimeDiagnostics,
         provider_http_clients: ProviderHttpClients,
         media_outputs: MediaOutputStore,
     ) -> None:
@@ -94,7 +92,6 @@ class RequestSnapshotRuntime:
         self._middleware_packages_dir = middleware_packages_dir
         self._runtime_dir = runtime_dir
         self._skills_dir = skills_dir
-        self._diagnostics = diagnostics
         self._provider_http_clients = provider_http_clients
         self._media_outputs = media_outputs
 
@@ -126,7 +123,6 @@ class RequestSnapshotRuntime:
                     provider_http_clients=self._provider_http_clients,
                 ),
                 self._media_outputs,
-                self._diagnostics,
             )
             return RequestRuntimeSnapshot(
                 _configs=configs,

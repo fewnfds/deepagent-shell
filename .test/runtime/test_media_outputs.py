@@ -14,59 +14,32 @@ from agent_shell.storage.database import SQLiteDatabase
 from agent_shell.storage.media_outputs import MediaOutputStore, MediaProjection
 
 
-_PRE_OUTPUT_SCHEMA = """
-CREATE TABLE api_message_history (
-    id TEXT PRIMARY KEY,
-    request_id TEXT NOT NULL,
-    model TEXT NOT NULL,
-    agent_name TEXT NOT NULL,
-    started_at TEXT NOT NULL,
-    finished_at TEXT NOT NULL,
-    status TEXT NOT NULL,
-    request_body TEXT NOT NULL,
-    response_body TEXT,
-    response_content_type TEXT,
-    http_status INTEGER,
-    error_code TEXT
-);
-
-CREATE TABLE agent_session_runs (
-    id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    request_id TEXT NOT NULL,
-    model TEXT NOT NULL,
-    agent_name TEXT NOT NULL,
-    started_at TEXT NOT NULL,
-    finished_at TEXT,
-    status TEXT NOT NULL,
-    error_code TEXT,
-    input_messages_json TEXT NOT NULL,
-    timeline_json TEXT NOT NULL,
-    response_text TEXT NOT NULL
-);
-"""
-
-
-def test_media_store_starts_with_existing_history_tables(tmp_path: Path) -> None:
+def test_database_initialization_drops_obsolete_history_tables(tmp_path: Path) -> None:
     database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
     database_path.parent.mkdir(parents=True)
     with sqlite3.connect(database_path) as connection:
-        connection.executescript(_PRE_OUTPUT_SCHEMA)
+        connection.executescript(
+            "CREATE TABLE api_message_history (id TEXT PRIMARY KEY);"
+            "CREATE TABLE api_message_history_outputs (history_id TEXT PRIMARY KEY);"
+            "CREATE TABLE agent_session_runs (id TEXT PRIMARY KEY);"
+            "CREATE TABLE agent_session_run_outputs (run_id TEXT PRIMARY KEY);"
+        )
 
     database = SQLiteDatabase(database_path)
-    MediaOutputStore(database, tmp_path / "data" / "media" / "outputs")
-
     with database.transaction() as connection:
-        output_tables = {
+        tables = {
             row["name"]
             for row in connection.execute(
                 "SELECT name FROM sqlite_master WHERE type = 'table'"
             )
         }
-    assert {
+
+    assert not {
+        "api_message_history",
         "api_message_history_outputs",
+        "agent_session_runs",
         "agent_session_run_outputs",
-    }.issubset(output_tables)
+    } & tables
 
 
 def test_failed_file_cleanup_keeps_asset_index_for_retry(

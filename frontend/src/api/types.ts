@@ -365,9 +365,7 @@ export interface PaginationResponse<TItem> {
   total_pages: number
 }
 
-export type TerminalStatus = 'client_disconnected' | 'completed' | 'failed'
-
-export type EventSource = 'api_call' | 'interception' | 'system' | 'runtime'
+export type EventSource = 'interception' | 'system' | 'runtime'
 export type EventLevel = 'debug' | 'info' | 'warning' | 'error'
 
 export interface EventFeedItem {
@@ -383,10 +381,6 @@ export interface EventFeedItem {
 }
 
 export type EventFeedResponse = PaginationResponse<EventFeedItem>
-
-export interface EventFeedPreviewResponse {
-  content: string
-}
 
 export interface EventFeedFilters {
   started_at: string
@@ -422,55 +416,8 @@ interface RuntimeDiagnosticEntry {
 }
 
 export interface RuntimeDiagnostics {
-  verbose: boolean
   retention_limit: number
   max_retention_limit: number
-}
-
-export interface AgentSessionSummary {
-  session_id: string
-  model: string
-  agent_name: string
-  started_at: string
-  updated_at: string
-  status: TerminalStatus
-  error_code: string | null
-  model_call_count: number
-}
-
-interface AgentSessionTimelineStep {
-  step_id: string
-  sequence: string | number
-  kind: string
-  timestamp: string | null
-  data: Record<string, unknown>
-}
-
-export interface AgentSessionTimelineRun {
-  id: string
-  session_id: string
-  request_id: string
-  model: string
-  agent_name: string
-  started_at: string
-  finished_at: string
-  status: TerminalStatus
-  error_code: string | null
-  input_message_count: number
-  timeline: AgentSessionTimelineStep[]
-  response_summary: string
-}
-
-interface AgentSessionTokenUsage {
-  input_tokens: number | null
-  non_reasoning_output_tokens: number | null
-  reasoning_output_tokens: number | null
-}
-
-export interface AgentSessionTimeline {
-  session_id: string
-  token_usage: AgentSessionTokenUsage
-  runs: AgentSessionTimelineRun[]
 }
 
 export type ManagementEvent =
@@ -478,15 +425,6 @@ export type ManagementEvent =
   | { type: 'settings_changed' }
   | { type: 'history_changed' }
   | { type: 'interception_changed'; id?: string }
-  | { type: 'agent_session_changed'; session_id: string }
   | { type: 'runtime_diagnostic'; entry: RuntimeDiagnosticEntry }
   | { type: 'system_log'; entry: Record<string, unknown> }
   | ({ type: string } & Record<string, unknown>)
-
-export interface AgentSessionFilters {
-  page?: number
-  page_size?: number
-  query?: string
-  agent?: string
-  status?: TerminalStatus
-}

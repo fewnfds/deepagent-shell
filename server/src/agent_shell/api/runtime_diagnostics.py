@@ -7,12 +7,6 @@ from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.storage.history_retention import MAX_HISTORY_RETENTION_LIMIT
 
 
-class RuntimeDiagnosticsUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    verbose: bool
-
-
 class RuntimeDiagnosticsRetentionUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -27,12 +21,6 @@ def build_runtime_diagnostics_router(
     @router.get("/api/runtime-diagnostics")
     async def get_runtime_diagnostics() -> dict[str, object]:
         return diagnostics.settings()
-
-    @router.put("/api/runtime-diagnostics")
-    async def update_runtime_diagnostics(
-        payload: RuntimeDiagnosticsUpdate,
-    ) -> dict[str, object]:
-        return diagnostics.set_verbose(payload.verbose)
 
     @router.put("/api/runtime-diagnostics/retention")
     async def update_runtime_diagnostics_retention(

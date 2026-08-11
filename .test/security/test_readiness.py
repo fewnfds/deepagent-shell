@@ -139,7 +139,6 @@ def test_readiness_and_runtime_diagnostics_require_management_scope(
     payload = diagnostic.json()
     serialized = json.dumps(payload).lower()
     assert payload == {
-        "verbose": False,
         "retention_limit": 20,
         "max_retention_limit": 10_000,
     }

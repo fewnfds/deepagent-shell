@@ -1,6 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 
-const AgentSessionsPage = () => import('@/pages/AgentSessionsPage.vue')
 const ApiServerSettingsPage = () => import('@/pages/ApiServerSettingsPage.vue')
 const ComponentsPage = () => import('@/pages/ComponentsPage.vue')
 const ConfigLibraryPage = () => import('@/pages/ConfigLibraryPage.vue')
@@ -43,7 +42,6 @@ export const router = createRouter({
       meta: { titleKey: 'navigation.system' },
     },
     { path: '/system/events', component: EventFeedPage, meta: { titleKey: 'navigation.system' } },
-    { path: '/system/agent-sessions', component: AgentSessionsPage, meta: { titleKey: 'navigation.system' } },
     { path: '/style-lab', component: StyleLabPage, meta: { titleKey: 'styleLab.title' } },
     {
       path: '/terminology',

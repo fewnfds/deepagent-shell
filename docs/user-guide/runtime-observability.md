@@ -1,31 +1,30 @@
-# 日志中心与历史会话
+# 日志中心与 Workflow 观测边界
 
-## 日志中心
+## 当前日志中心
 
-【系统 / 日志中心】统一查询四类事件：
+【系统 / 日志中心】只保留三类管理观测：
 
-- API 调用：客户端请求、响应、状态和 usage；
-- 拦截记录：Provider 前的最终 ModelRequest；
-- 系统日志：服务、配置、安全和管理 API 事件；
-- Agent 运行日志：请求生命周期和脱敏诊断。
+- 系统日志：服务启动/停止、配置变更、安全事件和失败的管理请求；
+- 运行诊断：请求级、脱敏且有界的内部错误诊断；
+- 拦截记录：Provider 边界测试产生的最终 ModelRequest（仅在拦截测试开启时写入）。
 
-列表支持时间范围、来源、级别、全文搜索、页码分页和按当前筛选批量删除。默认时间范围从浏览器本地
-当天零点到页面打开时刻；新事件到达后点击“载入新事件”才推进结束时间。
+列表支持时间范围、来源、级别、全文搜索、页码分页、按当前筛选批量删除和大条目下载。系统日志按 MiB
+限制；拦截记录与运行诊断按条数限制。降低上限会立即删除超出的旧记录。
 
-API 调用行的精简预览省略消息与响应正文。RAW 下载保留实际 wire；DEBUG 下载合并流式文本并附带
-当前保留范围内的脱敏运行诊断。分享下载文件前应检查用户内容。
+日志中心不是 Workflow 执行历史，也不保存客户端完整消息、Provider 原始响应、traceback、工具参数/结果或
+逐 token reasoning。拦截记录可能含有完整用户消息和最终提示词，只应在本地调试后及时删除或降低保存上限。
 
-API 调用、拦截记录和运行日志分别使用可配置的 SQLite 条数上限；系统日志使用 MiB 上限。降低上限会
-立即删除超额旧记录。详细诊断开关位于日志中心，只增加生命周期、工具和 Subagent 元数据，不保存
-逐 token reasoning 正文。
+## 当前未提供 Workflow 历史
 
-## 历史会话
+当前不收集 Workflow 内部节点树，不提供 session header、线性 Timeline、API 调用历史或 verbose diagnostics。
+这些接口不属于当前产品 contract。
 
-【系统 / 历史会话】按 `X-Agent-Session-ID` 聚合已完成、失败或客户端断开的请求。列表支持搜索、状态
-筛选、下载、单项删除、筛选删除和保存上限。
+以下能力暂不提供，待 LangGraph 官方 thread/checkpoint 与并发运行契约明确后再单独设计：
 
-详情 Timeline 按 ModelRequest 编号组织输入准备、模型响应、工具调用/结果和 Subagent 事件。工作流步骤
-只保存名称、计数、状态、usage 和关联 ID；完整客户端输入与最终响应只在 management-only 会话记录中
-提供。
+- Workflow execution history 与 run tree；
+- 多 Agent / 多脚本 node 的并发、重试、取消和关联关系；
+- thread、checkpoint、resume 以及可恢复历史；
+- 面向用户的完整输入/输出回放。
 
-历史会话不参与下一轮上下文。客户端应带回响应中的 session ID，并继续提交完整 `messages[]`。
+外部 LangSmith、Langfuse 或 OpenTelemetry sink（如果以后接入）只能作为可选 trace 后端，不能替代系统安全日志、
+产品数据契约或 checkpoint/thread 存储。

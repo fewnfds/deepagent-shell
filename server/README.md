@@ -11,11 +11,12 @@
 - `/api/main-agents`、`/api/subagents`：Agent 配置；
 - `/api/tools/custom`、`/api/middlewares/custom`、`/api/skills`：用户资源发现；
 - `/api/file-manager/*`、`/api/system/settings`：数据与实例设置；
-- `/api/event-feed`、`/api/agent-sessions`：日志与历史会话；
+- `/api/event-feed`：系统日志、请求级运行错误诊断与显式拦截测试记录；
 - `/v1/models`、`/v1/chat/completions`：OpenAI-compatible 推理接口。
 
 每个推理请求从单次 SQLite 快照解析配置，再通过 `deepagents.create_deep_agent()` 构造 Main Agent 和
-同步 Subagent。用户资源文件在装配时重新校验和物化。多轮消息由客户端提交；历史会话只用于观察。
+同步 Subagent。用户资源文件在装配时重新校验和物化。多轮消息由客户端提交；当前不提供 Workflow 执行历史、
+聊天记忆或 checkpoint/resume。
 
 ## 运行与开发
 

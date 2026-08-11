@@ -82,7 +82,6 @@ async function mountShell(path = '/', api = createShellApi()) {
       '/system/config',
       '/system/files',
       '/system/events',
-      '/system/agent-sessions',
       '/style-lab',
       '/agents/main',
       '/agents/subagents',

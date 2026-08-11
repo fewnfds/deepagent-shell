@@ -11,7 +11,6 @@ from agent_shell.runtime.agent_builder import AgentBuilder, BuiltAgent
 from agent_shell.runtime.capabilities import DeepAgentsWorkspace
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.middleware_packages.runtime import MiddlewarePackageRuntime
-from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.model_response import ModelResponse
 from agent_shell.runtime.media_response import MainAgentMediaResponse
@@ -245,11 +244,9 @@ class AgentRuntime:
         self,
         builder: AgentBuilder,
         media_outputs: MediaOutputStore,
-        diagnostics: RuntimeDiagnostics | None = None,
     ) -> None:
         self._builder = builder
         self._media_outputs = media_outputs
-        self._diagnostics = diagnostics
 
     async def build_agent(
         self,
@@ -295,12 +292,6 @@ class AgentRuntime:
         observers = []
         if event_observer is not None:
             observers.append(event_observer)
-        if self._diagnostics is not None:
-            observers.append(
-                lambda event: self._diagnostics.runtime_event(
-                    event, request_id=request_id, model=public_model
-                )
-            )
         workflow_agents = workflow_built or ((workflow_node_id, built),)
         if workflow_node_id:
             from agent_shell.workflow.events import WorkflowEventSourceV1

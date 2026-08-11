@@ -14,7 +14,6 @@ const messages = {
       systemSettings: 'System settings',
       fileManager: 'File manager',
       eventFeed: 'Log center',
-      agentSessions: 'Session history',
       styleLab: 'Style lab',
       mainAgent: 'Main Agent',
       subagents: 'Subagent',
@@ -51,7 +50,6 @@ describe('PageShell', () => {
       'System settings',
       'File manager',
       'Log center',
-      'Session history',
     ])
     expect(buttons[2]?.attributes('aria-current')).toBe('page')
     expect(buttons[2]?.classes()).toContain('btn-primary')
