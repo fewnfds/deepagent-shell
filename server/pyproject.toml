@@ -42,5 +42,5 @@ packages = ["src/agent_shell"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
-testpaths = ["../.test"]
+testpaths = ["../test"]
 addopts = "-p no:cacheprovider"

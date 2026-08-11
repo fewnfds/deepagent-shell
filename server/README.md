@@ -34,7 +34,7 @@
 ```powershell
 cd server
 uv sync --extra dev
-uv run pytest ..\.test\<domain>\test_relevant_module.py -q
+uv run pytest ..\test\<domain>\test_relevant_module.py -q
 ```
 
 完整说明见根 [README](../README.md)、[用户指南](../docs/user-guide/README.md)和
