@@ -51,6 +51,7 @@ import {
   SummarizationEditor,
   SystemPromptEditor,
   TodoListEditor,
+  WorkflowInputContextEditor,
 } from '@/editors'
 
 interface PageBlockAdapter {
@@ -73,6 +74,7 @@ const editorComponents: Record<BlockType, Component> = {
   subagent: SubagentCapabilityEditor,
   summarization: SummarizationEditor,
   'prompt-caching': PromptCachingEditor,
+  'workflow-input-context': WorkflowInputContextEditor,
 }
 
 const { t } = useI18n()
@@ -176,6 +178,7 @@ const editorProps = computed<Record<string, unknown>>(() => {
     case 'subagent':
     case 'summarization':
     case 'prompt-caching':
+    case 'workflow-input-context':
       return {
         defaults: activeDefaults.value,
         ...(activeType.value === 'filesystem-permissions'

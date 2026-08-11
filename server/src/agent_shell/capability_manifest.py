@@ -128,6 +128,11 @@ CAPABILITY_MANIFESTS = (
         "database", "prompt_caching",
         subagent_overrideable=True, required=False, subagent_policy="inherit",
     ),
+    CapabilityManifest(
+        "workflow-input-context", "workflow-input-context", "Workflow 输入上下文", 14,
+        "chat-left-text", "workflow_input_context",
+        subagent_overrideable=True, required=False, subagent_policy="inherit",
+    ),
 )
 
 

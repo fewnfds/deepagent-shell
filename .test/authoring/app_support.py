@@ -25,6 +25,7 @@ PUBLIC_TYPES = (
     "subagent",
     "summarization",
     "prompt-caching",
+    "workflow-input-context",
 )
 
 
@@ -184,6 +185,14 @@ def block_cases(tmp_path: Path) -> list[tuple[str, dict]]:
                 "name": "One-hour prompt cache",
                 "ttl": "1h",
                 "min_messages_to_cache": 4,
+            },
+        ),
+        (
+            "workflow-input-context",
+            {
+                "name": "Input context",
+                "custom_transform_source": "",
+                "slots": [],
             },
         ),
         (

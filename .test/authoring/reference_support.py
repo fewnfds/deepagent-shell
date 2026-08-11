@@ -113,6 +113,7 @@ def block_payload(capability_type: str, name: str) -> dict:
         },
         "summarization": {"name": name},
         "prompt-caching": {"name": name},
+        "workflow-input-context": {"name": name},
     }
     return payloads[capability_type]
 

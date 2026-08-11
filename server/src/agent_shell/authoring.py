@@ -17,6 +17,9 @@ from agent_shell.contracts import (
     SKILL_PROMPT_FIELDS,
     SummarizationBlock,
 )
+from agent_shell.plugins.workflow_input_context.contracts import (
+    WorkflowInputContextBlock,
+)
 
 
 # These text snapshots are management-editor data. Production catalog reads must not
@@ -492,6 +495,9 @@ _EDITOR_DEFAULTS = {
         mode="json",
         exclude={"name"},
     ),
+    "workflow_input_context": WorkflowInputContextBlock(
+        name="Workflow input context"
+    ).model_dump(mode="json", exclude={"name"}),
 }
 
 

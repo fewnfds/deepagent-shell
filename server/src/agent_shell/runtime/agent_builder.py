@@ -20,6 +20,9 @@ from agent_shell.contracts import (
 )
 from agent_shell.provider_http import PROVIDER_HTTP_TIMEOUT, ProviderHttpClients
 from agent_shell.provider_secrets import ProviderCredentialError, ProviderSecretResolver
+from agent_shell.plugins.workflow_input_context.factory import (
+    materialize_workflow_input_context_middleware,
+)
 from agent_shell.runtime.capabilities import (
     DeepAgentsCapabilityError,
     DeepAgentsWorkspace,
@@ -337,6 +340,31 @@ class AgentBuilder:
         skill_sources = deepagents.skill_sources
 
         extra_middleware: list[Any] = []
+        workflow_input_context = selected_blocks.get("workflow-input-context")
+        if workflow_input_context is not None:
+            try:
+                input_context_middleware = materialize_workflow_input_context_middleware(
+                    {
+                        key: value
+                        for key, value in workflow_input_context.items()
+                        if key != "id"
+                    },
+                    backend=backend,
+                    scope=scope,
+                )
+                if input_context_middleware is not None:
+                    extra_middleware.append(input_context_middleware)
+            except Exception as exc:
+                raise configuration_error(
+                    "middleware_materialization_failed",
+                    "The selected Workflow input context configuration could not be constructed.",
+                    status_code=422,
+                    scope=scope,
+                    owner_id=owner_id,
+                    owner_name=owner_name,
+                    path="capability_refs.workflow-input-context",
+                ) from exc
+
         summarization = selected_blocks.get("summarization")
         if summarization is not None:
             try:

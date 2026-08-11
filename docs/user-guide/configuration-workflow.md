@@ -47,6 +47,18 @@ Custom Middleware 组件保存有序 Middleware 包引用。Main Agent 选择组
 在 `before_agent`/`abefore_agent` 中读取 `runtime.context.messages`，按 Agent 身份整理后返回官方 state update。Subagent 默认保留 Deep Agents
 delegated messages。格式见[自定义 Middleware 包](middleware-packages.md)。
 
+### Workflow 输入上下文 Middleware
+
+在 Components 中创建“Workflow 输入上下文”组件，再由 Main Agent 或 Subagent 的 capability refs 选择它。
+它是独立源码目录中的内置实现，后端只负责固定物化；前端沿用本页的组件仓库和 Agent 覆写流程，不创建第二套
+插件页面。
+
+运行顺序是：复制请求快照 -> 可选 `transform(messages, read_file, config)` -> 按字符阈值上提非顶部 system ->
+把剩余非顶部 system 转为 user -> 顺序追加槽位。`messages` 是可变副本，`read_file` 只能读 Workflow backend
+中的虚拟路径，`config` 是本次请求的配置副本。槽位按主文件、fallback 文件、literal 选择内容，再按 `max_chars`
+截断；`truncate_if_missing` 会在全部来源缺失时停止后续槽位。关闭组件或取消 `apply_to` 范围即可跳过，不影响
+原始 `WorkflowRuntimeContext.messages`。
+
 ## 校验与生效
 
 Main Agent 与 Subagent 编辑页继续提交完整草稿给后端预校验，保存时再次校验。Workflow Graph PUT 接受当前画布

@@ -26,9 +26,10 @@ def test_health_catalog_and_readiness_are_small_and_current(
         "exception_retry",
         "summarization",
         "prompt_caching",
+        "workflow_input_context",
     }
     assert [item["type"] for item in catalog["block_types"]] == list(PUBLIC_TYPES)
-    assert [item["order"] for item in catalog["block_types"]] == list(range(1, 14))
+    assert [item["order"] for item in catalog["block_types"]] == list(range(1, 15))
     by_type = {item["type"]: item for item in catalog["block_types"]}
     assert set(by_type["model"]) == {
         "type",

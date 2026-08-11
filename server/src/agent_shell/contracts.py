@@ -33,6 +33,9 @@ from agent_shell.registries.custom_tools import (
     CUSTOM_TOOL_RESOURCE_NAME_PATTERN,
 )
 from agent_shell.registries.skills import SKILL_NAME_MAX_LENGTH, skill_name_issue
+from agent_shell.plugins.workflow_input_context.contracts import (
+    WorkflowInputContextBlock,
+)
 
 
 SKILL_PROMPT_FIELDS = (
@@ -980,6 +983,7 @@ BLOCK_MODELS: dict[str, type[StrictBlock]] = {
     "subagent": SubagentBlock,
     "summarization": SummarizationBlock,
     "prompt-caching": PromptCachingBlock,
+    "workflow-input-context": WorkflowInputContextBlock,
 }
 
 validate_capability_manifests(CAPABILITY_MANIFESTS, BLOCK_MODELS)

@@ -38,6 +38,7 @@ def test_manifest_matches_current_blocks_and_form_order() -> None:
         "subagent",
         "summarization",
         "prompt-caching",
+        "workflow-input-context",
     ]
     assert {manifest.type for manifest in CAPABILITY_MANIFESTS} == set(BLOCK_MODELS)
     assert CAPABILITY_MANIFESTS[0].required is True
@@ -62,6 +63,8 @@ def test_manifest_matches_current_blocks_and_form_order() -> None:
     assert manifests["summarization"].subagent_policy == "inherit"
     assert manifests["prompt-caching"].subagent_overrideable is True
     assert manifests["prompt-caching"].subagent_policy == "inherit"
+    assert manifests["workflow-input-context"].subagent_overrideable is True
+    assert manifests["workflow-input-context"].subagent_policy == "inherit"
     assert manifests["todo-list"].subagent_overrideable is True
     assert manifests["todo-list"].tool_names == ("write_todos",)
 

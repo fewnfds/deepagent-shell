@@ -36,6 +36,7 @@ CAPABILITY_TYPES = (
     "subagent",
     "summarization",
     "prompt-caching",
+    "workflow-input-context",
 )
 OUTPUT_EVENT_TYPES = (
     "assistant_text",
@@ -133,6 +134,7 @@ def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> d
         "subagent": {"name": name},
         "summarization": {"name": name},
         "prompt-caching": {"name": name},
+        "workflow-input-context": {"name": name},
         "todo-list": {"name": name},
         "exception-retry": {
             "name": name,

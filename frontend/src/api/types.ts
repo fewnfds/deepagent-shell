@@ -14,6 +14,7 @@ export type BlockType =
   | 'subagent'
   | 'summarization'
   | 'prompt-caching'
+  | 'workflow-input-context'
 
 export interface CapabilityManifest {
   type: BlockType

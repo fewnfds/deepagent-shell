@@ -12,12 +12,14 @@ import {
   subagentAdapter,
   systemPromptAdapter,
   todoListAdapter,
+  workflowInputContextAdapter,
   type FilesystemDefaults,
   type ModelApiRecord,
   type OutputModeDefaults,
   type SkillDefaults,
   type SubagentDefaults,
   type TodoListDefaults,
+  type WorkflowInputContextDefaults,
 } from './blocks'
 
 const filesystemDefaults: FilesystemDefaults = {
@@ -54,6 +56,16 @@ const subagentDefaults: SubagentDefaults = {
 const todoDefaults: TodoListDefaults = {
   system_prompt: 'todo default',
   tool_description: 'write_todos default',
+}
+const workflowInputDefaults: WorkflowInputContextDefaults = {
+  enabled: true,
+  apply_to: ['main_agent', 'subagent'],
+  custom_transform_enabled: false,
+  custom_transform_source: '',
+  system_promote_enabled: true,
+  system_promote_min_chars: 10,
+  demote_non_top_system: true,
+  slots: [],
 }
 function modelRecord(): ModelApiRecord {
   return {
@@ -295,5 +307,36 @@ describe('block adapters', () => {
     expect(todoListAdapter.toPayload(todo, todoDefaults)).toEqual({
       name: 'Todos', system_prompt_override: null, tool_description_override: null,
     })
+
+    const inputContext = workflowInputContextAdapter.blank(workflowInputDefaults)
+    inputContext.name = ' Input context '
+    inputContext.custom_transform_enabled = true
+    inputContext.custom_transform_source = 'def transform(messages, read_file, config):\n    return messages'
+    inputContext.slots.push({
+      _key: 'slot', enabled: true, role: 'system', file: ' /prompt.txt ',
+      fallback_files: ['/fallback.txt', '/fallback.txt'], literal: 'fallback',
+      max_chars: 100, truncate_if_missing: true,
+    })
+    expect(workflowInputContextAdapter.toPayload(inputContext)).toEqual({
+      name: 'Input context',
+      enabled: true,
+      apply_to: ['main_agent', 'subagent'],
+      custom_transform_enabled: true,
+      custom_transform_source: 'def transform(messages, read_file, config):\n    return messages',
+      system_promote_enabled: true,
+      system_promote_min_chars: 10,
+      demote_non_top_system: true,
+      slots: [{
+        enabled: true,
+        role: 'system',
+        file: '/prompt.txt',
+        fallback_files: ['/fallback.txt'],
+        literal: 'fallback',
+        max_chars: 100,
+        truncate_if_missing: true,
+      }],
+    })
+
+    expect(workflowInputContextAdapter.fromApi({ apply_to: [] }, workflowInputDefaults).apply_to).toEqual([])
   })
 })
