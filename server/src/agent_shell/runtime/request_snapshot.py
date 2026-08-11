@@ -10,6 +10,8 @@ from agent_shell.provider_http import ProviderHttpClients
 from agent_shell.provider_secrets import ProviderSecretResolver
 from agent_shell.runtime.agent_builder import AgentBuilder
 from agent_shell.runtime.agent_runtime import AgentExecution, AgentRuntime
+from agent_shell.runtime.diagnostics import RuntimeDiagnostics
+from agent_shell.runtime.workflow_debug import WorkflowDebugService
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.file_config import FileConfigRepository
@@ -87,6 +89,8 @@ class RequestSnapshotRuntime:
         skills_dir: Path,
         provider_http_clients: ProviderHttpClients,
         media_outputs: MediaOutputStore,
+        workflow_debug: WorkflowDebugService,
+        runtime_diagnostics: RuntimeDiagnostics,
     ) -> None:
         self._configuration = configuration
         self._custom_tools_dir = custom_tools_dir
@@ -95,6 +99,8 @@ class RequestSnapshotRuntime:
         self._skills_dir = skills_dir
         self._provider_http_clients = provider_http_clients
         self._media_outputs = media_outputs
+        self._workflow_debug = workflow_debug
+        self._runtime_diagnostics = runtime_diagnostics
 
     def capture(self) -> RequestRuntimeSnapshot:
         repository = self._configuration.clone()
@@ -124,6 +130,8 @@ class RequestSnapshotRuntime:
                     provider_http_clients=self._provider_http_clients,
                 ),
                 self._media_outputs,
+                workflow_debug=self._workflow_debug,
+                runtime_diagnostics=self._runtime_diagnostics,
             )
             return RequestRuntimeSnapshot(
                 _configs=configs,

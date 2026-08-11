@@ -155,6 +155,68 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch) -> None:
 
     assert asyncio.run(scenario()) is True
 
+
+def test_workflow_debug_record_failure_does_not_fail_successful_execution() -> None:
+    async def scenario() -> list[str]:
+        class EmptyRun:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, _exc_type, _exc, _traceback) -> None:
+                return None
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                raise StopAsyncIteration
+
+            async def output(self):
+                return {"messages": [], "shared_vars": {"result": "ok"}}
+
+        class Graph:
+            async def astream_events(
+                self, _input, *, config: dict, version: str, transformers: tuple = ()
+            ):
+                assert version == "v3"
+                assert transformers
+                return EmptyRun()
+
+        class FailingDebugRun:
+            async def finish(self, *_args, **_kwargs) -> None:
+                raise RuntimeError("private debug storage failure")
+
+        class RecordingDiagnostics:
+            def __init__(self) -> None:
+                self.codes: list[str] = []
+
+            def observation_error(self, _exc, *, code: str, **_kwargs) -> None:
+                self.codes.append(code)
+
+            def runtime_error(self, _exc, *, code: str, **_kwargs) -> None:
+                self.codes.append(code)
+
+        diagnostics = RecordingDiagnostics()
+        execution = AgentExecution(
+            graph=Graph(),
+            input_state={"messages": [], "shared_vars": {}},
+            rectifier=OutputEventRectifier(OutputProjector(config(mode="blocklist"))),
+            normalizer=V3EventNormalizer("Main Agent"),
+            middleware_runtime=noop_middleware_runtime(),
+            media_response=noop_media_response(),
+            debug_run=FailingDebugRun(),  # type: ignore[arg-type]
+            runtime_diagnostics=diagnostics,  # type: ignore[arg-type]
+        )
+
+        await execution.run()
+        assert execution.final_state == {
+            "messages": [],
+            "shared_vars": {"result": "ok"},
+        }
+        return diagnostics.codes
+
+    assert asyncio.run(scenario()) == ["workflow_debug_record_failed"]
+
 def test_graph_recursion_failure_uses_step_limit_error() -> None:
     async def scenario() -> str:
         from langgraph.errors import GraphRecursionError

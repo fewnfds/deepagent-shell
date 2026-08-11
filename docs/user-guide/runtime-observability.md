@@ -14,17 +14,24 @@
 日志中心不是 Workflow 执行历史，也不保存客户端完整消息、Provider 原始响应、traceback、工具参数/结果或
 逐 token reasoning。拦截记录可能含有完整用户消息和最终提示词，只应在本地调试后及时删除或降低保存上限。
 
-## 当前未提供 Workflow 历史
+## Workflow Debug
 
-当前不收集 Workflow 内部节点树，不提供 session header、线性 Timeline、API 调用历史或 verbose diagnostics。
-这些接口不属于当前产品 contract。
+每次 Workflow 请求建立独立 Debug thread 和 run identity。外层 Workflow 使用 LangGraph 官方
+`AsyncSqliteSaver`，以 `durability="sync"` 在 super-step 边界写入 `data/state/agent-shell.sqlite3`。静态 Agent
+子图继承父图 checkpointer；Shell 不实现第二套快照引擎。
 
-以下能力暂不提供，待 LangGraph 官方 thread/checkpoint 与并发运行契约明确后再单独设计：
+管理接口只返回安全的结构信息：
 
-- Workflow execution history 与 run tree；
-- 多 Agent / 多脚本 node 的并发、重试、取消和关联关系；
-- thread、checkpoint、resume 以及可恢复历史；
-- 面向用户的完整输入/输出回放。
+- `GET /api/workflow-debug/runs`：有界运行索引；
+- `GET /api/workflow-debug/runs/{thread_id}`：运行树与官方 checkpoint 摘要；
+- `DELETE /api/workflow-debug/runs/{thread_id}`：删除索引并调用官方 `adelete_thread()`。
 
-外部 LangSmith、Langfuse 或 OpenTelemetry sink（如果以后接入）只能作为可选 trace 后端，不能替代系统安全日志、
-产品数据契约或 checkpoint/thread 存储。
+运行树包含 Workflow、Agent graph、model、tool 和 retriever 的父子身份与状态，不复制 prompt、工具参数/结果或
+模型正文。Checkpoint 保存官方 Graph state，属于敏感实例数据；管理摘要只公开 checkpoint id、namespace、step、
+channel 名称和 pending write 数量，不返回 state 值。
+
+系统配置可以选择启用 LangSmith。LangSmith 是外部 trace 后端，通常会接收 prompt、模型输出、工具输入/输出等完整
+追踪内容，只应在确认数据策略后启用；它不能替代本地系统日志、运行诊断或 checkpoint 数据库。
+
+当前不提供 Resume、断线续跑、旧输入重发、面向用户的完整输入/输出回放或恢复 API。`messages_sha` 只作为 Debug
+关联信息，不能触发执行。

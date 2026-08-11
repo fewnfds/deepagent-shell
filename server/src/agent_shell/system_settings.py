@@ -58,6 +58,12 @@ class SystemSettingsService:
             "port": settings.port,
             "allow_remote": settings.allow_remote,
             "langsmith_tracing_enabled": settings.langsmith_tracing_enabled,
+            "langsmith_endpoint": settings.langsmith_endpoint,
+            "langsmith_project": settings.langsmith_project,
+            "langsmith_workspace_id": settings.langsmith_workspace_id,
+            "langsmith_api_key": {
+                "configured": settings.langsmith_api_key is not None,
+            },
             "cors_origins": list(settings.cors_origins),
             "trusted_proxy_cidrs": list(settings.trusted_proxy_cidrs),
             "management_token": {
@@ -72,6 +78,8 @@ class SystemSettingsService:
             == SystemSettingsService._public(right)
             and _secret_value(left.management_token)
             == _secret_value(right.management_token)
+            and _secret_value(left.langsmith_api_key)
+            == _secret_value(right.langsmith_api_key)
         )
 
     def get(self) -> dict[str, Any]:
@@ -100,11 +108,19 @@ class SystemSettingsService:
         )
 
     def _candidate(self, payload: dict[str, Any]) -> Settings:
+        langsmith_api_key = self._apply_optional_secret(
+            self._saved.langsmith_api_key,
+            payload["langsmith_api_key"],
+        )
         values = {
             "host": payload["host"],
             "port": payload["port"],
             "allow_remote": payload["allow_remote"],
             "langsmith_tracing_enabled": payload["langsmith_tracing_enabled"],
+            "langsmith_endpoint": payload["langsmith_endpoint"],
+            "langsmith_project": payload["langsmith_project"],
+            "langsmith_workspace_id": payload["langsmith_workspace_id"],
+            "langsmith_api_key": langsmith_api_key,
             "management_token": self._apply_management_password(
                 self._saved.management_token,
                 payload["management_token"],
@@ -145,6 +161,27 @@ class SystemSettingsService:
             ) from None
         return candidate
 
+    @staticmethod
+    def _apply_optional_secret(
+        current: SecretStr | None,
+        payload: dict[str, Any],
+    ) -> str | None:
+        operation = payload.get("operation")
+        if operation == "keep":
+            return _secret_value(current)
+        if operation == "clear":
+            return None
+        if operation == "replace":
+            value = payload.get("value")
+            if isinstance(value, str) and value:
+                return value
+        raise SystemSettingsError(
+            422,
+            "system_secret_operation_invalid",
+            "errors.systemSecretOperationInvalid",
+            "The secret update operation is invalid.",
+        )
+
     def update(self, payload: dict[str, Any]) -> dict[str, Any]:
         candidate = self._candidate(payload)
         try:
@@ -156,6 +193,9 @@ class SystemSettingsService:
                         "port": candidate.port,
                         "allow_remote": candidate.allow_remote,
                         "langsmith_tracing_enabled": candidate.langsmith_tracing_enabled,
+                        "langsmith_endpoint": candidate.langsmith_endpoint,
+                        "langsmith_project": candidate.langsmith_project,
+                        "langsmith_workspace_id": candidate.langsmith_workspace_id,
                         "cors_origins": list(candidate.cors_origins),
                         "trusted_proxy_cidrs": list(candidate.trusted_proxy_cidrs),
                     },
@@ -165,6 +205,12 @@ class SystemSettingsService:
                 "AGENT_SHELL_MANAGEMENT_TOKEN",
                 _secret_value(candidate.management_token),
             )
+            operation = payload["langsmith_api_key"]["operation"]
+            if operation != "keep":
+                self._configuration.set_secret(
+                    "LANGSMITH_API_KEY",
+                    _secret_value(candidate.langsmith_api_key),
+                )
         except OSError as exc:
             raise SystemSettingsError(
                 500,

@@ -22,6 +22,7 @@ def compile_workflow(
     document: WorkflowGraphDocumentV1,
     *,
     node_graphs: Mapping[str, Any],
+    checkpointer: Any | None = None,
 ) -> Any:
     """Compile catalog-declared canvas nodes into an official StateGraph."""
 
@@ -65,7 +66,7 @@ def compile_workflow(
         source = START if edge.source in entry_ids else edge.source
         target = END if edge.target in exit_ids else edge.target
         builder.add_edge(source, target)
-    return builder.compile()
+    return builder.compile(checkpointer=checkpointer)
 
 
 __all__ = ["compile_workflow"]

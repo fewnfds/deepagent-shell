@@ -48,6 +48,12 @@ const host = ref('127.0.0.1')
 const port = ref(19100)
 const allowRemote = ref(false)
 const langsmithTracingEnabled = ref(false)
+const langsmithEndpoint = ref('https://api.smith.langchain.com')
+const langsmithProject = ref('agent-shell')
+const langsmithWorkspaceId = ref('')
+const langsmithApiKey = ref('')
+const langsmithApiKeyDirty = ref(false)
+const showLangsmithApiKey = ref(false)
 const managementPassword = ref('')
 const showManagementPassword = ref(false)
 const apiKey = ref('')
@@ -64,6 +70,9 @@ const trustedProxies = ref('')
 const apiKeyPlaceholder = computed(() => apiServerSettings.value?.api_key.configured
   ? t('common.configuredSecretPlaceholder')
   : t('common.apiKeyPlaceholder'))
+const langsmithApiKeyPlaceholder = computed(() => settings.value?.langsmith_api_key.configured
+  ? t('common.configuredSecretPlaceholder')
+  : t('common.apiKeyPlaceholder'))
 
 function fieldLabel(messageKey: string, wireField: string): string {
   return locale.value === 'debug' ? wireField : t(messageKey)
@@ -73,6 +82,19 @@ const settingsValid = computed(() => {
   const normalizedPort = Number(port.value)
   const normalizedMessageLimit = Number(maxInitialMessages.value)
   const normalizedValidationDebounce = Number(validationDebounceMs.value)
+  let endpointValid = false
+  try {
+    const endpoint = new URL(langsmithEndpoint.value.trim())
+    endpointValid = ['http:', 'https:'].includes(endpoint.protocol)
+      && !endpoint.username
+      && !endpoint.password
+      && !endpoint.search
+      && !endpoint.hash
+  } catch {
+    endpointValid = false
+  }
+  const langsmithApiKeyAvailable = Boolean(langsmithApiKey.value)
+    || (!langsmithApiKeyDirty.value && Boolean(settings.value?.langsmith_api_key.configured))
   return Number.isInteger(normalizedPort)
     && normalizedPort >= 1
     && normalizedPort <= 65_535
@@ -82,6 +104,9 @@ const settingsValid = computed(() => {
     && Number.isInteger(normalizedValidationDebounce)
     && normalizedValidationDebounce >= validationDebounceMin.value
     && normalizedValidationDebounce <= validationDebounceMax.value
+    && endpointValid
+    && Boolean(langsmithProject.value.trim())
+    && (!langsmithTracingEnabled.value || langsmithApiKeyAvailable)
 })
 
 function lines(value: string): string[] {
@@ -94,6 +119,12 @@ function applySystemSettings(value: SystemSettings): void {
   port.value = value.port
   allowRemote.value = value.allow_remote
   langsmithTracingEnabled.value = value.langsmith_tracing_enabled
+  langsmithEndpoint.value = value.langsmith_endpoint
+  langsmithProject.value = value.langsmith_project
+  langsmithWorkspaceId.value = value.langsmith_workspace_id ?? ''
+  langsmithApiKey.value = ''
+  langsmithApiKeyDirty.value = false
+  showLangsmithApiKey.value = false
   corsOrigins.value = value.cors_origins.join('\n')
   trustedProxies.value = value.trusted_proxy_cidrs.join('\n')
   managementPassword.value = ''
@@ -158,6 +189,11 @@ async function save(): Promise<void> {
       : apiKeyDirty.value
         ? { operation: 'clear' }
         : { operation: 'keep' }
+    const langsmithApiKeyUpdate: SystemSettingsUpdate['langsmith_api_key'] = langsmithApiKey.value
+      ? { operation: 'replace', value: langsmithApiKey.value }
+      : langsmithApiKeyDirty.value
+        ? { operation: 'clear' }
+        : { operation: 'keep' }
     const [
       savedSystemSettings,
       savedApiServerSettings,
@@ -169,6 +205,10 @@ async function save(): Promise<void> {
         port: Number(port.value),
         allow_remote: allowRemote.value,
         langsmith_tracing_enabled: langsmithTracingEnabled.value,
+        langsmith_endpoint: langsmithEndpoint.value.trim().replace(/\/$/, ''),
+        langsmith_project: langsmithProject.value.trim(),
+        langsmith_workspace_id: langsmithWorkspaceId.value.trim() || null,
+        langsmith_api_key: langsmithApiKeyUpdate,
         management_token: managementPassword.value
           ? { operation: 'replace', value: managementPassword.value }
           : { operation: 'preserve' },
@@ -406,23 +446,109 @@ onMounted(() => { void load() })
                     </label>
                   </div>
                 </div>
-                <div class="col-12">
-                  <div class="form-check form-switch">
-                    <input
-                      id="langsmith-tracing"
-                      v-model="langsmithTracingEnabled"
-                      class="form-check-input"
-                      role="switch"
-                      type="checkbox"
-                    >
-                    <label class="form-check-label" for="langsmith-tracing">
-                      {{ fieldLabel('systemSettings.langsmithTracing', 'langsmith_tracing_enabled') }}
-                    </label>
-                  </div>
-                  <div class="form-text">
-                    {{ t('systemSettings.langsmithTracingHint') }}
-                  </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="card mb-3" data-testid="system-card-langsmith">
+            <header class="card-header d-flex align-items-center justify-content-between">
+              <h2 class="card-title">
+                <i class="bi bi-gear me-2" aria-hidden="true" />
+                {{ t('systemSettings.langsmith.title') }}
+              </h2>
+              <a href="https://smith.langchain.com" rel="noreferrer" target="_blank">
+                {{ t('systemSettings.langsmith.open') }}
+              </a>
+            </header>
+            <div class="card-body">
+              <div class="form-check form-switch mb-3">
+                <input
+                  id="langsmith-tracing"
+                  v-model="langsmithTracingEnabled"
+                  class="form-check-input"
+                  role="switch"
+                  type="checkbox"
+                >
+                <label class="form-check-label" for="langsmith-tracing">
+                  {{ fieldLabel('systemSettings.langsmith.tracing', 'langsmith_tracing_enabled') }}
+                </label>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label" for="langsmith-endpoint">
+                  {{ fieldLabel('systemSettings.langsmith.endpoint', 'langsmith_endpoint') }}
+                </label>
+                <input
+                  id="langsmith-endpoint"
+                  v-model="langsmithEndpoint"
+                  autocomplete="url"
+                  class="form-control"
+                  required
+                  spellcheck="false"
+                  type="url"
+                >
+              </div>
+
+              <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                  <label class="form-label" for="langsmith-project">
+                    {{ fieldLabel('systemSettings.langsmith.project', 'langsmith_project') }}
+                  </label>
+                  <input
+                    id="langsmith-project"
+                    v-model="langsmithProject"
+                    class="form-control"
+                    maxlength="200"
+                    required
+                    spellcheck="false"
+                    type="text"
+                  >
                 </div>
+                <div class="col-md-6">
+                  <label class="form-label" for="langsmith-workspace-id">
+                    {{ fieldLabel('systemSettings.langsmith.workspaceId', 'langsmith_workspace_id') }}
+                  </label>
+                  <input
+                    id="langsmith-workspace-id"
+                    v-model="langsmithWorkspaceId"
+                    class="form-control"
+                    maxlength="200"
+                    spellcheck="false"
+                    type="text"
+                  >
+                </div>
+              </div>
+
+              <label class="form-label" for="langsmith-api-key">
+                {{ fieldLabel('systemSettings.langsmith.apiKey', 'langsmith_api_key') }}
+              </label>
+              <div class="input-group">
+                <input
+                  id="langsmith-api-key"
+                  v-model="langsmithApiKey"
+                  autocomplete="off"
+                  class="form-control"
+                  :placeholder="langsmithApiKeyPlaceholder"
+                  spellcheck="false"
+                  :type="showLangsmithApiKey ? 'text' : 'password'"
+                  @input="langsmithApiKeyDirty = true"
+                >
+                <LteButton
+                  :aria-label="showLangsmithApiKey ? t('common.hide') : t('common.show')"
+                  :aria-pressed="showLangsmithApiKey"
+                  theme="info"
+                  type="button"
+                  @click="showLangsmithApiKey = !showLangsmithApiKey"
+                >
+                  <i v-if="showLangsmithApiKey" class="bi bi-eye-slash" aria-hidden="true" />
+                  <i v-else class="bi bi-eye" aria-hidden="true" />
+                </LteButton>
+              </div>
+              <div class="form-text">
+                <a href="https://docs.langchain.com/langsmith/trace-with-langchain" rel="noreferrer" target="_blank">
+                  {{ t('systemSettings.langsmith.docs') }}
+                </a>
+                {{ t('systemSettings.langsmith.restart') }}
               </div>
             </div>
           </section>

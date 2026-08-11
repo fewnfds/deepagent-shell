@@ -32,6 +32,10 @@ def _payload(**overrides) -> dict:
         "port": 19100,
         "allow_remote": False,
         "langsmith_tracing_enabled": False,
+        "langsmith_endpoint": "https://api.smith.langchain.com",
+        "langsmith_project": "agent-shell",
+        "langsmith_workspace_id": None,
+        "langsmith_api_key": {"operation": "keep"},
         "management_token": {"operation": "preserve"},
         "cors_origins": [],
         "trusted_proxy_cidrs": [],
@@ -54,6 +58,10 @@ def test_system_settings_get_reports_secret_status_without_secret_values(
         "port": 19100,
         "allow_remote": False,
         "langsmith_tracing_enabled": False,
+        "langsmith_endpoint": "https://api.smith.langchain.com",
+        "langsmith_project": "agent-shell",
+        "langsmith_workspace_id": None,
+        "langsmith_api_key": {"configured": False},
         "cors_origins": [],
         "trusted_proxy_cidrs": [],
         "management_token": {"configured": True},
@@ -74,6 +82,11 @@ def test_valid_system_settings_are_atomic_and_take_effect_after_restart(
         json=_payload(
             port=9123,
             langsmith_tracing_enabled=True,
+            langsmith_project="workflow-debug",
+            langsmith_api_key={
+                "operation": "replace",
+                "value": "langsmith-test-key",
+            },
             cors_origins=["https://CONSOLE.example:8443"],
         ),
     )
@@ -82,11 +95,15 @@ def test_valid_system_settings_are_atomic_and_take_effect_after_restart(
     assert response.json()["restart_required"] is True
     assert response.json()["port"] == 9123
     assert response.json()["langsmith_tracing_enabled"] is True
+    assert response.json()["langsmith_api_key"] == {"configured": True}
+    assert "langsmith-test-key" not in response.text
     assert response.json()["cors_origins"] == ["https://console.example:8443"]
     assert app.state.settings.port == 19100
     document = yaml.safe_load(settings_path.read_text(encoding="utf-8"))
     assert document["settings"]["port"] == 9123
     assert document["settings"]["langsmith_tracing_enabled"] is True
+    assert document["settings"]["langsmith_project"] == "workflow-debug"
+    assert "langsmith_api_key" not in document["settings"]
     assert document["settings"]["cors_origins"] == ["https://console.example:8443"]
     restarted = get_settings(
         application_home=tmp_path,
@@ -94,7 +111,15 @@ def test_valid_system_settings_are_atomic_and_take_effect_after_restart(
     )
     assert restarted.port == 9123
     assert restarted.langsmith_tracing_enabled is True
+    assert restarted.langsmith_api_key is not None
+    assert restarted.langsmith_api_key.get_secret_value() == "langsmith-test-key"
     assert restarted.cors_origins == ("https://console.example:8443",)
+    reloaded_repository = FileConfigRepository(tmp_path / "data")
+    reloaded_repository.set_secret("AGENT_SHELL_API_KEY", "another-shell-key")
+    env_text = (tmp_path / "data" / "config" / "agent-shell.env").read_text(
+        encoding="utf-8"
+    )
+    assert "LANGSMITH_API_KEY=langsmith-test-key" in env_text
 
 
 def test_invalid_candidate_does_not_write_or_reveal_replacement_secrets(

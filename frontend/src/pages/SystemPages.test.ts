@@ -22,6 +22,10 @@ const currentSettings: SystemSettings = {
   port: 19100,
   allow_remote: false,
   langsmith_tracing_enabled: false,
+  langsmith_endpoint: 'https://api.smith.langchain.com',
+  langsmith_project: 'agent-shell',
+  langsmith_workspace_id: null,
+  langsmith_api_key: { configured: true },
   management_token: { configured: true },
   cors_origins: [],
   trusted_proxy_cidrs: [],
@@ -73,10 +77,10 @@ describe('SystemSettingsPage', () => {
     await flushPromises()
 
     const cards = wrapper.findAll('[data-testid^="system-card-"]')
-    expect(cards).toHaveLength(4)
+    expect(cards).toHaveLength(5)
     expect(cards.every((card) => !card.classes().includes('card-primary'))).toBe(true)
     expect(cards.map((card) => card.get('.card-header i').classes().find((name) => name.startsWith('bi-'))))
-      .toEqual(['bi-hdd-network', 'bi-key', 'bi-sliders', 'bi-shield-lock'])
+      .toEqual(['bi-hdd-network', 'bi-key', 'bi-sliders', 'bi-gear', 'bi-shield-lock'])
     expect(cards.every((card) => card.get('.card-title').element.tagName === 'H2')).toBe(true)
 
     const saveButtons = wrapper.findAll('button').filter((button) => button.text() === 'common.save')
@@ -89,6 +93,10 @@ describe('SystemSettingsPage', () => {
       port: 19100,
       allow_remote: false,
       langsmith_tracing_enabled: false,
+      langsmith_endpoint: 'https://api.smith.langchain.com',
+      langsmith_project: 'agent-shell',
+      langsmith_workspace_id: null,
+      langsmith_api_key: { operation: 'keep' },
       management_token: { operation: 'preserve' },
       cors_origins: [],
       trusted_proxy_cidrs: [],
@@ -133,6 +141,7 @@ describe('SystemSettingsPage', () => {
     await wrapper.get('#max-initial-messages').setValue('2500')
     await wrapper.get('#interception-test').setValue(true)
     await wrapper.get('#langsmith-tracing').setValue(true)
+    await wrapper.get('#langsmith-api-key').setValue('new-langsmith-key')
     const textareas = wrapper.findAll('textarea')
     await textareas[0]!.setValue('http://localhost:3000\nhttp://127.0.0.1:3000')
     await textareas[1]!.setValue('127.0.0.1/32')
@@ -145,6 +154,10 @@ describe('SystemSettingsPage', () => {
       port: 21000,
       allow_remote: true,
       langsmith_tracing_enabled: true,
+      langsmith_endpoint: 'https://api.smith.langchain.com',
+      langsmith_project: 'agent-shell',
+      langsmith_workspace_id: null,
+      langsmith_api_key: { operation: 'replace', value: 'new-langsmith-key' },
       management_token: { operation: 'replace', value: 'new-management-password' },
       cors_origins: ['http://localhost:3000', 'http://127.0.0.1:3000'],
       trusted_proxy_cidrs: ['127.0.0.1/32'],
@@ -156,7 +169,7 @@ describe('SystemSettingsPage', () => {
     expect(api.updateInterceptionTest).toHaveBeenCalledWith(true)
   })
 
-  it('reveals only newly entered credentials and clears an edited API key through the unified save', async () => {
+  it('reveals only newly entered credentials and clears edited API keys through the unified save', async () => {
     const api = {
       ...validationSettingsApi(),
       getSystemSettings: vi.fn().mockResolvedValue(currentSettings),
@@ -174,16 +187,22 @@ describe('SystemSettingsPage', () => {
 
     const managementPassword = wrapper.get('#management-password')
     const apiKey = wrapper.get('#api-server-key')
+    const langsmithApiKey = wrapper.get('#langsmith-api-key')
     expect(managementPassword.attributes('type')).toBe('password')
     expect(apiKey.attributes('type')).toBe('password')
+    expect(langsmithApiKey.attributes('type')).toBe('password')
     await managementPassword.setValue('visible-management-password')
     await managementPassword.element.parentElement!.querySelector('button')!.click()
     await apiKey.setValue('temporary-key')
     await apiKey.element.parentElement!.querySelector('button')!.click()
+    await langsmithApiKey.setValue('temporary-langsmith-key')
+    await langsmithApiKey.element.parentElement!.querySelector('button')!.click()
     expect(managementPassword.attributes('type')).toBe('text')
     expect(apiKey.attributes('type')).toBe('text')
+    expect(langsmithApiKey.attributes('type')).toBe('text')
 
     await apiKey.setValue('')
+    await langsmithApiKey.setValue('')
     await wrapper.get('[data-testid="system-settings-form"]').trigger('submit')
     await flushPromises()
 
@@ -191,6 +210,9 @@ describe('SystemSettingsPage', () => {
       api_key: { operation: 'clear' },
       max_initial_messages: 1000,
     })
+    expect(api.updateSystemSettings).toHaveBeenCalledWith(expect.objectContaining({
+      langsmith_api_key: { operation: 'clear' },
+    }))
   })
 
 })

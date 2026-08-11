@@ -12,6 +12,7 @@ from agent_shell.runtime.capabilities import DeepAgentsWorkspace
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.middleware_packages.runtime import MiddlewarePackageRuntime
 from agent_shell.runtime.errors import AgentRuntimeError
+from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.model_response import ModelResponse
 from agent_shell.runtime.media_response import MainAgentMediaResponse
 from agent_shell.runtime.output_event_pool import OutputEventRectifier
@@ -24,6 +25,7 @@ from agent_shell.runtime.output_stream import (
 )
 from agent_shell.runtime.stream_transformers import RawCustomEventTransformer
 from agent_shell.storage.media_outputs import MediaOutputStore
+from agent_shell.runtime.workflow_debug import WorkflowDebugRun, WorkflowDebugService
 from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
 from langgraph.errors import GraphRecursionError
 
@@ -42,6 +44,13 @@ class AgentExecution:
     middleware_runtimes: tuple[MiddlewarePackageRuntime, ...] = ()
     event_observers: tuple[Callable[[OutputEvent], None], ...] = ()
     context: WorkflowRuntimeContext | None = None
+    run_config: dict[str, Any] | None = None
+    durability: str | None = None
+    debug_run: WorkflowDebugRun | None = None
+    runtime_diagnostics: RuntimeDiagnostics | None = None
+    request_id: str = ""
+    public_model: str = ""
+    agent_name: str = ""
     final_state: dict[str, Any] | None = None
     _started: bool = False
 
@@ -81,6 +90,40 @@ class AgentExecution:
 
     async def _stream_text_inner(self) -> AsyncIterator[str]:
 
+        async def finish_debug(
+            status: str,
+            *,
+            error_code: str = "",
+            error: BaseException | None = None,
+        ) -> None:
+            if self.debug_run is None:
+                return
+            try:
+                await self.debug_run.finish(
+                    status,
+                    error_code=error_code,
+                    error=error,
+                )
+            except Exception as exc:
+                if self.runtime_diagnostics is not None:
+                    self.runtime_diagnostics.observation_error(
+                        exc,
+                        request_id=self.request_id,
+                        model=self.public_model,
+                        agent_name=self.agent_name,
+                        code="workflow_debug_record_failed",
+                    )
+
+        def record_runtime_error(exc: BaseException, code: str) -> None:
+            if self.runtime_diagnostics is not None:
+                self.runtime_diagnostics.runtime_error(
+                    exc,
+                    request_id=self.request_id,
+                    model=self.public_model,
+                    agent_name=self.agent_name,
+                    code=code,
+                )
+
         def project_event(event: OutputEvent) -> list[str]:
             for observer in self.event_observers:
                 observer(event)
@@ -116,11 +159,17 @@ class AgentExecution:
                             r"The v3 streaming protocol on Pregel is experimental\."
                         ),
                     )
+                    config: dict[str, Any] = {
+                        "recursion_limit": GRAPH_RECURSION_LIMIT,
+                        **(self.run_config or {}),
+                    }
                     stream_kwargs: dict[str, Any] = {
-                        "config": {"recursion_limit": GRAPH_RECURSION_LIMIT},
+                        "config": config,
                         "version": "v3",
                         "transformers": (RawCustomEventTransformer,),
                     }
+                    if self.durability is not None:
+                        stream_kwargs["durability"] = self.durability
                     if self.context is not None:
                         stream_kwargs["context"] = self.context
                     stream = await self.graph.astream_events(
@@ -196,6 +245,7 @@ class AgentExecution:
         except asyncio.CancelledError:
             self.normalizer.abort_main_agent_messages()
             self.rectifier.discard()
+            await finish_debug("cancelled", error_code="request_cancelled")
             raise
         except TimeoutError as exc:
             error = AgentRuntimeError(
@@ -205,10 +255,14 @@ class AgentExecution:
             )
             for rendered in failure_output(error.code):
                 yield rendered
+            record_runtime_error(error, error.code)
+            await finish_debug("failed", error_code=error.code, error=error)
             raise error from exc
         except AgentRuntimeError as exc:
             for rendered in failure_output(exc.code):
                 yield rendered
+            record_runtime_error(exc, exc.code)
+            await finish_debug("failed", error_code=exc.code, error=exc)
             raise
         except Exception as exc:
             if isinstance(exc, GraphRecursionError):
@@ -225,7 +279,10 @@ class AgentExecution:
                 )
             for rendered in failure_output(error.code):
                 yield rendered
+            record_runtime_error(error, error.code)
+            await finish_debug("failed", error_code=error.code, error=error)
             raise error from exc
+        await finish_debug("completed")
         for rendered in project_event(
             self.normalizer.lifecycle(
                 "end", status="completed", finish_reason=self.normalizer.finish_reason
@@ -244,9 +301,14 @@ class AgentRuntime:
         self,
         builder: AgentBuilder,
         media_outputs: MediaOutputStore,
+        *,
+        workflow_debug: WorkflowDebugService | None = None,
+        runtime_diagnostics: RuntimeDiagnostics | None = None,
     ) -> None:
         self._builder = builder
         self._media_outputs = media_outputs
+        self._workflow_debug = workflow_debug
+        self._runtime_diagnostics = runtime_diagnostics
 
     async def build_agent(
         self,
@@ -288,6 +350,9 @@ class AgentRuntime:
         workflow_built: tuple[tuple[str, BuiltAgent], ...] = (),
         workflow_non_agent_filter: Callable[[OutputEvent], bool] | None = None,
         context: WorkflowRuntimeContext | None = None,
+        run_config: dict[str, Any] | None = None,
+        durability: str | None = None,
+        debug_run: WorkflowDebugRun | None = None,
     ) -> AgentExecution:
         observers = []
         if event_observer is not None:
@@ -340,6 +405,13 @@ class AgentRuntime:
                 for _, agent in workflow_agents[1:]
             ),
             context=context,
+            run_config=run_config,
+            durability=durability,
+            debug_run=debug_run,
+            runtime_diagnostics=self._runtime_diagnostics,
+            request_id=request_id,
+            public_model=public_model,
+            agent_name=built.agent_name,
         )
 
     async def start(
@@ -410,6 +482,33 @@ class AgentRuntime:
                 "graph": document.model_dump(mode="json"),
             },
         )
+        workflow_debug = getattr(self, "_workflow_debug", None)
+        runtime_diagnostics = getattr(self, "_runtime_diagnostics", None)
+        workflow_identity = dict(workflow_snapshot or {})
+        debug_run = (
+            workflow_debug.create_run(
+                request_id=request_id,
+                workflow_id=str(workflow_identity.get("id", "")),
+                workflow_name=str(
+                    workflow_identity.get("name", public_model or "workflow")
+                ),
+                messages_sha=context.messages_sha,
+            )
+            if workflow_debug is not None
+            else None
+        )
+        if debug_run is not None:
+            try:
+                debug_run.begin()
+            except Exception as exc:
+                if runtime_diagnostics is not None:
+                    runtime_diagnostics.observation_error(
+                        exc,
+                        request_id=request_id,
+                        model=public_model,
+                        agent_name="",
+                        code="workflow_debug_record_failed",
+                    )
         built_agents: list[tuple[str, BuiltAgent]] = []
         workspace = None
         try:
@@ -439,10 +538,48 @@ class AgentRuntime:
             graph = compile_workflow(
                 document,
                 node_graphs={node_id: agent.graph for node_id, agent in built_agents},
+                checkpointer=(
+                    workflow_debug.checkpointer
+                    if workflow_debug is not None
+                    else None
+                ),
             )
-        except Exception:
+        except asyncio.CancelledError:
             for _, agent in built_agents:
                 await agent.middleware_runtime.close()
+            if debug_run is not None:
+                await debug_run.finish("cancelled", error_code="request_cancelled")
+            raise
+        except Exception as exc:
+            for _, agent in built_agents:
+                await agent.middleware_runtime.close()
+            error_code = (
+                exc.code
+                if isinstance(exc, AgentRuntimeError)
+                else "workflow_assembly_failed"
+            )
+            if runtime_diagnostics is not None:
+                runtime_diagnostics.runtime_error(
+                    exc,
+                    request_id=request_id,
+                    model=public_model,
+                    agent_name="",
+                    code=error_code,
+                )
+            if debug_run is not None:
+                try:
+                    await debug_run.finish(
+                        "failed", error_code=error_code, error=exc
+                    )
+                except Exception as observation_error:
+                    if runtime_diagnostics is not None:
+                        runtime_diagnostics.observation_error(
+                            observation_error,
+                            request_id=request_id,
+                            model=public_model,
+                            agent_name="",
+                            code="workflow_debug_record_failed",
+                        )
             raise
         first_node_id, built = built_agents[0]
         return self._execution(
@@ -456,4 +593,7 @@ class AgentRuntime:
             public_model=public_model,
             workflow_non_agent_filter=workflow_non_agent_filter,
             context=context,
+            run_config=debug_run.config() if debug_run is not None else None,
+            durability="sync" if debug_run is not None else None,
+            debug_run=debug_run,
         )

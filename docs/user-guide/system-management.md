@@ -39,7 +39,8 @@ data/
 ## 系统设置
 
 【系统 / 系统配置】管理监听地址、端口、远程访问、管理密码、API Key、初始消息条数上限、拦截测试、
-LangSmith 追踪、CORS origins 和可信代理 CIDR。secret 只显示是否配置，不回显明文。
+LangSmith tracing、Endpoint、Project、可选 Workspace ID 与 write-only API Key，以及 CORS origins 和可信代理
+CIDR。secret 只显示是否配置，不回显明文。
 
-API Key、消息上限和拦截测试立即生效；host、端口、远程访问、管理密码、CORS 和可信代理重启后生效。
+API Key、消息上限和拦截测试立即生效；host、端口、远程访问、管理密码、LangSmith、CORS 和可信代理重启后生效。
 远程部署要求见[安全与部署](../security-and-deployment.md)。

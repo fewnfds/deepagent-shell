@@ -289,7 +289,8 @@ def test_project_langsmith_tracing_setting_is_explicit_and_portable(
 ) -> None:
     _write_environment_file(
         tmp_path,
-        "AGENT_SHELL_MANAGEMENT_TOKEN=portable-management-secret\n",
+        "AGENT_SHELL_MANAGEMENT_TOKEN=portable-management-secret\n"
+        "LANGSMITH_API_KEY=portable-langsmith-key\n",
     )
     _write_system_settings(tmp_path, langsmith_tracing_enabled=True)
 
@@ -299,6 +300,8 @@ def test_project_langsmith_tracing_setting_is_explicit_and_portable(
     )
 
     assert settings.langsmith_tracing_enabled is True
+    assert settings.langsmith_api_key is not None
+    assert settings.langsmith_api_key.get_secret_value() == "portable-langsmith-key"
 
 
 def test_management_password_has_no_application_length_policy(

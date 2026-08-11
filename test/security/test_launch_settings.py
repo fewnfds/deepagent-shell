@@ -125,6 +125,8 @@ def test_project_langsmith_tracing_boundary_is_explicit(
     monkeypatch.setenv("LANGSMITH_TRACING", "true" if not enabled else "false")
     monkeypatch.setenv("LANGCHAIN_TRACING_V2", "true" if not enabled else "false")
     monkeypatch.setenv("LANGCHAIN_TRACING", "true" if not enabled else "false")
+    if enabled:
+        monkeypatch.setenv("LANGSMITH_API_KEY", "langsmith-test-key")
     monkeypatch.setattr(launcher.uvicorn, "run", lambda *_args, **_kwargs: None)
 
     assert launcher.main(serve_frontend=False) == 0

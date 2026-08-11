@@ -111,11 +111,20 @@ type SystemSecretUpdate =
   | { operation: 'preserve' }
   | { operation: 'replace'; value: string }
 
+type OptionalSecretUpdate =
+  | { operation: 'keep' }
+  | { operation: 'replace'; value: string }
+  | { operation: 'clear' }
+
 export interface SystemSettings {
   host: string
   port: number
   allow_remote: boolean
   langsmith_tracing_enabled: boolean
+  langsmith_endpoint: string
+  langsmith_project: string
+  langsmith_workspace_id: string | null
+  langsmith_api_key: { configured: boolean }
   management_token: { configured: boolean }
   cors_origins: string[]
   trusted_proxy_cidrs: string[]
@@ -128,6 +137,10 @@ export interface SystemSettingsUpdate {
   port: number
   allow_remote: boolean
   langsmith_tracing_enabled: boolean
+  langsmith_endpoint: string
+  langsmith_project: string
+  langsmith_workspace_id: string | null
+  langsmith_api_key: OptionalSecretUpdate
   management_token: SystemSecretUpdate
   cors_origins: string[]
   trusted_proxy_cidrs: string[]

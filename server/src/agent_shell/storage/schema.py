@@ -48,6 +48,33 @@ ON runtime_diagnostics(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_runtime_diagnostics_request
 ON runtime_diagnostics(request_id);
 
+CREATE TABLE IF NOT EXISTS workflow_runs (
+    thread_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL UNIQUE,
+    request_id TEXT NOT NULL,
+    workflow_id TEXT NOT NULL,
+    workflow_name TEXT NOT NULL,
+    messages_sha TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (
+        status IN ('running', 'completed', 'failed', 'cancelled')
+    ),
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    error_code TEXT NOT NULL,
+    langsmith_project TEXT NOT NULL,
+    tracing_enabled INTEGER NOT NULL CHECK (tracing_enabled IN (0, 1)),
+    run_tree_json TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_started
+ON workflow_runs(started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_request
+ON workflow_runs(request_id);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow
+ON workflow_runs(workflow_id, started_at DESC);
+
 CREATE TABLE IF NOT EXISTS media_output_assets (
     id TEXT PRIMARY KEY,
     request_id TEXT NOT NULL,

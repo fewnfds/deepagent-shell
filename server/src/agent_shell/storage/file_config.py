@@ -12,6 +12,7 @@ import yaml
 
 CONFIG_VERSION = 1
 API_KEY_ENV = "AGENT_SHELL_API_KEY"
+LANGSMITH_API_KEY_ENV = "LANGSMITH_API_KEY"
 
 
 def _default_config() -> dict[str, Any]:
@@ -32,6 +33,9 @@ def _default_system() -> dict[str, Any]:
             "port": 19100,
             "allow_remote": False,
             "langsmith_tracing_enabled": False,
+            "langsmith_endpoint": "https://api.smith.langchain.com",
+            "langsmith_project": "agent-shell",
+            "langsmith_workspace_id": None,
             "cors_origins": [],
             "trusted_proxy_cidrs": [],
         },
@@ -39,6 +43,7 @@ def _default_system() -> dict[str, Any]:
         "history_retention": {
             "interception_history": 20,
             "runtime_log": 20,
+            "workflow_debug_history": 50,
         },
         "runtime_control": {
             "interception_enabled": False,
@@ -190,7 +195,11 @@ class FileConfigRepository:
 
     @staticmethod
     def _allowed_environment_names(config: dict[str, Any]) -> set[str]:
-        names = {"AGENT_SHELL_MANAGEMENT_TOKEN", API_KEY_ENV}
+        names = {
+            "AGENT_SHELL_MANAGEMENT_TOKEN",
+            API_KEY_ENV,
+            LANGSMITH_API_KEY_ENV,
+        }
         models = config.get("components", {}).get("model", [])
         if not isinstance(models, list):
             return names

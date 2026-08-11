@@ -20,8 +20,8 @@ CORS 只接受明确的 `http://` 或 `https://` origin，不支持 `*`、userin
 
 ## Secret 与用户内容
 
-Provider credential、API Key 和管理密码保存在实例 `data/config/` 中：YAML 只保存模型 key 的变量引用，
-`agent-shell.env` 保存三类敏感值；当前文件不是加密 vault。保护整个 `data/` 的磁盘权限、备份和传输，
+Provider credential、API Key、管理密码和 LangSmith API Key 保存在实例 `data/config/` 中：YAML 只保存模型 key
+的变量引用，`agent-shell.env` 保存实际敏感值；当前文件不是加密 vault。保护整个 `data/` 的磁盘权限、备份和传输，
 不要提交 Git 或公开分享。
 
 普通 API、DOM、系统日志和运行诊断不回显 credential、Bearer token、宿主敏感路径、traceback 或
@@ -54,7 +54,8 @@ Middleware 包没有 sandbox，以 Agent Shell 服务进程权限运行。它可
 
 部署者负责磁盘、内存、上传大小、外部映射和并发限制。文件管理文本编辑限制为 2 MiB；其他文件传输
 采用流式处理，但不构成实例配额。拦截记录和运行诊断使用可配置保存条数，系统日志使用文件大小上限。
-降低上限会永久裁剪旧数据。Workflow 执行历史和 checkpoint 当前为 TBD，暂不产生持久运行树。
+降低上限会永久裁剪旧数据。Workflow Debug 运行索引有界保存；官方 checkpoint 与索引共用实例 SQLite，删除运行
+记录时同步调用 checkpointer 删除对应 thread。
 
 ## 系统配置与变量
 
@@ -66,21 +67,26 @@ settings:
   port: 19100
   allow_remote: false
   langsmith_tracing_enabled: false
+  langsmith_endpoint: https://api.smith.langchain.com
+  langsmith_project: agent-shell
+  langsmith_workspace_id: null
   cors_origins: []
   trusted_proxy_cidrs: []
 ```
 
-`data/config/agent-shell.env` 只保存三类敏感变量：
+`data/config/agent-shell.env` 保存敏感变量：
 
 ```dotenv
 AGENT_SHELL_MANAGEMENT_TOKEN=<management password>
 AGENT_SHELL_API_KEY=<FastAPI/OpenAI shell key>
 AGENT_SHELL_MODEL_<id>_API_KEY=<model API key>
+LANGSMITH_API_KEY=<LangSmith API key>
 ```
 
 模型 YAML 使用 `$AGENT_SHELL_MODEL_<id>_API_KEY` 形式引用对应变量；其他字段（包括 prompt、base URL、filesystem、
-middleware 和 tool 配置）直接写入 YAML。`AGENT_SHELL_LANGSMITH_TRACING_ENABLED` 默认关闭。关闭时，正式进程会在本项目自己的进程环境中覆盖
-LangSmith/LangChain tracing 开关为 `false`；不会修改宿主机或其他进程的环境变量。开启后，LangSmith
-凭据、Endpoint、项目名和其他 tracing 选项仍由部署者自行配置，并应按敏感数据策略控制上传内容。
+middleware 和 tool 配置）直接写入 YAML。LangSmith 连接在系统配置中管理，保存后重启生效；进程使用官方
+`LANGSMITH_TRACING`、`LANGSMITH_API_KEY`、`LANGSMITH_ENDPOINT`、`LANGSMITH_PROJECT` 和可选
+`LANGSMITH_WORKSPACE_ID`。关闭时只在本项目进程环境中强制 tracing 为 `false`。开启后，标准 LangSmith trace
+可能上传 prompt、模型输出和工具输入/输出，必须按敏感数据策略控制。
 
 非敏感 `AGENT_SHELL_*` 启动变量不再作为配置来源；未知键和误放入环境文件的键会使启动失败。Windows 源码启动器读取当前 Clone 的 data 配置；启动和维护方式见[开发与版本](development-and-release.md)。

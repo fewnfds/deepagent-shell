@@ -20,6 +20,7 @@ _LANGSMITH_TRACING_ENVIRONMENT = (
     "LANGCHAIN_TRACING_V2",
     "LANGCHAIN_TRACING",
 )
+DEFAULT_LANGSMITH_ENDPOINT = "https://api.smith.langchain.com"
 
 
 def bearer_token_is_valid(value: str) -> bool:
@@ -84,6 +85,10 @@ class Settings(BaseSettings):
     port: int = Field(default=19100, ge=1, le=65535)
     allow_remote: bool = False
     langsmith_tracing_enabled: bool = False
+    langsmith_endpoint: str = DEFAULT_LANGSMITH_ENDPOINT
+    langsmith_project: str = "agent-shell"
+    langsmith_workspace_id: str | None = None
+    langsmith_api_key: SecretStr | None = None
     management_token: SecretStr | None = None
     cors_origins: Annotated[tuple[str, ...], NoDecode] = ()
     trusted_proxy_cidrs: Annotated[tuple[str, ...], NoDecode] = ()
@@ -125,6 +130,56 @@ class Settings(BaseSettings):
                 "must be a non-empty printable ASCII value without spaces"
             )
         return value
+
+    @field_validator("langsmith_api_key")
+    @classmethod
+    def validate_langsmith_api_key(
+        cls, value: SecretStr | None
+    ) -> SecretStr | None:
+        if value is None:
+            return None
+        secret = value.get_secret_value()
+        if not bearer_token_is_valid(secret):
+            raise ValueError(
+                "must be a non-empty printable ASCII value without spaces"
+            )
+        return value
+
+    @field_validator("langsmith_endpoint")
+    @classmethod
+    def validate_langsmith_endpoint(cls, value: str) -> str:
+        normalized = value.strip().rstrip("/")
+        parsed = urlsplit(normalized)
+        if (
+            parsed.scheme.lower() not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+        ):
+            raise ValueError("must be an HTTP(S) URL without userinfo, query, or fragment")
+        return normalized
+
+    @field_validator("langsmith_project")
+    @classmethod
+    def validate_langsmith_project(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized or len(normalized) > 200:
+            raise ValueError("must contain 1 to 200 characters")
+        return normalized
+
+    @field_validator("langsmith_workspace_id", mode="before")
+    @classmethod
+    def normalize_langsmith_workspace_id(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        normalized = str(value).strip()
+        if not normalized:
+            return None
+        if len(normalized) > 200:
+            raise ValueError("must not exceed 200 characters")
+        return normalized
 
     @field_validator("cors_origins", "trusted_proxy_cidrs", mode="before")
     @classmethod
@@ -203,6 +258,10 @@ class Settings(BaseSettings):
             keys.add("AGENT_SHELL_MANAGEMENT_TOKEN")
             actions.append("Configure the management Bearer token.")
 
+        if self.langsmith_tracing_enabled and self.langsmith_api_key is None:
+            keys.add("LANGSMITH_API_KEY")
+            actions.append("Configure the LangSmith API key or disable tracing.")
+
         if actions:
             raise SettingsError(tuple(keys), " ".join(actions))
 
@@ -268,16 +327,31 @@ class Settings(BaseSettings):
             directory.mkdir(parents=True, exist_ok=True)
 
 
-def configure_project_langsmith_tracing(enabled: bool) -> None:
+def configure_project_langsmith_tracing(settings: Settings) -> None:
     """Apply the project-local LangSmith tracing boundary to this process.
 
     LangChain reads these variables directly from the process environment. Setting
     them here affects Agent Shell and its children only; it does not change the
     host user's or any other process's environment.
     """
-    value = "true" if enabled else "false"
+    value = "true" if settings.langsmith_tracing_enabled else "false"
     for name in _LANGSMITH_TRACING_ENVIRONMENT:
         os.environ[name] = value
+    os.environ["LANGSMITH_ENDPOINT"] = settings.langsmith_endpoint
+    os.environ["LANGSMITH_PROJECT"] = settings.langsmith_project
+    optional = {
+        "LANGSMITH_API_KEY": (
+            settings.langsmith_api_key.get_secret_value()
+            if settings.langsmith_api_key is not None
+            else None
+        ),
+        "LANGSMITH_WORKSPACE_ID": settings.langsmith_workspace_id,
+    }
+    for name, item in optional.items():
+        if item is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = item
 
 
 def _known_environment_keys() -> set[str]:
@@ -351,7 +425,15 @@ def _error_keys(exc: ValidationError) -> tuple[str, ...]:
         if not location:
             continue
         field = str(location[0]).upper()
-        keys.add(field if field.startswith(ENV_PREFIX) else f"{ENV_PREFIX}{field}")
+        keys.add(
+            field
+            if field.startswith((ENV_PREFIX, "LANGSMITH_"))
+            else (
+                f"LANGSMITH_{field.removeprefix('LANGSMITH_')}"
+                if field == "LANGSMITH_API_KEY"
+                else f"{ENV_PREFIX}{field}"
+            )
+        )
     return tuple(keys)
 
 
@@ -389,6 +471,7 @@ def load_settings(
                 raise ValueError("system.settings must contain a mapping")
             system_values = dict(values)
         system_values.pop("management_token", None)
+        system_values.pop("langsmith_api_key", None)
         environment_values = _environment_file_values(env_path)
         management_token = (
             os.environ["AGENT_SHELL_MANAGEMENT_TOKEN"]
@@ -397,6 +480,13 @@ def load_settings(
         )
         if management_token is not None:
             system_values["management_token"] = management_token
+        langsmith_api_key = (
+            os.environ["LANGSMITH_API_KEY"]
+            if include_process_environment and "LANGSMITH_API_KEY" in os.environ
+            else environment_values.get("LANGSMITH_API_KEY")
+        )
+        if langsmith_api_key is not None:
+            system_values["langsmith_api_key"] = langsmith_api_key
         settings = Settings(**system_values)
     except ValidationError as exc:
         raise SettingsError(

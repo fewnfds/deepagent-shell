@@ -22,9 +22,11 @@ from agent_shell.api.provider_integrations import build_provider_integrations_ro
 from agent_shell.api.system_settings import build_system_settings_router
 from agent_shell.api.validation import build_validation_router
 from agent_shell.api.workflows import build_workflow_router
+from agent_shell.api.workflow_debug import build_workflow_debug_router
 from agent_shell.provider_http import ProviderHttpClients
 from agent_shell.provider_secrets import ProviderSecretResolver
 from agent_shell.runtime.request_snapshot import RequestSnapshotRuntime
+from agent_shell.runtime.workflow_debug import WorkflowDebugService
 from agent_shell.settings import (
     Settings,
     SettingsError,
@@ -55,6 +57,7 @@ from agent_shell.storage.runtime_diagnostics import RuntimeDiagnosticStore
 from agent_shell.storage.system_log_settings import MIB_BYTES, SystemLogSettingsStore
 from agent_shell.storage.validation_settings import ConfigurationValidationSettingsStore
 from agent_shell.storage.workflows import WorkflowStore
+from agent_shell.storage.workflow_runs import WorkflowRunStore
 from agent_shell.storage.event_feed import EventFeedStore
 from agent_shell.validation.service import ConfigurationValidationService
 from agent_shell.middleware_packages.validation import MiddlewarePackageValidationService
@@ -73,7 +76,7 @@ def create_app(
     )
     if settings is None:
         settings = get_settings(application_home=application_home)
-    configure_project_langsmith_tracing(settings.langsmith_tracing_enabled)
+    configure_project_langsmith_tracing(settings)
     settings.ensure_directories()
 
     environment_permissions = ()
@@ -110,6 +113,13 @@ def create_app(
         max_bytes=system_log_settings.snapshot()["max_size_mib"] * MIB_BYTES,
     )
     history_retention = HistoryRetentionStore(configuration)
+    workflow_run_store = WorkflowRunStore(database, history_retention)
+    workflow_debug = WorkflowDebugService(
+        settings.resolved_database_path(),
+        workflow_run_store,
+        tracing_enabled=settings.langsmith_tracing_enabled,
+        langsmith_project=settings.langsmith_project,
+    )
     runtime_control_settings = RuntimeControlSettingsStore(configuration)
     configuration_validation_settings = ConfigurationValidationSettingsStore(configuration)
     runtime_diagnostic_store = RuntimeDiagnosticStore(database, history_retention)
@@ -177,6 +187,8 @@ def create_app(
         skills_dir=skills_dir,
         provider_http_clients=provider_http_clients,
         media_outputs=media_outputs,
+        workflow_debug=workflow_debug,
+        runtime_diagnostics=runtime_diagnostics,
     )
 
     frontend_dir = Path(__file__).parent / "frontend_dist"
@@ -206,32 +218,36 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        event_logger.emit(
-            "security_configuration_loaded",
-            {
-                "deployment_mode": settings.deployment_mode,
-                "management_scope": "configured",
-                "api_scope": (
-                    "configured"
-                    if api_server_store.api_key() is not None
-                    else "unavailable"
-                ),
-                "trusted_proxy": bool(settings.trusted_proxy_cidrs),
-            },
-        )
-        event_logger.emit(
-            "service_started", {"deployment_mode": settings.deployment_mode}
-        )
+        await workflow_debug.start()
         try:
+            event_logger.emit(
+                "security_configuration_loaded",
+                {
+                    "deployment_mode": settings.deployment_mode,
+                    "management_scope": "configured",
+                    "api_scope": (
+                        "configured"
+                        if api_server_store.api_key() is not None
+                        else "unavailable"
+                    ),
+                    "trusted_proxy": bool(settings.trusted_proxy_cidrs),
+                },
+            )
+            event_logger.emit(
+                "service_started", {"deployment_mode": settings.deployment_mode}
+            )
             yield
         finally:
             try:
                 await provider_http_clients.aclose()
             finally:
-                event_logger.emit(
-                    "service_stopped", {"reason": "application_shutdown"}
-                )
-                runtime_diagnostics.close()
+                try:
+                    await workflow_debug.close()
+                finally:
+                    event_logger.emit(
+                        "service_stopped", {"reason": "application_shutdown"}
+                    )
+                    runtime_diagnostics.close()
 
     app = FastAPI(
         title=settings.app_name,
@@ -389,6 +405,7 @@ def create_app(
     app.state.media_outputs = media_outputs
     app.state.provider_http_clients = provider_http_clients
     app.state.event_feed = event_feed
+    app.state.workflow_debug = workflow_debug
     app.state.system_log_settings = system_log_settings
     app.add_middleware(
         ScopeAuthenticationMiddleware,
@@ -433,6 +450,7 @@ def create_app(
         )
     )
     app.include_router(build_workflow_router(workflow_store, block_store))
+    app.include_router(build_workflow_debug_router(workflow_debug))
     app.include_router(
         build_validation_router(
             configuration_validation,

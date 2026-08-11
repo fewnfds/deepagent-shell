@@ -40,12 +40,12 @@ fan-out、fan-in 或形成 LangGraph 支持的循环。画布 Start/End 直接�
 ## 当前边界
 
 - Workflow 只有一份当前图，没有 draft/published revision、发布审核或历史回滚；
-- 每次请求是一次新的完整运行，尚未接入 thread/checkpointer/resume；
+- 每次请求是一次新的完整运行，并建立独立 Debug thread；外层 Workflow 使用官方持久 checkpointer，但不提供 resume；
 - 当前不支持 conditional edge、可编程路由 Node、动态 worker、Interrupt 或 Subworkflow；多个 normal 出边会按
   LangGraph super-step 语义并行激活目标；
 - 图不完整、引用失效、Agent 装配失败或 Provider 失败时，本次请求直接返回错误；
-- Workflow execution history、thread、checkpoint/resume 和内部运行树当前为 TBD；日志中心只保留系统事件、请求级
-  错误诊断和显式 interception test，不提供旧 Main Agent 直连兼容。
+- Workflow Debug 管理 API 提供有界运行索引、结构运行树和 checkpoint 摘要；日志中心仍只保留系统事件、请求级
+  错误诊断和显式 interception test。当前不提供 Resume 或旧 Main Agent 直连兼容。
 
 ## API Key 与状态
 
