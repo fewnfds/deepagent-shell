@@ -4,7 +4,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
-import { managementApi, type CapabilityManifest, type ValidationIssue } from '@/api'
+import { managementApi, type CapabilityManifest, type WorkflowComponentManifest, type ValidationIssue } from '@/api'
 import ConfigDetail from '@/components/ConfigDetail.vue'
 import ConfigurationLibraryNav from '@/components/ConfigurationLibraryNav.vue'
 import DataTableWorkbench from '@/components/data-table/DataTableWorkbench.vue'
@@ -39,7 +39,7 @@ const { notify } = useToasts()
 const confirmation = useConfirmation()
 const api = computed<ConfigLibraryApi>(() => props.api ?? managementApi)
 
-const manifests = ref<CapabilityManifest[]>([])
+const manifests = ref<Array<CapabilityManifest | WorkflowComponentManifest>>([])
 const catalogReady = ref(false)
 const refreshing = ref(false)
 const catalogError = ref('')
@@ -103,7 +103,10 @@ async function loadCatalog(): Promise<void> {
   catalogError.value = ''
   try {
     const catalog = await api.value.getCatalog()
-    manifests.value = [...catalog.block_types].sort((left, right) => left.order - right.order)
+    manifests.value = [
+      ...catalog.block_types,
+      ...catalog.workflow_component_types,
+    ].sort((left, right) => left.order - right.order)
   } catch (error) {
     catalogError.value = managementError.describe(error).display
   } finally {

@@ -449,6 +449,7 @@ def create_app(
             configuration_validation,
             provider_http_clients,
             workflow_store,
+            runtime_dir,
         )
     )
     app.include_router(

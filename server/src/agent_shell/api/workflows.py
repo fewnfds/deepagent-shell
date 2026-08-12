@@ -47,6 +47,14 @@ def _save(
             message_key="errors.workflowFilesystemNotFound",
             message="The selected Workflow filesystem does not exist.",
         )
+    prepare_id = validated["workflow_prepare_id"]
+    if prepare_id is not None and blocks.get_block("workflow-prepare", prepare_id) is None:
+        raise management_error(
+            422,
+            code="workflow_prepare_not_found",
+            message_key="errors.workflowPrepareNotFound",
+            message="The selected Workflow Prepare component does not exist.",
+        )
     try:
         store.save_item(item_id, validated)
     except ValueError as exc:

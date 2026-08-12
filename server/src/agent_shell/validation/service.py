@@ -14,6 +14,7 @@ from agent_shell.capability_manifest import (
 )
 from agent_shell.contracts import (
     BLOCK_MODELS,
+    MANAGED_COMPONENT_MODELS,
     CapabilityReference,
     FilesystemToolConfigs,
     MainAgentProfile,
@@ -130,7 +131,7 @@ class ConfigurationValidationService:
         stage: str,
         owner_id: str = "",
     ) -> tuple[ValidationReport, dict[str, Any] | None]:
-        model = BLOCK_MODELS[block_type]
+        model = MANAGED_COMPONENT_MODELS[block_type]
         try:
             validated_model = model.model_validate(payload)
         except ValidationError as exc:
@@ -181,7 +182,7 @@ class ConfigurationValidationService:
         if storage_issue is not None:
             return ValidationReport(stage=stage, issues=(storage_issue,))
         try:
-            validated = BLOCK_MODELS[block_type].model_validate(payload).model_dump(
+            validated = MANAGED_COMPONENT_MODELS[block_type].model_validate(payload).model_dump(
                 mode="json"
             )
         except ValidationError as exc:
@@ -211,7 +212,7 @@ class ConfigurationValidationService:
         if storage_issue is not None:
             return ValidationReport(stage=stage, issues=(storage_issue,))
         try:
-            validated = BLOCK_MODELS[block_type].model_validate(payload).model_dump(
+            validated = MANAGED_COMPONENT_MODELS[block_type].model_validate(payload).model_dump(
                 mode="json"
             )
         except ValidationError as exc:
@@ -344,7 +345,7 @@ class ConfigurationValidationService:
         issues: list[ValidationIssue] = []
         for block in self._blocks.list_block_headers():
             block_type = block["block_type"]
-            if block_type not in BLOCK_MODELS:
+            if block_type not in MANAGED_COMPONENT_MODELS:
                 issues.append(
                     ValidationIssue(
                         code="storage.unknown_block_type",
@@ -361,7 +362,7 @@ class ConfigurationValidationService:
                         message_args={"type": block_type},
                     )
                 )
-        for block_type in BLOCK_MODELS:
+        for block_type in MANAGED_COMPONENT_MODELS:
             for block in self._blocks.list_blocks_internal(block_type):
                 issues.extend(
                     self.validate_stored_block(

@@ -15,6 +15,10 @@ export type BlockType =
   | 'summarization'
   | 'prompt-caching'
   | 'workflow-input-context'
+  | 'session-recorder'
+
+export type WorkflowComponentType = 'workflow-prepare'
+export type ManagedComponentType = BlockType | WorkflowComponentType
 
 export interface CapabilityManifest {
   type: BlockType
@@ -29,8 +33,18 @@ export interface CapabilityManifest {
   tool_names: string[]
 }
 
+export interface WorkflowComponentManifest {
+  type: WorkflowComponentType
+  terminology_key: string
+  label: string
+  order: number
+  icon_key: string
+  editor_key: string
+}
+
 export interface CatalogResponse {
   block_types: CapabilityManifest[]
+  workflow_component_types: WorkflowComponentManifest[]
   editor_defaults: Record<string, unknown>
 }
 
@@ -41,6 +55,9 @@ export interface BlockPayload {
 
 export type SavedBlock<TPayload extends BlockPayload = BlockPayload> = TPayload & {
   id: string
+  requirements_fingerprint?: string
+  dependency_status?: 'ready' | 'restart_required' | 'failed'
+  dependency_error_code?: string
 }
 
 export interface ModelProviderCatalogItem {
@@ -220,6 +237,8 @@ export interface WorkflowPayload {
   name: string
   description: string
   filesystem_id: string
+  state_mode: 'shared' | 'isolated'
+  workflow_prepare_id: string | null
   enabled: boolean
 }
 

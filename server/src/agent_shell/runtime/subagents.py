@@ -33,6 +33,7 @@ def build_subagent_specs(
     nodes: dict[SubagentNodeKey, ResolvedSubagent],
     workspace: DeepAgentsWorkspace,
     materialize_profile: ProfileMaterializer,
+    workflow_node_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Project direct children to Deep Agents' official SubAgent dictionaries."""
 
@@ -41,6 +42,7 @@ def build_subagent_specs(
             nodes[edge.target_key],
             workspace=workspace,
             materialize_profile=materialize_profile,
+            workflow_node_id=workflow_node_id,
         )
         for edge in roots
     ]
@@ -51,6 +53,7 @@ def _build_subagent_spec(
     *,
     workspace: DeepAgentsWorkspace,
     materialize_profile: ProfileMaterializer,
+    workflow_node_id: str | None,
 ) -> dict[str, Any]:
     child = materialize_profile(
         node.references,
@@ -59,10 +62,16 @@ def _build_subagent_spec(
         scope="subagent",
         owner_id=node.key,
         owner_name=node.name,
+        workflow_node_id=workflow_node_id,
         workspace=workspace,
         disabled_capabilities=node.disabled_capabilities,
     )
     middleware: list[Any] = [
+        *(
+            [child.session_recorder_middleware]
+            if child.session_recorder_middleware is not None
+            else []
+        ),
         AgentShellStateMiddleware(),
         ToolErrorBoundaryMiddleware(),
         *child.middleware,

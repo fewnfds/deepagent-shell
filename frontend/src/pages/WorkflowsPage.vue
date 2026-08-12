@@ -29,10 +29,18 @@ const formOpen = ref(false)
 const saving = ref(false)
 const formError = ref('')
 const filesystems = ref<SavedBlock[]>([])
+const workflowPrepares = ref<SavedBlock[]>([])
 const form = ref<WorkflowPayload>(blankWorkflow())
 
 function blankWorkflow(): WorkflowPayload {
-  return { name: '', description: '', filesystem_id: '', enabled: true }
+  return {
+    name: '',
+    description: '',
+    filesystem_id: '',
+    state_mode: 'shared',
+    workflow_prepare_id: null,
+    enabled: true,
+  }
 }
 
 function openNew(): void {
@@ -48,6 +56,8 @@ function openEdit(workflow: Workflow): void {
     name: workflow.name,
     description: workflow.description,
     filesystem_id: workflow.filesystem_id,
+    state_mode: workflow.state_mode,
+    workflow_prepare_id: workflow.workflow_prepare_id,
     enabled: workflow.enabled,
   }
   formError.value = ''
@@ -68,6 +78,8 @@ async function save(): Promise<void> {
       name: form.value.name.trim(),
       description: form.value.description.trim(),
       filesystem_id: form.value.filesystem_id,
+      state_mode: form.value.state_mode,
+      workflow_prepare_id: form.value.workflow_prepare_id || null,
       enabled: form.value.enabled,
     }
     if (editingId.value) await managementApi.updateWorkflow(editingId.value, payload)
@@ -88,7 +100,10 @@ function filesystemName(id: string): string {
 
 onMounted(async () => {
   try {
-    filesystems.value = await managementApi.listBlocks('filesystem')
+    ;[filesystems.value, workflowPrepares.value] = await Promise.all([
+      managementApi.listBlocks('filesystem'),
+      managementApi.listBlocks('workflow-prepare'),
+    ])
   } catch (error) {
     notify({
       tone: 'danger',
@@ -117,6 +132,11 @@ const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
       key: 'filesystem',
       label: () => t('workflows.fields.filesystem'),
       value: (row) => filesystemName(row.filesystem_id),
+    },
+    {
+      key: 'state-mode',
+      label: () => t('workflows.fields.stateMode'),
+      value: (row) => t(`workflows.stateModes.${row.state_mode}`),
     },
     {
       key: 'enabled',
@@ -176,6 +196,26 @@ const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
     <form id="workflow-form" @submit.prevent="save">
       <FormField field-path="name" label-key="workflows.fields.name">
         <LteInput v-model="form.name" maxlength="120" required />
+      </FormField>
+      <FormField field-path="state_mode" label-key="workflows.fields.stateMode">
+        <div class="d-flex flex-wrap gap-3">
+          <div class="form-check">
+            <input id="workflow-state-shared" v-model="form.state_mode" class="form-check-input" type="radio" value="shared">
+            <label class="form-check-label" for="workflow-state-shared">{{ t('workflows.stateModes.shared') }}</label>
+          </div>
+          <div class="form-check">
+            <input id="workflow-state-isolated" v-model="form.state_mode" class="form-check-input" type="radio" value="isolated">
+            <label class="form-check-label" for="workflow-state-isolated">{{ t('workflows.stateModes.isolated') }}</label>
+          </div>
+        </div>
+      </FormField>
+      <FormField field-path="workflow_prepare_id" label-key="workflows.fields.prepare">
+        <select v-model="form.workflow_prepare_id" class="form-select">
+          <option :value="null">{{ t('common.none') }}</option>
+          <option v-for="prepare in workflowPrepares" :key="prepare.id" :value="prepare.id">
+            {{ prepare.name }}
+          </option>
+        </select>
       </FormField>
       <FormField field-path="description" label-key="workflows.fields.description">
         <LteTextarea v-model="form.description" :rows="4" maxlength="2000" />

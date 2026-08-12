@@ -19,6 +19,7 @@ def test_direct_subagents_become_official_dictionary_specs_with_shared_workspace
         scope,
         owner_id,
         owner_name,
+        workflow_node_id,
         workspace,
         disabled_capabilities,
     ):
@@ -26,6 +27,7 @@ def test_direct_subagents_become_official_dictionary_specs_with_shared_workspace
         assert scope == "subagent"
         assert owner_id in {"reader-id", "writer-id"}
         assert disabled_capabilities == frozenset()
+        assert workflow_node_id is None
         materialized_workspaces.append(workspace)
         return SimpleNamespace(
             model=object(),
@@ -34,6 +36,7 @@ def test_direct_subagents_become_official_dictionary_specs_with_shared_workspace
             middleware=(),
             package_middleware=(),
             extra_middleware=(),
+            session_recorder_middleware=None,
             tool_choice=None,
             model_settings={},
             response_format=None,

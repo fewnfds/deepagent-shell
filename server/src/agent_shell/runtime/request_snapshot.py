@@ -130,6 +130,7 @@ class RequestSnapshotRuntime:
                     provider_http_clients=self._provider_http_clients,
                 ),
                 self._media_outputs,
+                blocks=blocks,
                 workflow_debug=self._workflow_debug,
                 runtime_diagnostics=self._runtime_diagnostics,
             )

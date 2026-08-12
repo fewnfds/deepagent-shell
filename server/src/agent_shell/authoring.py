@@ -20,6 +20,8 @@ from agent_shell.contracts import (
 from agent_shell.plugins.workflow_input_context.contracts import (
     WorkflowInputContextBlock,
 )
+from agent_shell.plugins.session_recorder.contracts import SessionRecorderBlock
+from agent_shell.workflow_prepare import WorkflowPrepareBlock
 
 
 # These text snapshots are management-editor data. Production catalog reads must not
@@ -498,6 +500,12 @@ _EDITOR_DEFAULTS = {
     "workflow_input_context": WorkflowInputContextBlock(
         name="Workflow input context"
     ).model_dump(mode="json", exclude={"name"}),
+    "session_recorder": SessionRecorderBlock(name="Session recorder").model_dump(
+        mode="json", exclude={"name"}
+    ),
+    "workflow_prepare": WorkflowPrepareBlock(name="Workflow prepare").model_dump(
+        mode="json", exclude={"name"}
+    ),
 }
 
 

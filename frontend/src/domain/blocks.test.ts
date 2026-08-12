@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   blockAdapters,
   blockTypes,
+  managedComponentTypes,
   customMiddlewareAdapter,
   customToolAdapter,
   filesystemAdapter,
@@ -59,7 +60,7 @@ const todoDefaults: TodoListDefaults = {
 }
 const workflowInputDefaults: WorkflowInputContextDefaults = {
   enabled: true,
-  apply_to: ['main_agent', 'subagent'],
+  python_requirements: [],
   custom_transform_enabled: false,
   custom_transform_source: '',
   system_promote_enabled: true,
@@ -80,7 +81,7 @@ function modelRecord(): ModelApiRecord {
 
 describe('block adapters', () => {
   it('registers exactly one explicit adapter for every current block type', () => {
-    expect(Object.keys(blockAdapters)).toEqual(blockTypes)
+    expect(Object.keys(blockAdapters)).toEqual(managedComponentTypes)
   })
 
   it('maps model credentials and nullable parameters without validating provider behavior', () => {
@@ -311,7 +312,8 @@ describe('block adapters', () => {
     const inputContext = workflowInputContextAdapter.blank(workflowInputDefaults)
     inputContext.name = ' Input context '
     inputContext.custom_transform_enabled = true
-    inputContext.custom_transform_source = 'def transform(messages, read_file, config):\n    return messages'
+    inputContext.custom_transform_source = 'def transform(messages, read_file, config, state, context):\n    return messages'
+    inputContext.python_requirements = ['PyYAML>=6', 'PyYAML>=6']
     inputContext.slots.push({
       _key: 'slot', enabled: true, role: 'system', file: ' /prompt.txt ',
       fallback_files: ['/fallback.txt', '/fallback.txt'], literal: 'fallback',
@@ -320,9 +322,9 @@ describe('block adapters', () => {
     expect(workflowInputContextAdapter.toPayload(inputContext)).toEqual({
       name: 'Input context',
       enabled: true,
-      apply_to: ['main_agent', 'subagent'],
+      python_requirements: ['PyYAML>=6'],
       custom_transform_enabled: true,
-      custom_transform_source: 'def transform(messages, read_file, config):\n    return messages',
+      custom_transform_source: 'def transform(messages, read_file, config, state, context):\n    return messages',
       system_promote_enabled: true,
       system_promote_min_chars: 10,
       demote_non_top_system: true,
@@ -337,6 +339,6 @@ describe('block adapters', () => {
       }],
     })
 
-    expect(workflowInputContextAdapter.fromApi({ apply_to: [] }, workflowInputDefaults).apply_to).toEqual([])
+    expect(workflowInputContextAdapter.fromApi({ python_requirements: ['httpx'] }, workflowInputDefaults).python_requirements).toEqual(['httpx'])
   })
 })

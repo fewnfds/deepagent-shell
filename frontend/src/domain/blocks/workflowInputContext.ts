@@ -9,7 +9,6 @@ import {
 } from './shared'
 
 export type WorkflowInputContextRole = 'user' | 'assistant' | 'system'
-export type WorkflowInputContextScope = 'main_agent' | 'subagent'
 
 export interface WorkflowInputContextSlotDraft {
   _key: string
@@ -24,7 +23,8 @@ export interface WorkflowInputContextSlotDraft {
 
 export interface WorkflowInputContextDraft extends BlockDraftBase {
   enabled: boolean
-  apply_to: WorkflowInputContextScope[]
+  python_requirements: string[]
+  dependency_status: 'ready' | 'restart_required' | 'failed'
   custom_transform_enabled: boolean
   custom_transform_source: string
   system_promote_enabled: boolean
@@ -35,7 +35,7 @@ export interface WorkflowInputContextDraft extends BlockDraftBase {
 
 export interface WorkflowInputContextDefaults {
   enabled: boolean
-  apply_to: WorkflowInputContextScope[]
+  python_requirements: string[]
   custom_transform_enabled: boolean
   custom_transform_source: string
   system_promote_enabled: boolean
@@ -46,7 +46,7 @@ export interface WorkflowInputContextDefaults {
 
 interface WorkflowInputContextPayload extends BlockPayloadBase {
   enabled: boolean
-  apply_to: WorkflowInputContextScope[]
+  python_requirements: string[]
   custom_transform_enabled: boolean
   custom_transform_source: string
   system_promote_enabled: boolean
@@ -92,7 +92,8 @@ export const workflowInputContextAdapter = {
       id: '',
       name: '',
       enabled: defaults.enabled,
-      apply_to: [...defaults.apply_to],
+      python_requirements: [...defaults.python_requirements],
+      dependency_status: 'ready',
       custom_transform_enabled: defaults.custom_transform_enabled,
       custom_transform_source: defaults.custom_transform_source,
       system_promote_enabled: defaults.system_promote_enabled,
@@ -103,16 +104,14 @@ export const workflowInputContextAdapter = {
   },
   fromApi(value: unknown, defaults: WorkflowInputContextDefaults): WorkflowInputContextDraft {
     const source = isRecord(value) ? value : {}
-    const applyTo = Array.isArray(source.apply_to)
-      ? source.apply_to.filter((item): item is WorkflowInputContextScope => item === 'main_agent' || item === 'subagent')
-      : [...defaults.apply_to]
     return {
       id: stringValue(source.id),
       name: stringValue(source.name),
       enabled: typeof source.enabled === 'boolean' ? source.enabled : defaults.enabled,
-      apply_to: Array.isArray(source.apply_to)
-        ? [...new Set(applyTo)]
-        : [...defaults.apply_to],
+      python_requirements: stringList(source.python_requirements),
+      dependency_status: source.dependency_status === 'failed' || source.dependency_status === 'restart_required'
+        ? source.dependency_status
+        : 'ready',
       custom_transform_enabled: source.custom_transform_enabled === true,
       custom_transform_source: stringValue(source.custom_transform_source, defaults.custom_transform_source),
       system_promote_enabled: source.system_promote_enabled !== false,
@@ -127,7 +126,7 @@ export const workflowInputContextAdapter = {
     return {
       name: cleanName(value.name),
       enabled: value.enabled,
-      apply_to: [...new Set(value.apply_to)],
+      python_requirements: uniqueStrings(value.python_requirements),
       custom_transform_enabled: value.custom_transform_enabled,
       custom_transform_source: value.custom_transform_source,
       system_promote_enabled: value.system_promote_enabled,

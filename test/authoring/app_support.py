@@ -26,6 +26,7 @@ PUBLIC_TYPES = (
     "summarization",
     "prompt-caching",
     "workflow-input-context",
+    "session-recorder",
 )
 
 

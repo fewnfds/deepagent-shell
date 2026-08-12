@@ -36,6 +36,7 @@ from agent_shell.registries.skills import SKILL_NAME_MAX_LENGTH, skill_name_issu
 from agent_shell.plugins.workflow_input_context.contracts import (
     WorkflowInputContextBlock,
 )
+from agent_shell.plugins.session_recorder.contracts import SessionRecorderBlock
 
 
 SKILL_PROMPT_FIELDS = (
@@ -984,13 +985,17 @@ BLOCK_MODELS: dict[str, type[StrictBlock]] = {
     "summarization": SummarizationBlock,
     "prompt-caching": PromptCachingBlock,
     "workflow-input-context": WorkflowInputContextBlock,
+    "session-recorder": SessionRecorderBlock,
 }
 
 validate_capability_manifests(CAPABILITY_MANIFESTS, BLOCK_MODELS)
 BLOCK_CATALOG = PUBLIC_CAPABILITY_MANIFESTS
+from agent_shell.workflow_prepare import WORKFLOW_COMPONENT_MODELS
+
+MANAGED_COMPONENT_MODELS = {**BLOCK_MODELS, **WORKFLOW_COMPONENT_MODELS}
 
 def validate_block_payload(block_type: str, payload: dict) -> dict:
-    model = BLOCK_MODELS[block_type].model_validate(payload)
+    model = MANAGED_COMPONENT_MODELS[block_type].model_validate(payload)
     return model.model_dump(mode="json")
 
 

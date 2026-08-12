@@ -32,6 +32,10 @@ export const zhCN = {
     searchPlaceholder: '搜索名称或说明',
     loadFailed: '无法载入 Workflow',
     filesystemLoadFailed: '无法载入文件系统配置',
+    stateModes: {
+      shared: '共享 Agent 消息',
+      isolated: '隔离 Agent 消息',
+    },
     createTitle: '新建 Workflow',
     editTitle: '编辑 Workflow',
     saved: 'Workflow 已保存。',
@@ -86,6 +90,8 @@ export const zhCN = {
       name: '名称',
       description: '说明',
       filesystem: '共享文件系统',
+      stateMode: 'Agent State 模式',
+      prepare: 'Workflow Prepare',
       enabled: '启用',
     },
   },
@@ -391,6 +397,14 @@ export const zhCN = {
     'workflow-input-context': {
       label: 'Workflow 输入上下文',
       description: '在 Agent 启动时变换并注入不可变的 OpenAI 消息快照',
+    },
+    'session-recorder': {
+      label: 'Session Recorder',
+      description: '为每次已装配的 Agent 调用保存结束后的对话快照',
+    },
+    'workflow-prepare': {
+      label: 'Workflow Prepare',
+      description: '在 LangChain 构造前准备不可变的 Workflow 运行上下文',
     },
     'main-agent': {
       label: 'Main Agent',
@@ -721,11 +735,8 @@ export const zhCN = {
       cacheTypes: { ephemeral: '临时缓存（ephemeral）' },
     },
     workflowInputContext: {
-      scopeTitle: 'Agent 范围',
-      mainAgent: 'Main Agent',
-      subagent: '同步 Subagent',
       transformTitle: '受信任 Python 变换',
-      transformHint: '定义 def transform(messages, read_file, config) 并返回消息数组；import 会在受信任的服务进程内执行。',
+      transformHint: '定义 def transform(messages, read_file, config, state, context) 并返回消息数组；import 会在受信任的服务进程内执行。',
       transformEnabled: '执行自定义变换',
       systemTitle: 'System 消息规则',
       promoteEnabled: '把满足条件的 system 消息上提到顶部连续 system 区域',
@@ -737,6 +748,20 @@ export const zhCN = {
       moveDown: '槽位下移',
       truncateIfMissing: '所有来源缺失时停止处理后续槽位',
       noSlots: '尚未配置消息槽位。',
+    },
+    sessionRecorder: {
+      transformEnabled: '变换需要保存的对话副本',
+      transformHint: '定义 def transform(messages, read_file, config, state, context)，返回需要保存的消息数组。',
+    },
+    workflowPrepare: {
+      sourceHint: '定义 async def prepare(input)，返回可包含 context 对象的结果。',
+    },
+    scriptRequirements: {
+      hint: '每行一个 PEP 508 requirement；依赖变更需要重启软件。',
+      status: {
+        restart_required: 'Python requirements 已变化，重启软件后准备依赖。',
+        failed: 'Python requirements 准备失败，请查看运行诊断。',
+      },
     },
   },
   feedback: {
@@ -954,6 +979,7 @@ export const zhCN = {
   errors: {
     workflowInvalid: 'Workflow 配置无效。',
     workflowFilesystemNotFound: '所选 Workflow 文件系统不存在。',
+    workflowPrepareNotFound: '所选 Workflow Prepare 组件不存在。',
     workflowNameConflict: '已有同名 Workflow。',
     workflowNotFound: 'Workflow 不存在。',
     workflowDebugRunNotFound: 'Workflow Debug 运行记录不存在。',

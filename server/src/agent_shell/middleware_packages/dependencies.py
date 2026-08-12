@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 from hashlib import sha256
 from importlib.metadata import distributions
 import json
@@ -17,15 +16,17 @@ from urllib.request import urlopen
 from uuid import uuid4
 from zipfile import ZipFile
 
-from packaging.requirements import InvalidRequirement, Requirement
 from packaging.utils import canonicalize_name
 
+from agent_shell.python_requirements import (
+    PythonRequirements as PackageRequirements,
+    PythonRequirementsError,
+    parse_python_requirements,
+)
 from agent_shell.registries.errors import ResourceScanError
 
 
 DEPENDENCY_STATE_SCHEMA = 1
-MAX_REQUIREMENTS_BYTES = 64 * 1024
-MAX_REQUIREMENTS_COUNT = 100
 PYPI_INDEX = "https://pypi.org/simple"
 REQUIREMENTS_FILE = "requirements.txt"
 RUNTIME_FOLDER = "middleware_packages"
@@ -33,12 +34,6 @@ SITE_PACKAGES_FOLDER = "site-packages"
 STATE_FILE = "dependency-state.json"
 
 DependencyStatus = Literal["ready", "restart_required", "failed"]
-
-
-@dataclass(frozen=True, slots=True)
-class PackageRequirements:
-    values: tuple[str, ...]
-    fingerprint: str
 
 
 def _is_link(path: Path) -> bool:
@@ -51,16 +46,10 @@ def _is_link(path: Path) -> bool:
     return path.is_symlink() or bool(attributes & reparse_flag)
 
 
-def _requirements_fingerprint(values: tuple[str, ...]) -> str:
-    encoded = json.dumps(values, ensure_ascii=True, separators=(",", ":")).encode()
-    return sha256(encoded).hexdigest()
-
-
 def read_package_requirements(folder: Path) -> PackageRequirements:
     path = folder / REQUIREMENTS_FILE
     if not path.exists():
-        values: tuple[str, ...] = ()
-        return PackageRequirements(values, _requirements_fingerprint(values))
+        return parse_python_requirements(())
     if not path.is_file() or _is_link(path):
         raise ResourceScanError(
             "resource.error.middlewarePackage.requirementsLinkUnsupported",
@@ -73,11 +62,6 @@ def read_package_requirements(folder: Path) -> PackageRequirements:
             "resource.error.middlewarePackage.requirementsReadFailed",
             "requirements.txt could not be read.",
         ) from exc
-    if len(content) > MAX_REQUIREMENTS_BYTES:
-        raise ResourceScanError(
-            "resource.error.middlewarePackage.requirementsTooLarge",
-            "requirements.txt may not exceed 64 KiB.",
-        )
     try:
         text = content.decode("utf-8")
     except UnicodeError as exc:
@@ -86,47 +70,22 @@ def read_package_requirements(folder: Path) -> PackageRequirements:
             "requirements.txt must use UTF-8 encoding.",
         ) from exc
 
-    parsed: dict[str, str] = {}
-    for line_number, raw_line in enumerate(text.splitlines(), start=1):
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.startswith("-") or "\\" in line or "://" in line:
-            raise ResourceScanError(
-                "resource.error.middlewarePackage.requirementsInvalid",
-                f"requirements.txt line {line_number} is not a package requirement.",
-                {"line": line_number},
-            )
-        try:
-            requirement = Requirement(line)
-        except InvalidRequirement as exc:
-            raise ResourceScanError(
-                "resource.error.middlewarePackage.requirementsInvalid",
-                f"requirements.txt line {line_number} is invalid.",
-                {"line": line_number},
-            ) from exc
-        if requirement.url is not None:
-            raise ResourceScanError(
-                "resource.error.middlewarePackage.requirementsInvalid",
-                f"requirements.txt line {line_number} may not use a direct URL.",
-                {"line": line_number},
-            )
-        name = canonicalize_name(requirement.name)
-        if name in parsed:
-            raise ResourceScanError(
-                "resource.error.middlewarePackage.requirementsDuplicate",
-                f"requirements.txt declares {requirement.name!r} more than once.",
-                {"line": line_number, "package": requirement.name},
-            )
-        parsed[name] = str(requirement)
-        if len(parsed) > MAX_REQUIREMENTS_COUNT:
-            raise ResourceScanError(
-                "resource.error.middlewarePackage.requirementsTooMany",
-                "requirements.txt may contain at most 100 packages.",
-            )
-
-    values = tuple(parsed[name] for name in sorted(parsed))
-    return PackageRequirements(values, _requirements_fingerprint(values))
+    try:
+        return parse_python_requirements(text.splitlines())
+    except PythonRequirementsError as exc:
+        key = {
+            "duplicate": "requirementsDuplicate",
+            "too_large": "requirementsTooLarge",
+            "too_many": "requirementsTooMany",
+        }.get(exc.code, "requirementsInvalid")
+        details = {"line": exc.line} if exc.line else {}
+        if exc.package:
+            details["package"] = exc.package
+        raise ResourceScanError(
+            f"resource.error.middlewarePackage.{key}",
+            str(exc),
+            details,
+        ) from exc
 
 
 def package_runtime_root(runtime_root: Path) -> Path:
@@ -153,7 +112,7 @@ def load_dependency_state(runtime_root: Path | None) -> dict[str, Any] | None:
         not isinstance(value, dict)
         or value.get("schema") != DEPENDENCY_STATE_SCHEMA
         or value.get("status") not in {"ready", "failed"}
-        or not isinstance(value.get("packages"), dict)
+        or not isinstance(value.get("records"), dict)
     ):
         return None
     return value
@@ -170,7 +129,7 @@ def dependency_metadata(
     else:
         state = load_dependency_state(runtime_root)
         package_state = (
-            state.get("packages", {}).get(script_id)
+            state.get("records", {}).get(script_id)
             if state is not None
             else None
         )
@@ -230,13 +189,13 @@ def _runtime_manifest(runtime_root: Path) -> dict[str, Any]:
 
 def _input_fingerprint(
     core_fingerprint: str,
-    packages: list[dict[str, object]],
+    records: list[dict[str, object]],
 ) -> str:
     payload = {
         "core": core_fingerprint,
-        "packages": [
+        "records": [
             [item["id"], item["requirements_fingerprint"]]
-            for item in sorted(packages, key=lambda value: str(value["id"]))
+            for item in sorted(records, key=lambda value: str(value["id"]))
             if item["python_requirements"]
         ],
     }
@@ -244,8 +203,8 @@ def _input_fingerprint(
     return sha256(encoded).hexdigest()
 
 
-def _package_states(
-    packages: list[dict[str, object]],
+def _record_states(
+    records: list[dict[str, object]],
     *,
     status: Literal["ready", "failed"],
     error_code: str = "",
@@ -256,14 +215,14 @@ def _package_states(
             "status": status,
             "error_code": error_code,
         }
-        for item in packages
+        for item in records
         if item["python_requirements"]
     }
 
 
 def _write_failure_state(
     runtime_root: Path,
-    packages: list[dict[str, object]],
+    records: list[dict[str, object]],
     *,
     input_fingerprint: str,
     core_fingerprint: str,
@@ -277,8 +236,8 @@ def _write_failure_state(
             "status": "failed",
             "input_fingerprint": input_fingerprint,
             "core_fingerprint": core_fingerprint,
-            "packages": _package_states(
-                packages, status="failed", error_code=error_code
+            "records": _record_states(
+                records, status="failed", error_code=error_code
             ),
         },
     )
@@ -393,8 +352,29 @@ def prepare_windows_dependencies(
         data_root / "resources" / "custom_middlewares",
         runtime_root=None,
     )["catalog"]
-    packages = [dict(item) for item in catalog]
-    input_fingerprint = _input_fingerprint(core_fingerprint, packages)
+    records = [
+        {**dict(item), "id": f"middleware-package:{item['id']}"}
+        for item in catalog
+    ]
+    from agent_shell.storage.file_config import FileConfigRepository
+
+    repository = FileConfigRepository(data_root)
+    for component_type in (
+        "workflow-input-context",
+        "session-recorder",
+        "workflow-prepare",
+    ):
+        for component in repository.config().get("components", {}).get(component_type, []):
+            component_id = str(component.get("id", ""))
+            requirements = parse_python_requirements(component.get("python_requirements", []))
+            records.append(
+                {
+                    "id": f"{component_type}:{component_id}",
+                    "python_requirements": list(requirements.values),
+                    "requirements_fingerprint": requirements.fingerprint,
+                }
+            )
+    input_fingerprint = _input_fingerprint(core_fingerprint, records)
     current = load_dependency_state(runtime_root)
     target = package_site_packages(runtime_root)
     if (
@@ -408,8 +388,8 @@ def prepare_windows_dependencies(
 
     requirements = [
         requirement
-        for package in packages
-        for requirement in package["python_requirements"]
+        for record in records
+        for requirement in record["python_requirements"]
     ]
     build_root = runtime_root / "tmp" / f"middleware-packages-{uuid4().hex}"
     prepared = build_root / SITE_PACKAGES_FOLDER
@@ -460,7 +440,7 @@ def prepare_windows_dependencies(
             if result.returncode != 0:
                 _write_failure_state(
                     runtime_root,
-                    packages,
+                    records,
                     input_fingerprint=input_fingerprint,
                     core_fingerprint=core_fingerprint,
                     error_code="dependency_resolution_failed",
@@ -474,7 +454,7 @@ def prepare_windows_dependencies(
             if not _package_layout_is_supported(prepared):
                 _write_failure_state(
                     runtime_root,
-                    packages,
+                    records,
                     input_fingerprint=input_fingerprint,
                     core_fingerprint=core_fingerprint,
                     error_code="dependency_layout_unsupported",
@@ -496,7 +476,7 @@ def prepare_windows_dependencies(
                 "status": "ready",
                 "input_fingerprint": input_fingerprint,
                 "core_fingerprint": core_fingerprint,
-                "packages": _package_states(packages, status="ready"),
+                "records": _record_states(records, status="ready"),
             },
         )
         print("Middleware package dependencies are ready.")

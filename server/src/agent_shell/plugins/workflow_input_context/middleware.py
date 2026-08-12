@@ -89,11 +89,10 @@ def _compile_transform(source: str) -> Callable[..., Any]:
 class WorkflowInputContextMiddleware(AgentMiddleware):
     name = "WorkflowInputContextMiddleware"
 
-    def __init__(self, block: WorkflowInputContextBlock, *, backend: Any, scope: str) -> None:
+    def __init__(self, block: WorkflowInputContextBlock, *, backend: Any) -> None:
         super().__init__()
         self._block = block
         self._backend = backend
-        self._scope = scope
         self._transform = (
             _compile_transform(block.custom_transform_source)
             if block.custom_transform_enabled and block.custom_transform_source.strip()
@@ -146,17 +145,17 @@ class WorkflowInputContextMiddleware(AgentMiddleware):
         return result
 
     def _run(self, state: Any, runtime: Runtime[Any]) -> dict[str, Any] | None:
-        if self._scope not in self._block.apply_to:
-            return None
         context = getattr(runtime, "context", None)
         raw_messages = getattr(context, "messages", None)
         messages = _copy_messages(raw_messages or ())
         if self._transform is not None:
             try:
                 transformed = self._transform(
-                    messages,
-                    self._read_file,
-                    deepcopy(self._block.model_dump(mode="json")),
+                    messages=messages,
+                    read_file=self._read_file,
+                    config=deepcopy(self._block.model_dump(mode="json")),
+                    state=state,
+                    context=context,
                 )
             except WorkflowInputContextError:
                 raise

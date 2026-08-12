@@ -14,6 +14,7 @@ from agent_shell.authoring import editor_defaults
 from agent_shell.contracts import (
     BLOCK_CATALOG,
     BLOCK_MODELS,
+    MANAGED_COMPONENT_MODELS,
     validate_provider_credential,
 )
 from agent_shell.api.agent_configs import (
@@ -31,6 +32,9 @@ from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.validation.models import validation_failure_detail
 from agent_shell.validation.service import ConfigurationValidationService
+from agent_shell.workflow_prepare import WORKFLOW_COMPONENT_CATALOG
+from agent_shell.middleware_packages.dependencies import dependency_metadata
+from agent_shell.python_requirements import parse_python_requirements
 
 
 def build_router(
@@ -42,11 +46,12 @@ def build_router(
     validation: ConfigurationValidationService,
     provider_http_clients: ProviderHttpClients,
     workflow_store: WorkflowStore,
+    runtime_root: Path,
 ) -> APIRouter:
     router = APIRouter()
 
     def check_type(block_type: str) -> None:
-        if block_type not in BLOCK_MODELS:
+        if block_type not in MANAGED_COMPONENT_MODELS:
             raise management_error(
                 404,
                 code="unknown_configuration_type",
@@ -72,6 +77,25 @@ def build_router(
         assert validated is not None
         return validated
 
+    def project_block(block_type: str, block: dict | None) -> dict | None:
+        if block is None:
+            return None
+        if block_type not in {
+            "workflow-input-context",
+            "session-recorder",
+            "workflow-prepare",
+        }:
+            return block
+        requirements = parse_python_requirements(block.get("python_requirements", []))
+        return {
+            **block,
+            **dependency_metadata(
+                f"{block_type}:{block.get('id', '')}",
+                requirements,
+                runtime_root,
+            ),
+        }
+
     def reject_workflow_filesystem_reference(
         block_type: str,
         block_id: str,
@@ -89,10 +113,25 @@ def build_router(
             message_args={"owner": owner["name"]},
         )
 
+    def reject_workflow_prepare_reference(block_type: str, block_id: str) -> None:
+        if block_type != "workflow-prepare":
+            return
+        owner = workflow_store.get_item_by_prepare(block_id)
+        if owner is None:
+            return
+        raise management_error(
+            409,
+            code="configuration_referenced",
+            message_key="errors.configurationReferencedByWorkflow",
+            message="The configuration is still referenced by a Workflow.",
+            message_args={"owner": owner["name"]},
+        )
+
     @router.get("/api/catalog")
     async def catalog() -> dict:
         return {
             "block_types": BLOCK_CATALOG,
+            "workflow_component_types": WORKFLOW_COMPONENT_CATALOG,
             "editor_defaults": editor_defaults(),
         }
 
@@ -240,12 +279,12 @@ def build_router(
     @router.get("/api/blocks/{block_type}")
     async def list_blocks(block_type: str) -> list[dict]:
         check_type(block_type)
-        return block_store.list_blocks(block_type)
+        return [project_block(block_type, item) for item in block_store.list_blocks(block_type)]
 
     @router.delete("/api/unsupported-blocks/{block_id}")
     async def delete_unsupported_block(block_id: str) -> dict[str, bool]:
         block = block_store.get_block_header(block_id)
-        if block is None or block["block_type"] in BLOCK_MODELS:
+        if block is None or block["block_type"] in MANAGED_COMPONENT_MODELS:
             raise management_error(
                 404,
                 code="unsupported_block_not_found",
@@ -282,7 +321,9 @@ def build_router(
                     message="A component configuration does not exist.",
                 )
             reject_workflow_filesystem_reference(block_type, block_id)
-            if CAPABILITY_BY_TYPE[block_type].required:
+            reject_workflow_prepare_reference(block_type, block_id)
+            manifest = CAPABILITY_BY_TYPE.get(block_type)
+            if manifest is not None and manifest.required:
                 owner = main_agent_block_reference_owner(
                     config_store,
                     block_type,
@@ -317,7 +358,7 @@ def build_router(
                 message_key="errors.blockNotFound",
                 message="The component configuration does not exist.",
             )
-        return block
+        return project_block(block_type, block)
 
     @router.post("/api/blocks/{block_type}")
     async def create_block(block_type: str, payload: dict) -> dict:
@@ -333,7 +374,7 @@ def build_router(
                 message_key="errors.configurationNameConflict",
                 message="A configuration with this name already exists.",
             ) from exc
-        return block_store.get_block(block_type, block_id)
+        return project_block(block_type, block_store.get_block(block_type, block_id))
 
     @router.post("/api/blocks/{block_type}/{block_id}/copy")
     async def copy_block(block_type: str, block_id: str, payload: dict) -> dict:
@@ -386,7 +427,7 @@ def build_router(
                 message_key="errors.blockNotFound",
                 message="The component configuration does not exist.",
             )
-        return copied
+        return project_block(block_type, copied)
 
     @router.put("/api/blocks/{block_type}/{block_id}")
     async def update_block(block_type: str, block_id: str, payload: dict) -> dict:
@@ -408,13 +449,15 @@ def build_router(
                 message_key="errors.configurationNameConflict",
                 message="A configuration with this name already exists.",
             ) from exc
-        return block_store.get_block(block_type, block_id)
+        return project_block(block_type, block_store.get_block(block_type, block_id))
 
     @router.delete("/api/blocks/{block_type}/{block_id}")
     async def delete_block(block_type: str, block_id: str) -> dict[str, bool]:
         check_type(block_type)
         reject_workflow_filesystem_reference(block_type, block_id)
-        if CAPABILITY_BY_TYPE[block_type].required:
+        reject_workflow_prepare_reference(block_type, block_id)
+        manifest = CAPABILITY_BY_TYPE.get(block_type)
+        if manifest is not None and manifest.required:
             owner = main_agent_block_reference_owner(config_store, block_type, block_id)
             if owner is not None:
                 _, owner_name = owner

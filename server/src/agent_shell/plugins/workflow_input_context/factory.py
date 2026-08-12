@@ -12,14 +12,13 @@ def materialize_workflow_input_context_middleware(
     block: dict[str, Any],
     *,
     backend: Any,
-    scope: str,
 ) -> WorkflowInputContextMiddleware | None:
     from .middleware import WorkflowInputContextMiddleware
 
     configuration = WorkflowInputContextBlock.model_validate(block)
     if not configuration.enabled:
         return None
-    return WorkflowInputContextMiddleware(configuration, backend=backend, scope=scope)
+    return WorkflowInputContextMiddleware(configuration, backend=backend)
 
 
 __all__ = ["materialize_workflow_input_context_middleware"]

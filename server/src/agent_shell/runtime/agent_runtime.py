@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import warnings
+from copy import deepcopy
 from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from agent_shell.middleware_packages.runtime import MiddlewarePackageRuntime
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.model_response import ModelResponse
+from agent_shell.runtime.input_messages import validate_client_messages
 from agent_shell.runtime.media_response import MainAgentMediaResponse
 from agent_shell.runtime.output_event_pool import OutputEventRectifier
 from agent_shell.runtime.output_projection import OutputProjector, WorkflowOutputProjector
@@ -25,12 +27,37 @@ from agent_shell.runtime.output_stream import (
 )
 from agent_shell.runtime.stream_transformers import RawCustomEventTransformer
 from agent_shell.storage.media_outputs import MediaOutputStore
+from agent_shell.storage.blocks import BlockStore
 from agent_shell.runtime.workflow_debug import WorkflowDebugRun, WorkflowDebugService
 from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
+from agent_shell.validation.assembly import StaticAssembly
+from agent_shell.workflow_prepare import WorkflowPrepareError, run_workflow_prepare
 from langgraph.errors import GraphRecursionError
 
 EXECUTION_TIMEOUT_SECONDS = 600
 GRAPH_RECURSION_LIMIT = 100
+
+
+def _resolved_agent_prepare_snapshot(assembly: StaticAssembly) -> dict[str, Any]:
+    return {
+        "main_agent": deepcopy(assembly.main_agent),
+        "capability_refs": deepcopy(assembly.references),
+        "blocks": deepcopy(assembly.blocks),
+        "filesystem_mode": assembly.filesystem_mode,
+        "disabled_capabilities": sorted(assembly.disabled_capabilities),
+        "subagents": {
+            key: {
+                "component_name": node.component_name,
+                "name": node.name,
+                "description": node.description,
+                "capability_refs": deepcopy(node.references),
+                "blocks": deepcopy(node.blocks),
+                "filesystem_mode": node.filesystem_mode,
+                "disabled_capabilities": sorted(node.disabled_capabilities),
+            }
+            for key, node in assembly.subagent_nodes.items()
+        },
+    }
 
 
 @dataclass(slots=True)
@@ -308,11 +335,13 @@ class AgentRuntime:
         builder: AgentBuilder,
         media_outputs: MediaOutputStore,
         *,
+        blocks: BlockStore | None = None,
         workflow_debug: WorkflowDebugService | None = None,
         runtime_diagnostics: RuntimeDiagnostics | None = None,
     ) -> None:
         self._builder = builder
         self._media_outputs = media_outputs
+        self._blocks = blocks
         self._workflow_debug = workflow_debug
         self._runtime_diagnostics = runtime_diagnostics
 
@@ -326,6 +355,7 @@ class AgentRuntime:
         model_response_observer: Callable[[ModelResponse], None] | None = None,
         request_id: str = "",
         workflow_filesystem_id: str | None = None,
+        workflow_node_id: str | None = None,
         workspace: DeepAgentsWorkspace | None = None,
     ) -> BuiltAgent:
         try:
@@ -337,8 +367,21 @@ class AgentRuntime:
                 model_response_observer=model_response_observer,
                 request_id=request_id,
                 workflow_filesystem_id=workflow_filesystem_id,
+                workflow_node_id=workflow_node_id,
                 workspace=workspace,
             )
+        except Exception:
+            await self._builder.close_failed_build()
+            raise
+
+    async def build_resolved_agent(
+        self,
+        assembly: StaticAssembly,
+        raw_messages: object,
+        **kwargs: Any,
+    ) -> BuiltAgent:
+        try:
+            return await self._builder.build_resolved(assembly, raw_messages, **kwargs)
         except Exception:
             await self._builder.close_failed_build()
             raise
@@ -348,6 +391,7 @@ class AgentRuntime:
         built: BuiltAgent,
         *,
         graph: Any | None = None,
+        input_state: dict[str, Any] | None = None,
         workflow_node_id: str = "",
         event_observer: Callable[[OutputEvent], None] | None = None,
         model_response_observer: Callable[[ModelResponse], None] | None = None,
@@ -384,7 +428,7 @@ class AgentRuntime:
             projector = OutputProjector(built.output_config)
         return AgentExecution(
             graph=graph if graph is not None else built.graph,
-            input_state=built.input_state,
+            input_state=input_state if input_state is not None else built.input_state,
             middleware_runtime=built.middleware_runtime,
             media_response=MainAgentMediaResponse(self._media_outputs, request_id),
             rectifier=OutputEventRectifier(projector),
@@ -479,14 +523,16 @@ class AgentRuntime:
         agent_nodes = [
             node for node in document.definition.nodes if node.type == "agent"
         ]
-        context = WorkflowRuntimeContext.from_request(
-            raw_messages,
+        messages = validate_client_messages(raw_messages)
+        workflow_context = {
+            **dict(workflow_snapshot or {}),
+            "filesystem_id": workflow_filesystem_id,
+            "graph": document.model_dump(mode="json"),
+        }
+        base_context = WorkflowRuntimeContext.from_request(
+            messages,
             request_id=request_id,
-            workflow={
-                **dict(workflow_snapshot or {}),
-                "filesystem_id": workflow_filesystem_id,
-                "graph": document.model_dump(mode="json"),
-            },
+            workflow=workflow_context,
         )
         workflow_debug = getattr(self, "_workflow_debug", None)
         runtime_diagnostics = getattr(self, "_runtime_diagnostics", None)
@@ -498,7 +544,7 @@ class AgentRuntime:
                 workflow_name=str(
                     workflow_identity.get("name", public_model or "workflow")
                 ),
-                messages_sha=context.messages_sha,
+                messages_sha=base_context.messages_sha,
             )
             if workflow_debug is not None
             else None
@@ -518,18 +564,89 @@ class AgentRuntime:
         built_agents: list[tuple[str, BuiltAgent]] = []
         workspace = None
         try:
+            resolved_agents: list[tuple[Any, StaticAssembly]] = []
             for agent_node in agent_nodes:
                 main_agent_id = str(
                     AgentNodeConfig.model_validate(agent_node.config).main_agent_id
                 )
-                built = await self.build_agent(
-                    main_agent_id,
-                    raw_messages,
+                resolved_agents.append(
+                    (
+                        agent_node,
+                        self._builder.resolve(
+                            main_agent_id,
+                            workflow_filesystem_id=workflow_filesystem_id,
+                        ),
+                    )
+                )
+            prepare_context: Mapping[str, Any] = {}
+            prepare_id = (workflow_snapshot or {}).get("workflow_prepare_id")
+            if prepare_id is not None:
+                prepare_block = (
+                    self._blocks.get_block_internal(
+                        "workflow-prepare", str(prepare_id)
+                    )
+                    if self._blocks is not None
+                    else None
+                )
+                if prepare_block is None:
+                    raise AgentRuntimeError(
+                        "workflow_prepare_not_found",
+                        "The selected Workflow Prepare component does not exist.",
+                        status_code=422,
+                    )
+                if bool(prepare_block.get("enabled", True)):
+                    prepare_metadata = self._builder.script_dependency_metadata(
+                        "workflow-prepare",
+                        prepare_block,
+                    )
+                    if prepare_metadata["dependency_status"] != "ready":
+                        raise AgentRuntimeError(
+                            "workflow_prepare_dependencies_not_ready",
+                            "Restart Agent Shell to prepare the selected Workflow Prepare dependencies.",
+                            status_code=409,
+                        )
+                try:
+                    prepare_result = await run_workflow_prepare(
+                        {
+                            key: value
+                            for key, value in prepare_block.items()
+                            if key != "id"
+                        },
+                        input_value={
+                            "request": {
+                                "request_id": request_id,
+                                "messages": messages,
+                                "messages_sha": base_context.messages_sha,
+                            },
+                            "workflow": workflow_context,
+                            "agents": {
+                                node.id: _resolved_agent_prepare_snapshot(assembly)
+                                for node, assembly in resolved_agents
+                            },
+                        },
+                    )
+                except WorkflowPrepareError as exc:
+                    raise AgentRuntimeError(
+                        "workflow_prepare_failed",
+                        "Workflow preparation failed.",
+                        status_code=422,
+                    ) from exc
+                prepare_context = prepare_result.context
+            context = WorkflowRuntimeContext.from_request(
+                messages,
+                request_id=request_id,
+                workflow=workflow_context,
+                prepare=prepare_context,
+            )
+            for agent_node, assembly in resolved_agents:
+                built = await self.build_resolved_agent(
+                    assembly,
+                    messages,
                     model_request_interceptor=model_request_interceptor,
                     model_request_observer=model_request_observer,
                     model_response_observer=model_response_observer,
                     request_id=request_id,
-                    workflow_filesystem_id=workflow_filesystem_id,
+                    workflow_node_id=agent_node.id,
                     workspace=workspace,
                 )
                 built_agents.append((agent_node.id, built))
@@ -544,6 +661,7 @@ class AgentRuntime:
             graph = compile_workflow(
                 document,
                 node_graphs={node_id: agent.graph for node_id, agent in built_agents},
+                state_mode=str((workflow_snapshot or {}).get("state_mode", "shared")),
                 checkpointer=(
                     workflow_debug.checkpointer
                     if workflow_debug is not None
@@ -588,9 +706,19 @@ class AgentRuntime:
                         )
             raise
         first_node_id, built = built_agents[0]
+        state_mode = str((workflow_snapshot or {}).get("state_mode", "shared"))
+        input_state: dict[str, Any] = {
+            "shared_vars": {},
+            "agent_sessions": {},
+        }
+        if state_mode == "shared":
+            input_state["messages"] = []
+        if "files" in built.input_state:
+            input_state["files"] = built.input_state["files"]
         return self._execution(
             built,
             graph=graph,
+            input_state=input_state,
             workflow_node_id=first_node_id,
             workflow_built=tuple(built_agents),
             event_observer=event_observer,

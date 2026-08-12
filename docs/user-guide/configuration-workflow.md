@@ -3,7 +3,13 @@
 ## Workflow
 
 【Workflow】是 OpenAI-compatible `model` 的唯一来源。当前 CRUD 保存名称、说明、启用状态和一个共享 Filesystem，
-以及一份当前 Graph definition/layout。只有启用的 Workflow 出现在 `/v1/models`。
+一个明确的 `shared`/`isolated` state mode、可选 Workflow Prepare 引用，以及一份当前 Graph definition/layout。
+只有启用的 Workflow 出现在 `/v1/models`。
+
+`shared` 模式让 Workflow root 与 Agent subgraph 共享 `messages` channel，串行后继会看到前序 Agent 的对话。
+`isolated` 模式的 root 不声明 `messages`，每个 Agent subgraph 保持私有对话；`files`、`shared_vars` 和
+`agent_sessions` 仍是共享 channel。并行分支读取同一个 LangGraph super-step snapshot，更新在边界通过 reducer
+合并，不按开始时间或结束时间拼接会话。
 
 【编辑 Flow】进入独立全屏 Vue Flow 页面。左侧组件库当前只有 Agent，可以点击或拖到画布；右侧属性栏编辑所选
 Agent 的 Main Agent 引用并列出该 Node 声明的输入/输出端点。选中连线后，可以选择两端共同支持的 Edge 类型和具体
@@ -53,11 +59,24 @@ delegated messages。格式见[自定义 Middleware 包](middleware-packages.md)
 它是独立源码目录中的内置实现，后端只负责固定物化；前端沿用本页的组件仓库和 Agent 覆写流程，不创建第二套
 插件页面。
 
-运行顺序是：复制请求快照 -> 可选 `transform(messages, read_file, config)` -> 按字符阈值上提非顶部 system ->
+运行顺序是：复制请求快照 -> 可选 `transform(messages, read_file, config, state, context)` -> 按字符阈值上提非顶部 system ->
 把剩余非顶部 system 转为 user -> 顺序追加槽位。`messages` 是可变副本，`read_file` 只能读 Workflow backend
-中的虚拟路径，`config` 是本次请求的配置副本。槽位按主文件、fallback 文件、literal 选择内容，再按 `max_chars`
-截断；`truncate_if_missing` 会在全部来源缺失时停止后续槽位。关闭组件或取消 `apply_to` 范围即可跳过，不影响
+中的虚拟路径，`config` 是本次请求的配置副本，`state` 与 `context` 是本次运行的 schema-visible state 和 runtime
+context。槽位按主文件、fallback 文件、literal 选择内容，再按 `max_chars` 截断；`truncate_if_missing` 会在全部来源
+缺失时停止后续槽位。关闭组件或从该 Agent capability 装配中移除即可跳过，不影响
 原始 `WorkflowRuntimeContext.messages`。
+
+### Session Recorder
+
+Session Recorder 由 Main Agent capability ref 选择，Subagent 可继承、替换或关闭。它独立于 Workflow state mode：
+`shared` 和 `isolated` 都能使用；未选择时只是没有该 Agent 的 session record。Recorder 的五参数 transform 只处理
+最终对话的 OpenAI-style 副本，返回值写入共享 `agent_sessions[session_id]`，不会回写活动消息。
+
+### Workflow Prepare
+
+Workflow 可绑定零或一个 Workflow Prepare。Shell 先解析所有 Agent node 的纯配置装配，再把请求事实、Workflow
+快照和按 node ID 组织的装配事实传给 `async def prepare(input)`。当前返回的 `context` 只从
+`runtime.context.prepare` 读取；mutable graph state 仍由 LangGraph state/reducer 管理。
 
 ## 校验与生效
 

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Literal
 
 from langgraph.graph import END, START, StateGraph
 
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.context import WorkflowRuntimeContext
-from agent_shell.runtime.state import AgentShellState
+from agent_shell.runtime.state import AgentShellState, IsolatedWorkflowState
 from agent_shell.workflow.catalog import node_type_spec
 from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
 from agent_shell.workflow.topology import validate_workflow_topology
@@ -22,6 +22,7 @@ def compile_workflow(
     document: WorkflowGraphDocumentV1,
     *,
     node_graphs: Mapping[str, Any],
+    state_mode: Literal["shared", "isolated"] = "shared",
     checkpointer: Any | None = None,
 ) -> Any:
     """Compile catalog-declared canvas nodes into an official StateGraph."""
@@ -51,7 +52,7 @@ def compile_workflow(
             executable_nodes.append(node)
 
     builder = StateGraph(
-        AgentShellState,
+        AgentShellState if state_mode == "shared" else IsolatedWorkflowState,
         context_schema=WorkflowRuntimeContext,
     )
     for node in executable_nodes:

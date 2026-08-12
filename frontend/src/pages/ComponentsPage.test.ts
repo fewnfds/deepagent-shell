@@ -121,6 +121,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   api.getCatalog.mockResolvedValue({
     block_types: [skillManifest, modelManifest],
+    workflow_component_types: [],
     editor_defaults: {
       skill: { system_prompt: 'default skill prompt', required_placeholders: [] },
     },

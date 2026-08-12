@@ -138,7 +138,9 @@ def scan_middleware_package(
             exclude_none=True,
         ),
         "folder": folder.name,
-        **dependency_metadata(manifest.id, requirements, runtime_root),
+        **dependency_metadata(
+            f"middleware-package:{manifest.id}", requirements, runtime_root
+        ),
     }
 
 

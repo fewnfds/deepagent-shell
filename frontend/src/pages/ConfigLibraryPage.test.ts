@@ -179,6 +179,7 @@ function createApi() {
   let stored = [block]
   const getCatalog = vi.fn(async (): Promise<CatalogResponse> => ({
     block_types: manifests,
+    workflow_component_types: [],
     editor_defaults: {},
   }))
   const validateRepository = vi.fn(async (): Promise<ValidationReport> => ({

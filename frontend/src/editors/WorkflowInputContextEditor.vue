@@ -66,6 +66,14 @@ function setMaxChars(slot: WorkflowInputContextSlotDraft, event: Event): void {
   const value = (event.target as HTMLInputElement).value
   slot.max_chars = value === '' ? null : Number(value)
 }
+
+function requirementsText(): string {
+  return draft.python_requirements.join('\n')
+}
+
+function setRequirements(value: string): void {
+  draft.python_requirements = value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
+}
 </script>
 
 <template>
@@ -76,22 +84,9 @@ function setMaxChars(slot: WorkflowInputContextSlotDraft, event: Event): void {
         {{ draft.enabled ? t('common.enabled') : t('common.disabled') }}
       </label>
     </div>
-
-    <section class="card mb-3">
-      <header class="card-header">
-        <h3 class="card-title h5 mb-0">{{ t('editors.workflowInputContext.scopeTitle') }}</h3>
-      </header>
-      <div class="card-body">
-        <div class="form-check">
-          <input id="workflow-input-context-main" v-model="draft.apply_to" class="form-check-input" type="checkbox" value="main_agent">
-          <label class="form-check-label" for="workflow-input-context-main">{{ t('editors.workflowInputContext.mainAgent') }}</label>
-        </div>
-        <div class="form-check">
-          <input id="workflow-input-context-subagent" v-model="draft.apply_to" class="form-check-input" type="checkbox" value="subagent">
-          <label class="form-check-label" for="workflow-input-context-subagent">{{ t('editors.workflowInputContext.subagent') }}</label>
-        </div>
-      </div>
-    </section>
+    <p v-if="draft.dependency_status !== 'ready'" class="form-text">
+      {{ t(`editors.scriptRequirements.status.${draft.dependency_status}`) }}
+    </p>
 
     <section class="card mb-3">
       <header class="card-header">
@@ -107,6 +102,9 @@ function setMaxChars(slot: WorkflowInputContextSlotDraft, event: Event): void {
         </div>
         <FormField field-path="custom_transform_source">
           <LteTextarea v-model="draft.custom_transform_source" :disabled="!draft.custom_transform_enabled" :rows="12" />
+        </FormField>
+        <FormField field-path="python_requirements" :hint="t('editors.scriptRequirements.hint')">
+          <LteTextarea :model-value="requirementsText()" :rows="4" @update:model-value="setRequirements($event)" />
         </FormField>
       </div>
     </section>

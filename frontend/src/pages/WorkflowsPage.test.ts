@@ -28,6 +28,8 @@ const workflow: Workflow = {
   name: 'Research Workflow',
   description: 'Runs the research agent.',
   filesystem_id: 'filesystem-1',
+  state_mode: 'shared',
+  workflow_prepare_id: null,
   enabled: true,
 }
 const filesystem: SavedBlock = {
@@ -73,7 +75,7 @@ describe('WorkflowsPage', () => {
 
     await wrapper.get('#workflow-form input[type="text"]').setValue('New Workflow')
     await wrapper.get('#workflow-form textarea').setValue('New description')
-    await wrapper.get('#workflow-form select').setValue(filesystem.id)
+    await wrapper.get('#workflow-form select[required]').setValue(filesystem.id)
     await wrapper.get('#workflow-form').trigger('submit')
     await flushPromises()
 
@@ -81,6 +83,8 @@ describe('WorkflowsPage', () => {
       name: 'New Workflow',
       description: 'New description',
       filesystem_id: filesystem.id,
+      state_mode: 'shared',
+      workflow_prepare_id: null,
       enabled: true,
     })
 

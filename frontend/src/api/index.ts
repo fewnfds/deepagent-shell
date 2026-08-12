@@ -11,6 +11,7 @@ import type {
   ApiServerSettingsUpdate,
   BlockPayload,
   BlockType,
+  ManagedComponentType,
   CatalogResponse,
   ConfigurationValidationSettings,
   MiddlewarePackageResource,
@@ -249,20 +250,20 @@ export const managementApi = {
   },
 
   listBlocks<TPayload extends BlockPayload = BlockPayload>(
-    type: BlockType,
+    type: ManagedComponentType,
   ): Promise<SavedBlock<TPayload>[]> {
     return managementRequest(`/api/blocks/${type}`)
   },
 
   getBlock<TPayload extends BlockPayload = BlockPayload>(
-    type: BlockType,
+    type: ManagedComponentType,
     id: string,
   ): Promise<SavedBlock<TPayload>> {
     return managementRequest(recordPath(`/api/blocks/${type}`, id))
   },
 
   saveBlock<TPayload extends BlockPayload>(
-    type: BlockType,
+    type: ManagedComponentType,
     data: TPayload | SavedBlock<TPayload>,
   ): Promise<SavedBlock<TPayload>> {
     const id = 'id' in data && typeof data.id === 'string' ? data.id : ''
@@ -274,14 +275,14 @@ export const managementApi = {
   },
 
   copyBlock<TPayload extends BlockPayload = BlockPayload>(
-    type: BlockType,
+    type: ManagedComponentType,
     id: string,
     name: string,
   ): Promise<SavedBlock<TPayload>> {
     return managementRequest(`${recordPath(`/api/blocks/${type}`, id)}/copy`, jsonBody({ name }))
   },
 
-  deleteBlock(type: BlockType, id: string): Promise<{ ok: boolean }> {
+  deleteBlock(type: ManagedComponentType, id: string): Promise<{ ok: boolean }> {
     return managementRequest(recordPath(`/api/blocks/${type}`, id), { method: 'DELETE' })
   },
 
@@ -289,7 +290,7 @@ export const managementApi = {
     return managementRequest(recordPath('/api/unsupported-blocks', id), { method: 'DELETE' })
   },
 
-  deleteBlocks(type: BlockType, ids: string[]): Promise<{ deleted: number }> {
+  deleteBlocks(type: ManagedComponentType, ids: string[]): Promise<{ deleted: number }> {
     return managementRequest(`/api/blocks/${type}/delete`, jsonBody({ ids }))
   },
 

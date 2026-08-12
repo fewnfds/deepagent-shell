@@ -1,5 +1,5 @@
 import type {
-  BlockType,
+  ManagedComponentType,
   CatalogResponse,
   MainAgent,
   SavedBlock,
@@ -7,23 +7,23 @@ import type {
   ValidationReport,
 } from '@/api'
 
-export type LibraryCategoryId = BlockType | 'main-agent' | 'subagent-profile'
+export type LibraryCategoryId = ManagedComponentType | 'main-agent' | 'subagent-profile'
 export type LibraryItem = SavedBlock | MainAgent | Subagent
 
 export interface ConfigLibraryApi {
   getCatalog(): Promise<CatalogResponse>
   validateRepository(): Promise<ValidationReport>
-  listBlocks(type: BlockType): Promise<SavedBlock[]>
+  listBlocks(type: ManagedComponentType): Promise<SavedBlock[]>
   listMainAgents(): Promise<MainAgent[]>
   listSubagents(): Promise<Subagent[]>
-  copyBlock(type: BlockType, id: string, name: string): Promise<SavedBlock>
+  copyBlock(type: ManagedComponentType, id: string, name: string): Promise<SavedBlock>
   copyMainAgent(id: string, name: string): Promise<MainAgent>
   copySubagent(id: string, componentName: string): Promise<Subagent>
-  deleteBlock(type: BlockType, id: string): Promise<{ ok: boolean }>
+  deleteBlock(type: ManagedComponentType, id: string): Promise<{ ok: boolean }>
   deleteUnsupportedBlock(id: string): Promise<{ ok: boolean }>
   deleteMainAgent(id: string): Promise<{ ok: boolean }>
   deleteSubagent(id: string): Promise<{ ok: boolean }>
-  deleteBlocks(type: BlockType, ids: string[]): Promise<{ deleted: number }>
+  deleteBlocks(type: ManagedComponentType, ids: string[]): Promise<{ deleted: number }>
   deleteMainAgents(ids: string[]): Promise<{ deleted: number }>
   deleteSubagents(ids: string[]): Promise<{ deleted: number }>
 }

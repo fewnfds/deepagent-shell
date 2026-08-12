@@ -9,6 +9,8 @@ import pytest
 from agent_shell.middleware_packages import dependencies
 from agent_shell.middleware_packages.dependencies import prepare_windows_dependencies
 from agent_shell.middleware_packages.packages import scan_middleware_packages
+from agent_shell.storage.blocks import BlockStore
+from agent_shell.storage.file_config import FileConfigRepository
 
 
 def write_package(root: Path, package_id: str) -> Path:
@@ -95,6 +97,20 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
     folder = write_package(packages, "image-reader")
     (folder / "requirements.txt").write_text("Pillow==12.0.0\n", encoding="utf-8")
     write_runtime_manifest(runtime_root)
+    block_store = BlockStore(FileConfigRepository(data_root))
+    for component_type, component_id, requirement in (
+        ("workflow-input-context", "input-context", "PyYAML==6.0.3"),
+        ("session-recorder", "recorder", "orjson==3.11.7"),
+        ("workflow-prepare", "prepare", "rich==14.3.3"),
+    ):
+        block_store.save_block(
+            component_type,
+            component_id,
+            {
+                "name": component_id,
+                "python_requirements": [requirement],
+            },
+        )
     fake_uv = tmp_path / "uv.exe"
     fake_uv.write_bytes(b"fake")
     monkeypatch.setattr(dependencies, "_ensure_uv", lambda *_args: fake_uv)
@@ -113,7 +129,13 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
     state = dependencies.load_dependency_state(runtime_root)
     assert state is not None
     assert state["status"] == "ready"
-    assert state["packages"]["image-reader"]["status"] == "ready"
+    assert set(state["records"]) == {
+        "middleware-package:image-reader",
+        "workflow-input-context:input-context",
+        "session-recorder:recorder",
+        "workflow-prepare:prepare",
+    }
+    assert all(item["status"] == "ready" for item in state["records"].values())
     assert (dependencies.package_site_packages(runtime_root) / "PIL").is_dir()
     assert "--only-binary" in calls[0]
     ready = scan_middleware_packages(packages, runtime_root=runtime_root)["catalog"]
@@ -130,7 +152,7 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
     failed_state = dependencies.load_dependency_state(runtime_root)
     assert failed_state is not None
     assert failed_state["status"] == "failed"
-    assert failed_state["packages"]["image-reader"]["status"] == "failed"
+    assert failed_state["records"]["middleware-package:image-reader"]["status"] == "failed"
     assert (dependencies.package_site_packages(runtime_root) / "PIL").is_dir()
     failed = scan_middleware_packages(packages, runtime_root=runtime_root)["catalog"]
     assert failed[0]["dependency_status"] == "failed"

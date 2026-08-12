@@ -27,7 +27,6 @@ def run_agent(
     context_messages: tuple[dict[str, object], ...],
     *,
     files: dict[str, object] | None = None,
-    scope: str = "main_agent",
 ):
     backend = StateBackend()
     agent = create_deep_agent(
@@ -37,7 +36,6 @@ def run_agent(
             WorkflowInputContextMiddleware(
                 block,
                 backend=backend,
-                scope=scope,
             )
         ],
     )
@@ -94,20 +92,6 @@ def test_default_transform_template_is_inert_until_enabled() -> None:
     assert block.custom_transform_enabled is False
 
 
-def test_scope_can_skip_main_and_apply_to_subagent() -> None:
-    block = WorkflowInputContextBlock(name="input", apply_to=["subagent"])
-    source_messages = ({"role": "user", "content": "question"},)
-
-    main_result = run_agent(block, source_messages, scope="main_agent")
-    subagent_result = run_agent(block, source_messages, scope="subagent")
-
-    assert message_signature(main_result) == [("ai", "answer")]
-    assert message_signature(subagent_result) == [
-        ("human", "question"),
-        ("ai", "answer"),
-    ]
-
-
 def test_custom_transform_reads_shared_filesystem_without_mutating_context() -> None:
     source_messages = ({"role": "user", "content": "question"},)
     block = WorkflowInputContextBlock(
@@ -115,7 +99,7 @@ def test_custom_transform_reads_shared_filesystem_without_mutating_context() -> 
         custom_transform_enabled=True,
         demote_non_top_system=False,
         custom_transform_source=(
-            "def transform(messages, read_file, config):\n"
+            "def transform(messages, read_file, config, state, context):\n"
             "    messages.append({'role': 'system', 'content': read_file('/extra.txt')})\n"
             "    return messages\n"
         ),
@@ -173,7 +157,7 @@ def test_custom_transform_rejects_invalid_return_without_exposing_details() -> N
         name="input",
         custom_transform_enabled=True,
         custom_transform_source=(
-            "def transform(messages, read_file, config):\n"
+            "def transform(messages, read_file, config, state, context):\n"
             "    return {'secret': 'must-not-leak'}\n"
         ),
     )
@@ -189,7 +173,7 @@ def test_custom_transform_reader_rejects_host_paths() -> None:
         name="input",
         custom_transform_enabled=True,
         custom_transform_source=(
-            "def transform(messages, read_file, config):\n"
+            "def transform(messages, read_file, config, state, context):\n"
             "    read_file('C:\\\\private.txt')\n"
             "    return messages\n"
         ),

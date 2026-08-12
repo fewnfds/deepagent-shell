@@ -5,10 +5,12 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
+from agent_shell.python_requirements import parse_python_requirements
+
 
 PluginText = Annotated[str, StringConstraints(strip_whitespace=False)]
 DEFAULT_CUSTOM_TRANSFORM_SOURCE = (
-    "def transform(messages, read_file, config):\n"
+    "def transform(messages, read_file, config, state, context):\n"
     "    # import package_name\n"
     "    # Write custom Python here.\n"
     "    return messages\n"
@@ -18,7 +20,6 @@ VirtualPath = Annotated[
     StringConstraints(strip_whitespace=True, min_length=1, max_length=4096),
 ]
 SlotRole = Literal["user", "assistant", "system"]
-ApplyScope = Literal["main_agent", "subagent"]
 
 
 def validate_virtual_path(value: str) -> str:
@@ -71,10 +72,6 @@ class WorkflowInputContextBlock(BaseModel):
 
     name: Annotated[str, Field(min_length=1, max_length=120)]
     enabled: bool = True
-    apply_to: list[ApplyScope] = Field(
-        default_factory=lambda: ["main_agent", "subagent"],
-        max_length=2,
-    )
     custom_transform_enabled: bool = False
     custom_transform_source: PluginText = Field(
         default=DEFAULT_CUSTOM_TRANSFORM_SOURCE,
@@ -84,13 +81,12 @@ class WorkflowInputContextBlock(BaseModel):
     system_promote_min_chars: int = Field(default=10, ge=0, le=1_000_000)
     demote_non_top_system: bool = True
     slots: list[WorkflowInputContextSlot] = Field(default_factory=list, max_length=100)
+    python_requirements: list[str] = Field(default_factory=list, max_length=100)
 
-    @field_validator("apply_to")
+    @field_validator("python_requirements")
     @classmethod
-    def validate_apply_to(cls, values: list[ApplyScope]) -> list[ApplyScope]:
-        if len(values) != len(set(values)):
-            raise ValueError("apply_to values must be unique")
-        return values
+    def validate_python_requirements(cls, values: list[str]) -> list[str]:
+        return list(parse_python_requirements(values).values)
 
     @model_validator(mode="after")
     def validate_transform_source(self) -> "WorkflowInputContextBlock":
@@ -110,7 +106,6 @@ class WorkflowInputContextBlock(BaseModel):
 
 
 __all__ = [
-    "ApplyScope",
     "DEFAULT_CUSTOM_TRANSFORM_SOURCE",
     "SlotRole",
     "WorkflowInputContextBlock",

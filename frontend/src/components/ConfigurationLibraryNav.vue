@@ -3,13 +3,13 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
-import type { CapabilityManifest } from '@/api'
+import type { CapabilityManifest, WorkflowComponentManifest } from '@/api'
 import SectionNav from '@/components/SectionNav.vue'
 import type { SectionNavItem } from '@/components/sectionNav'
 import { agentLibraryCategories, routeCategory } from '@/pages/configLibrary'
 
 const props = defineProps<{
-  manifests: readonly CapabilityManifest[]
+  manifests: readonly (CapabilityManifest | WorkflowComponentManifest)[]
 }>()
 
 const { t } = useI18n()

@@ -9,6 +9,7 @@ from pydantic import SecretStr
 
 from agent_shell import __version__
 from agent_shell.middleware_packages.runtime import MiddlewarePackageRuntime
+from agent_shell.middleware_packages.dependencies import dependency_metadata
 from agent_shell.capability_manifest import FILESYSTEM_TOOL_NAMES
 from agent_shell.contracts import (
     FilesystemBlock,
@@ -20,6 +21,9 @@ from agent_shell.provider_http import PROVIDER_HTTP_TIMEOUT, ProviderHttpClients
 from agent_shell.provider_secrets import ProviderCredentialError, ProviderSecretResolver
 from agent_shell.plugins.workflow_input_context.factory import (
     materialize_workflow_input_context_middleware,
+)
+from agent_shell.plugins.session_recorder.factory import (
+    materialize_session_recorder_middleware,
 )
 from agent_shell.runtime.capabilities import (
     DeepAgentsCapabilityError,
@@ -66,6 +70,8 @@ from agent_shell.runtime.model_response import ModelResponse
 from agent_shell.runtime.state import AgentShellState
 from agent_shell.validation.capability_assembly import FilesystemMode
 from agent_shell.validation.service import ConfigurationValidationService
+from agent_shell.validation.assembly import StaticAssembly
+from agent_shell.python_requirements import parse_python_requirements
 
 
 _OPENAI_COMPATIBLE_PROVIDERS = frozenset({"deepseek", "openai", "xai"})
@@ -159,6 +165,47 @@ class AgentBuilder:
             return
         await self._middleware_runtime.close()
 
+    def script_dependency_metadata(
+        self,
+        component_type: str,
+        component: dict[str, Any],
+    ) -> dict[str, object]:
+        return dependency_metadata(
+            f"{component_type}:{component.get('id', '')}",
+            parse_python_requirements(component.get("python_requirements", [])),
+            self._runtime_dir,
+        )
+
+    def resolve(
+        self,
+        main_agent_id: str,
+        *,
+        workflow_filesystem_id: str | None = None,
+    ) -> StaticAssembly:
+        report, assembly = self._validation.resolve_main_agent(
+            main_agent_id,
+            workflow_filesystem_id=workflow_filesystem_id,
+        )
+        if not report.valid:
+            issue = report.issues[0]
+            if issue.code == "assembly.main_agent_not_found":
+                status_code = 404
+            elif issue.code in {
+                "assembly.referenced_block_invalid",
+                "assembly.tool_name_conflict",
+            } or issue.code.startswith("contract."):
+                status_code = 422
+            else:
+                status_code = 409
+            raise AgentRuntimeError(
+                issue.code,
+                issue.message,
+                status_code=status_code,
+                validation_report=report,
+            )
+        assert assembly is not None
+        return assembly
+
     def _materialize_profile(
         self,
         references: dict[str, str],
@@ -168,9 +215,25 @@ class AgentBuilder:
         scope: str,
         owner_id: str,
         owner_name: str,
+        workflow_node_id: str | None = None,
         workspace: DeepAgentsWorkspace | None = None,
         disabled_capabilities: frozenset[str] = frozenset(),
     ) -> MaterializedAgentProfile:
+        for component_type in ("workflow-input-context", "session-recorder"):
+            component = selected_blocks.get(component_type)
+            if component is None or not bool(component.get("enabled", True)):
+                continue
+            metadata = self.script_dependency_metadata(component_type, component)
+            if metadata["dependency_status"] != "ready":
+                raise configuration_error(
+                    "script_dependencies_not_ready",
+                    "Restart Agent Shell to prepare the selected script component dependencies.",
+                    status_code=409,
+                    scope=scope,
+                    owner_id=owner_id,
+                    owner_name=owner_name,
+                    path=f"capability_refs.{component_type}",
+                )
         model_id = references["model"]
         model_block = selected_blocks["model"]
         exception_retry = selected_blocks.get("exception-retry")
@@ -334,6 +397,34 @@ class AgentBuilder:
         skill_sources = deepagents.skill_sources
 
         extra_middleware: list[Any] = []
+        session_recorder_middleware = None
+        session_recorder = selected_blocks.get("session-recorder")
+        if session_recorder is not None:
+            try:
+                recorder_middleware = materialize_session_recorder_middleware(
+                    {
+                        key: value
+                        for key, value in session_recorder.items()
+                        if key != "id"
+                    },
+                    backend=backend,
+                    agent_scope=scope,
+                    agent_id=owner_id,
+                    agent_name=owner_name,
+                    workflow_node_id=workflow_node_id,
+                )
+                session_recorder_middleware = recorder_middleware
+            except Exception as exc:
+                raise configuration_error(
+                    "middleware_materialization_failed",
+                    "The selected Session Recorder configuration could not be constructed.",
+                    status_code=422,
+                    scope=scope,
+                    owner_id=owner_id,
+                    owner_name=owner_name,
+                    path="capability_refs.session-recorder",
+                ) from exc
+
         workflow_input_context = selected_blocks.get("workflow-input-context")
         if workflow_input_context is not None:
             try:
@@ -344,7 +435,6 @@ class AgentBuilder:
                         if key != "id"
                     },
                     backend=backend,
-                    scope=scope,
                 )
                 if input_context_middleware is not None:
                     extra_middleware.append(input_context_middleware)
@@ -435,6 +525,7 @@ class AgentBuilder:
             middleware=tuple(middleware),
             package_middleware=package_middleware,
             extra_middleware=tuple(extra_middleware),
+            session_recorder_middleware=session_recorder_middleware,
             backend=backend,
             initial_files=initial_files,
             skill_sources=skill_sources,
@@ -452,33 +543,40 @@ class AgentBuilder:
         model_response_observer: Callable[[ModelResponse], Any] | None = None,
         request_id: str = "",
         workflow_filesystem_id: str | None = None,
+        workflow_node_id: str | None = None,
         workspace: DeepAgentsWorkspace | None = None,
     ) -> BuiltAgent:
         # Validate the immutable request snapshot before any selected user module
         # can be imported or any optional capability can be materialized.
         messages = validate_client_messages(raw_messages)
-        report, assembly = self._validation.resolve_main_agent(
+        assembly = self.resolve(
             main_agent_id,
             workflow_filesystem_id=workflow_filesystem_id,
         )
-        if not report.valid:
-            issue = report.issues[0]
-            if issue.code == "assembly.main_agent_not_found":
-                status_code = 404
-            elif issue.code in {
-                "assembly.referenced_block_invalid",
-                "assembly.tool_name_conflict",
-            } or issue.code.startswith("contract."):
-                status_code = 422
-            else:
-                status_code = 409
-            raise AgentRuntimeError(
-                issue.code,
-                issue.message,
-                status_code=status_code,
-                validation_report=report,
-            )
-        assert assembly is not None
+        return await self.build_resolved(
+            assembly,
+            messages,
+            model_request_interceptor=model_request_interceptor,
+            model_request_observer=model_request_observer,
+            model_response_observer=model_response_observer,
+            request_id=request_id,
+            workflow_node_id=workflow_node_id,
+            workspace=workspace,
+        )
+
+    async def build_resolved(
+        self,
+        assembly: StaticAssembly,
+        raw_messages: object,
+        *,
+        model_request_interceptor: Callable[[dict[str, Any]], Any] | None = None,
+        model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
+        model_response_observer: Callable[[ModelResponse], Any] | None = None,
+        request_id: str = "",
+        workflow_node_id: str | None = None,
+        workspace: DeepAgentsWorkspace | None = None,
+    ) -> BuiltAgent:
+        validate_client_messages(raw_messages)
         main_agent = assembly.main_agent
         references = assembly.references
         selected_blocks = assembly.blocks
@@ -491,7 +589,7 @@ class AgentBuilder:
         ).model_dump(mode="json")
         resolved_subagents = assembly.subagents
 
-        main_agent_id = str(main_agent.get("id", main_agent_id))
+        main_agent_id = str(main_agent["id"])
         main_agent_name = str(main_agent["name"])
         middleware_runtime = MiddlewarePackageRuntime.from_assembly(
             assembly,
@@ -508,6 +606,7 @@ class AgentBuilder:
             scope="main_agent",
             owner_id=main_agent_id,
             owner_name=main_agent_name,
+            workflow_node_id=workflow_node_id,
             workspace=workspace,
             disabled_capabilities=assembly.disabled_capabilities,
         )
@@ -531,6 +630,11 @@ class AgentBuilder:
             constructor["skills"] = list(materialized.skill_sources)
 
         middleware = [
+            *(
+                [materialized.session_recorder_middleware]
+                if materialized.session_recorder_middleware is not None
+                else []
+            ),
             ToolErrorBoundaryMiddleware(),
             *materialized.middleware,
         ]
@@ -541,7 +645,11 @@ class AgentBuilder:
                     model_settings=materialized.model_settings,
                 )
             )
-        input_state: dict[str, Any] = {"messages": [], "shared_vars": {}}
+        input_state: dict[str, Any] = {
+            "messages": [],
+            "shared_vars": {},
+            "agent_sessions": {},
+        }
 
         compiled_subagents: list[dict[str, Any]] = []
         task_description_override: str | None = None
@@ -553,6 +661,7 @@ class AgentBuilder:
                 nodes=assembly.subagent_nodes,
                 workspace=materialized.workspace,
                 materialize_profile=self._materialize_profile,
+                workflow_node_id=workflow_node_id,
             )
             delegation_instruction = selected_blocks["subagent"][
                 "instruction_override"

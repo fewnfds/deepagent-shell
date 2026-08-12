@@ -6,7 +6,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent_shell.api.errors import management_error
-from agent_shell.contracts import BLOCK_MODELS
+from agent_shell.contracts import MANAGED_COMPONENT_MODELS
 from agent_shell.storage.validation_settings import (
     MAX_VALIDATION_DEBOUNCE_MS,
     MIN_VALIDATION_DEBOUNCE_MS,
@@ -63,7 +63,7 @@ def build_validation_router(
     async def validate_draft(request: DraftValidationRequest) -> dict[str, object]:
         target = request.target
         if target.kind == "block":
-            if target.type not in BLOCK_MODELS:
+            if target.type not in MANAGED_COMPONENT_MODELS:
                 raise management_error(
                     422,
                     code="unknown_configuration_type",

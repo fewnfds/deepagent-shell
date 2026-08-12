@@ -34,6 +34,10 @@ export const en: MessageSchema = {
     searchPlaceholder: 'Search name or description',
     loadFailed: 'Could not load Workflows',
     filesystemLoadFailed: 'Could not load filesystem configurations',
+    stateModes: {
+      shared: 'Shared Agent messages',
+      isolated: 'Isolated Agent messages',
+    },
     createTitle: 'Create Workflow',
     editTitle: 'Edit Workflow',
     saved: 'Workflow saved.',
@@ -88,6 +92,8 @@ export const en: MessageSchema = {
       name: 'Name',
       description: 'Description',
       filesystem: 'Shared filesystem',
+      stateMode: 'Agent state mode',
+      prepare: 'Workflow Prepare',
       enabled: 'Enabled',
     },
   },
@@ -393,6 +399,14 @@ export const en: MessageSchema = {
     'workflow-input-context': {
       label: 'Workflow input context',
       description: 'Transform and inject the immutable OpenAI message snapshot at Agent startup',
+    },
+    'session-recorder': {
+      label: 'Session Recorder',
+      description: 'Store a completed conversation snapshot for each assembled Agent invocation',
+    },
+    'workflow-prepare': {
+      label: 'Workflow Prepare',
+      description: 'Prepare immutable Workflow runtime context before LangChain construction',
     },
     'main-agent': {
       label: 'Main Agent',
@@ -723,11 +737,8 @@ export const en: MessageSchema = {
       cacheTypes: { ephemeral: 'Ephemeral cache' },
     },
     workflowInputContext: {
-      scopeTitle: 'Agent scope',
-      mainAgent: 'Main Agent',
-      subagent: 'Synchronous Subagent',
       transformTitle: 'Trusted Python transform',
-      transformHint: 'Define def transform(messages, read_file, config) and return the message list. Imports run in the trusted server process.',
+      transformHint: 'Define def transform(messages, read_file, config, state, context) and return the message list. Imports run in the trusted server process.',
       transformEnabled: 'Run the custom transform',
       systemTitle: 'System-message policy',
       promoteEnabled: 'Promote qualifying system messages into the leading system block',
@@ -739,6 +750,20 @@ export const en: MessageSchema = {
       moveDown: 'Move slot down',
       truncateIfMissing: 'Stop processing later slots when every source is missing',
       noSlots: 'No message slot is configured.',
+    },
+    sessionRecorder: {
+      transformEnabled: 'Transform the stored conversation copy',
+      transformHint: 'Define def transform(messages, read_file, config, state, context) and return the message list to store.',
+    },
+    workflowPrepare: {
+      sourceHint: 'Define async def prepare(input) and return an object with an optional context object.',
+    },
+    scriptRequirements: {
+      hint: 'One PEP 508 requirement per line. Dependency changes require an application restart.',
+      status: {
+        restart_required: 'Restart Agent Shell to prepare the changed Python requirements.',
+        failed: 'The Python requirements could not be prepared. Check runtime diagnostics.',
+      },
     },
   },
   feedback: {
@@ -956,6 +981,7 @@ export const en: MessageSchema = {
   errors: {
     workflowInvalid: 'The Workflow configuration is invalid.',
     workflowFilesystemNotFound: 'The selected Workflow filesystem does not exist.',
+    workflowPrepareNotFound: 'The selected Workflow Prepare component does not exist.',
     workflowNameConflict: 'A Workflow with this name already exists.',
     workflowNotFound: 'The Workflow does not exist.',
     workflowDebugRunNotFound: 'The Workflow Debug run does not exist.',

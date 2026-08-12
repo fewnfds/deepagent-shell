@@ -8,7 +8,8 @@ import {
   managementApi,
   ManagementApiError,
   type BlockPayload,
-  type BlockType,
+  type ManagedComponentType,
+  type WorkflowComponentManifest,
   type CapabilityManifest,
   type LocalizedMessagePayload,
   type ModelProviderCatalog,
@@ -52,6 +53,8 @@ import {
   SystemPromptEditor,
   TodoListEditor,
   WorkflowInputContextEditor,
+  SessionRecorderEditor,
+  WorkflowPrepareEditor,
 } from '@/editors'
 
 interface PageBlockAdapter {
@@ -60,7 +63,7 @@ interface PageBlockAdapter {
   toPayload(value: BlockDraftBase, defaults?: unknown): BlockPayload
 }
 
-const editorComponents: Record<BlockType, Component> = {
+const editorComponents: Record<ManagedComponentType, Component> = {
   model: ModelEditor,
   'system-prompt': SystemPromptEditor,
   filesystem: FilesystemEditor,
@@ -75,6 +78,8 @@ const editorComponents: Record<BlockType, Component> = {
   summarization: SummarizationEditor,
   'prompt-caching': PromptCachingEditor,
   'workflow-input-context': WorkflowInputContextEditor,
+  'session-recorder': SessionRecorderEditor,
+  'workflow-prepare': WorkflowPrepareEditor,
 }
 
 const { t } = useI18n()
@@ -84,9 +89,10 @@ const router = useRouter()
 const { confirm } = useConfirmation()
 const { notify } = useToasts()
 
-const manifests = ref<CapabilityManifest[]>([])
+type ManagedManifest = CapabilityManifest | WorkflowComponentManifest
+const manifests = ref<ManagedManifest[]>([])
 const editorDefaults = ref<Record<string, unknown>>({})
-const activeType = ref<BlockType | null>(null)
+const activeType = ref<ManagedComponentType | null>(null)
 const records = ref<SavedBlock[]>([])
 const selectedId = ref('')
 const draft = ref<BlockDraftBase | null>(null)
@@ -130,7 +136,7 @@ function invalidateModelCatalog(): void {
   loadingModels.value = false
 }
 
-function defaultsForType(type: BlockType | null): unknown {
+function defaultsForType(type: ManagedComponentType | null): unknown {
   const editorKey = manifests.value.find((item) => item.type === type)?.editor_key
   return editorKey ? editorDefaults.value[editorKey] : undefined
 }
@@ -179,6 +185,8 @@ const editorProps = computed<Record<string, unknown>>(() => {
     case 'summarization':
     case 'prompt-caching':
     case 'workflow-input-context':
+    case 'session-recorder':
+    case 'workflow-prepare':
       return {
         defaults: activeDefaults.value,
         ...(activeType.value === 'filesystem-permissions'
@@ -190,19 +198,19 @@ const editorProps = computed<Record<string, unknown>>(() => {
   }
 })
 
-function adapter(type: BlockType): PageBlockAdapter {
+function adapter(type: ManagedComponentType): PageBlockAdapter {
   return blockAdapters[type] as unknown as PageBlockAdapter
 }
 
-function blankDraft(type: BlockType): BlockDraftBase {
+function blankDraft(type: ManagedComponentType): BlockDraftBase {
   return adapter(type).blank(defaultsForType(type))
 }
 
-function draftFromApi(type: BlockType, value: SavedBlock): BlockDraftBase {
+function draftFromApi(type: ManagedComponentType, value: SavedBlock): BlockDraftBase {
   return adapter(type).fromApi(value, defaultsForType(type))
 }
 
-function payloadFromDraft(type: BlockType, value: BlockDraftBase): BlockPayload {
+function payloadFromDraft(type: ManagedComponentType, value: BlockDraftBase): BlockPayload {
   return adapter(type).toPayload(value, defaultsForType(type))
 }
 
@@ -347,7 +355,10 @@ async function loadCatalog(): Promise<void> {
   pageError.value = ''
   try {
     const catalog = await managementApi.getCatalog()
-    manifests.value = [...catalog.block_types].sort((left, right) => left.order - right.order)
+    manifests.value = [
+      ...catalog.block_types,
+      ...catalog.workflow_component_types,
+    ].sort((left, right) => left.order - right.order)
     editorDefaults.value = catalog.editor_defaults
     await loadRoute()
   } catch (error) {

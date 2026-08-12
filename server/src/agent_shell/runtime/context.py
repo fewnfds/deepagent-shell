@@ -34,6 +34,7 @@ class WorkflowRuntimeContext:
     messages: tuple[Mapping[str, Any], ...] = ()
     messages_sha: str = ""
     workflow: Mapping[str, Any] = field(default_factory=dict)
+    prepare: Mapping[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_request(
@@ -42,6 +43,7 @@ class WorkflowRuntimeContext:
         *,
         request_id: str,
         workflow: Mapping[str, Any] | None = None,
+        prepare: Mapping[str, Any] | None = None,
     ) -> "WorkflowRuntimeContext":
         messages = validate_prepared_messages(raw_messages)
         frozen_messages = tuple(
@@ -52,6 +54,7 @@ class WorkflowRuntimeContext:
             messages=frozen_messages,
             messages_sha=client_messages_sha(messages),
             workflow=_freeze(deepcopy(dict(workflow or {}))),
+            prepare=_freeze(deepcopy(dict(prepare or {}))),
         )
 
 

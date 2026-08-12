@@ -40,6 +40,7 @@ def _profile(
         middleware=(core,),
         package_middleware=packages,
         extra_middleware=(extra,),
+        session_recorder_middleware=None,
         backend=object(),
         initial_files={},
         skill_sources=(),
