@@ -990,6 +990,7 @@ export const en: MessageSchema = {
     systemSecretOperationInvalid: 'The secret update operation is invalid.',
     systemSettingsInvalid: 'The system settings are invalid: {keys}',
     systemSettingsWriteFailed: 'The system settings could not be saved.',
+    langsmithConnectionFailed: 'LangSmith connection validation failed. Check the API key, Endpoint region, and Workspace ID.',
     requestFailed: 'The management request failed.',
     requestValidationFailed: 'The request payload failed server structure validation ({count} issues).',
     internalError: 'An internal server operation failed. Use the request ID for diagnostics.',

@@ -15,11 +15,6 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 ENV_PREFIX = "AGENT_SHELL_"
 _MODEL_SECRET_ENVIRONMENT = re.compile(r"^AGENT_SHELL_MODEL_[A-Z0-9_]+_API_KEY$", re.IGNORECASE)
-_LANGSMITH_TRACING_ENVIRONMENT = (
-    "LANGSMITH_TRACING",
-    "LANGCHAIN_TRACING_V2",
-    "LANGCHAIN_TRACING",
-)
 DEFAULT_LANGSMITH_ENDPOINT = "https://api.smith.langchain.com"
 
 
@@ -325,33 +320,6 @@ class Settings(BaseSettings):
         )
         for directory in directories:
             directory.mkdir(parents=True, exist_ok=True)
-
-
-def configure_project_langsmith_tracing(settings: Settings) -> None:
-    """Apply the project-local LangSmith tracing boundary to this process.
-
-    LangChain reads these variables directly from the process environment. Setting
-    them here affects Agent Shell and its children only; it does not change the
-    host user's or any other process's environment.
-    """
-    value = "true" if settings.langsmith_tracing_enabled else "false"
-    for name in _LANGSMITH_TRACING_ENVIRONMENT:
-        os.environ[name] = value
-    os.environ["LANGSMITH_ENDPOINT"] = settings.langsmith_endpoint
-    os.environ["LANGSMITH_PROJECT"] = settings.langsmith_project
-    optional = {
-        "LANGSMITH_API_KEY": (
-            settings.langsmith_api_key.get_secret_value()
-            if settings.langsmith_api_key is not None
-            else None
-        ),
-        "LANGSMITH_WORKSPACE_ID": settings.langsmith_workspace_id,
-    }
-    for name, item in optional.items():
-        if item is None:
-            os.environ.pop(name, None)
-        else:
-            os.environ[name] = item
 
 
 def _known_environment_keys() -> set[str]:

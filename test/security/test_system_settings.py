@@ -76,6 +76,10 @@ def test_valid_system_settings_are_atomic_and_take_effect_after_restart(
 ) -> None:
     app, client = _client(tmp_path, monkeypatch)
     settings_path = tmp_path / "data" / "config" / "system.yaml"
+    monkeypatch.setattr(
+        "agent_shell.system_settings.validate_langsmith_connection",
+        lambda _settings: None,
+    )
 
     response = client.put(
         "/api/system/settings",
@@ -120,6 +124,38 @@ def test_valid_system_settings_are_atomic_and_take_effect_after_restart(
         encoding="utf-8"
     )
     assert "LANGSMITH_API_KEY=langsmith-test-key" in env_text
+
+
+def test_unreachable_langsmith_connection_does_not_save_settings_or_secret(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agent_shell.langsmith_tracing import LangSmithConnectionError
+
+    _, client = _client(tmp_path, monkeypatch)
+    settings_path = tmp_path / "data" / "config" / "system.yaml"
+    environment_path = tmp_path / "data" / "config" / "agent-shell.env"
+    original_settings = settings_path.read_text(encoding="utf-8")
+    original_environment = environment_path.read_text(encoding="utf-8")
+    replacement = "langsmith-replacement-secret"
+    monkeypatch.setattr(
+        "agent_shell.system_settings.validate_langsmith_connection",
+        lambda _settings: (_ for _ in ()).throw(LangSmithConnectionError()),
+    )
+
+    response = client.put(
+        "/api/system/settings",
+        json=_payload(
+            langsmith_tracing_enabled=True,
+            langsmith_api_key={"operation": "replace", "value": replacement},
+        ),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "langsmith_connection_failed"
+    assert response.json()["detail"]["message_key"] == "errors.langsmithConnectionFailed"
+    assert replacement not in response.text
+    assert settings_path.read_text(encoding="utf-8") == original_settings
+    assert environment_path.read_text(encoding="utf-8") == original_environment
 
 
 def test_invalid_candidate_does_not_write_or_reveal_replacement_secrets(

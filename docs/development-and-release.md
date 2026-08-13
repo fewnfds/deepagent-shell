@@ -55,8 +55,8 @@ Middleware 包的 `requirements.txt` 不进入项目 `pyproject.toml`。Windows 
 | runtime/CI uv | `0.12.2` |
 | Deep Agents | `0.7.5` |
 | FastAPI / Uvicorn | `0.141.1` / `0.52.1` |
-| LangChain adapters | Anthropic `1.5.4`；DeepSeek `1.1.0`；Google GenAI `4.3.2`；Google Vertex AI `3.2.4`；OpenAI `1.4.1`；xAI `1.3.0` |
-| LangChain core/graph | `langchain 1.3.14`；`langchain-core 1.5.3`；`langgraph 1.2.10` |
+| LangChain adapters | Anthropic `1.5.6`；DeepSeek `1.1.0`；Google GenAI `4.3.3`；Google Vertex AI `3.2.4`；OpenAI `1.5.0`；xAI `1.3.0` |
+| LangChain core/graph | `langchain 1.3.15`；`langchain-core 1.5.4`；`langgraph 1.2.11` |
 | 其他边界 | `packaging 26.3`；`websockets 15.0.1`；dev-only `httpx2/httpcore2 2.9.1` |
 
 截至本基线，`uv lock --dry-run --upgrade` 不再产生可解析的锁变化。`uv tree --outdated` 仍可能显示

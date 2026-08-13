@@ -988,6 +988,7 @@ export const zhCN = {
     systemSecretOperationInvalid: 'Secret 修改操作无效。',
     systemSettingsInvalid: '系统配置无效：{keys}',
     systemSettingsWriteFailed: '无法保存系统配置。',
+    langsmithConnectionFailed: 'LangSmith 连接验证失败，请检查 API Key、Endpoint 区域和 Workspace ID。',
     requestFailed: '管理请求失败。',
     requestValidationFailed: '请求数据未通过服务端结构校验（{count} 项）。',
     internalError: '服务端内部操作失败，请使用请求 ID 排查。',

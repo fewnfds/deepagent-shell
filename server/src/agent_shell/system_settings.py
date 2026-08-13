@@ -5,6 +5,10 @@ from typing import Any
 
 from pydantic import SecretStr, ValidationError
 
+from agent_shell.langsmith_tracing import (
+    LangSmithConnectionError,
+    validate_langsmith_connection,
+)
 from agent_shell.settings import Settings, SettingsError
 from agent_shell.security import ApiKeyPolicyError, validate_api_key_policy
 from agent_shell.storage.file_config import FileConfigRepository
@@ -184,6 +188,23 @@ class SystemSettingsService:
 
     def update(self, payload: dict[str, Any]) -> dict[str, Any]:
         candidate = self._candidate(payload)
+        langsmith_connection_changed = (
+            not self._saved.langsmith_tracing_enabled
+            or candidate.langsmith_endpoint != self._saved.langsmith_endpoint
+            or candidate.langsmith_workspace_id != self._saved.langsmith_workspace_id
+            or _secret_value(candidate.langsmith_api_key)
+            != _secret_value(self._saved.langsmith_api_key)
+        )
+        if candidate.langsmith_tracing_enabled and langsmith_connection_changed:
+            try:
+                validate_langsmith_connection(candidate)
+            except LangSmithConnectionError:
+                raise SystemSettingsError(
+                    422,
+                    "langsmith_connection_failed",
+                    "errors.langsmithConnectionFailed",
+                    "LangSmith connection validation failed. Check the API key, endpoint region, and workspace ID.",
+                ) from None
         try:
             self._configuration.update_system(
                 lambda system: system.__setitem__(

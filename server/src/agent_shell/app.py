@@ -25,12 +25,12 @@ from agent_shell.api.workflows import build_workflow_router
 from agent_shell.api.workflow_debug import build_workflow_debug_router
 from agent_shell.provider_http import ProviderHttpClients
 from agent_shell.provider_secrets import ProviderSecretResolver
+from agent_shell.langsmith_tracing import configure_project_langsmith_tracing
 from agent_shell.runtime.request_snapshot import RequestSnapshotRuntime
 from agent_shell.runtime.workflow_debug import WorkflowDebugService
 from agent_shell.settings import (
     Settings,
     SettingsError,
-    configure_project_langsmith_tracing,
     get_settings,
 )
 from agent_shell.runtime.interception import InterceptionTestController
@@ -77,7 +77,7 @@ def create_app(
     )
     if settings is None:
         settings = get_settings(application_home=application_home)
-    configure_project_langsmith_tracing(settings)
+    langsmith_client = configure_project_langsmith_tracing(settings)
     settings.ensure_directories()
 
     environment_permissions = ()
@@ -255,6 +255,8 @@ def create_app(
                         "service_stopped", {"reason": "application_shutdown"}
                     )
                     runtime_diagnostics.close()
+                    if langsmith_client is not None:
+                        langsmith_client.close(timeout=5.0)
 
     app = FastAPI(
         title=settings.app_name,

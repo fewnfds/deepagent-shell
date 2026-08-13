@@ -84,9 +84,10 @@ LANGSMITH_API_KEY=<LangSmith API key>
 ```
 
 模型 YAML 使用 `$AGENT_SHELL_MODEL_<id>_API_KEY` 形式引用对应变量；其他字段（包括 prompt、base URL、filesystem、
-middleware 和 tool 配置）直接写入 YAML。LangSmith 连接在系统配置中管理，保存后重启生效；进程使用官方
-`LANGSMITH_TRACING`、`LANGSMITH_API_KEY`、`LANGSMITH_ENDPOINT`、`LANGSMITH_PROJECT` 和可选
-`LANGSMITH_WORKSPACE_ID`。关闭时只在本项目进程环境中强制 tracing 为 `false`。开启后，标准 LangSmith trace
+middleware 和 tool 配置）直接写入 YAML。LangSmith 连接在系统配置中管理；启用或修改 Endpoint、API Key、
+Workspace ID 时会在落盘前验证 Key 能否访问对应区域，保存后重启生效。进程使用官方显式 Client 配置，并同步
+设置 `LANGSMITH_TRACING`、`LANGSMITH_API_KEY`、`LANGSMITH_ENDPOINT`、`LANGSMITH_PROJECT` 和可选
+`LANGSMITH_WORKSPACE_ID` 供 LangChain 生态读取。关闭时只在本项目进程环境中强制 tracing 为 `false`。开启后，标准 LangSmith trace
 可能上传 prompt、模型输出和工具输入/输出，必须按敏感数据策略控制。
 
 非敏感 `AGENT_SHELL_*` 启动变量不再作为配置来源；未知键和误放入环境文件的键会使启动失败。Windows 源码启动器读取当前 Clone 的 data 配置；启动和维护方式见[开发与版本](development-and-release.md)。

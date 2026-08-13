@@ -129,6 +129,7 @@ def test_project_langsmith_tracing_boundary_is_explicit(
     expected: str,
 ) -> None:
     from agent_shell import __main__ as launcher
+    from agent_shell import langsmith_tracing
 
     _write_system_settings(tmp_path, langsmith_tracing_enabled=enabled)
     monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "management-secret")
@@ -137,12 +138,21 @@ def test_project_langsmith_tracing_boundary_is_explicit(
     monkeypatch.setenv("LANGCHAIN_TRACING", "true" if not enabled else "false")
     if enabled:
         monkeypatch.setenv("LANGSMITH_API_KEY", "langsmith-test-key")
+    configured: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        langsmith_tracing.ls,
+        "configure",
+        lambda **kwargs: configured.append(kwargs),
+    )
     monkeypatch.setattr(launcher.uvicorn, "run", lambda *_args, **_kwargs: None)
 
     assert launcher.main(serve_frontend=False) == 0
     assert os.environ["LANGSMITH_TRACING"] == expected
     assert os.environ["LANGCHAIN_TRACING_V2"] == expected
     assert os.environ["LANGCHAIN_TRACING"] == expected
+    assert configured[-1]["enabled"] is enabled
+    assert configured[-1]["project_name"] == "agent-shell"
+    assert (configured[-1]["client"] is not None) is enabled
 
 
 def test_official_launcher_prints_effective_settings_for_windows_script(
