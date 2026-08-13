@@ -10,6 +10,9 @@ from langchain.agents.middleware.types import ModelRequest, ModelResponse
 from agent_shell.runtime.errors import AgentRuntimeError
 
 
+GRAPH_RECURSION_LIMIT = 100
+
+
 class ToolErrorBoundaryMiddleware(AgentMiddleware):
     """Classify exceptions from the selected tool without changing its result."""
 

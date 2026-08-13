@@ -992,21 +992,6 @@ from agent_shell.workflow_prepare import WORKFLOW_COMPONENT_MODELS
 
 MANAGED_COMPONENT_MODELS = {**BLOCK_MODELS, **WORKFLOW_COMPONENT_MODELS}
 
-def validate_block_payload(block_type: str, payload: dict) -> dict:
-    model = MANAGED_COMPONENT_MODELS[block_type].model_validate(payload)
-    return model.model_dump(mode="json")
-
-
 def validate_provider_credential(payload: object) -> str | None:
     value = CREDENTIAL_VALUE_ADAPTER.validate_python(payload)
     return _reject_masked_credential(value)
-
-
-def validate_main_agent_payload(payload: dict) -> dict:
-    model = MainAgentProfile.model_validate(payload)
-    return model.model_dump(mode="json")
-
-
-def validate_subagent_payload(payload: dict) -> dict:
-    model = SubagentProfile.model_validate(payload)
-    return model.model_dump(mode="json")

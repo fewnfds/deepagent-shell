@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from langchain_core.messages import AIMessage
+
+from agent_shell.workflow.events import WorkflowEventSourceV1
+
 from .support import *
 
 
@@ -92,6 +96,113 @@ def test_text_stream_keeps_v3_start_delta_finish_boundaries_without_rewriting() 
         "reasoning_tokens": 2,
     }
     assert normalizer.main_agent_message_active is False
+
+
+def test_usage_counts_main_and_subagent_model_runs_once_across_event_shapes() -> None:
+    main_agent_id = "11111111-1111-4111-8111-111111111111"
+    subagent_id = "22222222-2222-4222-8222-222222222222"
+    normalizer = V3EventNormalizer(
+        "Main Agent",
+        workflow_sources={
+            "agent-a": WorkflowEventSourceV1(
+                source_type="agent",
+                workflow_node_id="agent-a",
+                agent_profile_id=main_agent_id,
+            )
+        },
+        main_agent_names=("Main Agent",),
+        workflow_agent_names={"agent-a": "Main Agent"},
+        workflow_subagent_profile_ids={
+            "agent-a": {"Researcher": subagent_id}
+        },
+    )
+    main_usage = {
+        "input_tokens": 5,
+        "output_tokens": 3,
+        "total_tokens": 8,
+        "output_token_details": {"reasoning": 1},
+    }
+    subagent_usage = {
+        "input_tokens": 7,
+        "output_tokens": 2,
+        "total_tokens": 9,
+    }
+
+    main_events = normalizer.feed(
+        message_envelope(
+            AIMessage(content="main", usage_metadata=main_usage),
+            run_id="model-main",
+            namespace=["agent-a:invocation", "model:model-main"],
+        )
+    )
+    normalizer.feed(
+        message_envelope(
+            {"event": "message-finish", "usage": main_usage},
+            run_id="model-main",
+            namespace=["agent-a:invocation", "model:model-main"],
+        )
+    )
+    subagent_events = normalizer.feed(
+        message_envelope(
+            AIMessage(content="delegated", usage_metadata=subagent_usage),
+            run_id="model-subagent",
+            agent_name="Researcher",
+            namespace=["agent-a:invocation", "task:call-1", "model:model-subagent"],
+        )
+    )
+    normalizer.feed(
+        message_envelope(
+            {"event": "message-finish", "usage": subagent_usage},
+            run_id="model-subagent",
+            agent_name="Researcher",
+            namespace=["agent-a:invocation", "task:call-1", "model:model-subagent"],
+        )
+    )
+
+    assert any(isinstance(event, OutputEvent) for event in main_events)
+    assert subagent_events == []
+    assert normalizer.usage == {
+        "input_tokens": 12,
+        "output_tokens": 5,
+        "total_tokens": 17,
+        "reasoning_tokens": 1,
+    }
+
+
+def test_usage_applies_only_growth_from_later_run_snapshot() -> None:
+    normalizer = V3EventNormalizer("Main Agent")
+    normalizer.feed(
+        message_envelope(
+            {
+                "event": "message-finish",
+                "usage": {
+                    "input_tokens": 2,
+                    "output_tokens": 1,
+                    "total_tokens": 3,
+                },
+            },
+            run_id="model-main",
+        )
+    )
+    normalizer.feed(
+        message_envelope(
+            {
+                "event": "message-finish",
+                "usage": {
+                    "input_tokens": 4,
+                    "output_tokens": 2,
+                    "total_tokens": 6,
+                },
+            },
+            run_id="model-main",
+        )
+    )
+
+    assert normalizer.usage == {
+        "input_tokens": 4,
+        "output_tokens": 2,
+        "total_tokens": 6,
+    }
 
 
 def test_complete_blocks_and_atomic_events_keep_v3_arrival_order() -> None:

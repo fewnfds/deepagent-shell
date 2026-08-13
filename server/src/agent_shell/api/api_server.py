@@ -413,7 +413,6 @@ def build_api_server_router(
             )
         workflow = request_snapshot.workflow_by_name(model)
         if workflow is None or not workflow["enabled"]:
-            request_snapshot.close()
             return _openai_error(
                 404,
                 "model_not_found",
@@ -422,7 +421,6 @@ def build_api_server_router(
             )
         stream = payload.get("stream", False)
         if not isinstance(stream, bool):
-            request_snapshot.close()
             return _openai_error(
                 422,
                 "invalid_stream",
@@ -432,7 +430,6 @@ def build_api_server_router(
         messages = payload.get("messages")
         max_initial_messages = int(server_settings["max_initial_messages"])
         if isinstance(messages, list) and len(messages) > max_initial_messages:
-            request_snapshot.close()
             return _openai_error(
                 422,
                 "input_messages_too_many",

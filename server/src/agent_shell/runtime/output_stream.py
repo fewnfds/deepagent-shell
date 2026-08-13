@@ -228,6 +228,7 @@ class V3EventNormalizer:
         self._responses = ModelResponseTracker(model_response_observers)
         self._tool_names: dict[tuple[str, str, str], str] = {}
         self._subagent_runs: dict[str, tuple[str, str]] = {}
+        self._usage_by_run: dict[str, dict[str, int]] = {}
         self._raw_seq: int = 0
         self.usage = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
@@ -576,7 +577,7 @@ class V3EventNormalizer:
         )
 
         if not isinstance(payload, dict):
-            if not is_main_agent or not isinstance(payload, AIMessage):
+            if not isinstance(payload, AIMessage):
                 return []
             usage = getattr(payload, "usage_metadata", None)
             response_metadata = getattr(payload, "response_metadata", None)
@@ -589,7 +590,9 @@ class V3EventNormalizer:
                 additional_kwargs if isinstance(additional_kwargs, dict) else {}
             )
             content_blocks = getattr(payload, "content_blocks", None)
-            self._merge_usage(usage_data)
+            self._merge_run_usage(run_key, usage_data)
+            if not is_main_agent:
+                return []
             self._responses.record(
                 timestamp=timestamp,
                 namespace=namespace,
@@ -658,7 +661,7 @@ class V3EventNormalizer:
                     diagnostics.get("incomplete_block_count", 0)
                     + incomplete_block_count
                 )
-            self._merge_usage(usage_data)
+            self._merge_run_usage(run_key, usage_data)
             is_main_agent_message = self._main_agent_ai_runs.get(run_key, is_main_agent)
             self._responses.record(
                 timestamp=timestamp,
@@ -1184,20 +1187,25 @@ class V3EventNormalizer:
         for run_key in list(run_keys):
             self._discard_message(run_key)
 
-    def _merge_usage(self, usage: object) -> None:
+    def _merge_run_usage(self, run_key: str, usage: object) -> None:
         if not isinstance(usage, dict):
             return
+        current: dict[str, int] = {}
         for key in ("input_tokens", "output_tokens", "total_tokens"):
             value = usage.get(key)
             if isinstance(value, int) and value >= 0:
-                self.usage[key] += value
+                current[key] = value
         output_details = usage.get("output_token_details")
         if isinstance(output_details, dict):
             reasoning = output_details.get("reasoning")
             if isinstance(reasoning, int) and reasoning >= 0:
-                self.usage["reasoning_tokens"] = (
-                    self.usage.get("reasoning_tokens", 0) + reasoning
-                )
+                current["reasoning_tokens"] = reasoning
+        previous = self._usage_by_run.setdefault(run_key, {})
+        for key, value in current.items():
+            previous_value = previous.get(key, 0)
+            if value > previous_value:
+                self.usage[key] = self.usage.get(key, 0) + value - previous_value
+                previous[key] = value
 
     def _subagent_for_namespace(self, namespace: str) -> str:
         """Resolve the nearest active Deep Agent subagent scope."""

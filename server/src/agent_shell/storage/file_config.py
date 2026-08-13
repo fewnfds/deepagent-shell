@@ -244,7 +244,7 @@ class FileConfigRepository:
 
     def secret(self, name: str) -> str | None:
         with self._lock:
-            return self._env.get(name) or os.getenv(name)
+            return self._env[name] if name in self._env else os.getenv(name)
 
     def set_secret(self, name: str, value: str | None) -> None:
         with self._lock:

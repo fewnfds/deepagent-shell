@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import asyncio
+from types import SimpleNamespace
+
 import pytest
 from deepagents import create_deep_agent
 from deepagents.backends import StateBackend
 from deepagents.backends.utils import create_file_data
 from langchain.agents.middleware import AgentMiddleware, AgentState
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from typing_extensions import NotRequired
 
 from agent_shell.plugins.workflow_input_context.contracts import (
@@ -153,6 +156,75 @@ def test_subagent_uses_delegated_messages_without_root_request_or_duplicates() -
     assert message_signature(result) == [
         ("human", "delegated task"),
         ("ai", "answer"),
+    ]
+
+
+def test_subagent_preserves_delegated_tool_call_pair() -> None:
+    result = run_agent(
+        WorkflowInputContextBlock(name="input"),
+        ({"role": "user", "content": "original workflow request"},),
+        agent_scope="subagent",
+        input_messages=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "lookup",
+                        "args": {"query": "delegated"},
+                        "id": "call-1",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            ToolMessage(content="tool result", tool_call_id="call-1"),
+            HumanMessage(content="continue"),
+        ],
+    )
+
+    messages = result["messages"]
+    assert messages[0].tool_calls[0]["id"] == "call-1"
+    assert messages[1].tool_call_id == "call-1"
+    assert message_signature(result) == [
+        ("ai", ""),
+        ("tool", "tool result"),
+        ("human", "continue"),
+        ("ai", "answer"),
+    ]
+
+
+def test_async_hook_uses_backend_aread_for_slots() -> None:
+    class AsyncReadBackend:
+        def read(self, *_args, **_kwargs):
+            raise AssertionError("async hook must not use sync backend read")
+
+        async def aread(self, path, *, offset, limit):
+            assert (path, offset, limit) == ("/slot.txt", 0, 1_000_000)
+            return SimpleNamespace(file_data=create_file_data("slot content"), error=None)
+
+    middleware = WorkflowInputContextMiddleware(
+        WorkflowInputContextBlock(
+            name="input",
+            system_promote_enabled=False,
+            demote_non_top_system=False,
+            slots=[{"role": "system", "file": "/slot.txt", "max_chars": 4}],
+        ),
+        backend=AsyncReadBackend(),
+        agent_scope="main_agent",
+    )
+    context = WorkflowRuntimeContext.from_request(
+        ({"role": "user", "content": "question"},),
+        request_id="test-request",
+        workflow={"id": "workflow-id"},
+    )
+
+    update = asyncio.run(
+        middleware.abefore_agent({"messages": []}, SimpleNamespace(context=context))
+    )
+
+    assert update is not None
+    assert [message.content for message in update["messages"].value] == [
+        "question",
+        "slot",
     ]
 
 

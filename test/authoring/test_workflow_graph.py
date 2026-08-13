@@ -142,7 +142,13 @@ def test_admission_accepts_incomplete_drafts_and_layout_does_not_change_executio
         admitted,
         validate_main_agent=valid_main_agent,
     )
-    assert executable.valid is True
+    assert executable.valid is False
+    assert {
+        issue.code for issue in executable.issues
+    } >= {
+        "workflow.node_unreachable_from_start",
+        "workflow.node_cannot_reach_end",
+    }
 
     complete_report, complete = admit_workflow_document(graph_payload(AGENT_A))
     assert complete_report.valid is True
@@ -321,6 +327,52 @@ def test_topology_does_not_forbid_langgraph_cycles() -> None:
         document,
         validate_main_agent=valid_main_agent,
     ).valid is True
+
+
+@pytest.mark.parametrize(
+    ("remove_type", "expected_code"),
+    [
+        ("start", "workflow.start_required"),
+        ("agent", "workflow.agent_required"),
+        ("end", "workflow.end_required"),
+    ],
+)
+def test_executable_validation_requires_each_runtime_node_kind(
+    remove_type: str,
+    expected_code: str,
+) -> None:
+    payload = graph_payload(AGENT_A)
+    removed_ids = {
+        node["id"]
+        for node in payload["definition"]["nodes"]  # type: ignore[index]
+        if node["type"] == remove_type
+    }
+    payload["definition"]["nodes"] = [  # type: ignore[index]
+        node
+        for node in payload["definition"]["nodes"]  # type: ignore[index]
+        if node["id"] not in removed_ids
+    ]
+    payload["definition"]["edges"] = [  # type: ignore[index]
+        edge
+        for edge in payload["definition"]["edges"]  # type: ignore[index]
+        if edge["source"] not in removed_ids and edge["target"] not in removed_ids
+    ]
+    payload["layout"]["nodes"] = {  # type: ignore[index]
+        node_id: position
+        for node_id, position in payload["layout"]["nodes"].items()  # type: ignore[index]
+        if node_id not in removed_ids
+    }
+    admission, document = admit_workflow_document(payload)
+    assert admission.valid is True
+    assert document is not None
+
+    report = validate_workflow_executable(
+        document,
+        validate_main_agent=valid_main_agent,
+    )
+
+    assert report.valid is False
+    assert expected_code in {issue.code for issue in report.issues}
 
 
 def test_executable_validation_attaches_main_agent_issues_to_the_agent_node() -> None:

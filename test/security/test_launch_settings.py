@@ -60,6 +60,14 @@ def test_create_app_installs_minimal_cors_and_runtime_directories(
                 "Access-Control-Request-Headers": "Authorization, X-Request-ID",
             },
         )
+        patch_allowed = client.options(
+            "/api/files/%2Frenamed.txt",
+            headers={
+                "Origin": "https://console.example",
+                "Access-Control-Request-Method": "PATCH",
+                "Access-Control-Request-Headers": "Authorization, Content-Type",
+            },
+        )
         rejected = client.options(
             "/api/catalog",
             headers={
@@ -70,6 +78,8 @@ def test_create_app_installs_minimal_cors_and_runtime_directories(
 
     assert allowed.status_code == 200
     assert allowed.headers["access-control-allow-origin"] == "https://console.example"
+    assert patch_allowed.status_code == 200
+    assert "PATCH" in patch_allowed.headers["access-control-allow-methods"]
     assert "access-control-allow-credentials" not in allowed.headers
     assert rejected.status_code == 400
     assert "access-control-allow-origin" not in rejected.headers

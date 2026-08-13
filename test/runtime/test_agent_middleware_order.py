@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
+from typing import Annotated
 
 from deepagents import create_deep_agent
 from langchain.agents.middleware import AgentMiddleware
+from langchain.agents.middleware.types import PrivateStateAttr
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from typing_extensions import TypedDict
 
 from agent_shell.runtime import agent_builder, subagent_middleware
 from agent_shell.runtime.agent_builder import AgentBuilder
@@ -68,7 +71,6 @@ def _profile(
         package_middleware=packages,
         extra_middleware=(extra,),
         backend=object(),
-        initial_files={},
         skill_sources=(),
         permissions=(),
         workspace=SimpleNamespace(initial_files={}),
@@ -225,3 +227,41 @@ def test_custom_package_middleware_is_the_shell_caller_tail_for_main_and_subagen
     assert child_middleware.index(child_retry) < child_middleware.index(child_packages[0])
     assert main_middleware.index(delegation) < main_middleware.index(main_packages[0])
     assert delegation_input[-2:] == main_packages
+
+
+def test_task_description_override_keeps_middleware_private_state_keys(
+    monkeypatch,
+) -> None:
+    class PackageState(TypedDict):
+        public_value: str
+        private_value: Annotated[str, PrivateStateAttr]
+
+    captured: dict[str, object] = {}
+
+    class CapturingSubAgentMiddleware:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(
+        "deepagents.middleware.SubAgentMiddleware",
+        CapturingSubAgentMiddleware,
+    )
+
+    result = subagent_middleware.make_subagent_middleware_override(
+        backend=object(),
+        subagents=[
+            {
+                "name": "worker",
+                "description": "Handles delegated work.",
+                "runnable": object(),
+            }
+        ],
+        task_description="Delegate to {available_agents}.",
+        middleware=(_middleware("Package", state_schema=PackageState),),
+    )
+
+    assert isinstance(result, CapturingSubAgentMiddleware)
+    assert captured["task_description"] == "Delegate to {available_agents}."
+    assert captured["private_state_keys"] == frozenset(
+        {"_summarization_event", "jump_to", "private_value"}
+    )

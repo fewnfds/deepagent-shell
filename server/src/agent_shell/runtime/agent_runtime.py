@@ -16,6 +16,7 @@ from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.model_response import ModelResponse
 from agent_shell.runtime.input_messages import validate_client_messages
+from agent_shell.runtime.limits import GRAPH_RECURSION_LIMIT
 from agent_shell.runtime.media_response import MainAgentMediaResponse
 from agent_shell.runtime.output_event_pool import OutputEventRectifier
 from agent_shell.runtime.output_projection import OutputProjector, WorkflowOutputProjector
@@ -30,12 +31,13 @@ from agent_shell.storage.media_outputs import MediaOutputStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.runtime.workflow_debug import WorkflowDebugRun, WorkflowDebugService
 from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
+from agent_shell.workflow.validation import validate_workflow_executable
+from agent_shell.validation import ValidationReport
 from agent_shell.validation.assembly import StaticAssembly
 from agent_shell.workflow_prepare import WorkflowPrepareError, run_workflow_prepare
 from langgraph.errors import GraphRecursionError
 
 EXECUTION_TIMEOUT_SECONDS = 600
-GRAPH_RECURSION_LIMIT = 100
 
 
 def _resolved_agent_prepare_snapshot(assembly: StaticAssembly) -> dict[str, Any]:
@@ -524,6 +526,34 @@ class AgentRuntime:
             node for node in document.definition.nodes if node.type == "agent"
         ]
         messages = validate_client_messages(raw_messages)
+        assemblies: dict[str, StaticAssembly] = {}
+
+        def validate_main_agent(main_agent_id: str) -> ValidationReport:
+            if main_agent_id in assemblies:
+                return ValidationReport(stage="workflow_publish")
+            try:
+                assemblies[main_agent_id] = self._builder.resolve(
+                    main_agent_id,
+                    workflow_filesystem_id=workflow_filesystem_id,
+                )
+            except AgentRuntimeError as exc:
+                if exc.validation_report is not None:
+                    return exc.validation_report
+                raise
+            return ValidationReport(stage="workflow_publish")
+
+        executable = validate_workflow_executable(
+            document,
+            validate_main_agent=validate_main_agent,
+        )
+        if not executable.valid:
+            issue = executable.issues[0]
+            raise AgentRuntimeError(
+                issue.code,
+                issue.message,
+                status_code=422,
+                validation_report=executable,
+            )
         workflow_context = {
             **dict(workflow_snapshot or {}),
             "filesystem_id": workflow_filesystem_id,
@@ -572,10 +602,7 @@ class AgentRuntime:
                 resolved_agents.append(
                     (
                         agent_node,
-                        self._builder.resolve(
-                            main_agent_id,
-                            workflow_filesystem_id=workflow_filesystem_id,
-                        ),
+                        assemblies[main_agent_id],
                     )
                 )
             prepare_context: Mapping[str, Any] = {}

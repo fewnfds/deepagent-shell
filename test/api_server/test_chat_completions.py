@@ -76,6 +76,46 @@ def test_models_publish_only_enabled_workflows_and_chat_runs_current_graph(
         assert response.json()["error"]["code"] == "model_not_found"
 
 
+def test_chat_rejects_an_incomplete_saved_workflow_draft(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        main_agent = create_main_agent(client)
+        workflow = create_workflow(client, name="Incomplete Workflow")
+        saved = client.put(
+            f"/api/workflows/{workflow['id']}/graph",
+            json={
+                "definition": {
+                    "schema_version": 1,
+                    "state_contract": "agent-shell.workflow.agent-invocations.v1",
+                    "nodes": [
+                        {"id": "start", "type": "start", "type_version": 1, "config": {}},
+                        {
+                            "id": "agent",
+                            "type": "agent",
+                            "type_version": 1,
+                            "config": {"main_agent_id": main_agent["id"]},
+                        },
+                        {"id": "end", "type": "end", "type_version": 1, "config": {}},
+                    ],
+                    "edges": [],
+                },
+                "layout": {"nodes": {}, "viewport": {"x": 0, "y": 0, "zoom": 1}},
+            },
+        )
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": workflow["name"],
+                "messages": [{"role": "user", "content": "run"}],
+            },
+        )
+
+    assert saved.status_code == 200, saved.text
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "workflow.node_cannot_reach_end"
+
+
 def test_chat_completion_stream_runs_current_graph(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

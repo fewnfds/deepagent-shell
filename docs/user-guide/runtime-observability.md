@@ -27,8 +27,8 @@ DEBUG 文件可能包含请求内容、Provider 返回、凭据、宿主路径�
 ## Workflow Debug
 
 每次 Workflow 请求建立独立 thread，并由 LangGraph `AsyncSqliteSaver` 写入
-`data/state/agent-shell.sqlite3`。Workflow Debug 页面提供运行树和 checkpoint 摘要，用于定位失败的 Workflow、Agent、
-model 或 tool 节点；它不替代 DEBUG traceback。
+`data/state/agent-shell.sqlite3`。当前 management API 提供有界运行索引、结构运行树和 checkpoint 摘要，用于定位失败的
+Workflow、Agent、model 或 tool 节点；当前管理台没有 Workflow Debug 页面。它不替代 DEBUG traceback。
 
 当前 checkpoint 只用于 Debug，不提供 Resume。
 

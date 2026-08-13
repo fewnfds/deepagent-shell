@@ -177,6 +177,75 @@ def validate_workflow_topology(
         else:
             connections.add(connection)
 
+    node_indexes = {node.id: index for index, node in enumerate(nodes)}
+    start_ids = {node.id for node in nodes if node.type == "start"}
+    end_ids = {node.id for node in nodes if node.type == "end"}
+    agent_ids = {node.id for node in nodes if node.type == "agent"}
+    for node_type, ids in (
+        ("start", start_ids),
+        ("end", end_ids),
+        ("agent", agent_ids),
+    ):
+        if not ids:
+            issues.append(
+                _issue(
+                    f"workflow.{node_type}_required",
+                    "definition.nodes",
+                    f"The Workflow requires at least one {node_type.title()} node.",
+                    f"validation.issue.workflow.{node_type}Required",
+                    owner_type="graph",
+                )
+            )
+
+    if start_ids and end_ids:
+        outgoing: dict[str, set[str]] = {node.id: set() for node in nodes}
+        incoming: dict[str, set[str]] = {node.id: set() for node in nodes}
+        for edge in edges:
+            if edge.source in node_by_id and edge.target in node_by_id:
+                outgoing[edge.source].add(edge.target)
+                incoming[edge.target].add(edge.source)
+
+        reachable_from_start = set(start_ids)
+        pending = list(start_ids)
+        while pending:
+            for target in outgoing[pending.pop()]:
+                if target not in reachable_from_start:
+                    reachable_from_start.add(target)
+                    pending.append(target)
+
+        can_reach_end = set(end_ids)
+        pending = list(end_ids)
+        while pending:
+            for source in incoming[pending.pop()]:
+                if source not in can_reach_end:
+                    can_reach_end.add(source)
+                    pending.append(source)
+
+        for node in nodes:
+            index = node_indexes[node.id]
+            if node.id not in reachable_from_start:
+                issues.append(
+                    _issue(
+                        "workflow.node_unreachable_from_start",
+                        f"definition.nodes[{index}]",
+                        "The Workflow node is not reachable from a Start node.",
+                        "validation.issue.workflow.nodeUnreachableFromStart",
+                        owner_id=node.id,
+                        owner_type=node.type,
+                    )
+                )
+            if node.id not in can_reach_end:
+                issues.append(
+                    _issue(
+                        "workflow.node_cannot_reach_end",
+                        f"definition.nodes[{index}]",
+                        "The Workflow node cannot reach an End node.",
+                        "validation.issue.workflow.nodeCannotReachEnd",
+                        owner_id=node.id,
+                        owner_type=node.type,
+                    )
+                )
+
     return tuple(issues)
 
 

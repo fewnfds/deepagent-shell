@@ -12,6 +12,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from agent_shell.redaction import redact_for_boundary
+from agent_shell.runtime.limits import GRAPH_RECURSION_LIMIT
 from agent_shell.storage.workflow_runs import WorkflowRunStore
 
 
@@ -190,7 +191,7 @@ class WorkflowDebugRun:
 
     def config(self) -> dict[str, object]:
         return {
-            "recursion_limit": 100,
+            "recursion_limit": GRAPH_RECURSION_LIMIT,
             "configurable": {"thread_id": self.thread_id},
             "run_id": self.run_id,
             "run_name": f"workflow:{self.workflow_name}",

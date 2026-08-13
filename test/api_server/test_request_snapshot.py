@@ -108,13 +108,10 @@ def test_snapshot_freezes_workflow_filesystem_and_recursive_agent_permissions(
             child.references["filesystem-permissions"]
             == subagent_permissions["id"]
         )
-        snapshot.close()
-
         next_snapshot = client.app.state.agent_runtime.capture()
         current_workflow = next_snapshot.workflow_by_name(workflow["name"])
         assert current_workflow is not None
         assert current_workflow["filesystem_id"] == second_filesystem["id"]
-        next_snapshot.close()
 
 
 def test_snapshot_keeps_agent_identity_on_one_committed_view(
@@ -137,7 +134,6 @@ def test_snapshot_keeps_agent_identity_on_one_committed_view(
         assert captured is not None
         assert captured["id"] == main_agent["id"]
         assert snapshot.main_agent_by_name("Renamed after capture") is None
-        snapshot.close()
 
 
 def test_assembly_preserves_not_attached_middleware_semantics_per_agent(
@@ -190,7 +186,6 @@ def test_assembly_preserves_not_attached_middleware_semantics_per_agent(
             main_agent["id"],
             workflow_filesystem_id=workflow["filesystem_id"],
         )
-        snapshot.close()
 
     assert report.valid is True
     assert assembly is not None

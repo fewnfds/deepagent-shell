@@ -25,7 +25,6 @@ class MaterializedAgentProfile:
     package_middleware: tuple[Any, ...]
     extra_middleware: tuple[Any, ...]
     backend: Any | None
-    initial_files: dict[str, Any]
     skill_sources: tuple[str, ...]
     permissions: tuple[Any, ...]
     workspace: DeepAgentsWorkspace

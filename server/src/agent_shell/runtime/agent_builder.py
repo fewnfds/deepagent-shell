@@ -317,7 +317,6 @@ class AgentBuilder:
             middleware.append(disabled_todo_list_middleware())
 
         backend = None
-        initial_files: dict[str, Any] = {}
         skill_sources: tuple[str, ...] = ()
         filesystem = selected_blocks.get("filesystem")
         filesystem_permissions = selected_blocks.get("filesystem-permissions")
@@ -390,7 +389,6 @@ class AgentBuilder:
             ) from exc
         backend = deepagents.backend
         middleware.extend(deepagents.middleware)
-        initial_files.update(deepagents.initial_files)
         skill_sources = deepagents.skill_sources
 
         extra_middleware: list[Any] = []
@@ -496,7 +494,6 @@ class AgentBuilder:
             package_middleware=package_middleware,
             extra_middleware=tuple(extra_middleware),
             backend=backend,
-            initial_files=initial_files,
             skill_sources=skill_sources,
             permissions=deepagents.permissions,
             workspace=deepagents.workspace,
@@ -536,7 +533,7 @@ class AgentBuilder:
     async def build_resolved(
         self,
         assembly: StaticAssembly,
-        raw_messages: object,
+        _messages: list[dict[str, Any]],
         *,
         model_request_interceptor: Callable[[dict[str, Any]], Any] | None = None,
         model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
@@ -545,7 +542,6 @@ class AgentBuilder:
         workflow_node_id: str | None = None,
         workspace: DeepAgentsWorkspace | None = None,
     ) -> BuiltAgent:
-        validate_client_messages(raw_messages)
         main_agent = assembly.main_agent
         references = assembly.references
         selected_blocks = assembly.blocks

@@ -13,7 +13,6 @@ from agent_shell.api.errors import management_error
 from agent_shell.authoring import editor_defaults
 from agent_shell.contracts import (
     BLOCK_CATALOG,
-    BLOCK_MODELS,
     MANAGED_COMPONENT_MODELS,
     validate_provider_credential,
 )

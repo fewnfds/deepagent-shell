@@ -312,7 +312,7 @@ describe('block adapters', () => {
     const inputContext = workflowInputContextAdapter.blank(workflowInputDefaults)
     inputContext.name = ' Input context '
     inputContext.custom_transform_enabled = true
-    inputContext.custom_transform_source = 'def transform(messages, read_file, config, state, context):\n    return messages'
+    inputContext.custom_transform_source = 'def transform(read_file, config, workflow_state, agent_state, context):\n    return {}'
     inputContext.python_requirements = ['PyYAML>=6', 'PyYAML>=6']
     inputContext.slots.push({
       _key: 'slot', enabled: true, role: 'system', file: ' /prompt.txt ',
@@ -324,7 +324,7 @@ describe('block adapters', () => {
       enabled: true,
       python_requirements: ['PyYAML>=6'],
       custom_transform_enabled: true,
-      custom_transform_source: 'def transform(messages, read_file, config, state, context):\n    return messages',
+      custom_transform_source: 'def transform(read_file, config, workflow_state, agent_state, context):\n    return {}',
       system_promote_enabled: true,
       system_promote_min_chars: 10,
       demote_non_top_system: true,

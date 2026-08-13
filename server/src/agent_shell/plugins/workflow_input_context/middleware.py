@@ -39,6 +39,13 @@ def _copy_messages(value: object) -> list[dict[str, Any]]:
     return messages
 
 
+def _copy_agent_messages(value: object) -> list[dict[str, Any]]:
+    try:
+        return deepcopy(convert_to_openai_messages(convert_to_messages(value)))
+    except Exception as exc:
+        raise WorkflowInputContextError("input context messages are invalid") from exc
+
+
 def _promote_system_messages(
     messages: list[dict[str, Any]],
     *,
@@ -120,6 +127,10 @@ class WorkflowInputContextMiddleware(AgentMiddleware):
             result = self._backend.read(normalized_path, offset=0, limit=1_000_000)
         except Exception as exc:
             raise WorkflowInputContextError("workflow filesystem read failed") from exc
+        return self._read_result_text(result)
+
+    @staticmethod
+    def _read_result_text(result: object) -> str | None:
         if getattr(result, "file_data", None) is None:
             error = str(getattr(result, "error", ""))
             if "not found" in error.lower():
@@ -129,6 +140,23 @@ class WorkflowInputContextMiddleware(AgentMiddleware):
             return file_data_to_string(result.file_data)
         except Exception as exc:
             raise WorkflowInputContextError("workflow filesystem content is invalid") from exc
+
+    async def _aread_file(self, path: str) -> str | None:
+        try:
+            normalized_path = validate_virtual_path(path)
+        except (TypeError, ValueError) as exc:
+            raise WorkflowInputContextError(
+                "workflow filesystem path is invalid"
+            ) from exc
+        if self._backend is None:
+            return None
+        try:
+            result = await self._backend.aread(
+                normalized_path, offset=0, limit=1_000_000
+            )
+        except Exception as exc:
+            raise WorkflowInputContextError("workflow filesystem read failed") from exc
+        return self._read_result_text(result)
 
     def _apply_slots(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         result = list(messages)
@@ -152,32 +180,77 @@ class WorkflowInputContextMiddleware(AgentMiddleware):
             result.append({"role": slot.role, "content": content})
         return result
 
-    def _run(self, state: Any, runtime: Runtime[Any]) -> dict[str, Any] | None:
-        context = getattr(runtime, "context", None)
+    async def _apply_slots_async(
+        self, messages: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        result = list(messages)
+        for slot in self._block.slots:
+            if not slot.enabled:
+                continue
+            content: str | None = None
+            candidates = ([slot.file] if slot.file is not None else []) + list(
+                slot.fallback_files
+            )
+            for path in candidates:
+                content = await self._aread_file(path)
+                if content is not None:
+                    break
+            if content is None and slot.literal:
+                content = slot.literal
+            if content is None:
+                if slot.truncate_if_missing:
+                    break
+                continue
+            if slot.max_chars is not None:
+                content = content[: slot.max_chars]
+            result.append({"role": slot.role, "content": content})
+        return result
+
+    def _initial_messages(self, state: Any, runtime: Runtime[Any]) -> list[dict[str, Any]]:
         if self._agent_scope == "subagent":
-            raw_messages = convert_to_openai_messages(state.get("messages", []))
-        else:
-            raw_messages = getattr(context, "messages", None)
-        messages = _copy_messages(raw_messages or ())
+            return _copy_agent_messages(state.get("messages", []))
+        context = getattr(runtime, "context", None)
+        return _copy_messages(getattr(context, "messages", None) or ())
+
+    def _apply_transform(
+        self,
+        messages: list[dict[str, Any]],
+        state: Any,
+        runtime: Runtime[Any],
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        context = getattr(runtime, "context", None)
         state_update: dict[str, Any] = {}
-        if self._transform is not None:
-            try:
-                transformed = self._transform(
-                    read_file=self._read_file,
-                    config=deepcopy(self._block.model_dump(mode="json")),
-                    workflow_state=getattr(context, "workflow_state", {}),
-                    agent_state=state,
-                    context=context,
-                )
-            except WorkflowInputContextError:
-                raise
-            except Exception as exc:
-                raise WorkflowInputContextError("custom input transform failed") from exc
-            if not isinstance(transformed, Mapping):
-                raise WorkflowInputContextError("custom input transform returned invalid state update")
-            state_update = dict(transformed)
-            if "messages" in state_update:
-                messages = _copy_messages(state_update["messages"])
+        if self._transform is None:
+            return messages, state_update
+        try:
+            transformed = self._transform(
+                read_file=self._read_file,
+                config=deepcopy(self._block.model_dump(mode="json")),
+                workflow_state=getattr(context, "workflow_state", {}),
+                agent_state=state,
+                context=context,
+            )
+        except WorkflowInputContextError:
+            raise
+        except Exception as exc:
+            raise WorkflowInputContextError("custom input transform failed") from exc
+        if not isinstance(transformed, Mapping):
+            raise WorkflowInputContextError(
+                "custom input transform returned invalid state update"
+            )
+        state_update = dict(transformed)
+        if "messages" in state_update:
+            messages = (
+                _copy_agent_messages(state_update["messages"])
+                if self._agent_scope == "subagent"
+                else _copy_messages(state_update["messages"])
+            )
+        return messages, state_update
+
+    def _apply_message_policy(
+        self,
+        messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         messages = _promote_system_messages(
             messages,
             enabled=self._block.system_promote_enabled,
@@ -185,20 +258,44 @@ class WorkflowInputContextMiddleware(AgentMiddleware):
         )
         if self._block.demote_non_top_system:
             messages = _demote_non_top_system(messages)
-        messages = self._apply_slots(messages)
+        return messages
+
+    @staticmethod
+    def _finalize(
+        messages: list[dict[str, Any]],
+        state_update: dict[str, Any],
+    ) -> dict[str, Any]:
         try:
             return {
                 **state_update,
                 "messages": Overwrite(convert_to_messages(messages)),
             }
         except Exception as exc:
-            raise WorkflowInputContextError("input context messages could not be materialized") from exc
+            raise WorkflowInputContextError(
+                "input context messages could not be materialized"
+            ) from exc
+
+    def _run(self, state: Any, runtime: Runtime[Any]) -> dict[str, Any] | None:
+        messages, state_update = self._apply_transform(
+            self._initial_messages(state, runtime), state, runtime
+        )
+        messages = self._apply_message_policy(messages)
+        messages = self._apply_slots(messages)
+        return self._finalize(messages, state_update)
+
+    async def _arun(self, state: Any, runtime: Runtime[Any]) -> dict[str, Any] | None:
+        messages, state_update = self._apply_transform(
+            self._initial_messages(state, runtime), state, runtime
+        )
+        messages = self._apply_message_policy(messages)
+        messages = await self._apply_slots_async(messages)
+        return self._finalize(messages, state_update)
 
     def before_agent(self, state: Any, runtime: Runtime[Any]) -> dict[str, Any] | None:
         return self._run(state, runtime)
 
     async def abefore_agent(self, state: Any, runtime: Runtime[Any]) -> dict[str, Any] | None:
-        return self._run(state, runtime)
+        return await self._arun(state, runtime)
 
 
 __all__ = ["WorkflowInputContextError", "WorkflowInputContextMiddleware"]

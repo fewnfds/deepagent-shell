@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -338,6 +339,11 @@ class ConfigurationValidationService:
             stored=True,
             workflow_filesystem_id=workflow_filesystem_id,
         )
+        if assembly is not None:
+            assembly = replace(
+                assembly,
+                main_agent={"id": main_agent_id, **assembly.main_agent},
+            )
         return report, assembly
 
     def validate_repository(self) -> ValidationReport:

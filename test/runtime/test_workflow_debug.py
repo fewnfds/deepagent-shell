@@ -163,12 +163,14 @@ def test_workflow_debug_persists_official_checkpoints_without_turning_input_into
                 checkpoint["checkpoint_id"]
                 for checkpoint in detail["checkpoints"]
             )
-            assert any(
-                node["kind"] == "workflow" for node in detail["run_tree"]
-            )
-            root = next(
+            workflow_roots = [
                 node for node in detail["run_tree"] if node["kind"] == "workflow"
-            )
+            ]
+            assert len(workflow_roots) == 1
+            root = workflow_roots[0]
+            assert root["run_id"] == str(run.run_id)
+            assert root["parent_run_id"] is None
+            assert root["name"] == "Debug Workflow"
             assert any(
                 node["parent_run_id"] == root["run_id"]
                 for node in detail["run_tree"]

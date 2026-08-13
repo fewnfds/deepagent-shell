@@ -1,20 +1,21 @@
 # 自定义 Middleware
 
-一条组件保存最多 100 个有序 Python 构造项：
+自定义 Middleware 组件保存最多 100 个有序包引用：
 
 ```json
 {
-  "name": "可靠性中间件",
+  "name": "Request Middleware",
   "middlewares": [{
-    "name": "工具重试",
+    "package_id": "request-context",
     "enabled": true,
-    "source": "from langchain.agents.middleware import ToolRetryMiddleware\n\nmiddleware = ToolRetryMiddleware(max_retries=3)"
+    "config": {}
   }]
 }
 ```
 
-每段源码最多 100,000 字符，执行后必须在顶层绑定一个 `AgentMiddleware`，或由它们组成的 list/tuple。
-enabled 项按保存顺序执行和展平；不同项使用独立 namespace。运行名称必须唯一。
+每个 `package_id` 指向 `data/resources/custom_middlewares/<package-id>/` 下的一个 Middleware 包。启用项按保存顺序
+装配，`config` 必须满足包清单声明的 Schema；禁用项不导入、不执行。
 
-`data/resources/custom_middlewares/*.py` 只作为可复制模板目录，发现阶段仅做 UTF-8 与 AST 检查。
-源码会在真实请求中执行，不要写入 secret。Subagent 可继承、替换或关闭整份组件。
+包结构、`middleware.json`、`create_middleware(config, agent)` 入口、依赖与安全边界见
+[自定义 Middleware 包](../user-guide/middleware-packages.md)。包代码会在真实请求中执行，不要写入 secret。
+Subagent 可继承、替换或关闭整份组件。

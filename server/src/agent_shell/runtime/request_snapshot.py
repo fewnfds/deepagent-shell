@@ -30,7 +30,6 @@ class RequestRuntimeSnapshot:
     _workflows: WorkflowStore
     _validation: ConfigurationValidationService
     _runtime: AgentRuntime
-    _repository: FileConfigRepository
 
     def main_agent_by_name(self, name: str) -> dict[str, Any] | None:
         return self._configs.get_item_by_name("main_agents", name)
@@ -49,31 +48,20 @@ class RequestRuntimeSnapshot:
             workflow_filesystem_id=workflow_filesystem_id,
         )
 
-    def close(self) -> None:
-        # The repository clone owns no external handles. Keeping this method
-        # preserves the request lifecycle boundary used by AgentRuntime.
-        return None
-
     async def start_agent(self, main_agent_id: str, raw_messages: object, **kwargs: Any) -> AgentExecution:
-        try:
-            return await self._runtime.start(main_agent_id, raw_messages, **kwargs)
-        finally:
-            self.close()
+        return await self._runtime.start(main_agent_id, raw_messages, **kwargs)
 
     async def start_workflow(self, workflow: Mapping[str, Any], raw_messages: object, **kwargs: Any) -> AgentExecution:
-        try:
-            document = self._workflows.get_graph(str(workflow["id"]))
-            if document is None:
-                raise RuntimeError("the captured Workflow no longer exists")
-            return await self._runtime.start_workflow(
-                document,
-                raw_messages,
-                workflow_filesystem_id=str(workflow["filesystem_id"]),
-                workflow_snapshot=workflow,
-                **kwargs,
-            )
-        finally:
-            self.close()
+        document = self._workflows.get_graph(str(workflow["id"]))
+        if document is None:
+            raise RuntimeError("the captured Workflow no longer exists")
+        return await self._runtime.start_workflow(
+            document,
+            raw_messages,
+            workflow_filesystem_id=str(workflow["filesystem_id"]),
+            workflow_snapshot=workflow,
+            **kwargs,
+        )
 
 
 class RequestSnapshotRuntime:
@@ -104,42 +92,38 @@ class RequestSnapshotRuntime:
 
     def capture(self) -> RequestRuntimeSnapshot:
         repository = self._configuration.clone()
-        try:
-            blocks = BlockStore(repository)
-            configs = AgentConfigStore(repository)
-            workflows = WorkflowStore(repository)
-            secrets = ProviderSecretResolver(repository)
-            middleware_package_validation = MiddlewarePackageValidationService(
-                packages_dir=self._middleware_packages_dir,
-                runtime_root=self._runtime_dir,
-            )
-            validation = ConfigurationValidationService(
-                blocks,
-                configs,
-                middleware_package_validation,
+        blocks = BlockStore(repository)
+        configs = AgentConfigStore(repository)
+        workflows = WorkflowStore(repository)
+        secrets = ProviderSecretResolver(repository)
+        middleware_package_validation = MiddlewarePackageValidationService(
+            packages_dir=self._middleware_packages_dir,
+            runtime_root=self._runtime_dir,
+        )
+        validation = ConfigurationValidationService(
+            blocks,
+            configs,
+            middleware_package_validation,
+            custom_tools_dir=self._custom_tools_dir,
+        )
+        runtime = AgentRuntime(
+            AgentBuilder(
+                secrets,
                 custom_tools_dir=self._custom_tools_dir,
-            )
-            runtime = AgentRuntime(
-                AgentBuilder(
-                    secrets,
-                    custom_tools_dir=self._custom_tools_dir,
-                    middleware_packages_dir=self._middleware_packages_dir,
-                    runtime_dir=self._runtime_dir,
-                    skills_dir=self._skills_dir,
-                    validation=validation,
-                    provider_http_clients=self._provider_http_clients,
-                ),
-                self._media_outputs,
-                blocks=blocks,
-                workflow_debug=self._workflow_debug,
-                runtime_diagnostics=self._runtime_diagnostics,
-            )
-            return RequestRuntimeSnapshot(
-                _configs=configs,
-                _workflows=workflows,
-                _validation=validation,
-                _runtime=runtime,
-                _repository=repository,
-            )
-        except Exception:
-            raise
+                middleware_packages_dir=self._middleware_packages_dir,
+                runtime_dir=self._runtime_dir,
+                skills_dir=self._skills_dir,
+                validation=validation,
+                provider_http_clients=self._provider_http_clients,
+            ),
+            self._media_outputs,
+            blocks=blocks,
+            workflow_debug=self._workflow_debug,
+            runtime_diagnostics=self._runtime_diagnostics,
+        )
+        return RequestRuntimeSnapshot(
+            _configs=configs,
+            _workflows=workflows,
+            _validation=validation,
+            _runtime=runtime,
+        )

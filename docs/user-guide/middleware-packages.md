@@ -99,4 +99,4 @@ Middleware 包列表。禁用项不导入、不执行；包不存在、格式无
 此边界：包加载和独立依赖准备继续保留，包的执行对象则统一使用官方 `AgentMiddleware`。
 
 Middleware 包是受信任的任意 Python 代码，以 Agent Shell 服务进程权限运行，没有 sandbox。只允许实例维护者
-写入该目录。示例见 `examples/middleware-packages/`。
+写入该目录。

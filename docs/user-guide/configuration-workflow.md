@@ -17,10 +17,14 @@ Workflow root 不声明 `messages`。每个画布 Agent 节点由 wrapper 以空
 
 【编辑 Flow】进入独立全屏 Vue Flow 页面。左侧组件库当前只有 Agent，可以点击或拖到画布；右侧属性栏编辑所选
 Agent 的 Main Agent 引用并列出该 Node 声明的输入/输出端点。选中连线后，可以选择两端共同支持的 Edge 类型和具体
-source/target endpoint，也可以删除连线；当前唯一选项是 Normal Edge。两侧均可独立收起。Agent 数量不限，同一个 Main Agent 可以被
-多个 Agent node 重复引用；normal 端点可以连接 `Start -> Agent`、`Agent -> Agent` 和 `Agent -> End`，并允许一个
+source/target endpoint，也可以删除连线；当前唯一选项是 Normal Edge。两侧均可独立收起。一个 Graph 最多保存 100 个
+nodes 和 200 条 edges，同一个 Main Agent 可以被多个 Agent node 重复引用；normal 端点可以连接 `Start -> Agent`、
+`Agent -> Agent` 和 `Agent -> End`，并允许一个
 端点连接多个激活方向。保存直接覆盖当前图，重新打开时恢复节点、边、位置和 viewport；没有
 draft/published revision、自动保存、并发编辑或恢复层。
+
+保存入口允许不完整 draft。通过 `/v1/chat/completions` 运行时，Graph 必须至少包含一个 Start、一个 Agent 和一个 End，
+并且每个节点都必须可从某个 Start 到达且能够继续到达某个 End；不满足时在 Agent 装配和 Graph compile 前返回 422。
 
 画布 Start/End 分别映射 LangGraph 官方虚拟 `START/END`，不编译成 Shell 函数节点。Agent 节点引用的
 `main_agent_id` 只保存在 Graph definition 中，不是 Workflow metadata 外键。`normal` 是节点端点类型；从 normal 输出
