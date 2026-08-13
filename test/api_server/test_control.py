@@ -60,7 +60,7 @@ def test_start_stop_and_known_workflow_runs_after_restart(
     assert started.json()["enabled"] is True
     assert [item["id"] for item in models.json()["data"]] == [workflow["name"]]
     assert completion.status_code == 422
-    assert completion.json()["error"]["code"] == "workflow.node_runtime_missing"
+    assert completion.json()["error"]["code"] == "workflow.start_required"
 
 def test_event_hub_pushes_interception_notifications_without_bodies() -> None:
     async def scenario() -> str:

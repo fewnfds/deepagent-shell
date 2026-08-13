@@ -141,5 +141,6 @@ def test_readiness_and_runtime_diagnostics_require_management_scope(
     assert payload == {
         "retention_limit": 20,
         "max_retention_limit": 10_000,
+        "debug_enabled": False,
     }
     assert str(tmp_path).lower() not in serialized
