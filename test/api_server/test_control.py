@@ -61,21 +61,3 @@ def test_start_stop_and_known_workflow_runs_after_restart(
     assert [item["id"] for item in models.json()["data"]] == [workflow["name"]]
     assert completion.status_code == 422
     assert completion.json()["error"]["code"] == "workflow.start_required"
-
-def test_event_hub_pushes_interception_notifications_without_bodies() -> None:
-    async def scenario() -> str:
-        hub = ApiServerEventHub()
-        stream = hub.stream()
-        assert await anext(stream) == ": connected\n\n"
-        pending = asyncio.create_task(anext(stream))
-        await asyncio.sleep(0)
-        await hub.publish({"type": "interception_changed", "id": "record-id"})
-        event = await asyncio.wait_for(pending, timeout=1)
-        await stream.aclose()
-        return event
-
-    event = asyncio.run(scenario())
-    assert json.loads(event.removeprefix("data: ")) == {
-        "type": "interception_changed",
-        "id": "record-id",
-    }

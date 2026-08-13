@@ -6,7 +6,7 @@ from agent_shell.storage.file_config import FileConfigRepository
 DEFAULT_HISTORY_RETENTION_LIMIT = 20
 MAX_HISTORY_RETENTION_LIMIT = 10_000
 HISTORY_TYPES = frozenset(
-    {"interception_history", "runtime_log", "workflow_debug_history"}
+    {"runtime_log", "workflow_debug_history"}
 )
 
 

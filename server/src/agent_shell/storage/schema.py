@@ -10,23 +10,7 @@ DROP TABLE IF EXISTS agent_session_run_outputs;
 DROP TABLE IF EXISTS agent_session_runs;
 DROP TABLE IF EXISTS api_message_history_outputs;
 DROP TABLE IF EXISTS api_message_history;
-
-CREATE TABLE IF NOT EXISTS interception_test_records (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    intercepted_at TEXT NOT NULL,
-    request_id TEXT NOT NULL,
-    model TEXT NOT NULL,
-    agent_name TEXT NOT NULL,
-    request_raw_json TEXT NOT NULL,
-    model_request_raw_json TEXT NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_interception_test_records_time
-ON interception_test_records(intercepted_at DESC);
-
-CREATE INDEX IF NOT EXISTS idx_interception_test_records_model
-ON interception_test_records(model);
+DROP TABLE IF EXISTS interception_test_records;
 
 CREATE TABLE IF NOT EXISTS runtime_diagnostics (
     sequence INTEGER PRIMARY KEY,

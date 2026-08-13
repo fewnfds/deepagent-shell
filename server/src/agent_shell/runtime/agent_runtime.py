@@ -36,6 +36,7 @@ from agent_shell.validation import ValidationReport
 from agent_shell.validation.assembly import StaticAssembly
 from agent_shell.workflow_prepare import WorkflowPrepareError, run_workflow_prepare
 from langgraph.errors import GraphRecursionError
+from langgraph.prebuilt import ToolCallTransformer
 
 EXECUTION_TIMEOUT_SECONDS = 600
 
@@ -201,7 +202,10 @@ class AgentExecution:
                     stream_kwargs: dict[str, Any] = {
                         "config": config,
                         "version": "v3",
-                        "transformers": (RawCustomEventTransformer,),
+                        "transformers": (
+                            RawCustomEventTransformer,
+                            ToolCallTransformer,
+                        ),
                     }
                     if self.durability is not None:
                         stream_kwargs["durability"] = self.durability
@@ -352,7 +356,6 @@ class AgentRuntime:
         main_agent_id: str,
         raw_messages: object,
         *,
-        model_request_interceptor: Callable[[dict[str, Any]], Any] | None = None,
         model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
         model_response_observer: Callable[[ModelResponse], None] | None = None,
         request_id: str = "",
@@ -364,7 +367,6 @@ class AgentRuntime:
             return await self._builder.build(
                 main_agent_id,
                 raw_messages,
-                model_request_interceptor=model_request_interceptor,
                 model_request_observer=model_request_observer,
                 model_response_observer=model_response_observer,
                 request_id=request_id,
@@ -471,7 +473,6 @@ class AgentRuntime:
         main_agent_id: str,
         raw_messages: object,
         *,
-        model_request_interceptor: Callable[[dict[str, Any]], Any] | None = None,
         model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
         model_response_observer: Callable[[ModelResponse], None] | None = None,
         event_observer: Callable[[OutputEvent], None] | None = None,
@@ -489,7 +490,6 @@ class AgentRuntime:
         built = await self.build_agent(
             main_agent_id,
             raw_messages,
-            model_request_interceptor=model_request_interceptor,
             model_request_observer=model_request_observer,
             model_response_observer=model_response_observer,
             request_id=request_id,
@@ -511,7 +511,6 @@ class AgentRuntime:
         *,
         workflow_filesystem_id: str,
         workflow_snapshot: Mapping[str, Any] | None = None,
-        model_request_interceptor: Callable[[dict[str, Any]], Any] | None = None,
         model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
         model_response_observer: Callable[[ModelResponse], None] | None = None,
         event_observer: Callable[[OutputEvent], None] | None = None,
@@ -669,7 +668,6 @@ class AgentRuntime:
                 built = await self.build_resolved_agent(
                     assembly,
                     messages,
-                    model_request_interceptor=model_request_interceptor,
                     model_request_observer=model_request_observer,
                     model_response_observer=model_response_observer,
                     request_id=request_id,

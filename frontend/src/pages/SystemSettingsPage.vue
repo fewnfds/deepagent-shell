@@ -28,8 +28,6 @@ interface SystemSettingsApi {
   saveApiServer(payload: ApiServerSettingsUpdate): Promise<ApiServerSettings>
   getValidationSettings(): Promise<ConfigurationValidationSettings>
   updateValidationSettings(debounceMs: number): Promise<ConfigurationValidationSettings>
-  getInterceptionTest(): Promise<{ enabled: boolean }>
-  updateInterceptionTest(enabled: boolean): Promise<{ enabled: boolean }>
 }
 
 const props = defineProps<{ api?: SystemSettingsApi }>()
@@ -63,7 +61,6 @@ const maxInitialMessages = ref(1000)
 const validationDebounceMs = ref(1000)
 const validationDebounceMin = ref(100)
 const validationDebounceMax = ref(10_000)
-const interceptionEnabled = ref(false)
 const corsOrigins = ref('')
 const trustedProxies = ref('')
 
@@ -139,10 +136,6 @@ function applyApiServerSettings(value: ApiServerSettings): void {
   maxInitialMessages.value = value.max_initial_messages
 }
 
-function applyInterceptionSetting(interception: { enabled: boolean }): void {
-  interceptionEnabled.value = interception.enabled
-}
-
 function applyValidationSettings(value: ConfigurationValidationSettings): void {
   validationDebounceMs.value = value.debounce_ms
   validationDebounceMin.value = value.min_debounce_ms
@@ -157,17 +150,14 @@ async function load(): Promise<void> {
     const [
       loadedSystemSettings,
       loadedApiServerSettings,
-      loadedInterception,
       loadedValidationSettings,
     ] = await Promise.all([
       api.getSystemSettings(),
       api.getApiServer(),
-      api.getInterceptionTest(),
       api.getValidationSettings(),
     ])
     applySystemSettings(loadedSystemSettings)
     applyApiServerSettings(loadedApiServerSettings)
-    applyInterceptionSetting(loadedInterception)
     applyValidationSettings(loadedValidationSettings)
   } catch (error) {
     pageError.value = managementError.describe(error).display
@@ -197,7 +187,6 @@ async function save(): Promise<void> {
     const [
       savedSystemSettings,
       savedApiServerSettings,
-      savedInterception,
       savedValidationSettings,
     ] = await Promise.all([
       api.updateSystemSettings({
@@ -219,12 +208,10 @@ async function save(): Promise<void> {
         api_key: apiKeyUpdate,
         max_initial_messages: Number(maxInitialMessages.value),
       }),
-      api.updateInterceptionTest(interceptionEnabled.value),
       api.updateValidationSettings(Number(validationDebounceMs.value)),
     ])
     applySystemSettings(savedSystemSettings)
     applyApiServerSettings(savedApiServerSettings)
-    applyInterceptionSetting(savedInterception)
     applyValidationSettings(savedValidationSettings)
     notify({ tone: 'success', title: t('systemSettings.saved') })
   } catch (error) {
@@ -431,22 +418,6 @@ onMounted(() => { void load() })
                 >
               </div>
 
-              <div class="row g-3 mt-2">
-                <div class="col-md-6">
-                  <div class="form-check form-switch">
-                    <input
-                      id="interception-test"
-                      v-model="interceptionEnabled"
-                      class="form-check-input"
-                      role="switch"
-                      type="checkbox"
-                    >
-                    <label class="form-check-label" for="interception-test">
-                      {{ fieldLabel('eventFeed.controls.interception', 'enabled') }}
-                    </label>
-                  </div>
-                </div>
-              </div>
             </div>
           </section>
 

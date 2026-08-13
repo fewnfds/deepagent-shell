@@ -395,7 +395,7 @@ export interface PaginationResponse<TItem> {
   total_pages: number
 }
 
-export type EventSource = 'interception' | 'system' | 'runtime'
+export type EventSource = 'system' | 'runtime'
 export type EventLevel = 'debug' | 'info' | 'warning' | 'error'
 
 export interface EventFeedItem {
@@ -420,11 +420,6 @@ export interface EventFeedFilters {
   source?: EventSource[]
   level?: EventLevel[]
   query?: string
-}
-
-export interface RetentionSettings {
-  retention_limit: number
-  max_retention_limit: number
 }
 
 export interface SystemLogSettings {
@@ -455,7 +450,6 @@ export type ManagementEvent =
   | { type: 'event_stream_connected' }
   | { type: 'settings_changed' }
   | { type: 'history_changed' }
-  | { type: 'interception_changed'; id?: string }
   | { type: 'runtime_diagnostic'; entry: RuntimeDiagnosticEntry }
   | { type: 'system_log'; entry: Record<string, unknown> }
   | ({ type: string } & Record<string, unknown>)

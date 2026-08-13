@@ -45,7 +45,7 @@ fan-out、fan-in 或形成 LangGraph 支持的循环。画布 Start/End 直接�
   LangGraph super-step 语义并行激活目标；
 - 图不完整、引用失效、Agent 装配失败或 Provider 失败时，本次请求直接返回错误；
 - Workflow Debug 管理 API 提供有界运行索引、结构运行树和 checkpoint 摘要；日志中心展示系统事件、请求级
-  错误诊断和显式 interception test，并可按开关保存完整异常文件。当前不提供 Resume 或旧 Main Agent 直连兼容。
+  错误诊断，并可按开关保存完整异常文件。当前不提供 Resume 或旧 Main Agent 直连兼容。
 
 ## API Key 与状态
 

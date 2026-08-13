@@ -18,15 +18,6 @@ function api() {
       total_pages: 1,
     })),
     downloadEvent: vi.fn(async () => new Blob(['{}'])),
-    getInterceptionTest: vi.fn(async () => ({ enabled: false })),
-    getInterceptionRetention: vi.fn(async () => ({
-      retention_limit: 20,
-      max_retention_limit: 10_000,
-    })),
-    updateInterceptionRetention: vi.fn(async (retentionLimit: number) => ({
-      retention_limit: retentionLimit,
-      max_retention_limit: 10_000,
-    })),
     getRuntimeDiagnostics: vi.fn(async () => ({
       retention_limit: 20,
       max_retention_limit: 10_000,
@@ -82,7 +73,6 @@ describe('EventFeedPage', () => {
     const mockApi = api()
     const wrapper = await mountPage(mockApi)
 
-    expect(wrapper.find('[data-testid="retention-interception"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="retention-runtime"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="retention-api_call"]').exists()).toBe(false)
     const debugSwitch = wrapper.get<HTMLInputElement>('#runtime-debug-enabled')

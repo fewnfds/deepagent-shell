@@ -4,12 +4,13 @@ import asyncio
 import warnings
 from typing_extensions import TypedDict
 
+from langchain_core.tools import tool
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
 from agent_shell.runtime.agent_runtime import AgentExecution
 from agent_shell.runtime.output_event_pool import OutputEventRectifier
-from agent_shell.runtime.output_projection import WorkflowOutputProjector
+from agent_shell.runtime.output_projection import OutputProjector, WorkflowOutputProjector
 from agent_shell.runtime.output_stream import V3EventNormalizer
 from agent_shell.runtime.stream_transformers import RawCustomEventTransformer
 from agent_shell.workflow.events import WorkflowCustomEventV1, WorkflowEventSourceV1
@@ -108,3 +109,43 @@ def test_agent_execution_projects_real_stream_writer_custom_event() -> None:
 
     assert asyncio.run(collect()) == ['{"progress":"ready"}']
     assert execution.final_state == {"value": "done"}
+
+
+def test_agent_execution_projects_real_tool_result() -> None:
+    @tool
+    def inspect_value(value: str) -> str:
+        """Return a visible inspection result."""
+
+        return f"inspected:{value}"
+
+    async def call_tool(state: _State, config) -> dict[str, str]:
+        result = await inspect_value.ainvoke({"value": "ready"}, config=config)
+        return {"value": result}
+
+    builder = StateGraph(_State)
+    builder.add_node("call_tool", call_tool)
+    builder.add_edge(START, "call_tool")
+    builder.add_edge("call_tool", END)
+    graph = builder.compile()
+
+    output_mode = config(mode="blocklist", template="{{message}}")
+    for event_template in output_mode["event_templates"].values():
+        event_template["enabled"] = False
+    output_mode["event_templates"]["tool_result"] = {
+        "enabled": True,
+        "template": "tool={{tool_name}} output={{output}}",
+    }
+    execution = AgentExecution(
+        graph=graph,
+        input_state={},
+        rectifier=OutputEventRectifier(OutputProjector(output_mode)),
+        normalizer=V3EventNormalizer("Main Agent"),
+        middleware_runtime=noop_middleware_runtime(),
+        media_response=noop_media_response(),
+    )
+
+    async def collect() -> list[str]:
+        return [part async for part in execution.stream_text()]
+
+    assert asyncio.run(collect()) == ["tool=inspect_value output=inspected:ready"]
+    assert execution.final_state == {"value": "inspected:ready"}

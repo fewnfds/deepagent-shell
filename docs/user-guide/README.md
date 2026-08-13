@@ -10,7 +10,6 @@ Agent Shell 通过管理台组合 Deep Agents 配置，并把启用的 Workflow 
 4. [使用自定义 Middleware 包](middleware-packages.md)
 5. [管理配置仓库](configuration-library.md)
 6. [调用 API Server](api-server.md)
-7. [查看最终 ModelRequest](interception-test.md)
 8. [查看日志中心与 Workflow 观测边界](runtime-observability.md)
 9. [管理数据、文件与系统设置](system-management.md)
 

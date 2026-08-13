@@ -213,13 +213,11 @@ export const en: MessageSchema = {
     empty: 'No events match the current filters.',
     download: 'Download full entry',
     matchedInContent: 'The query matched full content that is not shown in the list.',
-    interceptionWarning: 'Interception testing is enabled and Provider calls are short-circuited.',
     debug: {
       label: 'Full DEBUG logs',
       active: 'DEBUG is enabled. Full exception logs are being written to data/logs/debug.',
     },
     sources: {
-      interception: 'Interception record',
       system: 'System log',
       runtime: 'Agent runtime log',
     },
@@ -242,7 +240,6 @@ export const en: MessageSchema = {
     },
     controls: {
       title: 'Capture controls',
-      interception: 'Interception test',
     },
     retention: {
       title: 'Log settings',

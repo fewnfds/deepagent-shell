@@ -504,7 +504,6 @@ class AgentBuilder:
         main_agent_id: str,
         raw_messages: object,
         *,
-        model_request_interceptor: Callable[[dict[str, Any]], Any] | None = None,
         model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
         model_response_observer: Callable[[ModelResponse], Any] | None = None,
         request_id: str = "",
@@ -522,7 +521,6 @@ class AgentBuilder:
         return await self.build_resolved(
             assembly,
             messages,
-            model_request_interceptor=model_request_interceptor,
             model_request_observer=model_request_observer,
             model_response_observer=model_response_observer,
             request_id=request_id,
@@ -535,7 +533,6 @@ class AgentBuilder:
         assembly: StaticAssembly,
         _messages: list[dict[str, Any]],
         *,
-        model_request_interceptor: Callable[[dict[str, Any]], Any] | None = None,
         model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
         model_response_observer: Callable[[ModelResponse], Any] | None = None,
         request_id: str = "",
@@ -634,7 +631,7 @@ class AgentBuilder:
 
         middleware.extend(materialized.extra_middleware)
         if model_request_observer is not None:
-            from agent_shell.runtime.interception import (
+            from agent_shell.runtime.model_request_observer import (
                 make_model_request_observer_middleware,
             )
 
@@ -647,12 +644,6 @@ class AgentBuilder:
                         "tool_call_id": "",
                     },
                 )
-            )
-        if model_request_interceptor is not None:
-            from agent_shell.runtime.interception import make_interception_middleware
-
-            middleware.append(
-                make_interception_middleware(model_request_interceptor)
             )
         exception_retry_runtime = materialized.exception_retry
         middleware.append(ProviderErrorBoundaryMiddleware())

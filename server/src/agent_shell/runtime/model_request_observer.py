@@ -4,38 +4,9 @@ import inspect
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from threading import Lock
 from typing import Any
 
 from agent_shell.redaction import redact_for_boundary
-from agent_shell.storage.runtime_controls import RuntimeControlSettingsStore
-
-
-INTERCEPTION_REPLY = "拦截测试已捕获；未调用模型服务。"
-
-
-class InterceptionTestController:
-    """Persist and serve the Provider-boundary interception test switch."""
-
-    def __init__(self, store: RuntimeControlSettingsStore) -> None:
-        self._lock = Lock()
-        self._store = store
-        self._enabled = store.snapshot()["interception_enabled"]
-
-    def snapshot(self) -> dict[str, bool]:
-        with self._lock:
-            return {"enabled": self._enabled}
-
-    def set_enabled(self, enabled: bool) -> dict[str, bool]:
-        with self._lock:
-            self._store.set_interception_enabled(enabled)
-            self._enabled = enabled
-            return {"enabled": self._enabled}
-
-    def is_enabled(self) -> bool:
-        with self._lock:
-            return self._enabled
-
 
 def _type_name(value: Any) -> str:
     value_type = value if isinstance(value, type) else type(value)
@@ -196,30 +167,6 @@ def serialize_model_request(request: Any) -> dict[str, Any]:
 
 
 CaptureCallback = Callable[[dict[str, Any]], None | Awaitable[None]]
-
-
-def make_interception_middleware(capture: CaptureCallback) -> Any:
-    """Capture the final ModelRequest and terminate before the Provider handler."""
-
-    from langchain.agents.middleware import AgentMiddleware, ModelResponse
-    from langchain_core.messages import AIMessage
-
-    class InterceptionMiddleware(AgentMiddleware):
-        def wrap_model_call(self, request: Any, _handler: Callable[[Any], Any]) -> Any:
-            result = capture(serialize_model_request(request))
-            if inspect.isawaitable(result):
-                raise RuntimeError("async interception callback used in sync model call")
-            return ModelResponse(result=[AIMessage(content=INTERCEPTION_REPLY)])
-
-        async def awrap_model_call(
-            self, request: Any, _handler: Callable[[Any], Awaitable[Any]]
-        ) -> Any:
-            result = capture(serialize_model_request(request))
-            if inspect.isawaitable(result):
-                await result
-            return ModelResponse(result=[AIMessage(content=INTERCEPTION_REPLY)])
-
-    return InterceptionMiddleware()
 
 
 def make_model_request_observer_middleware(

@@ -9,18 +9,16 @@ from typing import Literal
 
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.security_events import SecurityEventLogger
-from agent_shell.storage.event_feed import EventFeedStore
 from agent_shell.storage.runtime_diagnostics import runtime_diagnostic_id
 from agent_shell.storage.system_log_settings import MIB_BYTES, SystemLogSettingsStore
 
 
 EVENT_DOWNLOAD_THRESHOLD_BYTES = 4 * 1024
 EVENT_SUMMARY_MAX_CHARS = 240
-EventSource = Literal["interception", "system", "runtime"]
+EventSource = Literal["system", "runtime"]
 EventLevel = Literal["debug", "info", "warning", "error"]
 
 _SOURCE_RANK: dict[str, int] = {
-    "interception": 3,
     "system": 2,
     "runtime": 1,
 }
@@ -53,12 +51,10 @@ class EventFeedService:
 
     def __init__(
         self,
-        store: EventFeedStore,
         system_events: SecurityEventLogger,
         diagnostics: RuntimeDiagnostics,
         system_log_settings: SystemLogSettingsStore,
     ) -> None:
-        self._store = store
         self._system_events = system_events
         self._diagnostics = diagnostics
         self._system_log_settings = system_log_settings
@@ -95,39 +91,6 @@ class EventFeedService:
             _SOURCE_RANK[source],
             str(item["id"]),
         )
-
-    @staticmethod
-    def _interception_item(row: dict[str, object]) -> dict[str, object]:
-        content: str | None = None
-        download_available = int(row["original_size_bytes"]) > EVENT_DOWNLOAD_THRESHOLD_BYTES
-        if row["inline_request_raw_json"] is not None:
-            entry = {
-                "id": row["id"],
-                "name": row["name"],
-                "intercepted_at": row["intercepted_at"],
-                "request_id": row["request_id"],
-                "model": row["model"],
-                "agent_name": row["agent_name"],
-                "request_raw_json": row["inline_request_raw_json"],
-                "model_request_raw_json": row["inline_model_request_raw_json"],
-            }
-            candidate = _detail_json("interception", entry)
-            if len(candidate.encode("utf-8")) <= EVENT_DOWNLOAD_THRESHOLD_BYTES:
-                content = candidate
-            else:
-                download_available = True
-        return {
-            "id": row["id"],
-            "source": "interception",
-            "occurred_at": row["intercepted_at"],
-            "level": "info",
-            "request_id": row["request_id"],
-            "summary": _summary(row["agent_name"], row["model"]),
-            "inline_content": content,
-            "matched_in_content": bool(row["matched_in_content"])
-            and content is None,
-            "download_available": download_available,
-        }
 
     @staticmethod
     def _system_item(record: dict[str, object]) -> dict[str, object]:
@@ -216,18 +179,6 @@ class EventFeedService:
         items: list[dict[str, object]] = []
         started_at = started_at.astimezone(timezone.utc)
         ended_at = ended_at.astimezone(timezone.utc)
-        started_iso = started_at.isoformat()
-        ended_iso = ended_at.isoformat()
-
-        if "interception" in selected_sources and (not levels or "info" in levels):
-            rows = self._store.list_interceptions(
-                query=query,
-                started_at=started_iso,
-                ended_at=ended_iso,
-                inline_limit_bytes=EVENT_DOWNLOAD_THRESHOLD_BYTES,
-            )
-            items.extend(self._interception_item(row) for row in rows)
-
         needle = query.casefold()
         if "system" in selected_sources:
             items.extend(
@@ -292,16 +243,7 @@ class EventFeedService:
         selected_sources = sources or set(_SOURCE_RANK)
         started_at = started_at.astimezone(timezone.utc)
         ended_at = ended_at.astimezone(timezone.utc)
-        started_iso = started_at.isoformat()
-        ended_iso = ended_at.isoformat()
         deleted = 0
-        if "interception" in selected_sources and (not levels or "info" in levels):
-            deleted += self._store.delete_interceptions(
-                query=query,
-                started_at=started_iso,
-                ended_at=ended_iso,
-            )
-
         needle = query.casefold()
 
         def matches(record: dict[str, object]) -> bool:
@@ -343,10 +285,7 @@ class EventFeedService:
         source: EventSource,
         item_id: str,
     ) -> tuple[bytes | Path, str, str] | None:
-        if source == "interception":
-            entry = self._store.get_interception(item_id)
-            timestamp_key = "intercepted_at"
-        elif source == "system":
+        if source == "system":
             entry = self._system_record(item_id)
             timestamp_key = "timestamp"
         else:

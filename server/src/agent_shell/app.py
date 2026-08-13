@@ -33,7 +33,6 @@ from agent_shell.settings import (
     SettingsError,
     get_settings,
 )
-from agent_shell.runtime.interception import InterceptionTestController
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.event_feed import EventFeedService
 from agent_shell.redaction import redact_for_boundary
@@ -59,7 +58,6 @@ from agent_shell.storage.system_log_settings import MIB_BYTES, SystemLogSettings
 from agent_shell.storage.validation_settings import ConfigurationValidationSettingsStore
 from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.storage.workflow_runs import WorkflowRunStore
-from agent_shell.storage.event_feed import EventFeedStore
 from agent_shell.validation.service import ConfigurationValidationService
 from agent_shell.middleware_packages.validation import MiddlewarePackageValidationService
 from agent_shell.file_manager import FileManagerService
@@ -141,9 +139,7 @@ def create_app(
         middleware_package_validation,
         custom_tools_dir=custom_tools_dir,
     )
-    api_server_store = ApiServerStore(
-        database, configuration, event_logger, history_retention
-    )
+    api_server_store = ApiServerStore(database, configuration, event_logger)
     try:
         validate_api_key_policy(settings, api_server_store.api_key())
     except ApiKeyPolicyError as exc:
@@ -166,9 +162,7 @@ def create_app(
             code="security_event_record_failed",
         )
     )
-    interception_tests = InterceptionTestController(runtime_control_settings)
     event_feed = EventFeedService(
-        EventFeedStore(database),
         event_logger,
         runtime_diagnostics,
         system_log_settings,
@@ -407,7 +401,6 @@ def create_app(
     app.state.startup_storage_permissions = startup_permission_statuses
     app.state.security_events = event_logger
     app.state.agent_runtime = agent_runtime
-    app.state.interception_tests = interception_tests
     app.state.runtime_diagnostics = runtime_diagnostics
     app.state.runtime_diagnostic_store = runtime_diagnostic_store
     app.state.runtime_debug_logs = runtime_debug_logs
@@ -478,9 +471,7 @@ def create_app(
     app.include_router(
         build_event_feed_router(
             event_feed,
-            api_server_store,
             api_server_events,
-            interception_tests,
         )
     )
     app.include_router(build_file_manager_router(file_manager))

@@ -41,12 +41,10 @@ def _default_system() -> dict[str, Any]:
         },
         "api_server": {"enabled": True, "max_initial_messages": 1000},
         "history_retention": {
-            "interception_history": 20,
             "runtime_log": 20,
             "workflow_debug_history": 50,
         },
         "runtime_control": {
-            "interception_enabled": False,
             "debug_logging_enabled": False,
         },
         "configuration_validation": {"debounce_ms": 1000},
@@ -190,6 +188,12 @@ class FileConfigRepository:
             if isinstance(current, dict) and isinstance(value, dict):
                 for key, default in value.items():
                     current.setdefault(key, deepcopy(default))
+        history_retention = self._system.get("history_retention")
+        if isinstance(history_retention, dict):
+            history_retention.pop("interception_history", None)
+        runtime_control = self._system.get("runtime_control")
+        if isinstance(runtime_control, dict):
+            runtime_control.pop("interception_enabled", None)
         components = self._config["components"]
         if not isinstance(components, dict):
             raise ValueError("config components must be a mapping")

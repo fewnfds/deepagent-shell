@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-import json
 
 from agent_shell.runtime.errors import AgentRuntimeError
 
@@ -12,13 +11,6 @@ def test_event_feed_exposes_only_supported_sources(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
-        interception = client.app.state.api_server_store.add_interception_record(
-            request_id="request-interception",
-            model="published-model",
-            agent_name="Published Main Agent",
-            request_raw_json='{"message":"interception"}',
-            model_request_raw_json='{"messages":[]}',
-        )
         client.app.state.security_events.emit(
             "configuration_updated",
             {"action": "updated", "entity": "test", "entity_id": "one"},
@@ -43,7 +35,7 @@ def test_event_feed_exposes_only_supported_sources(
 
     assert response.status_code == 200
     items = response.json()["items"]
-    assert {item["source"] for item in items} == {"interception", "system", "runtime"}
+    assert {item["source"] for item in items} == {"system", "runtime"}
     assert all(
         set(item)
         == {
@@ -59,7 +51,6 @@ def test_event_feed_exposes_only_supported_sources(
         }
         for item in items
     )
-    assert next(item for item in items if item["id"] == interception["id"])
     assert rejected.status_code == 422
 
 
@@ -97,42 +88,6 @@ def test_event_feed_deletes_filtered_runtime_records_across_pages(
     assert listed["total"] == 3
     assert deleted.json() == {"deleted": 3}
     assert remaining["items"] == []
-
-
-def test_event_feed_downloads_long_public_records_and_retention_is_scoped(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    with make_client(tmp_path, monkeypatch) as client:
-        interception = client.app.state.api_server_store.add_interception_record(
-            request_id="long-interception",
-            model="published-model",
-            agent_name="Published Main Agent",
-            request_raw_json='{"message":"' + "拦" * 5000 + '"}',
-            model_request_raw_json='{"messages":[]}',
-        )
-        listing = client.get(
-            "/api/event-feed",
-            params=event_feed_params(source="interception", page_size=100),
-        ).json()
-        item = next(row for row in listing["items"] if row["id"] == interception["id"])
-        download = client.get(f"/api/event-feed/interception/{item['id']}/download")
-        retention = client.put(
-            "/api/interception-test/records/retention", json={"retention_limit": 10_000}
-        )
-        runtime_retention = client.put(
-            "/api/runtime-diagnostics/retention", json={"retention_limit": 10_000}
-        )
-        obsolete = client.put(
-            "/api/api-server/history/retention", json={"retention_limit": 10}
-        )
-
-    assert item["inline_content"] is None
-    assert item["download_available"] is True
-    assert download.status_code == 200
-    assert json.loads(download.content.decode("utf-8"))["source"] == "interception"
-    assert retention.json()["retention_limit"] == 10_000
-    assert runtime_retention.json()["retention_limit"] == 10_000
-    assert obsolete.status_code == 404
 
 
 def test_runtime_debug_download_keeps_full_exception_out_of_summary(

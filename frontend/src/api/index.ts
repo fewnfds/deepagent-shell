@@ -38,7 +38,6 @@ import type {
   MainAgentPayload,
   ReadinessResponse,
   ResourceCatalog,
-  RetentionSettings,
   RuntimeDiagnostics,
   SavedBlock,
   SkillResource,
@@ -443,28 +442,6 @@ export const managementApi = {
       level: filters.level ?? [],
       query: filters.query ?? '',
     }))
-  },
-
-  getInterceptionTest(): Promise<{ enabled: boolean }> {
-    return managementRequest('/api/interception-test')
-  },
-
-  updateInterceptionTest(enabled: boolean): Promise<{ enabled: boolean }> {
-    return managementRequest('/api/interception-test', {
-      method: 'PUT',
-      body: JSON.stringify({ enabled }),
-    })
-  },
-
-  getInterceptionRetention(): Promise<RetentionSettings> {
-    return managementRequest('/api/interception-test/records/retention')
-  },
-
-  updateInterceptionRetention(retentionLimit: number): Promise<RetentionSettings> {
-    return managementRequest('/api/interception-test/records/retention', {
-      method: 'PUT',
-      body: JSON.stringify({ retention_limit: retentionLimit }),
-    })
   },
 
   getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {

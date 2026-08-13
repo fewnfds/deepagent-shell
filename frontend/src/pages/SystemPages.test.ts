@@ -65,13 +65,11 @@ describe('SystemSettingsPage', () => {
       ...validationSettingsApi(),
       getSystemSettings: vi.fn().mockResolvedValue(currentSettings),
       getApiServer: vi.fn().mockResolvedValue(currentApiServerSettings),
-      getInterceptionTest: vi.fn().mockResolvedValue({ enabled: false }),
       updateSystemSettings: vi.fn().mockResolvedValue({
         ...currentSettings,
         restart_required: true,
       }),
       saveApiServer: vi.fn().mockResolvedValue(currentApiServerSettings),
-      updateInterceptionTest: vi.fn(async (enabled: boolean) => ({ enabled })),
     }
     const wrapper = mount(SystemSettingsPage, { props: { api } })
     await flushPromises()
@@ -105,7 +103,6 @@ describe('SystemSettingsPage', () => {
       api_key: { operation: 'keep' },
       max_initial_messages: 1000,
     })
-    expect(api.updateInterceptionTest).toHaveBeenCalledWith(false)
     expect(wrapper.text()).toContain('systemSettings.restartRequired')
     expect(wrapper.text()).not.toContain('test-management-token')
   })
@@ -115,7 +112,6 @@ describe('SystemSettingsPage', () => {
       ...validationSettingsApi(),
       getSystemSettings: vi.fn().mockResolvedValue(currentSettings),
       getApiServer: vi.fn().mockResolvedValue(currentApiServerSettings),
-      getInterceptionTest: vi.fn().mockResolvedValue({ enabled: false }),
       updateSystemSettings: vi.fn().mockImplementation(async (payload: SystemSettingsUpdate) => ({
         ...currentSettings,
         host: payload.host,
@@ -128,7 +124,6 @@ describe('SystemSettingsPage', () => {
         ...currentApiServerSettings,
         max_initial_messages: payload.max_initial_messages ?? 1000,
       })),
-      updateInterceptionTest: vi.fn(async (enabled: boolean) => ({ enabled })),
     }
     const wrapper = mount(SystemSettingsPage, { props: { api } })
     await flushPromises()
@@ -139,7 +134,6 @@ describe('SystemSettingsPage', () => {
     await wrapper.get('#management-password').setValue('new-management-password')
     await wrapper.get('#api-server-key').setValue('new-api-key')
     await wrapper.get('#max-initial-messages').setValue('2500')
-    await wrapper.get('#interception-test').setValue(true)
     await wrapper.get('#langsmith-tracing').setValue(true)
     await wrapper.get('#langsmith-api-key').setValue('new-langsmith-key')
     const textareas = wrapper.findAll('textarea')
@@ -166,7 +160,6 @@ describe('SystemSettingsPage', () => {
       api_key: { operation: 'replace', value: 'new-api-key' },
       max_initial_messages: 2500,
     })
-    expect(api.updateInterceptionTest).toHaveBeenCalledWith(true)
   })
 
   it('reveals only newly entered credentials and clears edited API keys through the unified save', async () => {
@@ -174,13 +167,11 @@ describe('SystemSettingsPage', () => {
       ...validationSettingsApi(),
       getSystemSettings: vi.fn().mockResolvedValue(currentSettings),
       getApiServer: vi.fn().mockResolvedValue(currentApiServerSettings),
-      getInterceptionTest: vi.fn().mockResolvedValue({ enabled: false }),
       updateSystemSettings: vi.fn().mockResolvedValue(currentSettings),
       saveApiServer: vi.fn().mockResolvedValue({
         ...currentApiServerSettings,
         api_key: { configured: false },
       }),
-      updateInterceptionTest: vi.fn(async (enabled: boolean) => ({ enabled })),
     }
     const wrapper = mount(SystemSettingsPage, { props: { api } })
     await flushPromises()

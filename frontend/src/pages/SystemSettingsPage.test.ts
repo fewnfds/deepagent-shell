@@ -52,8 +52,6 @@ describe('SystemSettingsPage', () => {
       updateSystemSettings: vi.fn(async () => systemSettings),
       getApiServer: vi.fn(async () => apiServerSettings),
       saveApiServer: vi.fn(async () => apiServerSettings),
-      getInterceptionTest: vi.fn(async () => ({ enabled: false })),
-      updateInterceptionTest: vi.fn(async () => ({ enabled: false })),
       getValidationSettings: vi.fn(async () => validationSettings(1000)),
       updateValidationSettings: vi.fn(async (value: number) => validationSettings(value)),
     }
@@ -81,8 +79,6 @@ describe('SystemSettingsPage', () => {
       updateSystemSettings: vi.fn(async () => systemSettings),
       getApiServer: vi.fn(async () => apiServerSettings),
       saveApiServer: vi.fn(async () => apiServerSettings),
-      getInterceptionTest: vi.fn(async () => ({ enabled: false })),
-      updateInterceptionTest: vi.fn(async () => ({ enabled: false })),
       getValidationSettings: vi.fn(async () => validationSettings(1000)),
       updateValidationSettings: vi.fn(async (value: number) => validationSettings(value)),
     }

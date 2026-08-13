@@ -14,19 +14,10 @@ from agent_shell.event_feed import (
     EventLevel,
     EventSource,
 )
-from agent_shell.runtime.interception import InterceptionTestController
-from agent_shell.storage.api_server import ApiServerStore
-from agent_shell.storage.history_retention import MAX_HISTORY_RETENTION_LIMIT
 from agent_shell.storage.system_log_settings import (
     MAX_SYSTEM_LOG_MAX_SIZE_MIB,
     MIN_SYSTEM_LOG_MAX_SIZE_MIB,
 )
-
-
-class InterceptionTestUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    enabled: bool
 
 
 class EventFeedDeleteMatching(BaseModel):
@@ -37,12 +28,6 @@ class EventFeedDeleteMatching(BaseModel):
     source: list[EventSource] = Field(default_factory=list)
     level: list[EventLevel] = Field(default_factory=list)
     query: str = Field(default="", max_length=200)
-
-
-class HistoryRetentionUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    retention_limit: int = Field(ge=1, le=MAX_HISTORY_RETENTION_LIMIT)
 
 
 class SystemLogSettingsUpdate(BaseModel):
@@ -81,9 +66,7 @@ def _time_window(started_at: datetime, ended_at: datetime) -> tuple[datetime, da
 
 def build_event_feed_router(
     service: EventFeedService,
-    store: ApiServerStore,
     events: Any,
-    interception_tests: InterceptionTestController,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -159,32 +142,6 @@ def build_event_feed_router(
     ) -> dict[str, int]:
         result = service.set_system_log_max_size_mib(payload.max_size_mib)
         await events.publish({"type": "settings_changed"})
-        return result
-
-    @router.get("/api/interception-test")
-    async def get_interception_test() -> dict[str, bool]:
-        return interception_tests.snapshot()
-
-    @router.put("/api/interception-test")
-    async def update_interception_test(
-        payload: InterceptionTestUpdate,
-    ) -> dict[str, bool]:
-        state = interception_tests.set_enabled(payload.enabled)
-        await events.publish({"type": "interception_changed"})
-        return state
-
-    @router.get("/api/interception-test/records/retention")
-    async def get_interception_retention() -> dict[str, int]:
-        return store.history_retention("interception_history")
-
-    @router.put("/api/interception-test/records/retention")
-    async def update_interception_retention(
-        payload: HistoryRetentionUpdate,
-    ) -> dict[str, int]:
-        result = store.set_history_retention(
-            "interception_history", payload.retention_limit
-        )
-        await events.publish({"type": "interception_changed"})
         return result
 
     return router

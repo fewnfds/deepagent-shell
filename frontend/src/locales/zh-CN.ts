@@ -211,13 +211,11 @@ export const zhCN = {
     empty: '没有符合条件的事件。',
     download: '下载完整条目',
     matchedInContent: '查询词命中了未在列表中展示的完整内容。',
-    interceptionWarning: '拦截测试已开启，Provider 调用会被短路。',
     debug: {
       label: 'DEBUG 完整日志',
       active: 'DEBUG 已开启，完整异常日志正在写入 data/logs/debug。',
     },
     sources: {
-      interception: '拦截记录',
       system: '系统日志',
       runtime: 'Agent 运行日志',
     },
@@ -240,7 +238,6 @@ export const zhCN = {
     },
     controls: {
       title: '采集控制',
-      interception: '拦截测试',
     },
     retention: {
       title: '日志设置',

@@ -13,7 +13,6 @@ import {
   type EventSource,
   type ManagementEvent,
   type RuntimeDiagnostics,
-  type RetentionSettings,
   type SystemLogSettings,
 } from '@/api'
 import DataTableWorkbench from '@/components/data-table/DataTableWorkbench.vue'
@@ -30,15 +29,12 @@ import { useManagementEvents } from '@/composables/useManagementEvents'
 import { useToasts } from '@/composables/useToasts'
 import { triggerBrowserDownload } from '@/utils/download'
 
-const sources: EventSource[] = ['interception', 'system', 'runtime']
+const sources: EventSource[] = ['system', 'runtime']
 const levels: EventLevel[] = ['debug', 'info', 'warning', 'error']
 
 interface EventFeedApi {
   listEventFeed(filters: EventFeedFilters): Promise<EventFeedResponse>
   downloadEvent(source: EventSource, id: string): Promise<Blob>
-  getInterceptionTest(): Promise<{ enabled: boolean }>
-  getInterceptionRetention(): Promise<RetentionSettings>
-  updateInterceptionRetention(value: number): Promise<RetentionSettings>
   getRuntimeDiagnostics(): Promise<RuntimeDiagnostics>
   updateRuntimeLogRetention(value: number): Promise<RuntimeDiagnostics>
   updateRuntimeDebug(enabled: boolean): Promise<RuntimeDiagnostics>
@@ -89,9 +85,8 @@ const controlsLoading = ref(false)
 const controlsReady = ref(false)
 const controlsError = ref('')
 const stale = ref(false)
-const interceptionEnabled = ref(false)
-const retentionDrafts = ref({ interception: 20, runtime: 20 })
-const savedRetentions = ref({ interception: 20, runtime: 20 })
+const retentionDrafts = ref({ runtime: 20 })
+const savedRetentions = ref({ runtime: 20 })
 const maxRetention = ref(1)
 const runtimeDebugEnabled = ref(false)
 const systemLogSizeDraft = ref(5)
@@ -272,23 +267,16 @@ async function loadControls(): Promise<void> {
   controlsLoading.value = true
   controlsError.value = ''
   try {
-    const [interception, interceptionRetention, diagnostics, systemLog] = await Promise.all([
-      api.getInterceptionTest(),
-      api.getInterceptionRetention(),
+    const [diagnostics, systemLog] = await Promise.all([
       api.getRuntimeDiagnostics(),
       api.getSystemLogSettings(),
     ])
-    interceptionEnabled.value = interception.enabled
     const loadedRetentions = {
-      interception: interceptionRetention.retention_limit,
       runtime: diagnostics.retention_limit,
     }
     retentionDrafts.value = loadedRetentions
     savedRetentions.value = { ...loadedRetentions }
-    maxRetention.value = Math.min(
-      interceptionRetention.max_retention_limit,
-      diagnostics.max_retention_limit,
-    )
+    maxRetention.value = diagnostics.max_retention_limit
     runtimeDebugEnabled.value = diagnostics.debug_enabled
     systemLogSizeDraft.value = systemLog.max_size_mib
     savedSystemLogSize.value = systemLog.max_size_mib
@@ -333,7 +321,7 @@ async function refreshAll(): Promise<void> {
   await Promise.all([refreshWindow(), loadControls()])
 }
 
-async function saveRetention(source: 'interception' | 'runtime'): Promise<void> {
+async function saveRetention(source: 'runtime'): Promise<void> {
   const value = retentionDrafts.value[source]
   if (value < savedRetentions.value[source]) {
     const accepted = await confirmation.confirm({
@@ -347,9 +335,7 @@ async function saveRetention(source: 'interception' | 'runtime'): Promise<void> 
   }
   savingControl.value = `${source}-retention`
   try {
-    const result = source === 'interception'
-      ? await api.updateInterceptionRetention(value)
-      : await api.updateRuntimeLogRetention(value)
+    const result = await api.updateRuntimeLogRetention(value)
     retentionDrafts.value[source] = result.retention_limit
     savedRetentions.value[source] = result.retention_limit
     maxRetention.value = result.max_retention_limit
@@ -401,7 +387,7 @@ function markStale(): void {
 }
 
 function handleEvent(event: ManagementEvent): void {
-  if (['history_changed', 'interception_changed', 'runtime_diagnostic', 'system_log']
+  if (['history_changed', 'runtime_diagnostic', 'system_log']
     .includes(event.type)) markStale()
 }
 
@@ -422,7 +408,6 @@ onMounted(() => { void loadControls() })
       <LteAlert v-if="controlsError" theme="danger" :title="t('eventFeed.feedback.loadFailed')">
         {{ controlsError }}
       </LteAlert>
-      <LteAlert v-if="interceptionEnabled" theme="warning" :title="t('eventFeed.interceptionWarning')" />
       <LteAlert v-if="runtimeDebugEnabled" theme="warning" :title="t('eventFeed.debug.active')" />
     </template>
 
@@ -435,7 +420,7 @@ onMounted(() => { void loadControls() })
       <div v-if="controlsReady">
         <div class="row g-3">
           <form
-            v-for="source in (['interception', 'runtime'] as const)"
+            v-for="source in (['runtime'] as const)"
             :key="source"
             class="col-lg-3"
             :data-testid="`retention-${source}`"
