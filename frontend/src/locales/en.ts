@@ -23,6 +23,8 @@ export const en: MessageSchema = {
       fileManager: 'File manager',
       eventFeed: 'Log center',
       mainAgent: 'Main Agent',
+      defer: 'Deferred execution',
+      deferEnabled: 'Wait for pending tasks before running this node',
       subagents: 'Subagent',
     },
   },

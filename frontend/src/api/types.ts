@@ -270,6 +270,7 @@ export interface WorkflowGraphNode {
   type_version: 1
   config: {
     main_agent_id?: string
+    defer?: boolean
   }
 }
 

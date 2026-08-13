@@ -128,6 +128,11 @@ def test_catalog_exposes_the_first_supported_node_and_handle_paradigms() -> None
     assert NODE_CATALOG[1].config_model.model_json_schema()["required"] == [
         "main_agent_id"
     ]
+    assert NODE_CATALOG[1].config_model.model_json_schema()["properties"]["defer"] == {
+        "default": False,
+        "title": "Defer",
+        "type": "boolean",
+    }
 
 
 def test_admission_accepts_incomplete_drafts_and_layout_does_not_change_execution_sha() -> None:
@@ -653,6 +658,127 @@ def test_normal_edge_fan_out_and_fan_in_merge_invocations_and_independent_files(
     assert result["files"]["/agent-1.txt"]["content"] == "written by agent-1"
     assert result["files"]["/agent-2.txt"]["content"] == "written by agent-2"
     assert "messages" not in result
+
+
+def test_normal_multi_in_compiles_as_one_all_of_barrier_and_runs_target_once() -> None:
+    payload = graph_payload(AGENT_A, AGENT_B, AGENT_C)
+    payload["definition"]["edges"] = [  # type: ignore[index]
+        {
+            "id": "start-agent-1",
+            "source": "start",
+            "source_handle": "next",
+            "target": "agent-1",
+            "target_handle": "in",
+        },
+        {
+            "id": "start-agent-2",
+            "source": "start",
+            "source_handle": "next",
+            "target": "agent-2",
+            "target_handle": "in",
+        },
+        {
+            "id": "agent-1-agent-3",
+            "source": "agent-1",
+            "source_handle": "next",
+            "target": "agent-3",
+            "target_handle": "in",
+        },
+        {
+            "id": "agent-2-agent-3",
+            "source": "agent-2",
+            "source_handle": "next",
+            "target": "agent-3",
+            "target_handle": "in",
+        },
+        {
+            "id": "agent-3-end",
+            "source": "agent-3",
+            "source_handle": "next",
+            "target": "end",
+            "target_handle": "in",
+        },
+    ]
+    admission, document = admit_workflow_document(payload)
+    assert admission.valid is True
+    assert document is not None
+
+    calls: list[str] = []
+
+    def agent_graph(node_id: str):
+        def answer(_state: AgentShellState) -> dict[str, object]:
+            calls.append(node_id)
+            return {"messages": [AIMessage(content=node_id)]}
+
+        return (
+            StateGraph(AgentShellState)
+            .add_node("answer", answer)
+            .add_edge(START, "answer")
+            .add_edge("answer", END)
+            .compile()
+        )
+
+    graph = compile_workflow(
+        document,
+        node_agents={
+            "agent-1": _built_agent(
+                agent_graph("agent-1"), agent_id=AGENT_A, agent_name="Agent A"
+            ),
+            "agent-2": _built_agent(
+                agent_graph("agent-2"), agent_id=AGENT_B, agent_name="Agent B"
+            ),
+            "agent-3": _built_agent(
+                agent_graph("agent-3"), agent_id=AGENT_C, agent_name="Agent C"
+            ),
+        },
+    )
+
+    result = asyncio.run(
+        graph.ainvoke(
+            {"shared_vars": {}, "agent_invocations": {}},
+            context=WorkflowRuntimeContext(
+                request_id="request-1", workflow={"id": "workflow-id"}
+            ),
+        )
+    )
+
+    assert calls.count("agent-3") == 1
+    assert len(result["agent_invocations"]) == 3
+
+
+def test_agent_defer_config_is_forwarded_to_langgraph_node(monkeypatch) -> None:
+    payload = graph_payload(AGENT_A)
+    payload["definition"]["nodes"][1]["config"]["defer"] = True  # type: ignore[index]
+    admission, document = admit_workflow_document(payload)
+    assert admission.valid is True
+    assert document is not None
+
+    agent_graph = (
+        StateGraph(AgentShellState)
+        .add_node("answer", lambda _state: {"messages": []})
+        .add_edge(START, "answer")
+        .add_edge("answer", END)
+        .compile()
+    )
+    original_add_node = StateGraph.add_node
+    node_options: dict[str, object] = {}
+
+    def add_node(builder, node_id, action, **kwargs):
+        if node_id == "agent-1":
+            node_options.update(kwargs)
+        return original_add_node(builder, node_id, action, **kwargs)
+
+    monkeypatch.setattr(StateGraph, "add_node", add_node)
+    compile_workflow(
+        document,
+        node_agents={
+            "agent-1": _built_agent(
+                agent_graph, agent_id=AGENT_A, agent_name="Agent A"
+            )
+        },
+    )
+
+    assert node_options["defer"] is True
 
 
 def test_repeated_node_execution_uses_distinct_langgraph_task_invocations() -> None:

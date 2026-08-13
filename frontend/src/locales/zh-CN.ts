@@ -21,6 +21,8 @@ export const zhCN = {
       fileManager: '文件管理',
       eventFeed: '日志中心',
       mainAgent: 'Main Agent',
+      defer: '延迟执行',
+      deferEnabled: '等待 pending 任务完成后再执行此节点',
       subagents: 'Subagent',
     },
   },

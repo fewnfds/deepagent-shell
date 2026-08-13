@@ -158,11 +158,27 @@ def compile_workflow(
         builder.add_node(
             node.id,
             _make_agent_node(node_id=node.id, built_agent=built_agent),
+            defer=bool(node.config.get("defer", False)),
         )
+
+    # Group normal incoming edges so LangGraph receives one explicit all-of
+    # waiting edge per target instead of several independent triggers.
+    incoming: dict[str, list[str]] = {}
     for edge in normalized.definition.edges:
         source = START if edge.source in entry_ids else edge.source
         target = END if edge.target in exit_ids else edge.target
-        builder.add_edge(source, target)
+        sources = incoming.setdefault(target, [])
+        if source not in sources:
+            sources.append(source)
+    for target, sources in incoming.items():
+        # START is a virtual sentinel and cannot participate in a list-source
+        # waiting edge. Keep entry activation explicit, then group real nodes.
+        if START in sources:
+            builder.add_edge(START, target)
+            sources = [source for source in sources if source != START]
+        if not sources:
+            continue
+        builder.add_edge(sources[0] if len(sources) == 1 else sources, target)
     return builder.compile(checkpointer=checkpointer)
 
 

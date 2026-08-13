@@ -265,6 +265,14 @@ function selectAgent(nodeId: string, mainAgentId: string): void {
   ))
 }
 
+function selectDefer(nodeId: string, defer: boolean): void {
+  nodes.value = nodes.value.map((node) => (
+    node.id === nodeId
+      ? { ...node, data: { ...node.data, defer } }
+      : node
+  ))
+}
+
 function clearSelection(): void {
   nodes.value = nodes.value.map((node) => ({ ...node, selected: false }))
   edges.value = edges.value.map((edge) => ({ ...edge, selected: false }))
@@ -444,6 +452,7 @@ onMounted(async () => {
         @select-edge-type="selectEdgeType"
         @toggle="rightCollapsed = !rightCollapsed"
         @update-agent="selectAgent"
+        @update-defer="selectDefer"
       />
     </div>
   </div>

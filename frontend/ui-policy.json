@@ -288,7 +288,7 @@
           "workflow-node-title", "workflow-port", "workflow-port--normal", "workflow-sidebar",
           "workflow-sidebar--inspector", "workflow-sidebar--library", "workflow-sidebar-body",
           "workflow-sidebar-header", "workflow-sidebar-section-title", "workflow-sidebar-title",
-          "workflow-sidebar-toggle", "form-select"
+          "workflow-sidebar-toggle", "form-check", "form-check-input", "form-check-label", "form-select", "form-switch"
         ]
       },
       {

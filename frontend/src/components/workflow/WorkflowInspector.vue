@@ -32,6 +32,7 @@ const emit = defineEmits<{
   selectEdgeType: [edgeId: string, edgeType: WorkflowCanvasEdgeType]
   toggle: []
   updateAgent: [nodeId: string, mainAgentId: string]
+  updateDefer: [nodeId: string, defer: boolean]
 }>()
 
 const { t } = useI18n()
@@ -59,6 +60,11 @@ function endpointLabel(endpoint: WorkflowNodeHandleSpec): string {
 function updateAgent(event: Event): void {
   if (!props.node || props.node.data.nodeType !== 'agent') return
   emit('updateAgent', props.node.id, (event.target as HTMLSelectElement).value)
+}
+
+function updateDefer(event: Event): void {
+  if (!props.node || props.node.data.nodeType !== 'agent') return
+  emit('updateDefer', props.node.id, (event.target as HTMLInputElement).checked)
 }
 
 function selectEdgeType(event: Event): void {
@@ -147,6 +153,23 @@ function selectEdgeTargetEndpoint(event: Event): void {
                 {{ agent.name }}
               </option>
             </select>
+          </FormField>
+          <FormField
+            field-path="definition.nodes[].config.defer"
+            label-key="workflows.editor.defer"
+          >
+            <div class="form-check form-switch">
+              <input
+                id="workflow-node-defer"
+                class="form-check-input"
+                type="checkbox"
+                :checked="node.data.defer"
+                @change="updateDefer"
+              >
+              <label class="form-check-label" for="workflow-node-defer">
+                {{ $t('workflows.editor.deferEnabled') }}
+              </label>
+            </div>
           </FormField>
           <button class="workflow-inspector-delete" type="button" @click="emit('removeNode', node.id)">
             <i class="bi bi-trash" aria-hidden="true" />

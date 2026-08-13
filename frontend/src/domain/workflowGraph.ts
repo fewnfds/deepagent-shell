@@ -19,6 +19,7 @@ import type {
 export interface WorkflowCanvasNodeData {
   nodeType: WorkflowNodeType
   mainAgentId: string
+  defer?: boolean
 }
 
 export type WorkflowCanvasNode = Node<WorkflowCanvasNodeData>
@@ -57,6 +58,7 @@ function canvasNode(node: WorkflowGraphNode, document: WorkflowGraphDocument): W
     data: {
       nodeType: node.type,
       mainAgentId: node.config.main_agent_id ?? '',
+      defer: node.config.defer ?? false,
     },
   }
 }
@@ -139,14 +141,20 @@ export function workflowCanvasToDocument(
     definition: {
       schema_version: 1,
       state_contract: 'agent-shell.workflow.agent-invocations.v1',
-      nodes: nodes.map((node) => ({
-        id: node.id,
-        type: node.data.nodeType,
-        type_version: 1,
-        config: node.data.nodeType === 'agent'
-          ? { main_agent_id: node.data.mainAgentId }
-          : {},
-      })),
+      nodes: nodes.map((node) => {
+        const config = node.data.nodeType === 'agent'
+          ? {
+              main_agent_id: node.data.mainAgentId,
+              ...(node.data.defer ? { defer: true } : {}),
+            }
+          : {}
+        return {
+          id: node.id,
+          type: node.data.nodeType,
+          type_version: 1,
+          config,
+        }
+      }),
       edges: edges.map((edge) => ({
         id: edge.id,
         source: edge.source,
@@ -174,7 +182,7 @@ export function newAgentCanvasNode(
     type: 'agent',
     position: { ...position },
     deletable: true,
-    data: { nodeType: 'agent', mainAgentId },
+    data: { nodeType: 'agent', mainAgentId, defer: false },
   }
 }
 

@@ -15,6 +15,8 @@ class AgentNodeConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     main_agent_id: UUID
+    # Reserved execution policy for LangGraph's deferred node scheduling.
+    defer: bool = False
 
 
 @dataclass(frozen=True, slots=True)
