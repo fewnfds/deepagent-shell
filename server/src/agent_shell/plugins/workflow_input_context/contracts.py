@@ -10,10 +10,10 @@ from agent_shell.python_requirements import parse_python_requirements
 
 PluginText = Annotated[str, StringConstraints(strip_whitespace=False)]
 DEFAULT_CUSTOM_TRANSFORM_SOURCE = (
-    "def transform(messages, read_file, config, state, context):\n"
+    "def transform(read_file, config, workflow_state, agent_state, context):\n"
     "    # import package_name\n"
     "    # Write custom Python here.\n"
-    "    return messages\n"
+    "    return {}\n"
 )
 VirtualPath = Annotated[
     str,

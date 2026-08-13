@@ -133,11 +133,6 @@ CAPABILITY_MANIFESTS = (
         "chat-left-text", "workflow_input_context",
         subagent_overrideable=True, required=False, subagent_policy="inherit",
     ),
-    CapabilityManifest(
-        "session-recorder", "session-recorder", "Session Recorder", 15,
-        "record-circle", "session_recorder",
-        subagent_overrideable=True, required=False, subagent_policy="inherit",
-    ),
 )
 
 

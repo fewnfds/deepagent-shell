@@ -5,9 +5,11 @@ from datetime import datetime, timezone
 import json
 
 import pytest
+from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
 
 from agent_shell.app import create_app
+from agent_shell.runtime.agent_builder import BuiltAgent
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.runtime.state import AgentShellState
 from agent_shell.runtime.workflow_debug import WorkflowDebugService
@@ -22,11 +24,16 @@ from support import ScopedAuthTestClient, configure_scope_tokens
 AGENT_ID = "11111111-1111-4111-8111-111111111111"
 
 
+class _MiddlewareRuntime:
+    async def close(self) -> None:
+        return None
+
+
 def _workflow_payload() -> dict[str, object]:
     return {
         "definition": {
             "schema_version": 1,
-            "state_contract": "agent-shell.workflow.messages.v1",
+            "state_contract": "agent-shell.workflow.agent-invocations.v1",
             "nodes": [
                 {"id": "start", "type": "start", "type_version": 1, "config": {}},
                 {
@@ -96,7 +103,10 @@ def test_workflow_debug_persists_official_checkpoints_without_turning_input_into
 
         def inspect_state(state: AgentShellState) -> dict[str, object]:
             observed_root_messages.extend(state.get("messages", []))
-            return {"shared_vars": {"result": "complete"}}
+            return {
+                "messages": [AIMessage(content="complete")],
+                "shared_vars": {"result": "complete"},
+            }
 
         agent_graph = (
             StateGraph(AgentShellState, context_schema=WorkflowRuntimeContext)
@@ -120,12 +130,22 @@ def test_workflow_debug_persists_official_checkpoints_without_turning_input_into
             run.begin()
             graph = compile_workflow(
                 document,
-                node_graphs={"agent-1": agent_graph},
+                node_agents={
+                    "agent-1": BuiltAgent(
+                        graph=agent_graph,
+                        input_state={"messages": [], "shared_vars": {}},
+                        output_config={},
+                        agent_id=AGENT_ID,
+                        agent_name="Debug Agent",
+                        subagent_profile_ids={},
+                        middleware_runtime=_MiddlewareRuntime(),  # type: ignore[arg-type]
+                    )
+                },
                 checkpointer=service.checkpointer,
             )
 
             result = await graph.ainvoke(
-                {"messages": [], "shared_vars": {}},
+                {"shared_vars": {}, "agent_invocations": {}},
                 config=run.config(),
                 context=context,
                 durability="sync",

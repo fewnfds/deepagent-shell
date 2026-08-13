@@ -36,12 +36,17 @@ def test_direct_subagents_become_official_dictionary_specs_with_shared_workspace
             middleware=(),
             package_middleware=(),
             extra_middleware=(),
-            session_recorder_middleware=None,
             tool_choice=None,
             model_settings={},
             response_format=None,
             permissions=(f"{owner_name}-permission",),
             exception_retry=None,
+            model_provider="openai",
+            model_name="test-model",
+            backend=object(),
+            initial_files={},
+            skill_sources=(),
+            workspace=workspace,
         )
 
     nodes = {
@@ -79,5 +84,8 @@ def test_direct_subagents_become_official_dictionary_specs_with_shared_workspace
     assert materialized_workspaces == [workspace, workspace]
     assert specs[0]["permissions"] == ["reader-permission"]
     assert specs[1]["permissions"] == ["writer-permission"]
-    assert any(isinstance(item, AgentShellStateMiddleware) for item in specs[0]["middleware"])
-    assert all("graph" not in item for item in specs)
+    assert any(
+        isinstance(item, AgentShellStateMiddleware)
+        for item in specs[0]["middleware"]
+    )
+    assert all("graph" not in item and "runnable" not in item for item in specs)

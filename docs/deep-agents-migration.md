@@ -1,13 +1,14 @@
 # Deep Agents runtime 基线
 
-Agent Shell 使用锁定版本的 `deepagents.create_deep_agent()` 构造 Main Agent。直接 Subagent 使用 Deep Agents 官方
-dictionary-based `SubAgent` 配置；Shell 不再为 child 编译自定义 graph。
+Agent Shell 使用锁定版本的 `deepagents.create_deep_agent()` 构造 Main Agent。直接 Subagent 通过 Deep Agents 官方
+dictionary 配置交给 `SubAgentMiddleware`，由 Deep Agents 构造和调度；Shell 只在外层画布 Main Agent node 建立
+invocation identity 和父子 State 输入输出边界，不实现委派调度或第二套 Agent loop。
 
 ## 责任边界
 
 Agent Shell 保留 Main Agent、组件、直接 Subagent 和 Provider secret 的完整装配能力，并由
-`deepagents.create_deep_agent()` 构造 compiled graph。当前 Workflow Agent node 引用完整 Main Agent，并把该 compiled
-graph 直接装入 `START -> Agent -> END` 外层 StateGraph。
+`deepagents.create_deep_agent()` 构造 compiled graph。当前 Workflow Agent node 引用完整 Main Agent，由父图 wrapper
+通过公开 `ainvoke()` 显式建立父子 State 输入输出边界。
 
 Deep Agents/LangGraph 负责模型循环、工具执行、同步委派、summarization、tool-call repair、prompt caching、
 state reducer、Middleware Hook、`Command`、错误传播和 graph 终止。
@@ -21,7 +22,7 @@ model/tool/agent Hook。需要 checkpoint 的业务数据通过官方 state upda
 - Main Agent 必须有模型与输出模式；
 - 只有 Main Agent 保存直接 Subagent UUID，Subagent contract 没有 child 引用；
 - Workflow 唯一选择共享 Filesystem；Main Agent/Subagent payload 不保存 Filesystem ref；
-- Subagent 能力按 inherit/replace/disabled 解析，并投影为官方字典 spec；
+- Subagent 能力按 inherit/replace/disabled 解析，并投影为官方 `CompiledSubAgent` 字典 spec；
 - 同一次 Workflow 请求共享 Deep Agents workspace/backend，各 Main Agent/Subagent 的 `filesystem-permissions` 与文件
   tool override 按身份显式装配；
 - Summarization 与 Prompt Caching 是两个独立 capability，每个身份显式物化自己的官方 middleware；
@@ -63,7 +64,8 @@ Deep Agents 也支持 `HarnessProfile.excluded_middleware` 物理移除普通 mi
 
 Canvas Start/End 只是 LangGraph 官方虚拟 `START/END`。客户端 `messages[]` 冻结在官方
 `WorkflowRuntimeContext`，通过 root `context=` 传递；不会由 Start 注入或自动成为 Main Agent 活动消息。已装配的官方
-`before_agent` Hook 从 `runtime.context.messages` 按 Agent 身份整理后产生 state update。
+`before_agent` Hook 为 Main Agent 从 `runtime.context.messages` 整理输入；同步 Subagent 默认从其 delegated private
+`state.messages` 整理输入，不自动混入根请求。
 
 同步 Subagent 是 Agent 内部的官方 `SubAgentMiddleware` 能力，不与外层 Workflow 竞争调度职责。后续
 AsyncSubAgent 使用 `create_deep_agent(subagents=[AsyncSubAgent(...)])` 的官方装配入口，并单独处理 `graph_id`、

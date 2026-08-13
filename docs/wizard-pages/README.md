@@ -16,7 +16,6 @@
 | 12 | [上下文摘要](summarization-config.md) | `summarization` |
 | 13 | [Prompt 缓存](prompt-caching-config.md) | `prompt-caching` |
 | 14 | [Workflow 输入上下文](workflow-input-context-config.md) | `workflow-input-context` |
-| 15 | [Session Recorder](session-recorder-config.md) | `session-recorder` |
 | Workflow | [Workflow Prepare](workflow-prepare-config.md) | `workflow-prepare` |
 
 模型和输出模式是 Main Agent 必选组件；Filesystem 由 Workflow 必选，Workflow Prepare 由 Workflow 可选绑定；

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,6 +13,5 @@ class WorkflowDefinition(BaseModel):
     name: Annotated[str, Field(min_length=1, max_length=120)]
     description: Annotated[str, Field(max_length=2_000)] = ""
     filesystem_id: RequiredReference
-    state_mode: Literal["shared", "isolated"] = "shared"
     workflow_prepare_id: RequiredReference | None = None
     enabled: bool = True

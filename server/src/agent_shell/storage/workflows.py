@@ -23,7 +23,6 @@ class WorkflowStore:
             "name": str(record["name"]),
             "description": str(record["description"]),
             "filesystem_id": str(record["filesystem_id"]),
-            "state_mode": str(record["state_mode"]),
             "workflow_prepare_id": record.get("workflow_prepare_id"),
             "enabled": bool(record["enabled"]),
         }

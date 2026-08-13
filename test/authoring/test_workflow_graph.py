@@ -5,13 +5,16 @@ import asyncio
 
 import pytest
 from deepagents.backends import StateBackend
+from deepagents.backends.utils import create_file_data
 from langchain_core.messages import AIMessage
+from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
+from langgraph.runtime import Runtime
 
 from agent_shell.runtime.agent_builder import BuiltAgent
 from agent_shell.runtime.agent_runtime import AgentRuntime
 from agent_shell.runtime.context import WorkflowRuntimeContext
-from agent_shell.runtime.state import AgentShellState
+from agent_shell.runtime.state import AgentShellState, WorkflowState
 from agent_shell.validation.assembly import StaticAssembly
 from agent_shell.validation import ValidationIssue, ValidationReport
 from agent_shell.workflow import (
@@ -22,10 +25,35 @@ from agent_shell.workflow import (
     workflow_document_sha256,
     workflow_executable_sha256,
 )
+from agent_shell.workflow.compiler import _make_agent_node
 
 
 AGENT_A = "11111111-1111-4111-8111-111111111111"
 AGENT_B = "22222222-2222-4222-8222-222222222222"
+AGENT_C = "33333333-3333-4333-8333-333333333333"
+
+
+class _MiddlewareRuntime:
+    async def close(self) -> None:
+        return None
+
+
+def _built_agent(
+    graph,
+    *,
+    agent_id: str,
+    agent_name: str,
+    input_state: dict[str, object] | None = None,
+) -> BuiltAgent:
+    return BuiltAgent(
+        graph=graph,
+        input_state=input_state or {"messages": [], "shared_vars": {}},
+        output_config={},
+        agent_id=agent_id,
+        agent_name=agent_name,
+        subagent_profile_ids={},
+        middleware_runtime=_MiddlewareRuntime(),  # type: ignore[arg-type]
+    )
 
 
 def graph_payload(*agent_ids: str) -> dict[str, object]:
@@ -57,7 +85,7 @@ def graph_payload(*agent_ids: str) -> dict[str, object]:
     return {
         "definition": {
             "schema_version": 1,
-            "state_contract": "agent-shell.workflow.messages.v1",
+            "state_contract": "agent-shell.workflow.agent-invocations.v1",
             "nodes": nodes,
             "edges": edges,
         },
@@ -79,7 +107,7 @@ def test_catalog_exposes_the_first_supported_node_and_handle_paradigms() -> None
     assert [item.type for item in NODE_CATALOG] == ["start", "agent", "end"]
     assert [item.runtime_kind for item in NODE_CATALOG] == [
         "graph_entry",
-        "compiled_subgraph",
+        "agent_wrapper",
         "graph_exit",
     ]
     assert [handle.id for handle in NODE_CATALOG[0].output_handles] == ["next"]
@@ -344,28 +372,61 @@ def test_compiler_maps_canvas_start_and_end_to_langgraph_sentinels() -> None:
         .add_edge("answer", END)
         .compile()
     )
-    graph = compile_workflow(document, node_graphs={"agent-1": agent_graph})
+    graph = compile_workflow(
+        document,
+        node_agents={
+            "agent-1": _built_agent(
+                agent_graph,
+                agent_id=AGENT_A,
+                agent_name="Agent A",
+            )
+        },
+    )
 
     result = asyncio.run(
         graph.ainvoke(
-            {
-                "messages": [],
-                "shared_vars": {},
-            }
+            {"shared_vars": {}, "agent_invocations": {}},
+            context=WorkflowRuntimeContext(
+                request_id="request-1",
+                workflow={"id": "workflow-id"},
+            ),
         )
     )
 
-    assert [message.type for message in result["messages"]] == ["ai"]
-    assert result["messages"][-1].content == "compiled workflow response"
+    assert "messages" not in result
+    record = next(iter(result["agent_invocations"].values()))
+    assert set(record) == {
+        "invocation_id",
+        "workflow_id",
+        "workflow_node_id",
+        "agent_id",
+        "invoked_at",
+        "messages",
+    }
+    assert record["invocation_id"] in result["agent_invocations"]
+    assert record["workflow_id"] == "workflow-id"
+    assert record["workflow_node_id"] == "agent-1"
+    assert record["agent_id"] == AGENT_A
+    assert isinstance(record["invoked_at"], float)
+    assert record["messages"][-1].content == "compiled workflow response"
 
 
-def test_compiler_maps_every_agent_node_to_a_compiled_subgraph() -> None:
+def test_serial_agents_have_private_messages_and_explicit_parent_snapshot() -> None:
     admission, document = admit_workflow_document(graph_payload(AGENT_A, AGENT_B))
     assert admission.valid is True
     assert document is not None
 
-    def answer(content: str):
-        def node(_state: AgentShellState) -> dict[str, list[AIMessage]]:
+    observations: dict[str, tuple[int, int]] = {}
+
+    def answer(node_id: str, content: str):
+        def node(
+            state: AgentShellState,
+            runtime: Runtime[WorkflowRuntimeContext],
+        ) -> dict[str, list[AIMessage]]:
+            observations[node_id] = (
+                len(state.get("messages", [])),
+                len(runtime.context.workflow_state.get("agent_invocations", {})),
+            )
             return {"messages": [AIMessage(content=content)]}
 
         return (
@@ -378,84 +439,45 @@ def test_compiler_maps_every_agent_node_to_a_compiled_subgraph() -> None:
 
     graph = compile_workflow(
         document,
-        node_graphs={
-            "agent-1": answer("first agent"),
-            "agent-2": answer("second agent"),
+        node_agents={
+            "agent-1": _built_agent(
+                answer("agent-1", "first agent"),
+                agent_id=AGENT_A,
+                agent_name="Agent A",
+            ),
+            "agent-2": _built_agent(
+                answer("agent-2", "second agent"),
+                agent_id=AGENT_B,
+                agent_name="Agent B",
+            ),
         },
     )
 
     result = asyncio.run(
         graph.ainvoke(
-            {
-                "messages": [],
-                "shared_vars": {},
-            }
+            {"shared_vars": {}, "agent_invocations": {}},
+            context=WorkflowRuntimeContext(
+                request_id="request-1",
+                workflow={"id": "workflow-id"},
+            ),
         )
     )
 
-    assert [message.content for message in result["messages"]] == [
+    assert observations == {"agent-1": (0, 0), "agent-2": (0, 1)}
+    records = list(result["agent_invocations"].values())
+    assert [record["workflow_node_id"] for record in records] == [
+        "agent-1",
+        "agent-2",
+    ]
+    assert [record["messages"][-1].content for record in records] == [
         "first agent",
         "second agent",
     ]
+    assert "messages" not in result
 
 
-@pytest.mark.parametrize(
-    ("state_mode", "expected_seen"),
-    [("shared", {"agent-1": 0, "agent-2": 1}), ("isolated", {"agent-1": 0, "agent-2": 0})],
-)
-def test_workflow_state_mode_controls_message_inheritance_and_merges_sessions(
-    state_mode: str,
-    expected_seen: dict[str, int],
-) -> None:
-    admission, document = admit_workflow_document(graph_payload(AGENT_A, AGENT_B))
-    assert admission.valid is True
-    assert document is not None
-
-    def agent_graph(node_id: str):
-        def answer(state: AgentShellState) -> dict[str, object]:
-            seen = len(state.get("messages", []))
-            return {
-                "messages": [AIMessage(content=node_id)],
-                "agent_sessions": {node_id: {"seen": seen}},
-            }
-
-        return (
-            StateGraph(AgentShellState)
-            .add_node("answer", answer)
-            .add_edge(START, "answer")
-            .add_edge("answer", END)
-            .compile()
-        )
-
-    graph = compile_workflow(
-        document,
-        node_graphs={
-            "agent-1": agent_graph("agent-1"),
-            "agent-2": agent_graph("agent-2"),
-        },
-        state_mode=state_mode,
-    )
-    input_state: dict[str, object] = {"shared_vars": {}, "agent_sessions": {}}
-    if state_mode == "shared":
-        input_state["messages"] = []
-
-    result = asyncio.run(graph.ainvoke(input_state))
-
-    assert {
-        session_id: record["seen"]
-        for session_id, record in result["agent_sessions"].items()
-    } == expected_seen
-    if state_mode == "shared":
-        assert [message.content for message in result["messages"]] == [
-            "agent-1",
-            "agent-2",
-        ]
-    else:
-        assert "messages" not in result
-
-
-def test_isolated_parallel_agents_share_one_snapshot_and_merge_public_channels() -> None:
-    payload = graph_payload(AGENT_A, AGENT_B)
+def test_normal_edge_fan_out_and_fan_in_merge_invocations_and_independent_files() -> None:
+    payload = graph_payload(AGENT_A, AGENT_B, AGENT_C)
     payload["definition"]["edges"] = [  # type: ignore[index]
         {
             "id": "start-agent-1",
@@ -472,15 +494,22 @@ def test_isolated_parallel_agents_share_one_snapshot_and_merge_public_channels()
             "target_handle": "in",
         },
         {
-            "id": "agent-1-end",
+            "id": "agent-1-agent-3",
             "source": "agent-1",
             "source_handle": "next",
-            "target": "end",
+            "target": "agent-3",
             "target_handle": "in",
         },
         {
-            "id": "agent-2-end",
+            "id": "agent-2-agent-3",
             "source": "agent-2",
+            "source_handle": "next",
+            "target": "agent-3",
+            "target_handle": "in",
+        },
+        {
+            "id": "agent-3-end",
+            "source": "agent-3",
             "source_handle": "next",
             "target": "end",
             "target_handle": "in",
@@ -490,14 +519,27 @@ def test_isolated_parallel_agents_share_one_snapshot_and_merge_public_channels()
     assert admission.valid is True
     assert document is not None
 
-    def agent_graph(node_id: str):
-        def answer(state: AgentShellState) -> dict[str, object]:
-            seen = len(state.get("messages", []))
-            return {
+    observations: dict[str, tuple[int, int, frozenset[str]]] = {}
+
+    def agent_graph(node_id: str, *, file_path: str | None = None):
+        def answer(
+            state: AgentShellState,
+            runtime: Runtime[WorkflowRuntimeContext],
+        ) -> dict[str, object]:
+            observations[node_id] = (
+                len(state.get("messages", [])),
+                len(runtime.context.workflow_state.get("agent_invocations", {})),
+                frozenset(state.get("files", {})),
+            )
+            update: dict[str, object] = {
                 "messages": [AIMessage(content=node_id)],
-                "shared_vars": {node_id: seen},
-                "agent_sessions": {node_id: {"seen": seen}},
+                "shared_vars": {node_id: True},
             }
+            if file_path is not None:
+                update["files"] = {
+                    file_path: create_file_data(f"written by {node_id}")
+                }
+            return update
 
         return (
             StateGraph(AgentShellState)
@@ -509,23 +551,163 @@ def test_isolated_parallel_agents_share_one_snapshot_and_merge_public_channels()
 
     graph = compile_workflow(
         document,
-        node_graphs={
-            "agent-1": agent_graph("agent-1"),
-            "agent-2": agent_graph("agent-2"),
+        node_agents={
+            "agent-1": _built_agent(
+                agent_graph("agent-1", file_path="/agent-1.txt"),
+                agent_id=AGENT_A,
+                agent_name="Agent A",
+            ),
+            "agent-2": _built_agent(
+                agent_graph("agent-2", file_path="/agent-2.txt"),
+                agent_id=AGENT_B,
+                agent_name="Agent B",
+            ),
+            "agent-3": _built_agent(
+                agent_graph("agent-3"),
+                agent_id=AGENT_C,
+                agent_name="Agent C",
+            ),
         },
-        state_mode="isolated",
     )
 
     result = asyncio.run(
-        graph.ainvoke({"shared_vars": {}, "agent_sessions": {}})
+        graph.ainvoke(
+            {"shared_vars": {}, "agent_invocations": {}, "files": {}},
+            context=WorkflowRuntimeContext(
+                request_id="request-1",
+                workflow={"id": "workflow-id"},
+            ),
+        )
     )
 
-    assert result["shared_vars"] == {"agent-1": 0, "agent-2": 0}
-    assert result["agent_sessions"] == {
-        "agent-1": {"seen": 0},
-        "agent-2": {"seen": 0},
+    assert observations == {
+        "agent-1": (0, 0, frozenset()),
+        "agent-2": (0, 0, frozenset()),
+        "agent-3": (
+            0,
+            2,
+            frozenset({"/agent-1.txt", "/agent-2.txt"}),
+        ),
     }
+    assert result["shared_vars"] == {
+        "agent-1": True,
+        "agent-2": True,
+        "agent-3": True,
+    }
+    assert {
+        record["workflow_node_id"]
+        for record in result["agent_invocations"].values()
+    } == {"agent-1", "agent-2", "agent-3"}
+    assert result["files"]["/agent-1.txt"]["content"] == "written by agent-1"
+    assert result["files"]["/agent-2.txt"]["content"] == "written by agent-2"
     assert "messages" not in result
+
+
+def test_repeated_node_execution_uses_distinct_langgraph_task_invocations() -> None:
+    agent_graph = (
+        StateGraph(AgentShellState)
+        .add_node(
+            "answer",
+            lambda _state: {"messages": [AIMessage(content="completed")]},
+        )
+        .add_edge(START, "answer")
+        .add_edge("answer", END)
+        .compile()
+    )
+    node = _make_agent_node(
+        node_id="agent-loop",
+        built_agent=_built_agent(
+            agent_graph,
+            agent_id=AGENT_A,
+            agent_name="Loop Agent",
+        ),
+    )
+    parent = StateGraph(WorkflowState, context_schema=WorkflowRuntimeContext)
+    parent.add_node("agent-loop", node)
+    parent.add_edge(START, "agent-loop")
+    parent.add_conditional_edges(
+        "agent-loop",
+        lambda state: (
+            "again" if len(state.get("agent_invocations", {})) < 2 else "done"
+        ),
+        {"again": "agent-loop", "done": END},
+    )
+    graph = parent.compile()
+
+    result = asyncio.run(
+        graph.ainvoke(
+            {"shared_vars": {}, "agent_invocations": {}},
+            context=WorkflowRuntimeContext(
+                request_id="request-loop",
+                workflow={"id": "workflow-id"},
+            ),
+        )
+    )
+    records = result["agent_invocations"]
+
+    assert len(records) == 2
+    assert {record["workflow_node_id"] for record in records.values()} == {
+        "agent-loop"
+    }
+    assert all(record["invocation_id"] == key for key, record in records.items())
+    assert {record["agent_id"] for record in records.values()} == {AGENT_A}
+    assert all(set(record) == {
+        "invocation_id",
+        "workflow_id",
+        "workflow_node_id",
+        "agent_id",
+        "invoked_at",
+        "messages",
+    } for record in records.values())
+
+
+def test_static_normal_edge_cycle_has_no_controlled_exit() -> None:
+    payload = graph_payload(AGENT_A, AGENT_B)
+    payload["definition"]["edges"].append(  # type: ignore[index]
+        {
+            "id": "agent-2-agent-1",
+            "source": "agent-2",
+            "source_handle": "next",
+            "target": "agent-1",
+            "target_handle": "in",
+        }
+    )
+    admission, document = admit_workflow_document(payload)
+    assert admission.valid is True
+    assert document is not None
+
+    def agent_graph(node_id: str):
+        return (
+            StateGraph(AgentShellState)
+            .add_node(
+                "answer",
+                lambda _state: {"messages": [AIMessage(content=node_id)]},
+            )
+            .add_edge(START, "answer")
+            .add_edge("answer", END)
+            .compile()
+        )
+
+    graph = compile_workflow(
+        document,
+        node_agents={
+            "agent-1": _built_agent(
+                agent_graph("agent-1"), agent_id=AGENT_A, agent_name="Agent A"
+            ),
+            "agent-2": _built_agent(
+                agent_graph("agent-2"), agent_id=AGENT_B, agent_name="Agent B"
+            ),
+        },
+    )
+
+    with pytest.raises(GraphRecursionError):
+        asyncio.run(
+            graph.ainvoke(
+                {"shared_vars": {}, "agent_invocations": {}},
+                config={"recursion_limit": 4},
+                context=WorkflowRuntimeContext(workflow={"id": "workflow-id"}),
+            )
+        )
 
 
 def test_workflow_agent_nodes_share_official_state_backend_files() -> None:
@@ -558,16 +740,20 @@ def test_workflow_agent_nodes_share_official_state_backend_files() -> None:
 
     graph = compile_workflow(
         document,
-        node_graphs={
-            "agent-1": agent_graph(write=True),
-            "agent-2": agent_graph(write=False),
+        node_agents={
+            "agent-1": _built_agent(
+                agent_graph(write=True), agent_id=AGENT_A, agent_name="Agent A"
+            ),
+            "agent-2": _built_agent(
+                agent_graph(write=False), agent_id=AGENT_B, agent_name="Agent B"
+            ),
         },
     )
 
     result = asyncio.run(
         graph.ainvoke(
-            {"messages": [], "shared_vars": {}, "files": {}},
-            context=WorkflowRuntimeContext(),
+            {"shared_vars": {}, "agent_invocations": {}, "files": {}},
+            context=WorkflowRuntimeContext(workflow={"id": "workflow-id"}),
         )
     )
 
@@ -578,10 +764,6 @@ def test_runtime_builds_repeated_main_agent_references_per_workflow_node() -> No
     admission, document = admit_workflow_document(graph_payload(AGENT_A, AGENT_A))
     assert admission.valid is True
     assert document is not None
-
-    class MiddlewareRuntime:
-        async def close(self) -> None:
-            return None
 
     class RecordingRuntime(AgentRuntime):
         def __init__(self) -> None:
@@ -630,7 +812,7 @@ def test_runtime_builds_repeated_main_agent_references_per_workflow_node() -> No
                 agent_id=main_agent_id,
                 agent_name="Repeated Agent",
                 subagent_profile_ids={},
-                middleware_runtime=MiddlewareRuntime(),  # type: ignore[arg-type]
+                middleware_runtime=_MiddlewareRuntime(),  # type: ignore[arg-type]
             )
 
         def _execution(self, built: BuiltAgent, **kwargs):
@@ -642,6 +824,7 @@ def test_runtime_builds_repeated_main_agent_references_per_workflow_node() -> No
             document,
             [{"role": "user", "content": "Run the Workflow."}],
             workflow_filesystem_id="33333333-3333-4333-8333-333333333333",
+            workflow_snapshot={"id": "workflow-id"},
         )
     )
 
@@ -652,6 +835,20 @@ def test_runtime_builds_repeated_main_agent_references_per_workflow_node() -> No
         "agent-2",
     ]
     result = asyncio.run(
-        execution["graph"].ainvoke({"messages": [], "shared_vars": {}})
+        execution["graph"].ainvoke(
+            {"shared_vars": {}, "agent_invocations": {}},
+            context=execution["context"],
+        )
     )
-    assert [message.content for message in result["messages"]] == [AGENT_A, AGENT_A]
+    assert [
+        (
+            record["agent_id"],
+            record["workflow_node_id"],
+            record["messages"][-1].content,
+        )
+        for record in result["agent_invocations"].values()
+    ] == [
+        (AGENT_A, "agent-1", AGENT_A),
+        (AGENT_A, "agent-2", AGENT_A),
+    ]
+    assert len(set(result["agent_invocations"])) == 2

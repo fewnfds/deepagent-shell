@@ -2,14 +2,18 @@
 
 ## Workflow
 
-【Workflow】是 OpenAI-compatible `model` 的唯一来源。当前 CRUD 保存名称、说明、启用状态和一个共享 Filesystem，
-一个明确的 `shared`/`isolated` state mode、可选 Workflow Prepare 引用，以及一份当前 Graph definition/layout。
+【Workflow】是 OpenAI-compatible `model` 的唯一来源。当前 CRUD 保存名称、说明、启用状态、一个共享 Filesystem、
+可选 Workflow Prepare 引用，以及一份当前 Graph definition/layout。
 只有启用的 Workflow 出现在 `/v1/models`。
 
-`shared` 模式让 Workflow root 与 Agent subgraph 共享 `messages` channel，串行后继会看到前序 Agent 的对话。
-`isolated` 模式的 root 不声明 `messages`，每个 Agent subgraph 保持私有对话；`files`、`shared_vars` 和
-`agent_sessions` 仍是共享 channel。并行分支读取同一个 LangGraph super-step snapshot，更新在边界通过 reducer
-合并，不按开始时间或结束时间拼接会话。
+Workflow root 不声明 `messages`。每个画布 Agent 节点由 wrapper 以空的私有 `messages` 调用自己的 Agent graph，
+所以后继 Agent 不会自动继承前序对话。Agent 完成后，wrapper 把完整 reduced conversation 保存到父 State 的
+`agent_invocations[invocation_id]`。每条记录只有 `invocation_id`、`workflow_id`、`workflow_node_id`、`agent_id`、
+`invoked_at` 和 Agent graph 公开返回的标准 `messages`。Workflow Input Context 可以显式选择、校验和转换这些记录，
+再构造当前 Agent 的初始消息。
+
+并行分支读取同一个 LangGraph super-step snapshot，以不同 invocation ID 返回的记录由 reducer 合并，不按开始时间、
+结束时间或 mapping 插入顺序解释先后。同一节点被再次调度时会产生独立 invocation ID，不覆盖先前执行。
 
 【编辑 Flow】进入独立全屏 Vue Flow 页面。左侧组件库当前只有 Agent，可以点击或拖到画布；右侧属性栏编辑所选
 Agent 的 Main Agent 引用并列出该 Node 声明的输入/输出端点。选中连线后，可以选择两端共同支持的 Edge 类型和具体
@@ -22,7 +26,7 @@ draft/published revision、自动保存、并发编辑或恢复层。
 `main_agent_id` 只保存在 Graph definition 中，不是 Workflow metadata 外键。`normal` 是节点端点类型；从 normal 输出
 端点画到 normal 输入端点的线是一条具体连接，只表达后继节点的激活方向。Node 端点来自后端 Catalog 的 input/output
 arrays，保存时仍只记录 `source_handle`/`target_handle`。多条 normal 出边按 LangGraph 官方 Graph API 激活多个后继节点；
-共享 State 是 Workflow 级后端 contract，不作为画布变量节点或数据端口编辑。
+父 Workflow State 是后端 contract，不作为画布变量节点或数据端口编辑。
 
 ## Main Agent 与直接 Subagent
 
@@ -35,7 +39,7 @@ Filesystem 不再由 Main Agent 或 Subagent 选择；两处界面只显示锁�
 路径权限和该身份可见的文件工具；运行时由后端把 Workflow 的共享 Filesystem 与各身份权限组合并冻结。
 
 Subagent settings 只定义身份、说明和 capability 覆写。它没有 child 引用字段。当前固定为一层同步
-`Main -> Subagent`，运行时使用 Deep Agents 官方 dictionary-based SubAgent。这是 Agent 内部
+`Main -> Subagent`，运行时使用 Deep Agents 官方 dictionary-based CompiledSubAgent。这是 Agent 内部
 `SubAgentMiddleware`/`task` 能力，不决定外层 Workflow 的节点和边；多阶段、并行、条件和 join 属于后续 Workflow
 图编辑器。
 
@@ -50,8 +54,9 @@ Custom Middleware 组件保存有序 Middleware 包引用。Main Agent 选择组
 `create_deep_agent()`，不存在 prepare、周期循环或结束 Hook。
 
 客户端 `messages[]` 是外围不可变请求事实，不会自动成为 Main Agent 活动消息。需要消息策略时，由 Middleware
-在 `before_agent`/`abefore_agent` 中读取 `runtime.context.messages`，按 Agent 身份整理后返回官方 state update。Subagent 默认保留 Deep Agents
-delegated messages。格式见[自定义 Middleware 包](middleware-packages.md)。
+在 `before_agent`/`abefore_agent` 中读取官方 state/context，按 Agent 身份整理后返回官方 state update。Main Agent
+可读取冻结的 `runtime.context.messages`；Subagent 默认保留 Deep Agents delegated messages，不自动附加根请求。格式见
+[自定义 Middleware 包](middleware-packages.md)。
 
 ### Workflow 输入上下文 Middleware
 
@@ -59,18 +64,14 @@ delegated messages。格式见[自定义 Middleware 包](middleware-packages.md)
 它是独立源码目录中的内置实现，后端只负责固定物化；前端沿用本页的组件仓库和 Agent 覆写流程，不创建第二套
 插件页面。
 
-运行顺序是：复制请求快照 -> 可选 `transform(messages, read_file, config, state, context)` -> 按字符阈值上提非顶部 system ->
-把剩余非顶部 system 转为 user -> 顺序追加槽位。`messages` 是可变副本，`read_file` 只能读 Workflow backend
-中的虚拟路径，`config` 是本次请求的配置副本，`state` 与 `context` 是本次运行的 schema-visible state 和 runtime
-context。槽位按主文件、fallback 文件、literal 选择内容，再按 `max_chars` 截断；`truncate_if_missing` 会在全部来源
+运行顺序是：选择 Main Agent 请求快照或 Subagent delegated messages -> 可选
+`transform(read_file, config, workflow_state, agent_state, context)` -> 按字符阈值上提非顶部 system ->
+把剩余非顶部 system 转为 user -> 顺序追加槽位。内部规划消息是本次调用的可变副本，`read_file` 只能读 Workflow backend
+中的虚拟路径，`config` 是组件配置副本，`workflow_state` 是当前父图快照，`agent_state` 是当前私有 Agent State，
+`context` 保存固定请求和当前 invocation 身份。transform 返回 partial Agent State update；其中 `messages` 用于本次
+Agent 的私有对话。槽位按主文件、fallback 文件、literal 选择内容，再按 `max_chars` 截断；`truncate_if_missing` 会在全部来源
 缺失时停止后续槽位。关闭组件或从该 Agent capability 装配中移除即可跳过，不影响
 原始 `WorkflowRuntimeContext.messages`。
-
-### Session Recorder
-
-Session Recorder 由 Main Agent capability ref 选择，Subagent 可继承、替换或关闭。它独立于 Workflow state mode：
-`shared` 和 `isolated` 都能使用；未选择时只是没有该 Agent 的 session record。Recorder 的五参数 transform 只处理
-最终对话的 OpenAI-style 副本，返回值写入共享 `agent_sessions[session_id]`，不会回写活动消息。
 
 ### Workflow Prepare
 

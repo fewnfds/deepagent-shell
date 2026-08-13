@@ -100,7 +100,6 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
     block_store = BlockStore(FileConfigRepository(data_root))
     for component_type, component_id, requirement in (
         ("workflow-input-context", "input-context", "PyYAML==6.0.3"),
-        ("session-recorder", "recorder", "orjson==3.11.7"),
         ("workflow-prepare", "prepare", "rich==14.3.3"),
     ):
         block_store.save_block(
@@ -132,7 +131,6 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
     assert set(state["records"]) == {
         "middleware-package:image-reader",
         "workflow-input-context:input-context",
-        "session-recorder:recorder",
         "workflow-prepare:prepare",
     }
     assert all(item["status"] == "ready" for item in state["records"].values())

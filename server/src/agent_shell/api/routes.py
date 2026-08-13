@@ -82,7 +82,6 @@ def build_router(
             return None
         if block_type not in {
             "workflow-input-context",
-            "session-recorder",
             "workflow-prepare",
         }:
             return block

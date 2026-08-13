@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 import builtins
+from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any, Callable
 
 from deepagents.backends.utils import file_data_to_string
 from langchain.agents.middleware import AgentMiddleware
-from langchain_core.messages.utils import convert_to_messages
+from langchain_core.messages.utils import convert_to_messages, convert_to_openai_messages
 from langgraph.runtime import Runtime
+from langgraph.types import Overwrite
 
 from agent_shell.middleware_packages.messages import mutable_request_messages
-
 from .contracts import WorkflowInputContextBlock, validate_virtual_path
 
 
@@ -89,10 +90,17 @@ def _compile_transform(source: str) -> Callable[..., Any]:
 class WorkflowInputContextMiddleware(AgentMiddleware):
     name = "WorkflowInputContextMiddleware"
 
-    def __init__(self, block: WorkflowInputContextBlock, *, backend: Any) -> None:
+    def __init__(
+        self,
+        block: WorkflowInputContextBlock,
+        *,
+        backend: Any,
+        agent_scope: str,
+    ) -> None:
         super().__init__()
         self._block = block
         self._backend = backend
+        self._agent_scope = agent_scope
         self._transform = (
             _compile_transform(block.custom_transform_source)
             if block.custom_transform_enabled and block.custom_transform_source.strip()
@@ -146,22 +154,30 @@ class WorkflowInputContextMiddleware(AgentMiddleware):
 
     def _run(self, state: Any, runtime: Runtime[Any]) -> dict[str, Any] | None:
         context = getattr(runtime, "context", None)
-        raw_messages = getattr(context, "messages", None)
+        if self._agent_scope == "subagent":
+            raw_messages = convert_to_openai_messages(state.get("messages", []))
+        else:
+            raw_messages = getattr(context, "messages", None)
         messages = _copy_messages(raw_messages or ())
+        state_update: dict[str, Any] = {}
         if self._transform is not None:
             try:
                 transformed = self._transform(
-                    messages=messages,
                     read_file=self._read_file,
                     config=deepcopy(self._block.model_dump(mode="json")),
-                    state=state,
+                    workflow_state=getattr(context, "workflow_state", {}),
+                    agent_state=state,
                     context=context,
                 )
             except WorkflowInputContextError:
                 raise
             except Exception as exc:
                 raise WorkflowInputContextError("custom input transform failed") from exc
-            messages = _copy_messages(transformed)
+            if not isinstance(transformed, Mapping):
+                raise WorkflowInputContextError("custom input transform returned invalid state update")
+            state_update = dict(transformed)
+            if "messages" in state_update:
+                messages = _copy_messages(state_update["messages"])
         messages = _promote_system_messages(
             messages,
             enabled=self._block.system_promote_enabled,
@@ -171,7 +187,10 @@ class WorkflowInputContextMiddleware(AgentMiddleware):
             messages = _demote_non_top_system(messages)
         messages = self._apply_slots(messages)
         try:
-            return {"messages": convert_to_messages(messages)}
+            return {
+                **state_update,
+                "messages": Overwrite(convert_to_messages(messages)),
+            }
         except Exception as exc:
             raise WorkflowInputContextError("input context messages could not be materialized") from exc
 

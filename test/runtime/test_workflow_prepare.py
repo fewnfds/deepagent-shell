@@ -98,7 +98,7 @@ def test_workflow_prepare_runs_after_all_resolution_and_before_agent_builds(
             )
             return BuiltAgent(
                 graph=graph,
-                input_state={"messages": [], "shared_vars": {}, "agent_sessions": {}},
+                input_state={"messages": [], "shared_vars": {}},
                 output_config={},
                 agent_id=agent_id,
                 agent_name=agent_id,
@@ -138,7 +138,7 @@ def test_workflow_prepare_runs_after_all_resolution_and_before_agent_builds(
     payload = {
         "definition": {
             "schema_version": 1,
-            "state_contract": "agent-shell.workflow.messages.v1",
+            "state_contract": "agent-shell.workflow.agent-invocations.v1",
             "nodes": [
                 {"id": "start", "type": "start", "type_version": 1, "config": {}},
                 {"id": "agent-1", "type": "agent", "type_version": 1, "config": {"main_agent_id": agent_a}},
@@ -172,7 +172,6 @@ def test_workflow_prepare_runs_after_all_resolution_and_before_agent_builds(
             workflow_filesystem_id="filesystem-1",
             workflow_snapshot={
                 "id": "workflow-1",
-                "state_mode": "isolated",
                 "workflow_prepare_id": "prepare-1",
             },
         )

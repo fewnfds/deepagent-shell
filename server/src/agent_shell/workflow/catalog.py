@@ -38,7 +38,7 @@ class NodeHandleSpec:
 class NodeTypeSpec:
     type: str
     type_version: int
-    runtime_kind: Literal["graph_entry", "graph_exit", "compiled_subgraph"]
+    runtime_kind: Literal["graph_entry", "graph_exit", "agent_wrapper"]
     title_key: str
     description_key: str
     config_model: type[BaseModel]
@@ -75,7 +75,7 @@ NODE_CATALOG: tuple[NodeTypeSpec, ...] = (
     NodeTypeSpec(
         type="agent",
         type_version=1,
-        runtime_kind="compiled_subgraph",
+        runtime_kind="agent_wrapper",
         title_key="workflow.nodes.agent.title",
         description_key="workflow.nodes.agent.description",
         config_model=AgentNodeConfig,

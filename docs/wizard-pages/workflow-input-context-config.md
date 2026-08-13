@@ -9,7 +9,7 @@ capability refs 选择它；Subagent 通过现有继承、替换或关闭规则�
 | --- | --- |
 | `enabled` | 是否物化 Middleware。默认开启，但组件仍需被 Agent 引用。 |
 | `custom_transform_enabled` | 是否执行下方受信任 Python 函数。默认关闭。 |
-| `custom_transform_source` | `def transform(messages, read_file, config, state, context): ...; return messages`。`messages` 是请求副本，`read_file` 读 Workflow 虚拟文件，`config` 是配置副本。 |
+| `custom_transform_source` | `def transform(read_file, config, workflow_state, agent_state, context): ...`，返回 partial Agent State update。`read_file` 读 Workflow 虚拟文件，`workflow_state` 是父图快照，`agent_state` 是私有 Agent State。 |
 | `python_requirements` | 每行一个 PEP 508 外部依赖；修改后重启生效。 |
 | `system_promote_enabled` / `system_promote_min_chars` | 是否把非顶部连续 system 中达到阈值的消息稳定上提。 |
 | `demote_non_top_system` | 上提后把仍不在顶部连续 system 区域的 system 改为 user。 |
@@ -22,5 +22,5 @@ capability refs 选择它；Subagent 通过现有继承、替换或关闭规则�
 ## 信任边界
 
 Python 源码在服务进程内执行，没有 sandbox；import 复用现有 Custom Middleware 依赖层，不建立新的依赖解析器。
-不要把普通 API 请求字段当作不受信任脚本入口。原始 `WorkflowRuntimeContext.messages` 永远不被改写，所有变换
-只作用于本次 Agent invocation 的副本。
+不要把普通 API 请求字段当作不受信任脚本入口。`workflow_state` 与 `agent_state` 只供读取；需要更新的 channel
+必须通过 transform 返回值交给 LangGraph reducer。原始 `WorkflowRuntimeContext.messages` 永远不被改写。

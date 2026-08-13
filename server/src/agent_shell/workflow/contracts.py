@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 
 WORKFLOW_SCHEMA_VERSION = 1
-WORKFLOW_STATE_CONTRACT = "agent-shell.workflow.messages.v1"
+WORKFLOW_STATE_CONTRACT = "agent-shell.workflow.agent-invocations.v1"
 MAX_WORKFLOW_NODES = 100
 MAX_WORKFLOW_EDGES = 200
 MAX_WORKFLOW_DOCUMENT_BYTES = 1_000_000
@@ -50,7 +50,7 @@ class WorkflowGraphDefinitionV1(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_version: Literal[1] = WORKFLOW_SCHEMA_VERSION
-    state_contract: Literal["agent-shell.workflow.messages.v1"] = (
+    state_contract: Literal["agent-shell.workflow.agent-invocations.v1"] = (
         WORKFLOW_STATE_CONTRACT
     )
     nodes: list[WorkflowNodeV1] = Field(

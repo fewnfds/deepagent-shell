@@ -28,7 +28,6 @@ const workflow: Workflow = {
   name: 'Research Workflow',
   description: 'Runs the research agent.',
   filesystem_id: 'filesystem-1',
-  state_mode: 'shared',
   workflow_prepare_id: null,
   enabled: true,
 }
@@ -83,7 +82,6 @@ describe('WorkflowsPage', () => {
       name: 'New Workflow',
       description: 'New description',
       filesystem_id: filesystem.id,
-      state_mode: 'shared',
       workflow_prepare_id: null,
       enabled: true,
     })
@@ -100,7 +98,7 @@ describe('WorkflowsPage', () => {
     const document: WorkflowGraphDocument = {
       definition: {
         schema_version: 1,
-        state_contract: 'agent-shell.workflow.messages.v1',
+        state_contract: 'agent-shell.workflow.agent-invocations.v1',
         nodes: [
           { id: 'start', type: 'start', type_version: 1, config: {} },
           {
@@ -152,7 +150,7 @@ describe('WorkflowsPage', () => {
       {
         type: 'agent',
         type_version: 1,
-        runtime_kind: 'compiled_subgraph',
+        runtime_kind: 'agent_wrapper',
         title_key: '',
         description_key: '',
         config_schema: {},

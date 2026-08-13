@@ -3,9 +3,14 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
+from deepagents import create_deep_agent
+from langchain.agents.middleware import AgentMiddleware
+from langchain_core.language_models.fake_chat_models import FakeListChatModel
+
 from agent_shell.runtime import agent_builder, subagent_middleware
 from agent_shell.runtime.agent_builder import AgentBuilder
 from agent_shell.runtime.agent_compilation import MaterializedAgentProfile
+from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.validation.assembly import (
     ResolvedSubagent,
     ResolvedSubagentEdge,
@@ -14,6 +19,28 @@ from agent_shell.validation.assembly import (
 from agent_shell.validation.models import ValidationReport
 
 from .support import config
+
+
+class _ToolCapableFakeModel(FakeListChatModel):
+    def bind_tools(self, tools, **kwargs):
+        return self
+
+
+class _ScopeReadingMiddleware(AgentMiddleware):
+    def before_agent(self, state, runtime):
+        return {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": (
+                        f"private={len(state['messages'])};"
+                        f"parent={len(runtime.context.workflow_state['agent_invocations'])};"
+                        f"node={runtime.context.workflow_node_id};"
+                        f"invocation={runtime.context.invocation_id}"
+                    ),
+                }
+            ]
+        }
 
 
 def _middleware(name: str, *, state_schema: object | None = None) -> SimpleNamespace:
@@ -40,12 +67,34 @@ def _profile(
         middleware=(core,),
         package_middleware=packages,
         extra_middleware=(extra,),
-        session_recorder_middleware=None,
         backend=object(),
         initial_files={},
         skill_sources=(),
         permissions=(),
         workspace=SimpleNamespace(initial_files={}),
+    )
+
+
+def test_custom_middleware_reads_private_agent_state_and_parent_workflow_snapshot() -> None:
+    middleware = _ScopeReadingMiddleware()
+    agent = create_deep_agent(
+        model=_ToolCapableFakeModel(responses=["answer"]),
+        middleware=[middleware],
+    )
+    context = WorkflowRuntimeContext.from_request(
+        [{"role": "user", "content": "external request"}],
+        request_id="request-1",
+    ).for_workflow_agent(
+        {"agent_invocations": {"prior": {"workflow_node_id": "agent-prior"}}},
+        workflow_node_id="agent-current",
+        agent_id="agent-id",
+        invocation_id="invocation-current",
+    )
+
+    result = agent.invoke({"messages": []}, context=context)
+
+    assert result["messages"][0].content == (
+        "private=0;parent=1;node=agent-current;invocation=invocation-current"
     )
 
 
@@ -143,6 +192,7 @@ def test_custom_package_middleware_is_the_shell_caller_tail_for_main_and_subagen
         return object()
 
     monkeypatch.setattr(agent_builder, "construct_deep_agent", capture_constructor)
+
     delegation = _middleware("SubAgentMiddleware")
 
     def capture_delegation(*, middleware, **_kwargs):

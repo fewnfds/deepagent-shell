@@ -82,6 +82,8 @@ Middleware 包列表。禁用项不导入、不执行；包不存在、格式无
 
 - `runtime.context.messages`：本次请求冻结的规范化 OpenAI `messages[]`；它不会自动进入提示词；
 - `runtime.context.workflow`：当前 Workflow 的冻结元数据和 Graph 文档；
+- `runtime.context.workflow_state`：wrapper 为当前画布 Agent invocation 提供的父 Workflow State 顶层只读快照；
+- `runtime.context.workflow_node_id`、`agent_id`、`invocation_id`：当前画布节点、Agent Profile 和本次执行身份；
 - `state` / `request.state`：当前 Agent graph 的可变 state，按官方 reducer 和 state update 语义读写。
 
 用户消息应由 Middleware 按 Main Agent/Subagent 身份切分、整理，再从 `before_agent`/`abefore_agent` 返回

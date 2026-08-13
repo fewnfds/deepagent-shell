@@ -660,8 +660,7 @@ class AgentRuntime:
                 )
             graph = compile_workflow(
                 document,
-                node_graphs={node_id: agent.graph for node_id, agent in built_agents},
-                state_mode=str((workflow_snapshot or {}).get("state_mode", "shared")),
+                node_agents=dict(built_agents),
                 checkpointer=(
                     workflow_debug.checkpointer
                     if workflow_debug is not None
@@ -706,13 +705,10 @@ class AgentRuntime:
                         )
             raise
         first_node_id, built = built_agents[0]
-        state_mode = str((workflow_snapshot or {}).get("state_mode", "shared"))
         input_state: dict[str, Any] = {
             "shared_vars": {},
-            "agent_sessions": {},
+            "agent_invocations": {},
         }
-        if state_mode == "shared":
-            input_state["messages"] = []
         if "files" in built.input_state:
             input_state["files"] = built.input_state["files"]
         return self._execution(

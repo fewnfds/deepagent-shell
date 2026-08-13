@@ -15,7 +15,6 @@ import { summarizationAdapter } from './blocks/summarization'
 import { systemPromptAdapter } from './blocks/systemPrompt'
 import { todoListAdapter } from './blocks/todoList'
 import { workflowInputContextAdapter } from './blocks/workflowInputContext'
-import { sessionRecorderAdapter } from './blocks/sessionRecorder'
 import { workflowPrepareAdapter } from './blocks/workflowPrepare'
 
 export type {
@@ -72,7 +71,6 @@ export type {
   WorkflowInputContextRole,
   WorkflowInputContextSlotDraft,
 } from './blocks/workflowInputContext'
-export type { SessionRecorderDefaults, SessionRecorderDraft } from './blocks/sessionRecorder'
 export type { WorkflowPrepareDefaults, WorkflowPrepareDraft } from './blocks/workflowPrepare'
 
 export {
@@ -91,7 +89,6 @@ export {
   systemPromptAdapter,
   todoListAdapter,
   workflowInputContextAdapter,
-  sessionRecorderAdapter,
   workflowPrepareAdapter,
 }
 
@@ -110,7 +107,6 @@ export const blockTypes = [
   'summarization',
   'prompt-caching',
   'workflow-input-context',
-  'session-recorder',
 ] as const
 
 export const managedComponentTypes = [...blockTypes, 'workflow-prepare'] as const
@@ -130,6 +126,5 @@ export const blockAdapters = {
   summarization: summarizationAdapter,
   'prompt-caching': promptCachingAdapter,
   'workflow-input-context': workflowInputContextAdapter,
-  'session-recorder': sessionRecorderAdapter,
   'workflow-prepare': workflowPrepareAdapter,
 } as const

@@ -133,7 +133,7 @@ def test_workflow_graph_catalog_save_and_reload(
         document = {
             "definition": {
                 "schema_version": 1,
-                "state_contract": "agent-shell.workflow.messages.v1",
+                "state_contract": "agent-shell.workflow.agent-invocations.v1",
                 "nodes": [
                     {"id": "start", "type": "start", "type_version": 1, "config": {}},
                     {

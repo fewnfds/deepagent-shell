@@ -53,7 +53,6 @@ import {
   SystemPromptEditor,
   TodoListEditor,
   WorkflowInputContextEditor,
-  SessionRecorderEditor,
   WorkflowPrepareEditor,
 } from '@/editors'
 
@@ -78,7 +77,6 @@ const editorComponents: Record<ManagedComponentType, Component> = {
   summarization: SummarizationEditor,
   'prompt-caching': PromptCachingEditor,
   'workflow-input-context': WorkflowInputContextEditor,
-  'session-recorder': SessionRecorderEditor,
   'workflow-prepare': WorkflowPrepareEditor,
 }
 
@@ -185,7 +183,6 @@ const editorProps = computed<Record<string, unknown>>(() => {
     case 'summarization':
     case 'prompt-caching':
     case 'workflow-input-context':
-    case 'session-recorder':
     case 'workflow-prepare':
       return {
         defaults: activeDefaults.value,

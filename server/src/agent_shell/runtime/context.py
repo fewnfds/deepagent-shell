@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import MappingProxyType
 from typing import Any, Mapping
 
@@ -35,6 +35,10 @@ class WorkflowRuntimeContext:
     messages_sha: str = ""
     workflow: Mapping[str, Any] = field(default_factory=dict)
     prepare: Mapping[str, Any] = field(default_factory=dict)
+    workflow_state: Mapping[str, Any] = field(default_factory=dict)
+    workflow_node_id: str = ""
+    agent_id: str = ""
+    invocation_id: str = ""
 
     @classmethod
     def from_request(
@@ -55,6 +59,24 @@ class WorkflowRuntimeContext:
             messages_sha=client_messages_sha(messages),
             workflow=_freeze(deepcopy(dict(workflow or {}))),
             prepare=_freeze(deepcopy(dict(prepare or {}))),
+        )
+
+    def for_workflow_agent(
+        self,
+        workflow_state: Mapping[str, Any],
+        *,
+        workflow_node_id: str,
+        agent_id: str,
+        invocation_id: str,
+    ) -> "WorkflowRuntimeContext":
+        """Bind the parent State reference and canvas Agent identity to a child run."""
+
+        return replace(
+            self,
+            workflow_state=workflow_state,
+            workflow_node_id=workflow_node_id,
+            agent_id=agent_id,
+            invocation_id=invocation_id,
         )
 
 

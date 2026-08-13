@@ -22,9 +22,6 @@ from agent_shell.provider_secrets import ProviderCredentialError, ProviderSecret
 from agent_shell.plugins.workflow_input_context.factory import (
     materialize_workflow_input_context_middleware,
 )
-from agent_shell.plugins.session_recorder.factory import (
-    materialize_session_recorder_middleware,
-)
 from agent_shell.runtime.capabilities import (
     DeepAgentsCapabilityError,
     DeepAgentsWorkspace,
@@ -219,7 +216,7 @@ class AgentBuilder:
         workspace: DeepAgentsWorkspace | None = None,
         disabled_capabilities: frozenset[str] = frozenset(),
     ) -> MaterializedAgentProfile:
-        for component_type in ("workflow-input-context", "session-recorder"):
+        for component_type in ("workflow-input-context",):
             component = selected_blocks.get(component_type)
             if component is None or not bool(component.get("enabled", True)):
                 continue
@@ -397,34 +394,6 @@ class AgentBuilder:
         skill_sources = deepagents.skill_sources
 
         extra_middleware: list[Any] = []
-        session_recorder_middleware = None
-        session_recorder = selected_blocks.get("session-recorder")
-        if session_recorder is not None:
-            try:
-                recorder_middleware = materialize_session_recorder_middleware(
-                    {
-                        key: value
-                        for key, value in session_recorder.items()
-                        if key != "id"
-                    },
-                    backend=backend,
-                    agent_scope=scope,
-                    agent_id=owner_id,
-                    agent_name=owner_name,
-                    workflow_node_id=workflow_node_id,
-                )
-                session_recorder_middleware = recorder_middleware
-            except Exception as exc:
-                raise configuration_error(
-                    "middleware_materialization_failed",
-                    "The selected Session Recorder configuration could not be constructed.",
-                    status_code=422,
-                    scope=scope,
-                    owner_id=owner_id,
-                    owner_name=owner_name,
-                    path="capability_refs.session-recorder",
-                ) from exc
-
         workflow_input_context = selected_blocks.get("workflow-input-context")
         if workflow_input_context is not None:
             try:
@@ -435,6 +404,7 @@ class AgentBuilder:
                         if key != "id"
                     },
                     backend=backend,
+                    agent_scope=scope,
                 )
                 if input_context_middleware is not None:
                     extra_middleware.append(input_context_middleware)
@@ -525,7 +495,6 @@ class AgentBuilder:
             middleware=tuple(middleware),
             package_middleware=package_middleware,
             extra_middleware=tuple(extra_middleware),
-            session_recorder_middleware=session_recorder_middleware,
             backend=backend,
             initial_files=initial_files,
             skill_sources=skill_sources,
@@ -629,15 +598,7 @@ class AgentBuilder:
         if materialized.skill_sources:
             constructor["skills"] = list(materialized.skill_sources)
 
-        middleware = [
-            *(
-                [materialized.session_recorder_middleware]
-                if materialized.session_recorder_middleware is not None
-                else []
-            ),
-            ToolErrorBoundaryMiddleware(),
-            *materialized.middleware,
-        ]
+        middleware = [ToolErrorBoundaryMiddleware(), *materialized.middleware]
         if materialized.tool_choice is not None or materialized.model_settings:
             middleware.append(
                 make_model_request_settings_middleware(
@@ -648,7 +609,6 @@ class AgentBuilder:
         input_state: dict[str, Any] = {
             "messages": [],
             "shared_vars": {},
-            "agent_sessions": {},
         }
 
         compiled_subagents: list[dict[str, Any]] = []

@@ -37,7 +37,6 @@ function blankWorkflow(): WorkflowPayload {
     name: '',
     description: '',
     filesystem_id: '',
-    state_mode: 'shared',
     workflow_prepare_id: null,
     enabled: true,
   }
@@ -56,7 +55,6 @@ function openEdit(workflow: Workflow): void {
     name: workflow.name,
     description: workflow.description,
     filesystem_id: workflow.filesystem_id,
-    state_mode: workflow.state_mode,
     workflow_prepare_id: workflow.workflow_prepare_id,
     enabled: workflow.enabled,
   }
@@ -78,7 +76,6 @@ async function save(): Promise<void> {
       name: form.value.name.trim(),
       description: form.value.description.trim(),
       filesystem_id: form.value.filesystem_id,
-      state_mode: form.value.state_mode,
       workflow_prepare_id: form.value.workflow_prepare_id || null,
       enabled: form.value.enabled,
     }
@@ -132,11 +129,6 @@ const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
       key: 'filesystem',
       label: () => t('workflows.fields.filesystem'),
       value: (row) => filesystemName(row.filesystem_id),
-    },
-    {
-      key: 'state-mode',
-      label: () => t('workflows.fields.stateMode'),
-      value: (row) => t(`workflows.stateModes.${row.state_mode}`),
     },
     {
       key: 'enabled',
@@ -196,18 +188,6 @@ const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
     <form id="workflow-form" @submit.prevent="save">
       <FormField field-path="name" label-key="workflows.fields.name">
         <LteInput v-model="form.name" maxlength="120" required />
-      </FormField>
-      <FormField field-path="state_mode" label-key="workflows.fields.stateMode">
-        <div class="d-flex flex-wrap gap-3">
-          <div class="form-check">
-            <input id="workflow-state-shared" v-model="form.state_mode" class="form-check-input" type="radio" value="shared">
-            <label class="form-check-label" for="workflow-state-shared">{{ t('workflows.stateModes.shared') }}</label>
-          </div>
-          <div class="form-check">
-            <input id="workflow-state-isolated" v-model="form.state_mode" class="form-check-input" type="radio" value="isolated">
-            <label class="form-check-label" for="workflow-state-isolated">{{ t('workflows.stateModes.isolated') }}</label>
-          </div>
-        </div>
       </FormField>
       <FormField field-path="workflow_prepare_id" label-key="workflows.fields.prepare">
         <select v-model="form.workflow_prepare_id" class="form-select">

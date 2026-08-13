@@ -138,7 +138,7 @@ export function workflowCanvasToDocument(
   return {
     definition: {
       schema_version: 1,
-      state_contract: 'agent-shell.workflow.messages.v1',
+      state_contract: 'agent-shell.workflow.agent-invocations.v1',
       nodes: nodes.map((node) => ({
         id: node.id,
         type: node.data.nodeType,

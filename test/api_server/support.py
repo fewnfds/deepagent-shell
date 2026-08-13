@@ -192,7 +192,7 @@ def save_linear_workflow_graph(
     document = {
         "definition": {
             "schema_version": 1,
-            "state_contract": "agent-shell.workflow.messages.v1",
+            "state_contract": "agent-shell.workflow.agent-invocations.v1",
             "nodes": [
                 {"id": "start", "type": "start", "type_version": 1, "config": {}},
                 {

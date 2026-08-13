@@ -24,7 +24,6 @@ class MaterializedAgentProfile:
     middleware: tuple[Any, ...]
     package_middleware: tuple[Any, ...]
     extra_middleware: tuple[Any, ...]
-    session_recorder_middleware: Any | None
     backend: Any | None
     initial_files: dict[str, Any]
     skill_sources: tuple[str, ...]

@@ -361,7 +361,6 @@ def prepare_windows_dependencies(
     repository = FileConfigRepository(data_root)
     for component_type in (
         "workflow-input-context",
-        "session-recorder",
         "workflow-prepare",
     ):
         for component in repository.config().get("components", {}).get(component_type, []):

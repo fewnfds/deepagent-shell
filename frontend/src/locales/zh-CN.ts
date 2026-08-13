@@ -32,10 +32,6 @@ export const zhCN = {
     searchPlaceholder: '搜索名称或说明',
     loadFailed: '无法载入 Workflow',
     filesystemLoadFailed: '无法载入文件系统配置',
-    stateModes: {
-      shared: '共享 Agent 消息',
-      isolated: '隔离 Agent 消息',
-    },
     createTitle: '新建 Workflow',
     editTitle: '编辑 Workflow',
     saved: 'Workflow 已保存。',
@@ -54,7 +50,7 @@ export const zhCN = {
       nodeLibrary: '组件库',
       inspector: '属性',
       executionNodes: '执行节点',
-      compiledAgent: 'Main Agent 子图',
+      compiledAgent: 'Main Agent wrapper',
       expandNodeLibrary: '展开组件库',
       collapseNodeLibrary: '收起组件库',
       expandInspector: '展开属性栏',
@@ -90,7 +86,6 @@ export const zhCN = {
       name: '名称',
       description: '说明',
       filesystem: '共享文件系统',
-      stateMode: 'Agent State 模式',
       prepare: 'Workflow Prepare',
       enabled: '启用',
     },
@@ -397,10 +392,6 @@ export const zhCN = {
     'workflow-input-context': {
       label: 'Workflow 输入上下文',
       description: '在 Agent 启动时变换并注入不可变的 OpenAI 消息快照',
-    },
-    'session-recorder': {
-      label: 'Session Recorder',
-      description: '为每次已装配的 Agent 调用保存结束后的对话快照',
     },
     'workflow-prepare': {
       label: 'Workflow Prepare',
@@ -736,7 +727,7 @@ export const zhCN = {
     },
     workflowInputContext: {
       transformTitle: '受信任 Python 变换',
-      transformHint: '定义 def transform(messages, read_file, config, state, context) 并返回消息数组；import 会在受信任的服务进程内执行。',
+      transformHint: '定义 def transform(read_file, config, workflow_state, agent_state, context) 并返回 Agent State 的局部更新；import 会在受信任的服务进程内执行。',
       transformEnabled: '执行自定义变换',
       systemTitle: 'System 消息规则',
       promoteEnabled: '把满足条件的 system 消息上提到顶部连续 system 区域',
@@ -748,10 +739,6 @@ export const zhCN = {
       moveDown: '槽位下移',
       truncateIfMissing: '所有来源缺失时停止处理后续槽位',
       noSlots: '尚未配置消息槽位。',
-    },
-    sessionRecorder: {
-      transformEnabled: '变换需要保存的对话副本',
-      transformHint: '定义 def transform(messages, read_file, config, state, context)，返回需要保存的消息数组。',
     },
     workflowPrepare: {
       sourceHint: '定义 async def prepare(input)，返回可包含 context 对象的结果。',

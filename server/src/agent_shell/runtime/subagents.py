@@ -67,11 +67,6 @@ def _build_subagent_spec(
         disabled_capabilities=node.disabled_capabilities,
     )
     middleware: list[Any] = [
-        *(
-            [child.session_recorder_middleware]
-            if child.session_recorder_middleware is not None
-            else []
-        ),
         AgentShellStateMiddleware(),
         ToolErrorBoundaryMiddleware(),
         *child.middleware,

@@ -15,7 +15,6 @@ export type BlockType =
   | 'summarization'
   | 'prompt-caching'
   | 'workflow-input-context'
-  | 'session-recorder'
 
 export type WorkflowComponentType = 'workflow-prepare'
 export type ManagedComponentType = BlockType | WorkflowComponentType
@@ -237,7 +236,6 @@ export interface WorkflowPayload {
   name: string
   description: string
   filesystem_id: string
-  state_mode: 'shared' | 'isolated'
   workflow_prepare_id: string | null
   enabled: boolean
 }
@@ -258,7 +256,7 @@ export interface WorkflowNodeHandleSpec {
 export interface WorkflowNodeCatalogItem {
   type: WorkflowNodeType
   type_version: 1
-  runtime_kind: 'graph_entry' | 'graph_exit' | 'compiled_subgraph'
+  runtime_kind: 'graph_entry' | 'graph_exit' | 'agent_wrapper'
   title_key: string
   description_key: string
   config_schema: Record<string, unknown>
@@ -286,7 +284,7 @@ export interface WorkflowGraphEdge {
 export interface WorkflowGraphDocument {
   definition: {
     schema_version: 1
-    state_contract: 'agent-shell.workflow.messages.v1'
+    state_contract: 'agent-shell.workflow.agent-invocations.v1'
     nodes: WorkflowGraphNode[]
     edges: WorkflowGraphEdge[]
   }

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated
 from typing_extensions import TypedDict
 from typing_extensions import NotRequired
 
 from deepagents import DeepAgentState
 from deepagents.middleware.filesystem import FilesystemState
 from langchain.agents.middleware import AgentMiddleware
+from langchain_core.messages import AnyMessage
 from pydantic import JsonValue
 
 
@@ -19,33 +20,41 @@ def merge_shared_vars(
     return {**(current or {}), **(update or {})}
 
 
-def merge_agent_sessions(
-    current: dict[str, dict[str, Any]] | None,
-    update: dict[str, dict[str, Any]] | None,
-) -> dict[str, dict[str, Any]]:
-    """Merge completed Agent invocation records by generated session ID."""
+class AgentInvocationRecord(TypedDict):
+    invocation_id: str
+    workflow_id: str
+    workflow_node_id: str
+    agent_id: str
+    invoked_at: float
+    messages: list[AnyMessage]
+
+
+def merge_agent_invocations(
+    current: dict[str, AgentInvocationRecord] | None,
+    update: dict[str, AgentInvocationRecord] | None,
+) -> dict[str, AgentInvocationRecord]:
+    """Merge independently identified Agent invocations across graph branches."""
 
     return {**(current or {}), **(update or {})}
 
 
-class WorkflowSharedState(TypedDict):
-    """Shell-owned channels shared by both Workflow state modes."""
+class WorkflowState(TypedDict):
+    """Workflow-owned channels; Agent conversations are provenance records."""
 
     shared_vars: NotRequired[Annotated[dict[str, JsonValue], merge_shared_vars]]
-    agent_sessions: NotRequired[
-        Annotated[dict[str, dict[str, Any]], merge_agent_sessions]
+    agent_invocations: NotRequired[
+        Annotated[
+            dict[str, AgentInvocationRecord],
+            merge_agent_invocations,
+        ]
     ]
-
-
-class AgentShellState(DeepAgentState, FilesystemState, WorkflowSharedState):
-    """Official Agent state plus the Deep Agents filesystem state channel."""
-
-
-
-class IsolatedWorkflowState(WorkflowSharedState):
-    """Workflow root state whose Agent subgraphs do not share ``messages``."""
-
     files: FilesystemState.__annotations__["files"]
+
+
+class AgentShellState(DeepAgentState, FilesystemState):
+    """Private Agent state plus Shell-owned variables mapped by its wrapper."""
+
+    shared_vars: NotRequired[Annotated[dict[str, JsonValue], merge_shared_vars]]
 
 
 class AgentShellStateMiddleware(AgentMiddleware[AgentShellState]):
@@ -55,9 +64,10 @@ class AgentShellStateMiddleware(AgentMiddleware[AgentShellState]):
 
 
 __all__ = [
+    "AgentInvocationRecord",
     "AgentShellState",
     "AgentShellStateMiddleware",
-    "IsolatedWorkflowState",
-    "merge_agent_sessions",
+    "WorkflowState",
+    "merge_agent_invocations",
     "merge_shared_vars",
 ]

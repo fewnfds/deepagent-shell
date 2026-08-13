@@ -36,7 +36,6 @@ from agent_shell.registries.skills import SKILL_NAME_MAX_LENGTH, skill_name_issu
 from agent_shell.plugins.workflow_input_context.contracts import (
     WorkflowInputContextBlock,
 )
-from agent_shell.plugins.session_recorder.contracts import SessionRecorderBlock
 
 
 SKILL_PROMPT_FIELDS = (
@@ -985,7 +984,6 @@ BLOCK_MODELS: dict[str, type[StrictBlock]] = {
     "summarization": SummarizationBlock,
     "prompt-caching": PromptCachingBlock,
     "workflow-input-context": WorkflowInputContextBlock,
-    "session-recorder": SessionRecorderBlock,
 }
 
 validate_capability_manifests(CAPABILITY_MANIFESTS, BLOCK_MODELS)

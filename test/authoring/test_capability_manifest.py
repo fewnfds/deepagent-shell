@@ -39,7 +39,6 @@ def test_manifest_matches_current_blocks_and_form_order() -> None:
         "summarization",
         "prompt-caching",
         "workflow-input-context",
-        "session-recorder",
     ]
     assert {manifest.type for manifest in CAPABILITY_MANIFESTS} == set(BLOCK_MODELS)
     assert CAPABILITY_MANIFESTS[0].required is True
