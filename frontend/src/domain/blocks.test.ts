@@ -63,9 +63,9 @@ const workflowInputDefaults: WorkflowInputContextDefaults = {
   python_requirements: [],
   custom_transform_enabled: false,
   custom_transform_source: '',
-  system_promote_enabled: true,
-  system_promote_min_chars: 10,
-  demote_non_top_system: true,
+  system_promote_enabled: false,
+  system_promote_min_chars: 1_000_000,
+  demote_non_top_system: false,
   slots: [],
 }
 function modelRecord(): ModelApiRecord {
@@ -325,9 +325,9 @@ describe('block adapters', () => {
       python_requirements: ['PyYAML>=6'],
       custom_transform_enabled: true,
       custom_transform_source: 'def transform(read_file, config, workflow_state, agent_state, context):\n    return {}',
-      system_promote_enabled: true,
-      system_promote_min_chars: 10,
-      demote_non_top_system: true,
+      system_promote_enabled: false,
+      system_promote_min_chars: 1_000_000,
+      demote_non_top_system: false,
       slots: [{
         enabled: true,
         role: 'system',
@@ -339,6 +339,14 @@ describe('block adapters', () => {
       }],
     })
 
-    expect(workflowInputContextAdapter.fromApi({ python_requirements: ['httpx'] }, workflowInputDefaults).python_requirements).toEqual(['httpx'])
+    expect(workflowInputContextAdapter.fromApi(
+      { python_requirements: ['httpx'] },
+      workflowInputDefaults,
+    )).toMatchObject({
+      python_requirements: ['httpx'],
+      system_promote_enabled: false,
+      system_promote_min_chars: 1_000_000,
+      demote_non_top_system: false,
+    })
   })
 })

@@ -845,7 +845,6 @@ class SummarizationThreshold(BaseModel):
 
 
 class SummarizationBlock(StrictBlock):
-    enabled: bool = True
     trigger: SummarizationThreshold = Field(default_factory=SummarizationThreshold)
     keep: SummarizationThreshold = Field(default_factory=SummarizationThreshold)
     truncate_args_enabled: bool = True

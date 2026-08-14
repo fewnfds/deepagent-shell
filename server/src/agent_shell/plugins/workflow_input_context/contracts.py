@@ -77,9 +77,9 @@ class WorkflowInputContextBlock(BaseModel):
         default=DEFAULT_CUSTOM_TRANSFORM_SOURCE,
         max_length=100_000,
     )
-    system_promote_enabled: bool = True
-    system_promote_min_chars: int = Field(default=10, ge=0, le=1_000_000)
-    demote_non_top_system: bool = True
+    system_promote_enabled: bool = False
+    system_promote_min_chars: int = Field(default=1_000_000, ge=0, le=1_000_000)
+    demote_non_top_system: bool = False
     slots: list[WorkflowInputContextSlot] = Field(default_factory=list, max_length=100)
     python_requirements: list[str] = Field(default_factory=list, max_length=100)
 

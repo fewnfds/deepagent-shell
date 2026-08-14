@@ -6,8 +6,8 @@ interface NavigationItem {
 
 export const navigationItems: NavigationItem[] = [
   { path: '/', labelKey: 'navigation.home', icon: 'bi-house' },
-  { path: '/workflows', labelKey: 'navigation.workflows', icon: 'bi-list' },
   { path: '/system', labelKey: 'navigation.system', icon: 'bi-gear' },
+  { path: '/workflows', labelKey: 'navigation.workflows', icon: 'bi-diagram-3' },
   { path: '/agents', labelKey: 'navigation.agents', icon: 'bi-robot' },
   { path: '/components', labelKey: 'navigation.components', icon: 'bi-boxes' },
   { path: '/library', labelKey: 'navigation.library', icon: 'bi-archive' },

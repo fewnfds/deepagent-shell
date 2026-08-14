@@ -110,6 +110,7 @@ def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
         "type": "auto",
         "value": None,
     }
+    assert "enabled" not in defaults["summarization"]
     from deepagents.middleware.summarization import DEEPAGENTS_DEFAULT_SUMMARY_PROMPT
 
     assert defaults["summarization"]["summary_prompt_default"] == (

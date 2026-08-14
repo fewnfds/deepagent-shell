@@ -40,9 +40,6 @@ def materialize_summarization_middleware(
     block = SummarizationBlock.model_validate(
         {key: value for key, value in capability.items() if key != "id"}
     )
-    if not block.enabled:
-        return _DisabledSummarizationMiddleware()
-
     from deepagents.middleware.summarization import (
         SummarizationMiddleware,
         compute_summarization_defaults,

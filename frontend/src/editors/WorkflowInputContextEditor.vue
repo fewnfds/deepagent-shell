@@ -93,7 +93,6 @@ function setRequirements(value: string): void {
         <h3 class="card-title h5 mb-0">{{ t('editors.workflowInputContext.transformTitle') }}</h3>
       </header>
       <div class="card-body">
-        <p class="form-text">{{ t('editors.workflowInputContext.transformHint') }}</p>
         <div class="form-check form-switch mb-3">
           <input id="workflow-input-context-transform-enabled" v-model="draft.custom_transform_enabled" class="form-check-input" type="checkbox">
           <label class="form-check-label" for="workflow-input-context-transform-enabled">
@@ -114,83 +113,109 @@ function setRequirements(value: string): void {
         <h3 class="card-title h5 mb-0">{{ t('editors.workflowInputContext.systemTitle') }}</h3>
       </header>
       <div class="card-body">
+        <FormField
+          control-id="workflow-input-context-system-chars"
+          field-path="system_promote_min_chars"
+        >
+          <div class="input-group">
+            <input
+              id="workflow-input-context-system-chars"
+              v-model.number="draft.system_promote_min_chars"
+              aria-describedby="workflow-input-context-system-chars-unit"
+              class="form-control"
+              max="1000000"
+              min="0"
+              step="1"
+              type="number"
+            >
+            <span id="workflow-input-context-system-chars-unit" class="input-group-text">
+              {{ t('editors.workflowInputContext.characterUnit') }}
+            </span>
+          </div>
+        </FormField>
         <div class="form-check form-switch mb-3">
           <input id="workflow-input-context-promote" v-model="draft.system_promote_enabled" class="form-check-input" type="checkbox">
-          <label class="form-check-label" for="workflow-input-context-promote">{{ t('editors.workflowInputContext.promoteEnabled') }}</label>
+          <label class="form-check-label" for="workflow-input-context-promote">
+            {{ t('editors.workflowInputContext.promoteEnabled') }}
+          </label>
         </div>
-        <div class="row g-3" data-ui-control-row>
-          <div class="col-md-6">
-            <FormField field-path="system_promote_min_chars">
-              <input v-model.number="draft.system_promote_min_chars" class="form-control" min="0" step="1" type="number">
-            </FormField>
-          </div>
-          <div class="col-md-6">
-            <span class="form-label d-block">{{ t('editors.workflowInputContext.demoteEnabled') }}</span>
-            <div class="form-check form-switch">
-              <input id="workflow-input-context-demote" v-model="draft.demote_non_top_system" class="form-check-input" type="checkbox">
-              <label class="visually-hidden" for="workflow-input-context-demote">{{ t('editors.workflowInputContext.demoteEnabled') }}</label>
-            </div>
-          </div>
+        <div class="form-check form-switch">
+          <input id="workflow-input-context-demote" v-model="draft.demote_non_top_system" class="form-check-input" type="checkbox">
+          <label class="form-check-label" for="workflow-input-context-demote">
+            {{ t('editors.workflowInputContext.demoteEnabled') }}
+          </label>
         </div>
       </div>
     </section>
 
     <section class="card mb-3">
-      <header class="card-header d-flex align-items-center justify-content-between gap-2">
+      <header class="card-header">
         <h3 class="card-title h5 mb-0">{{ t('editors.workflowInputContext.slotsTitle') }}</h3>
-        <LteButton size="sm" theme="success" type="button" @click="addSlot">
-          {{ t('editors.workflowInputContext.addSlot') }}
-        </LteButton>
       </header>
-      <div class="list-group list-group-flush">
-        <div v-for="(slot, index) in draft.slots" :key="slot._key" class="list-group-item">
-          <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
-            <div class="form-check form-switch">
-              <input :id="`workflow-input-context-slot-${index}-enabled`" v-model="slot.enabled" class="form-check-input" type="checkbox">
-              <label class="form-check-label" :for="`workflow-input-context-slot-${index}-enabled`">{{ t('common.enabled') }}</label>
+      <div class="card-body">
+        <div class="list-group list-group-flush">
+          <div v-for="(slot, index) in draft.slots" :key="slot._key" class="list-group-item">
+            <div class="d-flex align-items-center justify-content-between gap-2 mb-3">
+              <div class="form-check form-switch">
+                <input :id="`workflow-input-context-slot-${index}-enabled`" v-model="slot.enabled" class="form-check-input" type="checkbox">
+                <label class="form-check-label" :for="`workflow-input-context-slot-${index}-enabled`">{{ t('common.enabled') }}</label>
+              </div>
+              <div class="d-flex gap-1">
+                <LteButton :disabled="index === 0" :aria-label="t('editors.workflowInputContext.moveUp')" size="sm" theme="secondary" type="button" @click="moveSlot(index, -1)">↑</LteButton>
+                <LteButton :disabled="index === draft.slots.length - 1" :aria-label="t('editors.workflowInputContext.moveDown')" size="sm" theme="secondary" type="button" @click="moveSlot(index, 1)">↓</LteButton>
+                <LteButton :aria-label="t('editors.workflowInputContext.removeSlot')" size="sm" theme="danger" type="button" @click="removeSlot(index)">×</LteButton>
+              </div>
             </div>
-            <div class="d-flex gap-1">
-              <LteButton :disabled="index === 0" :aria-label="t('editors.workflowInputContext.moveUp')" size="sm" theme="secondary" type="button" @click="moveSlot(index, -1)">↑</LteButton>
-              <LteButton :disabled="index === draft.slots.length - 1" :aria-label="t('editors.workflowInputContext.moveDown')" size="sm" theme="secondary" type="button" @click="moveSlot(index, 1)">↓</LteButton>
-              <LteButton :aria-label="t('editors.workflowInputContext.removeSlot')" size="sm" theme="danger" type="button" @click="removeSlot(index)">×</LteButton>
-            </div>
-          </div>
-          <div class="row g-3">
-            <div class="col-lg-4">
-              <FormField field-path="role">
-                <select v-model="slot.role" class="form-select">
-                  <option v-for="role in roles" :key="role" :value="role">{{ role }}</option>
-                </select>
-              </FormField>
-            </div>
-            <div class="col-lg-8">
-              <FormField field-path="file">
-                <input v-model="slot.file" class="form-control" placeholder="/path/to/file.txt" type="text">
-              </FormField>
-            </div>
-            <div class="col-12">
-              <FormField field-path="fallback_files">
-                <LteTextarea :model-value="fallbackText(slot)" :rows="3" @update:model-value="setFallbackText(slot, $event)" />
-              </FormField>
-            </div>
-            <div class="col-lg-8">
-              <FormField field-path="literal">
-                <LteTextarea v-model="slot.literal" :rows="3" />
-              </FormField>
-            </div>
-            <div class="col-lg-4">
-              <FormField field-path="max_chars">
-                <input :value="slot.max_chars ?? ''" class="form-control" min="1" step="1" type="number" @input="setMaxChars(slot, $event)">
-              </FormField>
-              <div class="form-check form-switch mt-2">
-                <input :id="`workflow-input-context-slot-${index}-truncate`" v-model="slot.truncate_if_missing" class="form-check-input" type="checkbox">
-                <label class="form-check-label" :for="`workflow-input-context-slot-${index}-truncate`">{{ t('editors.workflowInputContext.truncateIfMissing') }}</label>
+            <div class="row g-3">
+              <div class="col-lg-4">
+                <FormField field-path="role">
+                  <select v-model="slot.role" class="form-select">
+                    <option v-for="role in roles" :key="role" :value="role">{{ role }}</option>
+                  </select>
+                </FormField>
+              </div>
+              <div class="col-lg-8">
+                <FormField field-path="file">
+                  <input v-model="slot.file" class="form-control" placeholder="/path/to/file.txt" type="text">
+                </FormField>
+              </div>
+              <div class="col-12">
+                <FormField field-path="fallback_files">
+                  <LteTextarea :model-value="fallbackText(slot)" :rows="3" @update:model-value="setFallbackText(slot, $event)" />
+                </FormField>
+              </div>
+              <div class="col-lg-8">
+                <FormField field-path="literal">
+                  <LteTextarea v-model="slot.literal" :rows="3" />
+                </FormField>
+              </div>
+              <div class="col-lg-4">
+                <FormField field-path="max_chars">
+                  <input :value="slot.max_chars ?? ''" class="form-control" min="1" step="1" type="number" @input="setMaxChars(slot, $event)">
+                </FormField>
+                <div class="form-check form-switch mt-2">
+                  <input :id="`workflow-input-context-slot-${index}-truncate`" v-model="slot.truncate_if_missing" class="form-check-input" type="checkbox">
+                  <label class="form-check-label" :for="`workflow-input-context-slot-${index}-truncate`">{{ t('editors.workflowInputContext.truncateIfMissing') }}</label>
+                </div>
               </div>
             </div>
           </div>
+          <div v-if="draft.slots.length === 0" class="list-group-item text-body-secondary">
+            {{ t('editors.workflowInputContext.noSlots') }}
+          </div>
         </div>
-        <div v-if="draft.slots.length === 0" class="list-group-item text-body-secondary">
-          {{ t('editors.workflowInputContext.noSlots') }}
+        <div class="simple-mapping-footer">
+          <LteButton
+            :aria-label="t('editors.workflowInputContext.addSlot')"
+            :title="t('editors.workflowInputContext.addSlot')"
+            data-action="add-workflow-input-slot"
+            size="sm"
+            theme="success"
+            type="button"
+            @click="addSlot"
+          >
+            <i class="bi bi-plus-lg" aria-hidden="true" />
+          </LteButton>
         </div>
       </div>
     </section>

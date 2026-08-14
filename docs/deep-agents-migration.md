@@ -43,7 +43,7 @@ middleware 列表中消失。
 | Agent Shell capability | Deep Agents middleware name | 触发 replacement 的情况 | 最终是否物理移除 |
 | --- | --- | --- | --- |
 | `todo-list` | `TodoListMiddleware` | Main 未选择；或 Subagent 选择 `disabled`；也覆盖当前 Codex harness profile 的额外 Todo | 否，保留无行为 placeholder |
-| `summarization` | `SummarizationMiddleware` | Main 未选择；或 Subagent 选择 `disabled`；或 block 自身 `enabled=false` | 否，保留无行为 placeholder |
+| `summarization` | `SummarizationMiddleware` | Main 未选择；或 Subagent 选择 `disabled` | 否，保留无行为 placeholder |
 | `prompt-caching` | `AnthropicPromptCachingMiddleware` | Main 未选择；或 Subagent 选择 `disabled`；或 block 自身 `enabled=false` | 否，保留无行为 placeholder |
 
 当前核心依赖只装配 Anthropic Prompt Caching replacement；如果未来启用 Deep Agents 的 Bedrock、Fireworks 等

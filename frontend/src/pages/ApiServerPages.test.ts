@@ -154,14 +154,15 @@ describe('ApiServerSettingsPage', () => {
     expect(navigationItems[0]).toMatchObject({ path: '/', labelKey: 'navigation.home' })
     expect(navigationItems.map((item) => item.path)).toEqual([
       '/',
-      '/workflows',
       '/system',
+      '/workflows',
       '/agents',
       '/components',
       '/library',
       '/terminology',
       '/style-lab',
     ])
+    expect(navigationItems.find((item) => item.path === '/workflows')?.icon).toBe('bi-diagram-3')
     expect(router.resolve('/').matched.at(-1)?.components?.default).toBeDefined()
     expect(router.getRoutes().some((route) => route.path === '/api-server/settings')).toBe(false)
   })

@@ -5,6 +5,7 @@ import type { Component } from 'vue'
 
 import {
   customToolAdapter,
+  exceptionRetryAdapter,
   filesystemAdapter,
   filesystemPermissionsAdapter,
   modelAdapter,
@@ -13,6 +14,7 @@ import {
   skillAdapter,
   summarizationAdapter,
   systemPromptAdapter,
+  type ExceptionRetryDefaults,
   type FilesystemDefaults,
   type FilesystemPermissionsDefaults,
   type OutputModeDefaults,
@@ -24,6 +26,7 @@ import { zhCN } from '@/locales/zh-CN'
 
 import {
   CustomToolEditor,
+  ExceptionRetryEditor,
   FilesystemEditor,
   FilesystemPermissionsEditor,
   ModelEditor,
@@ -70,7 +73,6 @@ const skillDefaults: SkillDefaults = {
 }
 const summarizationDefaults: SummarizationDefaults = {
   summary_prompt_default: '<role>default summary</role>',
-  enabled: true,
   trigger: { type: 'auto', value: null },
   keep: { type: 'auto', value: null },
   truncate_args_enabled: true,
@@ -86,6 +88,16 @@ const promptCachingDefaults: PromptCachingDefaults = {
   type: 'ephemeral',
   ttl: '5m',
   min_messages_to_cache: 0,
+}
+const exceptionRetryDefaults: ExceptionRetryDefaults = {
+  strategies: ['provider_native', 'model_retry_middleware'],
+  conditions: ['transport_error', 'timeout', 'rate_limit', 'server_error', 'authentication_error'],
+  default_value: {
+    strategy: 'provider_native',
+    force_non_streaming: true,
+    max_retries: 2,
+    retry_on: ['transport_error', 'timeout', 'rate_limit', 'server_error'],
+  },
 }
 const i18n = createI18n({
   legacy: false,
@@ -111,6 +123,30 @@ function mountEditor(component: Component, props: Record<string, unknown>): VueW
 }
 
 describe('dedicated block editors', () => {
+  it('renders exception retry as two unnested responsive strategy cards', () => {
+    const editor = mount(ExceptionRetryEditor, {
+      props: {
+        modelValue: exceptionRetryAdapter.blank(exceptionRetryDefaults),
+        defaults: exceptionRetryDefaults,
+      },
+      global: { plugins: [localizedI18n] },
+    })
+    const columns = editor.get('[data-editor="exception-retry"]').findAll(':scope > .col-12')
+    const cards = columns.map((column) => column.get(':scope > .card'))
+
+    expect(columns).toHaveLength(2)
+    expect(editor.findAll('.card')).toHaveLength(2)
+    expect(columns.every((column) => column.classes().includes('col-lg-6'))).toBe(true)
+    expect(cards.every((card) => card.find('.card').exists() === false)).toBe(true)
+    expect(cards.map((card) => card.get('.card-header').text())).toEqual([
+      'Provider 原生重试',
+      'LangChain ModelRetryMiddleware',
+    ])
+    expect(cards.every((card) => card.text().includes('强制非流式'))).toBe(true)
+    expect(cards.every((card) => card.find('input[type="number"]').exists())).toBe(true)
+    expect(editor.findAll('input[name="exception-retry-strategy"]')).toHaveLength(2)
+  })
+
   it('round-trips filesystem permission rules and atomic overrides', () => {
     const apiValue = {
       id: 'permissions-id',
@@ -219,6 +255,18 @@ describe('dedicated block editors', () => {
     expect(filesystem.findAll('[data-action="add-mapped-directory"]')).toHaveLength(1)
     expect(filesystem.findAll('[data-action="add-virtual-directory"]')).toHaveLength(1)
     expect(filesystem.findAll('[data-action="add-virtual-file"]')).toHaveLength(1)
+    const constraints = filesystem.get('[data-testid="filesystem-tool-constraints"]')
+    expect(constraints.get('.card-title').text()).toBe('文件工具约束')
+    expect(constraints.findAll('label')).toHaveLength(4)
+    expect(constraints.findAll('input')).toHaveLength(4)
+    expect(constraints.findAll('.input-group-text').map((unit) => unit.text())).toEqual([
+      'tokens', 'tokens', '条', '秒',
+    ])
+    expect(constraints.find('[data-testid="filesystem-tool-card"]').exists()).toBe(false)
+    expect(filesystem.findAll('[data-testid="filesystem-tool-card"]')).toHaveLength(
+      filesystemDefaults.tools.length,
+    )
+    expect(filesystem.text()).not.toContain('内置文件工具')
 
     const outputDraft = outputModeAdapter.blank(outputDefaults)
     outputDraft.filter_mappings.push({ field: 'message', value: 'secret' })
@@ -354,17 +402,29 @@ describe('dedicated block editors', () => {
       defaults: summarizationDefaults,
     })
     const selects = editor.findAll('[data-editor="summarization"] select')
-    const valueInputs = editor.findAll('[data-editor="summarization"] input[type="number"]')
     const summaryPrompt = editor.findAll('textarea').at(-1)
 
+    expect(editor.find('#summarization-enabled').exists()).toBe(false)
+    expect(editor.findAll('[data-summarization-section]')).toHaveLength(3)
+    expect(editor.find('[data-summarization-section] [data-summarization-section]').exists()).toBe(false)
     expect(selects).toHaveLength(4)
-    expect(valueInputs).toHaveLength(6)
+    expect(editor.findAll('[data-editor="summarization"] input[type="number"]')).toHaveLength(2)
     expect(summaryPrompt?.element).toHaveProperty('value', summarizationDefaults.summary_prompt_default)
-    for (const [index, select] of [selects[0], selects[1], selects[2], selects[3]].entries()) {
+    const valueLabels = [
+      'editors.summarization.triggerValue',
+      'editors.summarization.keepValue',
+      'editors.summarization.truncateTriggerValue',
+      'editors.summarization.truncateKeepValue',
+    ]
+    for (const [index, select] of selects.entries()) {
       await select?.setValue('tokens')
-      expect(valueInputs[index]?.element).toHaveProperty('value', '')
-      expect(valueInputs[index]?.attributes('step')).toBe('1')
+      const valueInput = editor.get(`input[aria-label="${valueLabels[index]}"]`)
+      expect(valueInput.element).toHaveProperty('value', '')
+      expect(valueInput.attributes('step')).toBe('1')
     }
+    await editor.get('#summarization-truncate-args-enabled').setValue(false)
+    expect(editor.find('[data-summarization-section="tool-arguments"] .card-body').exists()).toBe(false)
+    expect(editor.findAll('[data-editor="summarization"] select')).toHaveLength(2)
     await summaryPrompt?.setValue('custom summary prompt')
     await editor.get('[data-action="restore-summary-prompt"]').trigger('click')
     expect(summaryPrompt?.element).toHaveProperty('value', summarizationDefaults.summary_prompt_default)

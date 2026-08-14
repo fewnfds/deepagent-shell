@@ -114,11 +114,15 @@ export const workflowInputContextAdapter = {
         : 'ready',
       custom_transform_enabled: source.custom_transform_enabled === true,
       custom_transform_source: stringValue(source.custom_transform_source, defaults.custom_transform_source),
-      system_promote_enabled: source.system_promote_enabled !== false,
+      system_promote_enabled: typeof source.system_promote_enabled === 'boolean'
+        ? source.system_promote_enabled
+        : defaults.system_promote_enabled,
       system_promote_min_chars: typeof source.system_promote_min_chars === 'number'
         ? source.system_promote_min_chars
         : defaults.system_promote_min_chars,
-      demote_non_top_system: source.demote_non_top_system !== false,
+      demote_non_top_system: typeof source.demote_non_top_system === 'boolean'
+        ? source.demote_non_top_system
+        : defaults.demote_non_top_system,
       slots: workflowSlots(source.slots),
     }
   },

@@ -11,9 +11,12 @@ capability refs 选择它；Subagent 通过现有继承、替换或关闭规则�
 | `custom_transform_enabled` | 是否执行下方受信任 Python 函数。默认关闭。 |
 | `custom_transform_source` | `def transform(read_file, config, workflow_state, agent_state, context): ...`，返回 partial Agent State update。`read_file` 读 Workflow 虚拟文件，`workflow_state` 是父图快照，`agent_state` 是私有 Agent State。 |
 | `python_requirements` | 每行一个 PEP 508 外部依赖；修改后重启生效。 |
-| `system_promote_enabled` / `system_promote_min_chars` | 是否把非顶部连续 system 中达到阈值的消息稳定上提。 |
-| `demote_non_top_system` | 上提后把仍不在顶部连续 system 区域的 system 改为 user。 |
+| `system_promote_enabled` / `system_promote_min_chars` | 是否把非顶部连续 system 中达到阈值的消息稳定上提；开关默认关闭，阈值默认 1,000,000 字符。 |
+| `demote_non_top_system` | 上提后把仍不在顶部连续 system 区域的 system 改为 user；默认关闭。 |
 | `slots` | 末尾追加的 role 槽位，支持 `user`、`assistant`、`system`。 |
+
+消息规则固定先执行上提，再执行身份转换。若关闭上提、只开启身份转换，所有非顶部连续 system 消息都会转换为
+user；阈值只参与上提判断。
 
 每个 slot 可配置 `file`、按顺序排列的 `fallback_files`、`literal`、`max_chars`、`enabled` 和
 `truncate_if_missing`。文件必须是 Workflow filesystem 的虚拟绝对路径。选择优先级是主文件、fallback 文件、

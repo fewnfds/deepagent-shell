@@ -104,7 +104,9 @@ def test_before_agent_injects_snapshot_and_applies_system_policy() -> None:
     result = run_agent(
         WorkflowInputContextBlock(
             name="input",
+            system_promote_enabled=True,
             system_promote_min_chars=10,
+            demote_non_top_system=True,
         ),
         source_messages,
     )
@@ -124,6 +126,9 @@ def test_default_transform_template_is_inert_until_enabled() -> None:
 
     assert block.custom_transform_source == DEFAULT_CUSTOM_TRANSFORM_SOURCE
     assert block.custom_transform_enabled is False
+    assert block.system_promote_enabled is False
+    assert block.system_promote_min_chars == 1_000_000
+    assert block.demote_non_top_system is False
 
 
 def test_workflow_input_context_runs_before_custom_before_agent_middleware() -> None:

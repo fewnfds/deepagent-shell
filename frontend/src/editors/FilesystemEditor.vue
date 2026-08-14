@@ -155,61 +155,78 @@ function isVirtualFilePathInvalid(virtualPath: string, sourcePath: string): bool
       </div>
     </section>
 
-    <section class="mb-3">
-      <h3 class="h5 fw-semibold mb-3">{{ t('editors.filesystem.toolsTitle') }}</h3>
-      <div class="row g-3 mb-3">
-        <div class="col-lg-3">
-          <FormField field-path="tool_token_limit_before_evict">
-            <input v-model.number="draft.tool_token_limit_before_evict" class="form-control" min="1" step="1" type="number">
-          </FormField>
-        </div>
-        <div class="col-lg-3">
-          <FormField field-path="human_message_token_limit_before_evict">
-            <input v-model.number="draft.human_message_token_limit_before_evict" class="form-control" min="1" step="1" type="number">
-          </FormField>
-        </div>
-        <div class="col-lg-3">
-          <FormField field-path="grep_max_count">
-            <input v-model.number="draft.grep_max_count" class="form-control" min="1" step="1" type="number">
-          </FormField>
-        </div>
-        <div class="col-lg-3">
-          <FormField field-path="max_execute_timeout">
-            <input v-model.number="draft.max_execute_timeout" class="form-control" min="1" step="1" type="number">
-          </FormField>
-        </div>
-      </div>
-      <div class="row g-3">
-        <div v-for="row in toolRows" :key="row.tool.name" class="col-md-6">
-          <article class="card h-100" data-testid="filesystem-tool-card">
-            <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-              <h4 class="card-title mb-0 font-monospace">{{ row.tool.name }}</h4>
-              <div class="form-check form-switch ms-auto">
-                <input
-                  :id="`tool-visible-${row.tool.name}`"
-                  v-model="row.config.visible"
-                  class="form-check-input"
-                  :disabled="!row.tool.configurable"
-                  type="checkbox"
-                >
-                <label class="form-check-label" :for="`tool-visible-${row.tool.name}`">
-                  {{ row.config.visible ? t('editors.common.enabled') : t('editors.common.disabled') }}
-                </label>
+    <section class="card mb-3" data-testid="filesystem-tool-constraints">
+      <header class="card-header">
+        <h3 class="card-title">{{ t('editors.filesystem.constraintsTitle') }}</h3>
+      </header>
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-lg-3">
+            <FormField control-id="filesystem-tool-token-limit" field-path="tool_token_limit_before_evict">
+              <div class="input-group">
+                <input id="filesystem-tool-token-limit" v-model.number="draft.tool_token_limit_before_evict" aria-describedby="filesystem-tool-token-limit-unit" class="form-control" min="1" step="1" type="number">
+                <span id="filesystem-tool-token-limit-unit" class="input-group-text">{{ t('editors.filesystem.tokensUnit') }}</span>
               </div>
-            </header>
-            <div class="card-body">
-              <div class="d-flex justify-content-end mb-3">
-                <LteButton theme="warning" @click="row.config.description_override = row.tool.default_description">{{ t('editors.common.restoreDefault') }}</LteButton>
+            </FormField>
+          </div>
+          <div class="col-lg-3">
+            <FormField control-id="filesystem-human-message-token-limit" field-path="human_message_token_limit_before_evict">
+              <div class="input-group">
+                <input id="filesystem-human-message-token-limit" v-model.number="draft.human_message_token_limit_before_evict" aria-describedby="filesystem-human-message-token-limit-unit" class="form-control" min="1" step="1" type="number">
+                <span id="filesystem-human-message-token-limit-unit" class="input-group-text">{{ t('editors.filesystem.tokensUnit') }}</span>
               </div>
-              <LteTextarea
-                v-model="row.config.description_override"
-                :aria-label="t('editors.filesystem.toolDescriptionLabel', { tool: row.tool.name })"
-                :rows="8"
-              />
-            </div>
-          </article>
+            </FormField>
+          </div>
+          <div class="col-lg-3">
+            <FormField control-id="filesystem-grep-max-count" field-path="grep_max_count">
+              <div class="input-group">
+                <input id="filesystem-grep-max-count" v-model.number="draft.grep_max_count" aria-describedby="filesystem-grep-max-count-unit" class="form-control" min="1" step="1" type="number">
+                <span id="filesystem-grep-max-count-unit" class="input-group-text">{{ t('editors.filesystem.resultsUnit') }}</span>
+              </div>
+            </FormField>
+          </div>
+          <div class="col-lg-3">
+            <FormField control-id="filesystem-max-execute-timeout" field-path="max_execute_timeout">
+              <div class="input-group">
+                <input id="filesystem-max-execute-timeout" v-model.number="draft.max_execute_timeout" aria-describedby="filesystem-max-execute-timeout-unit" class="form-control" min="1" step="1" type="number">
+                <span id="filesystem-max-execute-timeout-unit" class="input-group-text">{{ t('editors.filesystem.secondsUnit') }}</span>
+              </div>
+            </FormField>
+          </div>
         </div>
       </div>
     </section>
+
+    <div class="row g-3">
+      <div v-for="row in toolRows" :key="row.tool.name" class="col-md-6">
+        <article class="card h-100" data-testid="filesystem-tool-card">
+          <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <h4 class="card-title mb-0 font-monospace">{{ row.tool.name }}</h4>
+            <div class="form-check form-switch ms-auto">
+              <input
+                :id="`tool-visible-${row.tool.name}`"
+                v-model="row.config.visible"
+                class="form-check-input"
+                :disabled="!row.tool.configurable"
+                type="checkbox"
+              >
+              <label class="form-check-label" :for="`tool-visible-${row.tool.name}`">
+                {{ row.config.visible ? t('editors.common.enabled') : t('editors.common.disabled') }}
+              </label>
+            </div>
+          </header>
+          <div class="card-body">
+            <div class="d-flex justify-content-end mb-3">
+              <LteButton theme="warning" @click="row.config.description_override = row.tool.default_description">{{ t('editors.common.restoreDefault') }}</LteButton>
+            </div>
+            <LteTextarea
+              v-model="row.config.description_override"
+              :aria-label="t('editors.filesystem.toolDescriptionLabel', { tool: row.tool.name })"
+              :rows="8"
+            />
+          </div>
+        </article>
+      </div>
+    </div>
   </div>
 </template>

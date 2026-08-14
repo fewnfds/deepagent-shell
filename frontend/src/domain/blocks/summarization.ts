@@ -14,7 +14,6 @@ export interface SummarizationThresholdDraft {
   value: number | string | null
 }
 export interface SummarizationDraft extends BlockDraftBase {
-  enabled: boolean
   trigger: SummarizationThresholdDraft
   keep: SummarizationThresholdDraft
   truncate_args_enabled: boolean
@@ -31,7 +30,6 @@ export type SummarizationDefaults = Omit<SummarizationDraft, 'id' | 'name'> & {
 }
 
 interface SummarizationApiRecord extends BlockDraftBase {
-  enabled?: unknown
   trigger?: unknown
   keep?: unknown
   truncate_args_enabled?: unknown
@@ -84,7 +82,6 @@ export const summarizationAdapter = {
   fromApi(value: SummarizationApiRecord, defaults: SummarizationDefaults): SummarizationDraft {
     return {
       ...identity(value),
-      enabled: typeof value.enabled === 'boolean' ? value.enabled : defaults.enabled,
       trigger: summarizationThresholdDraft(value.trigger, defaults.trigger),
       keep: summarizationThresholdDraft(value.keep, defaults.keep),
       truncate_args_enabled: typeof value.truncate_args_enabled === 'boolean'
