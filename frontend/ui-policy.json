@@ -269,6 +269,11 @@
         "classes": ["record-picker-name-field"]
       },
       {
+        "name": "configuration-library-nav",
+        "paths": ["src/components/ConfigurationLibraryNav.vue"],
+        "classes": ["configuration-library-nav-group"]
+      },
+      {
         "name": "validation-sidebar",
         "paths": [
           "src/pages/ApiServerSettingsPage.vue",

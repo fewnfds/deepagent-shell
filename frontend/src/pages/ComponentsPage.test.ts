@@ -79,6 +79,14 @@ const workflowPrepareManifest: WorkflowComponentManifest = {
   editor_key: 'workflow-prepare',
 }
 
+const conditionRouterManifest: WorkflowComponentManifest = {
+  ...workflowPrepareManifest,
+  type: 'condition-router',
+  terminology_key: 'condition_router',
+  label: 'Condition router',
+  editor_key: 'condition-router',
+}
+
 function modelRecord(id: string): SavedBlock {
   return {
     id,
@@ -103,7 +111,7 @@ function skillRecord(id: string): SavedBlock {
 async function mountAt(path: string) {
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path: '/components/:type', component: ComponentsPage }],
+    routes: [{ path: '/agent-components/:type', component: ComponentsPage }],
   })
   await router.push(path)
   await router.isReady()
@@ -180,7 +188,13 @@ describe('ComponentsPage', () => {
     api.getCatalog.mockResolvedValueOnce({
       block_types: [skillManifest, modelManifest],
       workflow_component_types: [workflowPrepareManifest],
-      editor_defaults: {},
+      editor_defaults: {
+        'workflow-prepare': {
+          enabled: false,
+          prepare_source: '',
+          python_requirements: [],
+        },
+      },
     })
     const router = createRouter({
       history: createMemoryHistory(),
@@ -211,9 +225,53 @@ describe('ComponentsPage', () => {
     wrapper.unmount()
   })
 
+  it('resolves each base component route from the first scoped catalog manifest', async () => {
+    api.getCatalog.mockResolvedValue({
+      block_types: [skillManifest],
+      workflow_component_types: [conditionRouterManifest],
+      editor_defaults: {
+        skill: { system_prompt: 'default skill prompt', required_placeholders: [] },
+      },
+    })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/agent-components', component: ComponentsPage },
+        { path: '/agent-components/:type', component: ComponentsPage },
+        {
+          path: '/workflow-components',
+          component: ComponentsPage,
+          props: { scope: 'workflow' },
+        },
+        {
+          path: '/workflow-components/:type',
+          component: ComponentsPage,
+          props: { scope: 'workflow' },
+        },
+      ],
+    })
+    await router.push('/agent-components')
+    await router.isReady()
+    const wrapper = mount({ template: '<RouterView />' }, { global: { plugins: [router] } })
+    await flushPromises()
+
+    expect(router.currentRoute.value.path).toBe('/agent-components/skill')
+    expect(api.listBlocks).toHaveBeenLastCalledWith('skill')
+
+    await router.push('/workflow-components')
+    await flushPromises()
+
+    await vi.waitFor(() => {
+      expect(router.currentRoute.value.path).toBe('/workflow-components/condition-router')
+    })
+    expect(api.listBlocks).toHaveBeenLastCalledWith('condition-router')
+    expect(wrapper.find('[data-editor="condition-router"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
   it('uses catalog order and loads only the routed type and explicit UUID', async () => {
     const id = '00000000-0000-0000-0000-000000000001'
-    const { wrapper } = await mountAt(`/components/model?id=${id}`)
+    const { wrapper } = await mountAt(`/agent-components/model?id=${id}`)
 
     const navLabels = wrapper.findAll('[data-testid="section-nav"] button').map((item) => item.text())
     expect(navLabels).toEqual(['capabilities.model.label', 'capabilities.skill.label'])
@@ -255,7 +313,7 @@ describe('ComponentsPage', () => {
 
   it('keeps route loading failures inline without also creating a toast', async () => {
     api.listBlocks.mockRejectedValueOnce(new Error('offline'))
-    const { wrapper } = await mountAt('/components/model')
+    const { wrapper } = await mountAt('/agent-components/model')
 
     expect(wrapper.get('[data-testid="page-error"]').attributes('role')).toBe('alert')
     expect(toastNotify).not.toHaveBeenCalled()
@@ -263,8 +321,8 @@ describe('ComponentsPage', () => {
   })
 
   it('scans resources only after the relevant editor requests a refresh', async () => {
-    const { router, wrapper } = await mountAt('/components/model')
-    await router.push('/components/skill')
+    const { router, wrapper } = await mountAt('/agent-components/model')
+    await router.push('/agent-components/skill')
     await flushPromises()
 
     expect(api.listBlocks).toHaveBeenLastCalledWith('skill')
@@ -283,7 +341,7 @@ describe('ComponentsPage', () => {
 
   it('updates with an explicit UUID and creates a uniquely named new draft', async () => {
     const id = '00000000-0000-0000-0000-000000000001'
-    const { wrapper } = await mountAt(`/components/model?id=${id}`)
+    const { wrapper } = await mountAt(`/agent-components/model?id=${id}`)
     await wrapper.get('[data-field="record-name"]').setValue('Renamed configuration')
     await buttonByText(wrapper, 'common.save').trigger('click')
     await flushPromises()
@@ -316,7 +374,7 @@ describe('ComponentsPage', () => {
 
   it('confirms before replacing a saved configuration with the same name', async () => {
     const existingId = '00000000-0000-0000-0000-000000000001'
-    const { wrapper } = await mountAt('/components/model')
+    const { wrapper } = await mountAt('/agent-components/model')
     await wrapper.get('[data-field="record-name"]').setValue('Shared name')
 
     await buttonByText(wrapper, 'common.save').trigger('click')
@@ -359,7 +417,7 @@ describe('ComponentsPage', () => {
       message: 'save rejected',
       validation,
     }))
-    const { wrapper } = await mountAt('/components/model')
+    const { wrapper } = await mountAt('/agent-components/model')
     const saveButton = buttonByText(wrapper, 'common.save')
 
     expect(saveButton.attributes('disabled')).toBeUndefined()
@@ -374,7 +432,7 @@ describe('ComponentsPage', () => {
   })
 
   it('keeps a dirty draft until the user confirms a route change', async () => {
-    const { router, wrapper } = await mountAt('/components/model')
+    const { router, wrapper } = await mountAt('/agent-components/model')
     await wrapper.get('[data-field="record-name"]').setValue('Unsaved name')
 
     const skillButton = wrapper.findAll('[data-testid="section-nav"] button')
@@ -385,20 +443,20 @@ describe('ComponentsPage', () => {
     expect(useConfirmation().current.value?.title).toBe('unsavedChanges.title')
     useConfirmation().cancel()
     await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/components/model')
+    expect(router.currentRoute.value.path).toBe('/agent-components/model')
     expect(wrapper.get('[data-field="record-name"]').element).toHaveProperty('value', 'Unsaved name')
 
     await skillButton.trigger('click')
     useConfirmation().accept()
     await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/components/skill')
+    expect(router.currentRoute.value.path).toBe('/agent-components/skill')
     expect(wrapper.find('.app-content-header').exists()).toBe(false)
     wrapper.unmount()
   })
 
   it('clears model results when the connection changes or a query fails', async () => {
     const id = '00000000-0000-0000-0000-000000000001'
-    const { wrapper } = await mountAt(`/components/model?id=${id}`)
+    const { wrapper } = await mountAt(`/agent-components/model?id=${id}`)
     const fetchButton = wrapper.findAll('[data-editor="model"] button')
       .find((button) => button.text() === 'editors.model.fetchModels')
     if (!fetchButton) throw new Error('fetch models button not found')
@@ -427,7 +485,7 @@ describe('ComponentsPage', () => {
       .mockImplementationOnce(() => first.promise)
       .mockImplementationOnce(() => second.promise)
     const id = '00000000-0000-0000-0000-000000000001'
-    const { wrapper } = await mountAt(`/components/model?id=${id}`)
+    const { wrapper } = await mountAt(`/agent-components/model?id=${id}`)
     const fetchButton = wrapper.findAll('[data-editor="model"] button')
       .find((button) => button.text() === 'editors.model.fetchModels')
     if (!fetchButton) throw new Error('fetch models button not found')

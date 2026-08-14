@@ -66,7 +66,7 @@ function titleKeyForPath(path: string): string {
   if (path.startsWith('/system/')) return 'navigation.system'
   if (path.startsWith('/agents/')) return 'navigation.agents'
   if (path === '/workflows') return 'navigation.workflows'
-  if (path.startsWith('/components/')) return 'components.title'
+  if (path.startsWith('/agent-components')) return 'components.title'
   if (path.startsWith('/library/')) return 'library.title'
   if (path === '/terminology') return 'terminology.title'
   if (path === '/style-lab') return 'styleLab.title'
@@ -85,8 +85,8 @@ async function mountShell(path = '/', api = createShellApi()) {
       '/style-lab',
       '/agents/main',
       '/agents/subagents',
-      '/components/model',
-      '/components/skill',
+      '/agent-components/model',
+      '/agent-components/skill',
       '/library/model',
       '/terminology',
     ].map((routePath) => ({
@@ -139,9 +139,9 @@ describe('AppShell', () => {
     expect(shell.find('.app-sidebar .nav-treeview').exists()).toBe(false)
     expect(shell.find('a[href="/system/files"]').exists()).toBe(false)
     expect(shell.find('a[href="/agents/main"]').exists()).toBe(false)
-    expect(shell.find('a[href^="/components/"]').exists()).toBe(false)
+    expect(shell.find('a[href^="/agent-components/"]').exists()).toBe(false)
     expect(shell.get('a[href="/style-lab"] .nav-icon').classes()).toContain('bi-sliders')
-    expect(shell.findAll('.app-sidebar .nav-link')).toHaveLength(8)
+    expect(shell.findAll('.app-sidebar .nav-link')).toHaveLength(9)
   })
 
   it('renders the localized route title beside the navigation toggle', async () => {
@@ -151,13 +151,13 @@ describe('AppShell', () => {
     expect(title.element.previousElementSibling?.classList).toContain('navbar-nav')
     expect(title.text()).toBe('系统')
 
-    await router.push('/components/model')
+    await router.push('/agent-components/model')
     await nextTick()
-    expect(title.text()).toBe('组件配置')
+    expect(title.text()).toBe('Agent 组件配置')
 
     await shell.get('#app-language').trigger('click')
     await nextTick()
-    expect(title.text()).toBe('Component configuration')
+    expect(title.text()).toBe('Agent component configuration')
 
     await router.push('/workflows')
     await nextTick()

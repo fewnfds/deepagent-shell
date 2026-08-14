@@ -43,7 +43,7 @@ function selectCategory(id: string): void {
 <template>
   <div
     v-if="agentComponentItems.length"
-    class="d-flex flex-wrap align-items-center gap-2 mb-2"
+    class="configuration-library-nav-group d-flex flex-wrap align-items-center gap-2 mb-2"
     data-testid="library-component-group"
   >
     <span class="fw-semibold">{{ t('library.groups.agentComponents') }}</span>
@@ -57,7 +57,7 @@ function selectCategory(id: string): void {
   </div>
   <div
     v-if="workflowComponentItems.length"
-    class="d-flex flex-wrap align-items-center gap-2 mb-2"
+    class="configuration-library-nav-group d-flex flex-wrap align-items-center gap-2 mb-2"
     data-testid="library-workflow-component-group"
   >
     <span class="fw-semibold">{{ t('library.groups.workflowComponents') }}</span>
@@ -69,7 +69,10 @@ function selectCategory(id: string): void {
       @select="selectCategory"
     />
   </div>
-  <div class="d-flex flex-wrap align-items-center gap-2 mb-2" data-testid="library-agent-group">
+  <div
+    class="configuration-library-nav-group d-flex flex-wrap align-items-center gap-2 mb-2"
+    data-testid="library-agent-group"
+  >
     <span class="fw-semibold">{{ t('library.groups.agents') }}</span>
     <SectionNav
       :active-id="activeCategoryId"

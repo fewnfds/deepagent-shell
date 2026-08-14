@@ -26,11 +26,13 @@ export const router = createRouter({
     { path: '/agents', redirect: '/agents/main' },
     { path: '/agents/main', component: MainAgentPage, meta: { titleKey: 'navigation.agents' } },
     { path: '/agents/subagents', component: SubagentPage, meta: { titleKey: 'navigation.agents' } },
-    { path: '/components', redirect: '/components/model' },
-    { path: '/components/:type', component: ComponentsPage, meta: { titleKey: 'components.title' } },
+    { path: '/agent-components', component: ComponentsPage, meta: { titleKey: 'components.title' } },
+    { path: '/agent-components/:type', component: ComponentsPage, meta: { titleKey: 'components.title' } },
     {
       path: '/workflow-components',
-      redirect: '/workflow-components/workflow-prepare',
+      component: ComponentsPage,
+      props: { scope: 'workflow' },
+      meta: { titleKey: 'workflowComponents.title' },
     },
     {
       path: '/workflow-components/:type',

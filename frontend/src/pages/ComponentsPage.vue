@@ -95,7 +95,7 @@ const managementError = useManagementError()
 const route = useRoute()
 const router = useRouter()
 const componentBasePath = computed(() => (
-  props.scope === 'workflow' ? '/workflow-components' : '/components'
+  props.scope === 'workflow' ? '/workflow-components' : '/agent-components'
 ))
 const { confirm } = useConfirmation()
 const { notify } = useToasts()
@@ -139,6 +139,7 @@ const skillErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const loadingResource = ref(false)
 
 let routeSequence = 0
+let catalogSequence = 0
 let modelRequestSequence = 0
 
 function invalidateModelCatalog(): void {
@@ -363,18 +364,23 @@ async function loadProviderCatalog(sequence = routeSequence): Promise<void> {
 }
 
 async function loadCatalog(): Promise<void> {
+  catalogSequence += 1
+  const sequence = catalogSequence
+  const scope = props.scope
   loading.value = true
   pageError.value = ''
   try {
     const catalog = await managementApi.getCatalog()
+    if (sequence !== catalogSequence || scope !== props.scope) return
     manifests.value = (
-      props.scope === 'workflow'
+      scope === 'workflow'
         ? catalog.workflow_component_types
         : catalog.block_types
     ).slice().sort((left, right) => left.order - right.order)
     editorDefaults.value = catalog.editor_defaults
     await loadRoute()
   } catch (error) {
+    if (sequence !== catalogSequence || scope !== props.scope) return
     pageError.value = managementError.describe(error).display
     loading.value = false
   }
@@ -547,8 +553,19 @@ async function fetchModels(request: {
 }
 
 watch(
-  () => [route.params.type, route.query.id],
-  () => {
+  () => [props.scope, route.params.type, route.query.id] as const,
+  ([scope], [previousScope]) => {
+    if (scope !== previousScope) {
+      routeSequence += 1
+      manifests.value = []
+      activeType.value = null
+      records.value = []
+      selectedId.value = ''
+      draft.value = null
+      markClean()
+      void loadCatalog()
+      return
+    }
     if (manifests.value.length === 0) return
     const requestedType = typeof route.params.type === 'string' ? route.params.type : ''
     if (requestedType === activeType.value && routeId() === (draft.value?.id ?? '')) return

@@ -46,5 +46,5 @@ export function editLocation(category: LibraryCategoryId, id: string): {
   if (category === 'workflow-prepare' || category === 'workflow-event-output' || category === 'condition-router') {
     return { path: `/workflow-components/${category}`, query: { id } }
   }
-  return { path: `/components/${category}`, query: { id } }
+  return { path: `/agent-components/${category}`, query: { id } }
 }

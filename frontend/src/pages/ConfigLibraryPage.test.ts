@@ -370,7 +370,7 @@ describe('ConfigLibraryPage', () => {
 
     await buttonByText(wrapper, 'Edit').trigger('click')
     await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/components/model')
+    expect(router.currentRoute.value.path).toBe('/agent-components/model')
     expect(router.currentRoute.value.query.id).toBe('copy-uuid')
   })
 
