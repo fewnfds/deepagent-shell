@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+import json
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
@@ -115,6 +116,93 @@ def _make_agent_node(*, node_id: str, built_agent: Any):
     return call_agent
 
 
+def _condition_node(_state: WorkflowState) -> dict[str, Any]:
+    return {}
+
+
+def _json_equal(left: Any, right: Any) -> bool:
+    try:
+        return json.dumps(
+            left,
+            sort_keys=True,
+            separators=(",", ":"),
+        ) == json.dumps(
+            right,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    except (TypeError, ValueError):
+        return False
+
+
+_MISSING = object()
+
+
+def _context_value(context: WorkflowRuntimeContext) -> dict[str, Any]:
+    return {
+        "request_id": context.request_id,
+        "messages": context.messages,
+        "messages_sha": context.messages_sha,
+        "workflow": context.workflow,
+        "prepare": context.prepare,
+        "workflow_state": context.workflow_state,
+        "workflow_node_id": context.workflow_node_id,
+        "agent_id": context.agent_id,
+        "invocation_id": context.invocation_id,
+    }
+
+
+def _json_pointer(root: Any, path: str) -> Any:
+    current = root
+    if not path:
+        return current
+    for encoded in path.split("/")[1:]:
+        token = encoded.replace("~1", "/").replace("~0", "~")
+        if isinstance(current, Mapping):
+            if token not in current:
+                return _MISSING
+            current = current[token]
+        elif (
+            isinstance(current, Sequence)
+            and not isinstance(current, (str, bytes, bytearray))
+            and token.isdigit()
+            and (token == "0" or not token.startswith("0"))
+        ):
+            index = int(token)
+            if index >= len(current):
+                return _MISSING
+            current = current[index]
+        else:
+            return _MISSING
+    return current
+
+
+def _make_condition_route(config: Mapping[str, Any]):
+    source = str(config["source"])
+    path = str(config["path"])
+    operator = str(config["operator"])
+    expected = config.get("value")
+
+    def route(
+        state: WorkflowState,
+        runtime: Runtime[WorkflowRuntimeContext],
+    ) -> str:
+        root = state if source == "state" else _context_value(runtime.context)
+        actual = _json_pointer(root, path)
+        present = actual is not _MISSING
+        if operator == "exists":
+            matched = present
+        elif operator == "not_exists":
+            matched = not present
+        elif operator == "not_equals":
+            matched = not present or not _json_equal(actual, expected)
+        else:
+            matched = present and _json_equal(actual, expected)
+        return "match" if matched else "otherwise"
+
+    return route
+
+
 def compile_workflow(
     document: WorkflowGraphDocumentV1,
     *,
@@ -149,6 +237,11 @@ def compile_workflow(
 
     builder = StateGraph(WorkflowState, context_schema=WorkflowRuntimeContext)
     for node in executable_nodes:
+        spec = node_type_spec(node.type, node.type_version)
+        assert spec is not None
+        if spec.runtime_kind == "state_condition":
+            builder.add_node(node.id, _condition_node)
+            continue
         built_agent = node_agents.get(node.id)
         if built_agent is None:
             raise _compile_error(
@@ -161,10 +254,24 @@ def compile_workflow(
             defer=bool(node.config.get("defer", False)),
         )
 
+    edge_types: dict[str, str] = {}
+    for edge in normalized.definition.edges:
+        source_node = next(node for node in nodes if node.id == edge.source)
+        source_spec = node_type_spec(source_node.type, source_node.type_version)
+        assert source_spec is not None
+        source_handle = next(
+            handle
+            for handle in source_spec.output_handles
+            if handle.id == edge.source_handle
+        )
+        edge_types[edge.id] = source_handle.edge_type
+
     # Group normal incoming edges so LangGraph receives one explicit all-of
     # waiting edge per target instead of several independent triggers.
     incoming: dict[str, list[str]] = {}
     for edge in normalized.definition.edges:
+        if edge_types[edge.id] != "normal":
+            continue
         source = START if edge.source in entry_ids else edge.source
         target = END if edge.target in exit_ids else edge.target
         sources = incoming.setdefault(target, [])
@@ -179,6 +286,28 @@ def compile_workflow(
         if not sources:
             continue
         builder.add_edge(sources[0] if len(sources) == 1 else sources, target)
+
+    conditional_edges: dict[str, dict[str, str]] = {}
+    for edge in normalized.definition.edges:
+        if edge_types[edge.id] != "conditional":
+            continue
+        target = END if edge.target in exit_ids else edge.target
+        conditional_edges.setdefault(edge.source, {})[edge.source_handle] = target
+    node_by_id = {node.id: node for node in nodes}
+    for source, path_map in conditional_edges.items():
+        source_node = node_by_id[source]
+        source_spec = node_type_spec(source_node.type, source_node.type_version)
+        assert source_spec is not None
+        if source_spec.runtime_kind != "state_condition":
+            raise _compile_error(
+                "workflow.conditional_source_unsupported",
+                "The Workflow conditional source is not supported.",
+            )
+        builder.add_conditional_edges(
+            source,
+            _make_condition_route(source_node.config),
+            path_map,
+        )
     return builder.compile(checkpointer=checkpointer)
 
 

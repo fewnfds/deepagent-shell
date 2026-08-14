@@ -5,11 +5,14 @@ import { describe, expect, it, vi } from 'vitest'
 import type { MainAgent, WorkflowNodeCatalogItem } from '@/api'
 import {
   newAgentCanvasNode,
+  newConditionCanvasNode,
   nextWorkflowCanvasEdgeId,
   WORKFLOW_NODE_DRAG_MIME,
   workflowCanvasEdgeTypesBetween,
   workflowCanvasNodeEndpoints,
+  workflowCanvasToDocument,
   workflowConnectionEdgeType,
+  workflowDocumentToCanvas,
   type WorkflowCanvasEdge,
   type WorkflowCanvasNode,
 } from '@/domain/workflowGraph'
@@ -29,7 +32,10 @@ const agentCatalog: WorkflowNodeCatalogItem = {
   title_key: 'workflow.nodes.agent.title',
   description_key: 'workflow.nodes.agent.description',
   config_schema: {},
-  input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', max_connections: null }],
+  input_handles: [
+    { id: 'in', kind: 'control', edge_type: 'normal', max_connections: null },
+    { id: 'when', kind: 'control', edge_type: 'conditional', max_connections: null },
+  ],
   output_handles: [{ id: 'next', kind: 'control', edge_type: 'normal', max_connections: null }],
 }
 
@@ -51,8 +57,25 @@ const endCatalog: WorkflowNodeCatalogItem = {
   title_key: 'workflow.nodes.end.title',
   description_key: 'workflow.nodes.end.description',
   config_schema: {},
-  input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', max_connections: null }],
+  input_handles: [
+    { id: 'in', kind: 'control', edge_type: 'normal', max_connections: null },
+    { id: 'when', kind: 'control', edge_type: 'conditional', max_connections: null },
+  ],
   output_handles: [],
+}
+
+const conditionCatalog: WorkflowNodeCatalogItem = {
+  type: 'condition',
+  type_version: 1,
+  runtime_kind: 'state_condition',
+  title_key: 'workflow.nodes.condition.title',
+  description_key: 'workflow.nodes.condition.description',
+  config_schema: {},
+  input_handles: agentCatalog.input_handles,
+  output_handles: [
+    { id: 'match', kind: 'control', edge_type: 'conditional', max_connections: 1 },
+    { id: 'otherwise', kind: 'control', edge_type: 'conditional', max_connections: 1 },
+  ],
 }
 
 const agents: MainAgent[] = [
@@ -61,9 +84,15 @@ const agents: MainAgent[] = [
 ]
 
 describe('Workflow canvas panels', () => {
-  it('exposes the backend Agent node as the only drag source', async () => {
+  it('exposes the backend Agent and Condition node classes', async () => {
     const wrapper = mount(WorkflowNodeLibrary, {
-      props: { agent: agentCatalog, collapsed: false, disabled: false },
+      props: {
+        agent: agentCatalog,
+        condition: conditionCatalog,
+        collapsed: false,
+        agentDisabled: false,
+        conditionDisabled: false,
+      },
       global: { plugins: [i18n()] },
     })
     const item = wrapper.get('.workflow-node-library-item')
@@ -76,6 +105,7 @@ describe('Workflow canvas panels', () => {
     expect(setData).toHaveBeenCalledWith(WORKFLOW_NODE_DRAG_MIME, 'agent')
     expect(dataTransfer.effectAllowed).toBe('copy')
     expect(wrapper.emitted('addAgent')).toHaveLength(1)
+    expect(wrapper.findAll('.workflow-node-library-item')).toHaveLength(2)
   })
 
   it('edits the selected Agent reference in the property panel', async () => {
@@ -140,6 +170,36 @@ describe('Workflow canvas panels', () => {
     expect(wrapper.emitted('selectEdgeTargetEndpoint')).toEqual([[edge.id, 'in']])
   })
 
+  it('edits a Condition source, JSON Pointer, operator, and JSON value', async () => {
+    const node = newConditionCanvasNode('condition-1')
+    const wrapper = mount(WorkflowInspector, {
+      props: {
+        collapsed: false,
+        edge: null,
+        edgeSourceEndpoints: [],
+        edgeTargetEndpoints: [],
+        edgeTypeOptions: [],
+        inputEndpoints: conditionCatalog.input_handles,
+        mainAgents: agents,
+        node,
+        outputEndpoints: conditionCatalog.output_handles,
+        stateContract: 'agent-shell.workflow.agent-invocations.v1',
+        workflowName: 'Research Workflow',
+      },
+      global: { plugins: [i18n()] },
+    })
+
+    await wrapper.get('#workflow-condition-source').setValue('state')
+    await wrapper.get('#workflow-condition-path').setValue('/agent_invocations')
+    await wrapper.get('#workflow-condition-operator').setValue('not_equals')
+    await wrapper.get('#workflow-condition-value').setValue('null')
+
+    expect(wrapper.emitted('updateConditionSource')).toEqual([[node.id, 'state']])
+    expect(wrapper.emitted('updateConditionPath')).toEqual([[node.id, '/agent_invocations']])
+    expect(wrapper.emitted('updateConditionOperator')).toEqual([[node.id, 'not_equals']])
+    expect(wrapper.emitted('updateConditionValue')).toEqual([[node.id, 'null']])
+  })
+
   it('allows repeated Agent nodes and multiple normal activation directions', () => {
     const start: WorkflowCanvasNode = {
       id: 'start',
@@ -194,5 +254,81 @@ describe('Workflow canvas panels', () => {
       targetHandle: 'in',
     }, nodes, [existing], catalog)).toBeNull()
     expect(workflowConnectionEdgeType(existing, nodes, [existing], catalog)).toBe('normal')
+  })
+
+  it('projects conditional endpoints and enforces their declared connection limit', () => {
+    const condition = newConditionCanvasNode('condition-1')
+    const end: WorkflowCanvasNode = {
+      id: 'end',
+      type: 'end',
+      position: { x: 720, y: 0 },
+      data: { nodeType: 'end', mainAgentId: '' },
+    }
+    const edge: WorkflowCanvasEdge = {
+      id: 'edge-1',
+      source: condition.id,
+      sourceHandle: 'match',
+      target: end.id,
+      targetHandle: 'when',
+      data: { edgeType: 'conditional' },
+    }
+    const catalog = [conditionCatalog, endCatalog]
+
+    expect(workflowCanvasEdgeTypesBetween(condition, end, catalog)).toEqual(['conditional'])
+    expect(workflowConnectionEdgeType(edge, [condition, end], [], catalog)).toBe('conditional')
+    expect(workflowConnectionEdgeType({
+      source: condition.id,
+      sourceHandle: 'match',
+      target: end.id,
+      targetHandle: 'when',
+    }, [condition, end], [edge], catalog)).toBeNull()
+  })
+
+  it('round-trips Condition config and conditional Edge presentation', () => {
+    const condition = newConditionCanvasNode('condition-1')
+    const end: WorkflowCanvasNode = {
+      id: 'end',
+      type: 'end',
+      position: { x: 720, y: 0 },
+      data: { nodeType: 'end', mainAgentId: '' },
+    }
+    const edges: WorkflowCanvasEdge[] = [
+      {
+        id: 'edge-match',
+        source: condition.id,
+        sourceHandle: 'match',
+        target: end.id,
+        targetHandle: 'when',
+        data: { edgeType: 'conditional' },
+      },
+      {
+        id: 'edge-otherwise',
+        source: condition.id,
+        sourceHandle: 'otherwise',
+        target: end.id,
+        targetHandle: 'when',
+        data: { edgeType: 'conditional' },
+      },
+    ]
+    const document = workflowCanvasToDocument(
+      [condition, end],
+      edges,
+      { x: 0, y: 0, zoom: 1 },
+    )
+
+    expect(document.definition.nodes[0]?.config).toEqual({
+      source: 'context',
+      path: '/prepare/approved',
+      operator: 'equals',
+      value: true,
+    })
+
+    const canvas = workflowDocumentToCanvas(
+      document,
+      [conditionCatalog, endCatalog],
+    )
+    expect(canvas.nodes[0]?.deletable).toBe(true)
+    expect(canvas.nodes[0]?.data.conditionPath).toBe('/prepare/approved')
+    expect(canvas.edges.every((edge) => edge.class === 'workflow-edge--conditional')).toBe(true)
   })
 })

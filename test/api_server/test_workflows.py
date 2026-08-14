@@ -157,7 +157,10 @@ def test_workflow_graph_catalog_save_and_reload(
                         "id": "agent",
                         "type": "agent",
                         "type_version": 1,
-                        "config": {"main_agent_id": main_agent["id"]},
+                        "config": {
+                            "main_agent_id": main_agent["id"],
+                            "defer": False,
+                        },
                     },
                     {"id": "end", "type": "end", "type_version": 1, "config": {}},
                 ],
@@ -201,7 +204,12 @@ def test_workflow_graph_catalog_save_and_reload(
 
     assert empty.status_code == 200
     assert empty.json()["definition"]["nodes"] == []
-    assert [item["type"] for item in catalog.json()] == ["start", "agent", "end"]
+    assert [item["type"] for item in catalog.json()] == [
+        "start",
+        "agent",
+        "condition",
+        "end",
+    ]
     assert saved.status_code == 200, saved.text
     assert saved.json() == document
     assert metadata.status_code == 200, metadata.text

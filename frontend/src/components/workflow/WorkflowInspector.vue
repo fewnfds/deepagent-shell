@@ -2,7 +2,11 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type { MainAgent, WorkflowNodeHandleSpec } from '@/api'
+import type {
+  MainAgent,
+  WorkflowConditionOperator,
+  WorkflowNodeHandleSpec,
+} from '@/api'
 import FormField from '@/components/FormField.vue'
 import type {
   WorkflowCanvasEdge,
@@ -32,6 +36,10 @@ const emit = defineEmits<{
   selectEdgeType: [edgeId: string, edgeType: WorkflowCanvasEdgeType]
   toggle: []
   updateAgent: [nodeId: string, mainAgentId: string]
+  updateConditionOperator: [nodeId: string, operator: WorkflowConditionOperator]
+  updateConditionPath: [nodeId: string, path: string]
+  updateConditionSource: [nodeId: string, source: 'state' | 'context']
+  updateConditionValue: [nodeId: string, valueJson: string]
   updateDefer: [nodeId: string, defer: boolean]
 }>()
 
@@ -50,7 +58,9 @@ const edgeTargetOptions = computed(() => props.edgeTargetEndpoints.filter((endpo
 )))
 
 function edgeTypeLabel(edgeType: string): string {
-  return edgeType === 'normal' ? t('workflows.editor.normalEdge') : edgeType
+  if (edgeType === 'normal') return t('workflows.editor.normalEdge')
+  if (edgeType === 'conditional') return t('workflows.editor.conditionalEdge')
+  return edgeType
 }
 
 function endpointLabel(endpoint: WorkflowNodeHandleSpec): string {
@@ -65,6 +75,39 @@ function updateAgent(event: Event): void {
 function updateDefer(event: Event): void {
   if (!props.node || props.node.data.nodeType !== 'agent') return
   emit('updateDefer', props.node.id, (event.target as HTMLInputElement).checked)
+}
+
+function updateConditionSource(event: Event): void {
+  if (!props.node || props.node.data.nodeType !== 'condition') return
+  const source = (event.target as HTMLSelectElement).value
+  if (source !== 'state' && source !== 'context') return
+  emit('updateConditionSource', props.node.id, source)
+}
+
+function updateConditionPath(event: Event): void {
+  if (!props.node || props.node.data.nodeType !== 'condition') return
+  emit('updateConditionPath', props.node.id, (event.target as HTMLInputElement).value)
+}
+
+function updateConditionOperator(event: Event): void {
+  if (!props.node || props.node.data.nodeType !== 'condition') return
+  const operator = (event.target as HTMLSelectElement).value as WorkflowConditionOperator
+  if (!['equals', 'not_equals', 'exists', 'not_exists'].includes(operator)) return
+  emit('updateConditionOperator', props.node.id, operator)
+}
+
+function updateConditionValue(event: Event): void {
+  if (!props.node || props.node.data.nodeType !== 'condition') return
+  emit('updateConditionValue', props.node.id, (event.target as HTMLTextAreaElement).value)
+}
+
+function conditionValueValid(value: string | undefined): boolean {
+  try {
+    JSON.parse(value ?? '')
+    return true
+  } catch {
+    return false
+  }
 }
 
 function selectEdgeType(event: Event): void {
@@ -177,6 +220,81 @@ function selectEdgeTargetEndpoint(event: Event): void {
           </button>
         </template>
 
+        <template v-else-if="node.data.nodeType === 'condition'">
+          <FormField
+            field-path="definition.nodes[].config.source"
+            label-key="workflows.editor.conditionSource"
+          >
+            <select
+              id="workflow-condition-source"
+              class="form-select workflow-inspector-select"
+              :value="node.data.conditionSource"
+              @change="updateConditionSource"
+            >
+              <option value="state">state</option>
+              <option value="context">context</option>
+            </select>
+          </FormField>
+          <FormField
+            field-path="definition.nodes[].config.path"
+            label-key="workflows.editor.conditionPath"
+          >
+            <input
+              id="workflow-condition-path"
+              class="form-control"
+              type="text"
+              :value="node.data.conditionPath"
+              @input="updateConditionPath"
+            >
+            <div class="form-text">{{ $t('workflows.editor.jsonPointer') }}</div>
+          </FormField>
+          <FormField
+            field-path="definition.nodes[].config.operator"
+            label-key="workflows.editor.conditionOperator"
+          >
+            <select
+              id="workflow-condition-operator"
+              class="form-select workflow-inspector-select"
+              :value="node.data.conditionOperator"
+              @change="updateConditionOperator"
+            >
+              <option value="equals">equals</option>
+              <option value="not_equals">not_equals</option>
+              <option value="exists">exists</option>
+              <option value="not_exists">not_exists</option>
+            </select>
+          </FormField>
+          <FormField
+            v-if="node.data.conditionOperator === 'equals' || node.data.conditionOperator === 'not_equals'"
+            field-path="definition.nodes[].config.value"
+            label-key="workflows.editor.conditionValue"
+          >
+            <textarea
+              v-if="conditionValueValid(node.data.conditionValueJson)"
+              id="workflow-condition-value"
+              class="form-control"
+              rows="3"
+              :value="node.data.conditionValueJson"
+              @input="updateConditionValue"
+            />
+            <textarea
+              v-else
+              id="workflow-condition-value"
+              class="form-control is-invalid"
+              rows="3"
+              :value="node.data.conditionValueJson"
+              @input="updateConditionValue"
+            />
+            <div v-if="!conditionValueValid(node.data.conditionValueJson)" class="invalid-feedback">
+              {{ $t('workflows.editor.invalidJsonValue') }}
+            </div>
+          </FormField>
+          <button class="workflow-inspector-delete" type="button" @click="emit('removeNode', node.id)">
+            <i class="bi bi-trash" aria-hidden="true" />
+            {{ $t('workflows.editor.removeCondition') }}
+          </button>
+        </template>
+
         <p v-else class="workflow-inspector-note">{{ $t('workflows.editor.fixedNode') }}</p>
       </template>
 
@@ -246,7 +364,7 @@ function selectEdgeTargetEndpoint(event: Event): void {
         </div>
         <div class="workflow-inspector-field">
           <span class="workflow-inspector-label">{{ $t('workflows.editor.edgeType') }}</span>
-          <span class="workflow-inspector-value">normal</span>
+          <span class="workflow-inspector-value">normal, conditional</span>
         </div>
       </template>
     </div>

@@ -560,6 +560,10 @@ pre code {
   cursor: not-allowed;
 }
 
+.workflow-node-library-item + .workflow-node-library-item {
+  margin-top: 8px;
+}
+
 .workflow-node-library-icon,
 .workflow-node-icon {
   display: inline-grid;
@@ -650,7 +654,8 @@ pre code {
   gap: 8px;
 }
 
-.workflow-node--agent {
+.workflow-node--agent,
+.workflow-node--condition {
   display: grid;
   gap: 10px;
 }
@@ -706,6 +711,26 @@ pre code {
   pointer-events: auto;
 }
 
+.workflow-node-endpoint-label {
+  position: absolute;
+  top: 50%;
+  color: var(--bs-secondary-color);
+  font-size: 10px;
+  letter-spacing: 0;
+  line-height: 1;
+  pointer-events: none;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+
+.workflow-node-endpoints[data-direction='input'] .workflow-node-endpoint-label {
+  left: 10px;
+}
+
+.workflow-node-endpoints[data-direction='output'] .workflow-node-endpoint-label {
+  right: 10px;
+}
+
 .workflow-node-endpoint .workflow-port {
   top: 50%;
 }
@@ -718,6 +743,14 @@ pre code {
   box-shadow: 0 0 0 1px var(--bs-primary);
 }
 
+.workflow-port.workflow-port--conditional {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--bs-body-bg);
+  background: var(--bs-warning);
+  box-shadow: 0 0 0 1px var(--bs-warning);
+}
+
 .workflow-editor-flow .vue-flow__connection-path,
 .workflow-editor-flow .vue-flow__edge-path {
   stroke: var(--bs-primary);
@@ -726,6 +759,11 @@ pre code {
 
 .workflow-editor-flow .vue-flow__edge.selected .vue-flow__edge-path {
   stroke-width: 3;
+}
+
+.workflow-editor-flow .workflow-edge--conditional .vue-flow__edge-path {
+  stroke: var(--bs-warning);
+  stroke-dasharray: 7 5;
 }
 
 .workflow-inspector-field {

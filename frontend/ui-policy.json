@@ -285,14 +285,15 @@
         "classes": [
           "workflow-editor-canvas", "workflow-editor-error", "workflow-editor-flow",
           "workflow-editor-shell", "workflow-editor-toolbar", "workflow-editor-workspace",
+          "form-control", "form-text", "invalid-feedback", "is-invalid",
           "workflow-inspector-context", "workflow-inspector-delete", "workflow-inspector-field",
           "workflow-inspector-label", "workflow-inspector-note", "workflow-inspector-select",
-          "workflow-inspector-value", "workflow-node", "workflow-node--agent",
+          "workflow-inspector-value", "workflow-node", "workflow-node--agent", "workflow-node--condition",
           "workflow-node--terminal", "workflow-node-header", "workflow-node-icon",
-          "workflow-node-endpoint", "workflow-node-endpoints",
+          "workflow-node-endpoint", "workflow-node-endpoint-label", "workflow-node-endpoints",
           "workflow-node-library-copy", "workflow-node-library-icon", "workflow-node-library-item",
           "workflow-node-library-meta", "workflow-node-library-title", "workflow-node-summary",
-          "workflow-node-title", "workflow-port", "workflow-port--normal", "workflow-sidebar",
+          "workflow-node-title", "workflow-port", "workflow-port--conditional", "workflow-port--normal", "workflow-edge--conditional", "workflow-sidebar",
           "workflow-sidebar--inspector", "workflow-sidebar--library", "workflow-sidebar-body",
           "workflow-sidebar-header", "workflow-sidebar-section-title", "workflow-sidebar-title",
           "workflow-sidebar-toggle", "form-check", "form-check-input", "form-check-label", "form-select", "form-switch"

@@ -248,7 +248,8 @@ export interface Workflow extends WorkflowPayload {
   id: string
 }
 
-export type WorkflowNodeType = 'start' | 'agent' | 'end'
+export type WorkflowNodeType = 'start' | 'agent' | 'condition' | 'end'
+export type WorkflowConditionOperator = 'equals' | 'not_equals' | 'exists' | 'not_exists'
 
 export interface WorkflowNodeHandleSpec {
   id: string
@@ -260,7 +261,7 @@ export interface WorkflowNodeHandleSpec {
 export interface WorkflowNodeCatalogItem {
   type: WorkflowNodeType
   type_version: 1
-  runtime_kind: 'graph_entry' | 'graph_exit' | 'agent_wrapper'
+  runtime_kind: 'graph_entry' | 'graph_exit' | 'agent_wrapper' | 'state_condition'
   title_key: string
   description_key: string
   config_schema: Record<string, unknown>
@@ -275,6 +276,10 @@ export interface WorkflowGraphNode {
   config: {
     main_agent_id?: string
     defer?: boolean
+    source?: 'state' | 'context'
+    path?: string
+    operator?: WorkflowConditionOperator
+    value?: unknown
   }
 }
 

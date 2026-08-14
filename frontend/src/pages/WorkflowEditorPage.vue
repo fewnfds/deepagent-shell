@@ -14,6 +14,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   managementApi,
   type MainAgent,
+  type WorkflowConditionOperator,
   type Workflow,
   type WorkflowNodeCatalogItem,
   type WorkflowNodeType,
@@ -25,9 +26,11 @@ import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
 import {
   newAgentCanvasNode,
+  newConditionCanvasNode,
+  isConditionValueJsonValid,
   nextWorkflowCanvasEdgeId,
   WORKFLOW_NODE_DRAG_MIME,
-  WORKFLOW_NORMAL_EDGE_MARKER,
+  WORKFLOW_EDGE_MARKER,
   workflowCanvasEdgeTypesBetween,
   workflowCanvasNodeEndpoints,
   workflowCanvasToDocument,
@@ -61,15 +64,20 @@ const workflowId = computed(() => String(route.params.id ?? ''))
 const agentCatalogItem = computed(() => (
   nodeCatalog.value.find((item) => item.type === 'agent') ?? null
 ))
+const conditionCatalogItem = computed(() => (
+  nodeCatalog.value.find((item) => item.type === 'condition') ?? null
+))
 const canAddAgent = computed(() => (
   loaded.value
   && mainAgents.value.length > 0
   && agentCatalogItem.value !== null
 ))
+const canAddCondition = computed(() => loaded.value && conditionCatalogItem.value !== null)
 const canSave = computed(() => (
   loaded.value
   && !saving.value
   && !nodes.value.some((node) => node.data.nodeType === 'agent' && !node.data.mainAgentId)
+  && nodes.value.every(isConditionValueJsonValid)
 ))
 const selectedNode = computed(() => nodes.value.find((node) => node.selected) ?? null)
 const selectedEdge = computed(() => (
@@ -139,7 +147,8 @@ function connect(connection: Connection): void {
       target: connection.target,
       targetHandle: connection.targetHandle,
       type: 'smoothstep',
-      markerEnd: WORKFLOW_NORMAL_EDGE_MARKER,
+      markerEnd: WORKFLOW_EDGE_MARKER,
+      class: edgeType === 'conditional' ? 'workflow-edge--conditional' : undefined,
       selected: true,
       data: { edgeType },
     },
@@ -161,11 +170,34 @@ function addAgent(position?: XYPosition): void {
   rightCollapsed.value = false
 }
 
+function addCondition(position?: XYPosition): void {
+  if (!canAddCondition.value) return
+  const node = newConditionCanvasNode(
+    nextConditionNodeId(),
+    position ?? nextConditionPosition(),
+  )
+  node.selected = true
+  nodes.value = [
+    ...nodes.value.map((item) => ({ ...item, selected: false })),
+    node,
+  ]
+  edges.value = edges.value.map((edge) => ({ ...edge, selected: false }))
+  rightCollapsed.value = false
+}
+
 function nextAgentPosition(): XYPosition {
   const count = nodes.value.filter((node) => node.data.nodeType === 'agent').length
   return {
     x: 360 + (count % 4) * 260,
     y: 180 + Math.floor(count / 4) * 140,
+  }
+}
+
+function nextConditionPosition(): XYPosition {
+  const count = nodes.value.filter((node) => node.data.nodeType === 'condition').length
+  return {
+    x: 620 + (count % 3) * 260,
+    y: 180 + Math.floor(count / 3) * 160,
   }
 }
 
@@ -175,23 +207,34 @@ function nextAgentNodeId(): string {
   return `agent-${index}`
 }
 
+function nextConditionNodeId(): string {
+  let index = 1
+  while (nodes.value.some((node) => node.id === `condition-${index}`)) index += 1
+  return `condition-${index}`
+}
+
 function dragOver(event: DragEvent): void {
-  if (!canAddAgent.value || !event.dataTransfer?.types.includes(WORKFLOW_NODE_DRAG_MIME)) return
+  if (
+    (!canAddAgent.value && !canAddCondition.value)
+    || !event.dataTransfer?.types.includes(WORKFLOW_NODE_DRAG_MIME)
+  ) return
   event.preventDefault()
   event.dataTransfer.dropEffect = 'copy'
 }
 
 function dropNode(event: DragEvent): void {
-  if (
-    !canAddAgent.value
-    || !flow.value
-    || event.dataTransfer?.getData(WORKFLOW_NODE_DRAG_MIME) !== 'agent'
-  ) return
+  if (!flow.value) return
+  const nodeType = event.dataTransfer?.getData(WORKFLOW_NODE_DRAG_MIME)
+  if (nodeType === 'agent' && !canAddAgent.value) return
+  if (nodeType === 'condition' && !canAddCondition.value) return
+  if (nodeType !== 'agent' && nodeType !== 'condition') return
   event.preventDefault()
-  addAgent(flow.value.screenToFlowCoordinate({ x: event.clientX, y: event.clientY }))
+  const position = flow.value.screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
+  if (nodeType === 'agent') addAgent(position)
+  else addCondition(position)
 }
 
-function removeAgent(nodeId: string): void {
+function removeNode(nodeId: string): void {
   nodes.value = nodes.value.filter((node) => node.id !== nodeId)
   edges.value = edges.value.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
 }
@@ -226,6 +269,7 @@ function replaceEdgeEndpoints(
           sourceHandle,
           targetHandle,
           data: { ...item.data, edgeType },
+          class: edgeType === 'conditional' ? 'workflow-edge--conditional' : undefined,
         }
       : item
   ))
@@ -271,6 +315,36 @@ function selectDefer(nodeId: string, defer: boolean): void {
       ? { ...node, data: { ...node.data, defer } }
       : node
   ))
+}
+
+function updateCondition(
+  nodeId: string,
+  patch: Partial<WorkflowCanvasNode['data']>,
+): void {
+  nodes.value = nodes.value.map((node) => (
+    node.id === nodeId && node.data.nodeType === 'condition'
+      ? { ...node, data: { ...node.data, ...patch } }
+      : node
+  ))
+}
+
+function selectConditionSource(nodeId: string, source: 'state' | 'context'): void {
+  updateCondition(nodeId, { conditionSource: source })
+}
+
+function selectConditionPath(nodeId: string, path: string): void {
+  updateCondition(nodeId, { conditionPath: path })
+}
+
+function selectConditionOperator(
+  nodeId: string,
+  operator: WorkflowConditionOperator,
+): void {
+  updateCondition(nodeId, { conditionOperator: operator })
+}
+
+function selectConditionValue(nodeId: string, conditionValueJson: string): void {
+  updateCondition(nodeId, { conditionValueJson })
 }
 
 function clearSelection(): void {
@@ -361,9 +435,12 @@ onMounted(async () => {
     >
       <WorkflowNodeLibrary
         :agent="agentCatalogItem"
+        :condition="conditionCatalogItem"
         :collapsed="leftCollapsed"
-        :disabled="!canAddAgent"
+        :agent-disabled="!canAddAgent"
+        :condition-disabled="!canAddCondition"
         @add-agent="addAgent()"
+        @add-condition="addCondition()"
         @toggle="leftCollapsed = !leftCollapsed"
       />
 
@@ -420,6 +497,26 @@ onMounted(async () => {
             </div>
           </template>
 
+          <template #node-condition="{ data }">
+            <div class="workflow-node workflow-node--condition">
+              <WorkflowNodeEndpoints
+                direction="input"
+                :endpoints="nodeEndpoints('condition', 'input')"
+              />
+              <div class="workflow-node-header">
+                <span class="workflow-node-icon" aria-hidden="true"><i class="bi bi-circle-half" /></span>
+                <span class="workflow-node-title">{{ t('workflows.editor.condition') }}</span>
+              </div>
+              <span class="workflow-node-summary">
+                {{ data.conditionSource }}{{ data.conditionPath || '' }}
+              </span>
+              <WorkflowNodeEndpoints
+                direction="output"
+                :endpoints="nodeEndpoints('condition', 'output')"
+              />
+            </div>
+          </template>
+
           <template #node-end>
             <div class="workflow-node workflow-node--terminal">
               <WorkflowNodeEndpoints
@@ -446,12 +543,16 @@ onMounted(async () => {
         :state-contract="stateContract"
         :workflow-name="workflow?.name ?? ''"
         @remove-edge="removeEdge"
-        @remove-node="removeAgent"
+        @remove-node="removeNode"
         @select-edge-source-endpoint="selectEdgeSourceEndpoint"
         @select-edge-target-endpoint="selectEdgeTargetEndpoint"
         @select-edge-type="selectEdgeType"
         @toggle="rightCollapsed = !rightCollapsed"
         @update-agent="selectAgent"
+        @update-condition-operator="selectConditionOperator"
+        @update-condition-path="selectConditionPath"
+        @update-condition-source="selectConditionSource"
+        @update-condition-value="selectConditionValue"
         @update-defer="selectDefer"
       />
     </div>
