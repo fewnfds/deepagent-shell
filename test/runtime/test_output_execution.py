@@ -6,17 +6,17 @@ from .support import *
 def test_execution_yields_each_completed_semantic_event_once() -> None:
     async def scenario() -> tuple[list[str], dict[str, int]]:
         settings = config(mode="blocklist")
-        settings["event_templates"]["assistant_text"] = {
+        settings["event_outputs"]["assistant_text"] = {
             "enabled": True,
-            "template": "[T]{{message}}[/T]",
+            "output_source": output_source("[T]{{message}}[/T]"),
         }
-        settings["event_templates"]["reasoning"] = {
+        settings["event_outputs"]["reasoning"] = {
             "enabled": True,
-            "template": "[R]{{message}}[/R]",
+            "output_source": output_source("[R]{{message}}[/R]"),
         }
-        settings["event_templates"]["custom"] = {
+        settings["event_outputs"]["custom"] = {
             "enabled": True,
-            "template": "[C]{{message}}[/C]",
+            "output_source": output_source("[C]{{message}}[/C]"),
         }
         events = [
             message_envelope(
@@ -82,13 +82,33 @@ def test_execution_yields_each_completed_semantic_event_once() -> None:
     parts, usage = asyncio.run(scenario())
 
     assert parts == [
-        "[R]",
-        "partial",
-        "[/R]",
-        "[C]&quot;working&quot;[/C]",
+        "[R]thought[/R]",
+        "[C]\"working\"[/C]",
         "[T]answer[/T]",
     ]
     assert usage == {"input_tokens": 2, "output_tokens": 4, "total_tokens": 6}
+
+
+def test_non_string_lifecycle_output_stays_behind_the_runtime_error_boundary() -> None:
+    async def scenario() -> None:
+        settings = config(mode="blocklist")
+        settings["event_outputs"]["lifecycle"] = {
+            "enabled": True,
+            "output_source": "def output(event):\n    return event\n",
+        }
+        execution = AgentExecution(
+            graph=EventGraph([]),
+            input_state={"messages": []},
+            rectifier=OutputEventRectifier(OutputProjector(settings)),
+            normalizer=V3EventNormalizer("Main Agent"),
+            middleware_runtime=noop_middleware_runtime(),
+            media_response=noop_media_response(),
+        )
+        with pytest.raises(AgentRuntimeError) as captured:
+            _ = [part async for part in execution.stream_text()]
+        assert captured.value.code == "agent_execution_failed"
+
+    asyncio.run(scenario())
 
 
 def test_model_response_observer_keeps_full_safe_source_data_per_call() -> None:

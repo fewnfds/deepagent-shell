@@ -73,7 +73,7 @@ const skillManifest: CapabilityManifest = {
 const workflowPrepareManifest: WorkflowComponentManifest = {
   type: 'workflow-prepare',
   terminology_key: 'workflow_prepare',
-  label: 'Workflow Prepare',
+  label: 'Prepare',
   order: 1,
   icon_key: 'workflow',
   editor_key: 'workflow-prepare',
@@ -200,6 +200,7 @@ describe('ComponentsPage', () => {
 
     expect(wrapper.findAll('[data-testid="section-nav"] button').map((item) => item.text())).toEqual([
       'navigation.sections.workflowPrepare',
+      'navigation.sections.workflowEventOutput',
       'navigation.sections.conditionRouter',
     ])
     expect(wrapper.get('.page-action-dock').findAll('button').map((button) => button.text())).toEqual([

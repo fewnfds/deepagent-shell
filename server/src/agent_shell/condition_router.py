@@ -5,7 +5,7 @@ import builtins
 from collections.abc import Collection, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import fields
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import (
     BaseModel,
@@ -17,9 +17,10 @@ from pydantic import (
 )
 
 from agent_shell.python_requirements import parse_python_requirements
-from agent_shell.runtime.context import WorkflowRuntimeContext
-from agent_shell.runtime.state import WorkflowState
 from agent_shell.script_source import validate_module_function
+
+if TYPE_CHECKING:
+    from agent_shell.runtime.context import WorkflowRuntimeContext
 
 
 BranchKey = Annotated[
@@ -117,6 +118,8 @@ def workflow_context_value(context: WorkflowRuntimeContext) -> dict[str, Any]:
 def _state_delta(
     before: Mapping[str, Any], after: Mapping[str, Any]
 ) -> dict[str, Any]:
+    from agent_shell.runtime.state import WorkflowState
+
     allowed = frozenset(WorkflowState.__annotations__)
     unexpected = sorted(set(after) - allowed)
     if unexpected:
@@ -143,6 +146,8 @@ async def run_condition_router(
     context: WorkflowRuntimeContext,
     allowed_branches: Collection[str],
 ) -> ConditionRouterResult:
+    from agent_shell.runtime.state import WorkflowState
+
     configuration = ConditionRouterBlock.model_validate(block)
     namespace: dict[str, Any] = {"__builtins__": builtins.__dict__}
     original_state = _detached(state)

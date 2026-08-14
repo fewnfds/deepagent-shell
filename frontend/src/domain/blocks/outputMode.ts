@@ -8,23 +8,20 @@ import {
 } from './shared'
 
 type OutputFilterMode = 'allowlist' | 'blocklist'
-type OutputVariableEncoding = 'html' | 'plain'
-
 interface OutputFilterMapping {
   field: string
   value: string
 }
 
-interface OutputEventTemplate {
+interface OutputEventScript {
   enabled: boolean
-  template: string
+  output_source: string
 }
 
 interface OutputModeValue {
   filter_mode: OutputFilterMode
   filter_mappings: OutputFilterMapping[]
-  variable_encoding: OutputVariableEncoding
-  event_templates: Record<string, OutputEventTemplate>
+  event_outputs: Record<string, OutputEventScript>
 }
 
 export interface OutputModeDraft extends BlockDraftBase, OutputModeValue {}
@@ -35,7 +32,7 @@ interface OutputEventDefault {
   key: string
   label?: string
   description?: string
-  variables: string[]
+  fields: string[]
 }
 
 export interface OutputModeDefaults {
@@ -49,17 +46,17 @@ export const outputModeAdapter = {
     return { id: '', name: '', ...clone(defaults.default_value) }
   },
   fromApi(value: OutputModeApiRecord, defaults: OutputModeDefaults): OutputModeDraft {
-    const templates = isRecord(value.event_templates) ? value.event_templates : {}
-    const event_templates = Object.fromEntries(defaults.events.map((event) => {
-      const fallback = defaults.default_value.event_templates[event.key]
-      const source = isRecord(templates[event.key]) ? templates[event.key] : {}
+    const outputs = isRecord(value.event_outputs) ? value.event_outputs : {}
+    const event_outputs = Object.fromEntries(defaults.events.map((event) => {
+      const fallback = defaults.default_value.event_outputs[event.key]
+      const source = isRecord(outputs[event.key]) ? outputs[event.key] : {}
       return [event.key, {
         enabled: typeof source.enabled === 'boolean'
           ? source.enabled
           : fallback?.enabled ?? false,
-        template: typeof source.template === 'string'
-          ? source.template
-          : fallback?.template ?? '',
+        output_source: typeof source.output_source === 'string'
+          ? source.output_source
+          : fallback?.output_source ?? '',
       }]
     }))
     return {
@@ -74,10 +71,7 @@ export const outputModeAdapter = {
           ? [{ field: mapping.field, value: mapping.value }]
           : [])
         : clone(defaults.default_value.filter_mappings),
-      variable_encoding: value.variable_encoding === 'html' || value.variable_encoding === 'plain'
-        ? value.variable_encoding
-        : defaults.default_value.variable_encoding,
-      event_templates,
+      event_outputs,
     }
   },
   toPayload(value: OutputModeDraft): OutputModePayload {
@@ -85,8 +79,7 @@ export const outputModeAdapter = {
       name: cleanName(value.name),
       filter_mode: value.filter_mode,
       filter_mappings: clone(value.filter_mappings),
-      variable_encoding: value.variable_encoding,
-      event_templates: clone(value.event_templates),
+      event_outputs: clone(value.event_outputs),
     }
   },
 }

@@ -7,7 +7,6 @@ import {
   managementApi,
   type SavedBlock,
   type Workflow,
-  type WorkflowEventOutputSettings,
   type WorkflowGraphDocument,
 } from '@/api'
 import { useConfirmation } from '@/composables/useConfirmation'
@@ -30,13 +29,24 @@ const workflow: Workflow = {
   description: 'Runs the research agent.',
   filesystem_id: 'filesystem-1',
   workflow_prepare_id: null,
+  workflow_event_output_id: null,
   enabled: true,
 }
 const filesystem: SavedBlock = {
   id: 'filesystem-1',
   name: 'Shared Filesystem',
 }
-const eventOutput: WorkflowEventOutputSettings = { values: false }
+const prepare: SavedBlock = { id: 'prepare-1', name: 'Prepare input' }
+const eventOutput: SavedBlock = { id: 'event-output-1', name: 'Public events' }
+
+function mockComponentLists(): void {
+  vi.spyOn(managementApi, 'listBlocks').mockImplementation(async (type) => {
+    if (type === 'filesystem') return [filesystem]
+    if (type === 'workflow-prepare') return [prepare]
+    if (type === 'workflow-event-output') return [eventOutput]
+    return []
+  })
+}
 
 function testRouter() {
   return createRouter({
@@ -58,8 +68,7 @@ afterEach(() => {
 describe('WorkflowsPage', () => {
   it('loads Workflows and performs create and delete operations', async () => {
     vi.spyOn(managementApi, 'listWorkflows').mockResolvedValue([workflow])
-    vi.spyOn(managementApi, 'listBlocks').mockResolvedValue([filesystem])
-    vi.spyOn(managementApi, 'getWorkflowEventOutput').mockResolvedValue(eventOutput)
+    mockComponentLists()
     const create = vi.spyOn(managementApi, 'createWorkflow').mockResolvedValue(workflow)
     const remove = vi.spyOn(managementApi, 'deleteWorkflow').mockResolvedValue({ ok: true })
     const router = testRouter()
@@ -77,6 +86,9 @@ describe('WorkflowsPage', () => {
 
     await wrapper.get('#workflow-form input[type="text"]').setValue('New Workflow')
     await wrapper.get('#workflow-form textarea').setValue('New description')
+    const componentSelects = wrapper.findAll('#workflow-form select:not([required])')
+    await componentSelects[0]!.setValue(prepare.id)
+    await componentSelects[1]!.setValue(eventOutput.id)
     await wrapper.get('#workflow-form select[required]').setValue(filesystem.id)
     await wrapper.get('#workflow-form').trigger('submit')
     await flushPromises()
@@ -85,7 +97,8 @@ describe('WorkflowsPage', () => {
       name: 'New Workflow',
       description: 'New description',
       filesystem_id: filesystem.id,
-      workflow_prepare_id: null,
+      workflow_prepare_id: prepare.id,
+      workflow_event_output_id: eventOutput.id,
       enabled: true,
     })
 
@@ -97,13 +110,15 @@ describe('WorkflowsPage', () => {
     wrapper.unmount()
   })
 
-  it('updates the global Workflow full-state output setting', async () => {
-    vi.spyOn(managementApi, 'listWorkflows').mockResolvedValue([workflow])
-    vi.spyOn(managementApi, 'listBlocks').mockResolvedValue([filesystem])
-    vi.spyOn(managementApi, 'getWorkflowEventOutput').mockResolvedValue(eventOutput)
-    const update = vi.spyOn(managementApi, 'updateWorkflowEventOutput').mockImplementation(
-      async (payload) => payload,
-    )
+  it('round-trips reusable Prepare and event output component references', async () => {
+    const configured = {
+      ...workflow,
+      workflow_prepare_id: prepare.id,
+      workflow_event_output_id: eventOutput.id,
+    }
+    vi.spyOn(managementApi, 'listWorkflows').mockResolvedValue([configured])
+    mockComponentLists()
+    const update = vi.spyOn(managementApi, 'updateWorkflow').mockResolvedValue(configured)
     const router = testRouter()
     await router.push('/workflows')
     await router.isReady()
@@ -111,13 +126,23 @@ describe('WorkflowsPage', () => {
     const wrapper = mount(WorkflowsPage, { global: { plugins: [i18n(), router] } })
     await flushPromises()
 
-    const values = wrapper.get('#workflow-event-output-values')
-    expect((values.element as HTMLInputElement).checked).toBe(false)
-
-    await values.setValue(true)
+    await wrapper.findAll('button').find((button) => button.text() === 'Configure')!.trigger('click')
     await flushPromises()
 
-    expect(update).toHaveBeenCalledWith({ values: true })
+    const componentSelects = wrapper.findAll('#workflow-form select:not([required])')
+    expect((componentSelects[0]!.element as HTMLSelectElement).value).toBe(prepare.id)
+    expect((componentSelects[1]!.element as HTMLSelectElement).value).toBe(eventOutput.id)
+    await wrapper.get('#workflow-form').trigger('submit')
+    await flushPromises()
+
+    expect(update).toHaveBeenCalledWith(workflow.id, {
+      name: workflow.name,
+      description: workflow.description,
+      filesystem_id: filesystem.id,
+      workflow_prepare_id: prepare.id,
+      workflow_event_output_id: eventOutput.id,
+      enabled: true,
+    })
     wrapper.unmount()
   })
 

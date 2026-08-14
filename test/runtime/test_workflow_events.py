@@ -5,7 +5,6 @@ from langchain_core.messages import AIMessage
 from agent_shell.runtime.output_event_pool import OutputEventRectifier
 from agent_shell.runtime.output_projection import WorkflowOutputProjector
 from agent_shell.runtime.output_stream import OutputEvent, V3EventNormalizer
-from agent_shell.workflow_event_output import WorkflowEventOutputSettings
 from agent_shell.workflow.events import (
     WorkflowCustomEventV1,
     WorkflowEventSourceV1,
@@ -21,6 +20,17 @@ SUBAGENT = "33333333-3333-4333-8333-333333333333"
 SUBAGENT_B = "44444444-4444-4444-8444-444444444444"
 
 
+def _workflow_output_config(
+    event_name: str,
+    source: str = 'def output(event):\n    return event["message"]\n',
+) -> dict:
+    return {
+        "event_outputs": {
+            event_name: {"enabled": True, "output_source": source}
+        }
+    }
+
+
 def _assistant_event(node_id: str, message: str, sequence: int) -> OutputEvent:
     return OutputEvent(
         event_type="assistant_text",
@@ -34,15 +44,20 @@ def _assistant_event(node_id: str, message: str, sequence: int) -> OutputEvent:
 
 
 def test_workflow_output_uses_the_policy_frozen_for_each_node() -> None:
-    policy_a = config(mode="blocklist", template="A:{{message}}")
-    policy_b = config(mode="blocklist", template="B:{{message}}")
-    policy_b["variable_encoding"] = "plain"
+    policy_a = config(
+        mode="blocklist",
+        source='def output(event):\n    return "A:" + event["message"]\n',
+    )
+    policy_b = config(
+        mode="blocklist",
+        source='def output(event):\n    return "B:" + event["message"]\n',
+    )
     rectifier = OutputEventRectifier(
         WorkflowOutputProjector({"agent-a": policy_a, "agent-b": policy_b})
     )
 
     assert rectifier.feed(_assistant_event("agent-a", "<first>", 1)) == [
-        "A:&lt;first&gt;"
+        "A:<first>"
     ]
     assert rectifier.feed(_assistant_event("agent-b", "<second>", 2)) == [
         "B:<second>"
@@ -331,7 +346,7 @@ def test_v3_sources_distinguish_agent_subagent_and_script_nodes() -> None:
     }
 
 
-def test_script_custom_event_ignores_agent_output_policy_until_workflow_filter_exists(
+def test_script_custom_event_requires_the_workflow_event_output_component(
     monkeypatch,
 ) -> None:
     normalizer = V3EventNormalizer("Main Agent")
@@ -358,14 +373,20 @@ def test_script_custom_event_ignores_agent_output_policy_until_workflow_filter_e
             },
         }
     )
-    rectifier = OutputEventRectifier(WorkflowOutputProjector({}))
+    blocked = OutputEventRectifier(WorkflowOutputProjector({}))
+    allowed = OutputEventRectifier(
+        WorkflowOutputProjector(
+            {}, workflow_output_config=_workflow_output_config("custom")
+        )
+    )
 
     assert len(events) == 1
     assert isinstance(events[0], OutputEvent)
-    assert rectifier.feed(events[0]) == ['{"content":"finished"}']
+    assert blocked.feed(events[0]) == []
+    assert allowed.feed(events[0]) == ['{"content":"finished"}']
 
 
-def test_registered_script_custom_event_uses_bounded_builtin_passthrough() -> None:
+def test_registered_script_custom_event_uses_the_workflow_component_script() -> None:
     source = WorkflowEventSourceV1(
         source_type="script",
         workflow_node_id="inspect-file",
@@ -388,7 +409,11 @@ def test_registered_script_custom_event_uses_bounded_builtin_passthrough() -> No
             },
         }
     )
-    rectifier = OutputEventRectifier(WorkflowOutputProjector({}))
+    rectifier = OutputEventRectifier(
+        WorkflowOutputProjector(
+            {}, workflow_output_config=_workflow_output_config("custom")
+        )
+    )
 
     assert rectifier.feed(events[0]) == ['{"content":"finished"}']
 
@@ -406,7 +431,7 @@ def test_registered_script_custom_event_uses_bounded_builtin_passthrough() -> No
     assert unregistered[0].source_type == "non_agent"
 
 
-def test_workflow_non_agent_filter_hook_applies_to_non_agent_events() -> None:
+def test_workflow_event_output_script_selects_and_renders_non_agent_events() -> None:
     event = OutputEvent(
         event_type="custom",
         phase="end",
@@ -414,21 +439,24 @@ def test_workflow_non_agent_filter_hook_applies_to_non_agent_events() -> None:
         timestamp="2026-01-01T00:00:00Z",
         source_type="non_agent",
         message="visible",
+        workflow_event_kind="custom",
         values={"channel": "progress"},
     )
     blocked = OutputEventRectifier(
-        WorkflowOutputProjector(
-            {}, non_agent_filter=lambda item: item.values.get("channel") == "audit"
-        )
+        WorkflowOutputProjector({}, workflow_output_config=_workflow_output_config("values"))
     )
     allowed = OutputEventRectifier(
         WorkflowOutputProjector(
-            {}, non_agent_filter=lambda item: item.values.get("channel") == "progress"
+            {},
+            workflow_output_config=_workflow_output_config(
+                "custom",
+                'def output(event):\n    return event["channel"] + ":" + event["message"]\n',
+            ),
         )
     )
 
     assert blocked.feed(event) == []
-    assert allowed.feed(event) == ["visible"]
+    assert allowed.feed(event) == ["progress:visible"]
 
 
 def test_non_agent_raw_channels_default_to_string_while_agent_state_stays_internal() -> None:
@@ -469,11 +497,27 @@ def test_non_agent_raw_channels_default_to_string_while_agent_state_stays_intern
     assert isinstance(script_output[0], OutputEvent)
     assert script_output[0].source_type == "non_agent"
     assert script_output[0].source_key == "unknown|script-node:invocation"
-    assert rectifier.feed(script_output[0]) == ['{"result":"ready"}']
+    assert rectifier.feed(script_output[0]) == []
+    configured = OutputEventRectifier(
+        WorkflowOutputProjector(
+            {},
+            workflow_output_config={
+                "event_outputs": {
+                    "updates": {
+                        "enabled": True,
+                        "output_source": (
+                            'def output(event):\n'
+                            '    return event["data"]["result"]\n'
+                        ),
+                    }
+                }
+            },
+        )
+    )
+    assert configured.feed(script_output[0]) == ["ready"]
 
 
-def test_workflow_event_output_settings_only_filter_full_state() -> None:
-    settings = WorkflowEventOutputSettings()
+def test_workflow_event_output_script_receives_the_full_state_dict() -> None:
     values = OutputEvent(
         event_type="custom",
         phase="end",
@@ -481,18 +525,24 @@ def test_workflow_event_output_settings_only_filter_full_state() -> None:
         timestamp="2026-01-01T00:00:00Z",
         source_type="non_agent",
         workflow_event_kind="values",
+        data={"shared_vars": {"answer": 42}},
     )
-    custom_or_other = OutputEvent(
-        event_type="custom",
-        phase="end",
-        sequence=2,
-        timestamp="2026-01-01T00:00:00Z",
-        source_type="non_agent",
+    projector = WorkflowOutputProjector(
+        {},
+        workflow_output_config={
+            "event_outputs": {
+                "values": {
+                    "enabled": True,
+                    "output_source": (
+                        'def output(event):\n'
+                        '    return str(event["data"]["shared_vars"]["answer"])\n'
+                    ),
+                }
+            }
+        },
     )
 
-    assert settings.allows(values) is False
-    assert settings.allows(custom_or_other) is True
-    assert settings.model_copy(update={"values": True}).allows(values) is True
+    assert projector.render(values) == "42"
 
 
 def test_v3_marks_only_the_full_state_channel_for_filtering() -> None:
@@ -540,5 +590,5 @@ def test_v3_marks_only_the_full_state_channel_for_filtering() -> None:
     assert isinstance(updates[0], OutputEvent)
     assert isinstance(custom[0], OutputEvent)
     assert values[0].workflow_event_kind == "values"
-    assert updates[0].workflow_event_kind == ""
-    assert custom[0].workflow_event_kind == ""
+    assert updates[0].workflow_event_kind == "updates"
+    assert custom[0].workflow_event_kind == "custom"

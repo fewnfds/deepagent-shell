@@ -17,7 +17,7 @@ export type BlockType =
   | 'prompt-caching'
   | 'workflow-input-context'
 
-export type WorkflowComponentType = 'workflow-prepare' | 'condition-router'
+export type WorkflowComponentType = 'workflow-prepare' | 'workflow-event-output' | 'condition-router'
 export type ManagedComponentType = BlockType | WorkflowComponentType
 
 export interface CapabilityManifest {
@@ -233,15 +233,12 @@ export interface MiddlewarePackageResource {
   dependency_error_code: string
 }
 
-export interface WorkflowEventOutputSettings {
-  values: boolean
-}
-
 export interface WorkflowPayload {
   name: string
   description: string
   filesystem_id: string
   workflow_prepare_id: string | null
+  workflow_event_output_id: string | null
   enabled: boolean
 }
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import posixpath
-import re
 from pathlib import Path, PurePosixPath
 from string import Formatter
 from typing import Annotated, Literal
@@ -18,7 +17,6 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from pydantic_core import PydanticCustomError
 
 from agent_shell.capability_manifest import (
     CAPABILITY_BY_TYPE,
@@ -64,11 +62,6 @@ LocalPath = Annotated[str, Field(max_length=4096)]
 VirtualPath = Annotated[str, Field(min_length=1, max_length=4096)]
 DescriptionDraft = Annotated[str, Field(max_length=100_000)]
 PromptOverrideText = Annotated[
-    str,
-    StringConstraints(strip_whitespace=False),
-    Field(max_length=100_000),
-]
-OutputTemplateText = Annotated[
     str,
     StringConstraints(strip_whitespace=False),
     Field(max_length=100_000),
@@ -350,7 +343,7 @@ OUTPUT_EVENT_NAMES = (
     "custom",
     "lifecycle",
 )
-OUTPUT_COMMON_TEMPLATE_VARIABLES = (
+OUTPUT_COMMON_FIELDS = (
     "event_type",
     "phase",
     "sequence",
@@ -359,12 +352,13 @@ OUTPUT_COMMON_TEMPLATE_VARIABLES = (
     "agent_name",
     "node",
     "message",
+    "data",
     "source_type",
     "workflow_node_id",
     "agent_profile_id",
     "subagent_profile_id",
 )
-OUTPUT_EVENT_TEMPLATE_VARIABLES = {
+OUTPUT_EVENT_FIELDS = {
     "assistant_text": ("message_id",),
     "reasoning": ("message_id",),
     "tool_call": ("tool_name", "tool_call_id", "arguments"),
@@ -374,35 +368,8 @@ OUTPUT_EVENT_TEMPLATE_VARIABLES = {
     "custom": ("channel", "data_json"),
     "lifecycle": ("status", "finish_reason", "error_code"),
 }
-_OUTPUT_PLACEHOLDER_RE = re.compile(r"{{\s*([^{}]+?)\s*}}")
 
-
-def _validate_output_template(event_name: str, template: str) -> None:
-    placeholders = [item.strip() for item in _OUTPUT_PLACEHOLDER_RE.findall(template)]
-    remainder = _OUTPUT_PLACEHOLDER_RE.sub("", template)
-    if "{{" in remainder or "}}" in remainder:
-        raise PydanticCustomError(
-            "output_template_malformed",
-            "Output template for {event_name} contains an incomplete placeholder.",
-            {"event_name": event_name},
-        )
-    allowed = frozenset(OUTPUT_COMMON_TEMPLATE_VARIABLES) | frozenset(
-        OUTPUT_EVENT_TEMPLATE_VARIABLES[event_name]
-    )
-    unknown = sorted(set(placeholders) - allowed)
-    if unknown:
-        raise PydanticCustomError(
-            "output_template_unknown_variables",
-            "Output template for {event_name} contains unsupported variables: {variables}.",
-            {"event_name": event_name, "variables": ", ".join(unknown)},
-        )
-
-
-class OutputEventTemplate(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
-
-    enabled: bool
-    template: OutputTemplateText
+from agent_shell.workflow_event_output import EventOutputScript, validate_event_outputs
 
 
 class OutputFilterMapping(BaseModel):
@@ -415,35 +382,11 @@ class OutputFilterMapping(BaseModel):
 class OutputModeBlock(StrictBlock):
     filter_mode: Literal["allowlist", "blocklist"]
     filter_mappings: Annotated[list[OutputFilterMapping], Field(max_length=100)]
-    variable_encoding: Literal["html", "plain"]
-    event_templates: dict[OutputEventName, OutputEventTemplate]
+    event_outputs: dict[OutputEventName, EventOutputScript]
 
     @model_validator(mode="after")
     def validate_output_mode(self) -> "OutputModeBlock":
-        expected = set(OUTPUT_EVENT_NAMES)
-        actual = set(self.event_templates)
-        if actual != expected:
-            missing = sorted(expected - actual)
-            unexpected = sorted(actual - expected)
-            details = []
-            if missing:
-                details.append("missing=" + ",".join(missing))
-            if unexpected:
-                details.append("unexpected=" + ",".join(unexpected))
-            raise PydanticCustomError(
-                "output_event_types_invalid",
-                "Output event templates do not match the current event types: {details}.",
-                {"details": " ".join(details)},
-            )
-        for event_name in OUTPUT_EVENT_NAMES:
-            setting = self.event_templates[event_name]
-            if setting.enabled and not setting.template:
-                raise PydanticCustomError(
-                    "output_template_empty",
-                    "Enabled output template for {event_name} must not be empty.",
-                    {"event_name": event_name},
-                )
-            _validate_output_template(event_name, setting.template)
+        validate_event_outputs(self.event_outputs, OUTPUT_EVENT_NAMES)
         return self
 
 

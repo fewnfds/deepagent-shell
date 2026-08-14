@@ -137,6 +137,7 @@ class OutputEvent:
     agent_profile_id: str = ""
     subagent_profile_id: str = ""
     message: str = ""
+    data: object = None
     values: dict[str, str] = field(default_factory=dict)
     stream_id: str = ""
     raw_seq: int = 0
@@ -144,11 +145,11 @@ class OutputEvent:
     cycle_key: str = ""
     workflow_event_kind: str = ""
 
-    def template_values(self) -> dict[str, str]:
+    def output_dict(self) -> dict[str, object]:
         return {
-            "event_type": self.event_type,
+            "event_type": self.workflow_event_kind or self.event_type,
             "phase": self.phase,
-            "sequence": str(self.sequence),
+            "sequence": self.sequence,
             "timestamp": self.timestamp,
             "namespace": self.namespace,
             "agent_name": self.agent_name,
@@ -158,6 +159,7 @@ class OutputEvent:
             "agent_profile_id": self.agent_profile_id,
             "subagent_profile_id": self.subagent_profile_id,
             "message": self.message,
+            "data": self.data,
             **self.values,
         }
 
@@ -257,6 +259,11 @@ class V3EventNormalizer:
         finish_reason: str = "",
         error_code: str = "",
     ) -> OutputEvent:
+        data = {
+            "status": status,
+            "finish_reason": finish_reason,
+            "error_code": error_code,
+        }
         return self._event(
             "lifecycle",
             phase,
@@ -265,7 +272,9 @@ class V3EventNormalizer:
             status=status,
             finish_reason=finish_reason,
             error_code=error_code,
+            data=data,
             source_type_override=("non_agent" if self._workflow_sources else ""),
+            workflow_event_kind=("lifecycle" if self._workflow_sources else ""),
         )
 
     def feed(
@@ -404,7 +413,14 @@ class V3EventNormalizer:
                 message=serialized,
                 channel=channel,
                 data_json=serialized,
+                data=custom_data,
                 source_type_override=source_type_override,
+                workflow_event_kind=(
+                    "custom"
+                    if source_type_override
+                    or (source is not None and source.source_type == "script")
+                    else ""
+                ),
             )
         ]
 
@@ -417,16 +433,39 @@ class V3EventNormalizer:
         namespace: str,
     ) -> OutputEvent:
         serialized = _bounded_json_text(data)
+        values = (
+            {
+                "status": str(data.get("event") or "running"),
+                "finish_reason": str(data.get("finish_reason") or ""),
+                "error_code": str(data.get("error_code") or ""),
+            }
+            if method == "lifecycle" and isinstance(data, dict)
+            else {"channel": method or "unknown", "data_json": serialized}
+        )
         return self._event(
             "custom",
             "end",
             timestamp=timestamp,
             namespace=namespace,
             message=serialized,
-            channel=method or "unknown",
-            data_json=serialized,
+            data=data,
             source_type_override="non_agent",
-            workflow_event_kind="values" if method == "values" else "",
+            workflow_event_kind=(
+                method
+                if method in {
+                    "values",
+                    "updates",
+                    "tasks",
+                    "checkpoints",
+                    "input",
+                    "input.requested",
+                    "debug",
+                    "lifecycle",
+                    "custom",
+                }
+                else "other"
+            ),
+            **values,
         )
 
     def _lifecycle_events(
@@ -501,6 +540,7 @@ class V3EventNormalizer:
                     status=status,
                     finish_reason="",
                     error_code=("workflow_node_failed" if phase == "error" else ""),
+                    data=data,
                 )
             ]
 
@@ -525,6 +565,7 @@ class V3EventNormalizer:
                     status=status,
                     tool_call_id=tool_call_id,
                     subagent_name=graph_name,
+                    data=data,
                 )
             ]
         return (
@@ -732,6 +773,7 @@ class V3EventNormalizer:
                         source=source,
                         message_id=message_id,
                         stream_id=stream_id,
+                        data=content,
                     )
                 ]
             if block_type in {
@@ -780,6 +822,7 @@ class V3EventNormalizer:
                     message=fragment,
                     message_id=message_id,
                     stream_id=f"{run_key}:{index}",
+                    data=delta,
                 )
             ]
         if event_name == "content-block-finish":
@@ -830,6 +873,7 @@ class V3EventNormalizer:
                         message=complete_text,
                         message_id=block.message_id,
                         stream_id=f"{run_key}:{index}",
+                        data=content,
                     )
                 ]
             return self._finished_block_events(
@@ -899,6 +943,7 @@ class V3EventNormalizer:
                     source=block.source,
                     message=self._block_text(content),
                     message_id=block.message_id,
+                    data=content,
                 )
             ]
         if block_type in {"image", "audio", "video", "file"}:
@@ -944,6 +989,7 @@ class V3EventNormalizer:
                     status="failed",
                     error_code="invalid_tool_call",
                     stream_id=stream_id,
+                    data=content,
                 )
             ]
         if block_type == "invalid_tool_call":
@@ -962,6 +1008,7 @@ class V3EventNormalizer:
                     status="failed",
                     error_code="invalid_tool_call",
                     stream_id=stream_id,
+                    data=content,
                 )
             ]
         if block_type == "server_tool_result":
@@ -991,6 +1038,7 @@ class V3EventNormalizer:
                         status="failed",
                         error_code="server_tool_error",
                         stream_id=stream_id,
+                        data=content,
                     )
                 ]
             text, result_name = _tool_result_text(content.get("output"), call_id)
@@ -1019,6 +1067,7 @@ class V3EventNormalizer:
                     status="completed",
                     output=text,
                     stream_id=stream_id,
+                    data=content.get("output"),
                 )
             ]
         return []
@@ -1037,6 +1086,7 @@ class V3EventNormalizer:
             message_id=block.message_id,
             stream_id=block.stream_id,
             source=block.source,
+            data=block.content,
         )
 
     @staticmethod
@@ -1087,6 +1137,7 @@ class V3EventNormalizer:
             tool_call_id=call_id,
             arguments=arguments_text,
             stream_id=stream_id,
+            data=tool_call,
         )
 
     def _tool_events(
@@ -1146,6 +1197,7 @@ class V3EventNormalizer:
                     tool_call_id=call_id,
                     status="completed",
                     output=result_text,
+                    data=output,
                 )
             ]
         if "fail" in lifecycle or "error" in lifecycle:
@@ -1164,6 +1216,7 @@ class V3EventNormalizer:
                     tool_call_id=call_id,
                     status="failed",
                     error_code="tool_execution_failed",
+                    data=data,
                 )
             ]
         return []
@@ -1315,6 +1368,7 @@ class V3EventNormalizer:
         agent_name: str = "",
         node: str = "",
         message: str = "",
+        data: object = None,
         stream_id: str = "",
         source: WorkflowEventSourceV1 | None = None,
         source_agent_name: str = "",
@@ -1356,6 +1410,7 @@ class V3EventNormalizer:
                 effective_source.subagent_profile_id or "" if effective_source else ""
             ),
             message=message,
+            data=data,
             values={key: str(value or "") for key, value in values.items()},
             stream_id=stream_id,
             raw_seq=self._raw_seq,

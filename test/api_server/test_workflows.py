@@ -3,21 +3,38 @@ from __future__ import annotations
 from .support import *
 
 
-def test_workflow_event_output_settings_are_global_and_persisted(
+def test_workflow_event_output_is_a_reusable_component_reference(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    expected = {"values": True}
     with make_client(tmp_path, monkeypatch) as client:
-        defaults = client.get("/api/workflow-event-output")
-        assert defaults.status_code == 200, defaults.text
-        assert defaults.json() == {"values": False}
-
-        updated = client.put("/api/workflow-event-output", json=expected)
+        defaults = client.get("/api/catalog").json()["editor_defaults"][
+            "workflow_event_output"
+        ]["default_value"]
+        output = client.post(
+            "/api/blocks/workflow-event-output",
+            json={"name": "Public workflow events", **defaults},
+        )
+        assert output.status_code == 200, output.text
+        workflow = create_workflow(client, name="Event Workflow")
+        updated = client.put(
+            f"/api/workflows/{workflow['id']}",
+            json={
+                **{key: workflow[key] for key in (
+                    "name", "description", "filesystem_id", "workflow_prepare_id", "enabled"
+                )},
+                "workflow_event_output_id": output.json()["id"],
+            },
+        )
         assert updated.status_code == 200, updated.text
-        assert updated.json() == expected
+        assert updated.json()["workflow_event_output_id"] == output.json()["id"]
+        protected = client.delete(
+            f"/api/blocks/workflow-event-output/{output.json()['id']}"
+        )
+        assert protected.status_code == 409
 
     with make_client(tmp_path, monkeypatch) as client:
-        assert client.get("/api/workflow-event-output").json() == expected
+        saved = client.get(f"/api/workflows/{workflow['id']}").json()
+        assert saved["workflow_event_output_id"] == output.json()["id"]
 
 
 def test_workflow_crud_publishes_enabled_tbd_entries_without_main_agent_reference(
@@ -171,6 +188,7 @@ def test_workflow_graph_catalog_save_and_reload(
                         "source_handle": "next",
                         "target": "agent",
                         "target_handle": "in",
+                        "branch_key": None,
                     },
                     {
                         "id": "agent-end",
@@ -178,6 +196,7 @@ def test_workflow_graph_catalog_save_and_reload(
                         "source_handle": "next",
                         "target": "end",
                         "target_handle": "in",
+                        "branch_key": None,
                     },
                 ],
             },
@@ -204,7 +223,9 @@ def test_workflow_graph_catalog_save_and_reload(
 
     assert empty.status_code == 200
     assert empty.json()["definition"]["nodes"] == []
-    assert [item["type"] for item in catalog.json()] == ["start", "agent", "end"]
+    assert [item["type"] for item in catalog.json()] == [
+        "start", "agent", "condition-router", "end"
+    ]
     assert saved.status_code == 200, saved.text
     assert saved.json() == document
     assert metadata.status_code == 200, metadata.text

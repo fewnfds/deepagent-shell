@@ -1,15 +1,9 @@
 from __future__ import annotations
 
-import time
 from collections import deque
-from collections.abc import Callable
 from dataclasses import dataclass
 
-from agent_shell.runtime.output_projection import (
-    OutputProjector,
-    StreamProjection,
-    WorkflowOutputProjector,
-)
+from agent_shell.runtime.output_projection import OutputProjector, WorkflowOutputProjector
 from agent_shell.runtime.output_stream import OutputEvent
 
 TOOL_OUTCOME_TYPES = {"tool_result", "tool_error"}
@@ -20,72 +14,36 @@ class _PendingEvent:
     event: OutputEvent
     source_key: str
     cycle_key: str
-    projection: StreamProjection | None = None
-    text: str = ""
-    sent_length: int = 0
-    last_activity: float = 0.0
     ready: bool = False
     boundary_closed: bool = False
-
-    @property
-    def streamable(self) -> bool:
-        return self.projection is not None
 
 
 @dataclass(slots=True)
 class _SourceState:
     source_key: str
-    event: OutputEvent
-    text: str = ""
-    pending: _PendingEvent | None = None
-    closed: bool = False
+    pending: _PendingEvent
 
 
 class OutputEventRectifier:
-    """Serialize public output events without trusting delayed block finishes."""
+    """Buffer model blocks and serialize complete semantic output events."""
 
     def __init__(
         self,
         projector: OutputProjector | WorkflowOutputProjector,
-        *,
-        quiet_seconds: float = 1.0,
-        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._projector = projector
-        self._quiet_seconds = quiet_seconds
-        self._clock = clock
         self._queue: deque[_PendingEvent] = deque()
         self._sources: dict[tuple[str, str], _SourceState] = {}
-        self._current: _PendingEvent | None = None
 
-    @property
-    def next_deadline(self) -> float | None:
-        if self._current is None or not self._queue:
-            return None
-        return self._current.last_activity + self._quiet_seconds
-
-    def deadline_delay(self) -> float | None:
-        deadline = self.next_deadline
-        return None if deadline is None else max(0.0, deadline - self._clock())
-
-    def feed(self, event: OutputEvent, *, now: float | None = None) -> list[str]:
-        observed_at = self._clock() if now is None else now
+    def feed(self, event: OutputEvent) -> list[str]:
         if event.stream_id:
-            parts = self._feed_source_event(event, observed_at)
+            self._feed_source_event(event)
         else:
-            parts = self._feed_atomic_event(event, observed_at)
-        parts.extend(self._drain(observed_at))
-        return parts
+            self._feed_atomic_event(event)
+        return self._drain()
 
     @staticmethod
     def event_source_key(event: OutputEvent) -> str:
-        """Return a request-local identity for the event's public source.
-
-        Workflow node/profile identity is preferred.  Invocation/runtime scope
-        is tracked separately by ``event_cycle_key`` so repeated invocations
-        of the same node cannot share pending tool-call state.
-        """
-
         explicit = str(getattr(event, "source_key", "") or "").strip()
         if explicit:
             return explicit
@@ -103,75 +61,45 @@ class OutputEventRectifier:
 
     @staticmethod
     def event_cycle_key(event: OutputEvent) -> str:
-        """Return the finest cycle scope available on an output event."""
-
         explicit = str(getattr(event, "cycle_key", "") or "").strip()
         if explicit:
             return explicit
         return event.namespace.strip() or "root"
 
     def flush_source(self, source_key: str) -> list[str]:
-        """Close and render only pending output owned by ``source_key``.
-
-        This is the boundary hook for a Workflow node/cycle.  It never
-        mutates pending state belonging to another concurrent source.
-        """
-
         return self._flush_scope(source_key=source_key)
 
     def flush_cycle(self, source_key: str, cycle_key: str) -> list[str]:
-        """Close and render pending output for one source invocation cycle."""
-
         return self._flush_scope(source_key=source_key, cycle_key=cycle_key)
 
-    def expire(self, *, now: float | None = None) -> list[str]:
-        observed_at = self._clock() if now is None else now
-        deadline = self.next_deadline
-        if deadline is None or observed_at < deadline:
-            return []
-        parts = self._close_current()
-        parts.extend(self._drain(observed_at))
-        return parts
-
     def flush(self) -> list[str]:
-        parts: list[str] = []
-        if self._current is not None:
-            parts.extend(self._close_current())
-        while self._queue:
-            item = self._queue.popleft()
-            if item.streamable:
-                parts.extend(self._activate(item))
-                parts.extend(self._close_current())
-            elif item.ready:
-                parts.extend(self._render_atomic_with_pair(item))
-        self._sources.clear()
+        for item in self._queue:
+            item.boundary_closed = True
+        parts = self._drain()
+        self.discard()
         return parts
 
     def _flush_scope(
         self, *, source_key: str, cycle_key: str | None = None
     ) -> list[str]:
-        parts: list[str] = []
-        current = self._current
-        if current is not None and self._matches_scope(
-            current, source_key=source_key, cycle_key=cycle_key
-        ):
-            parts.extend(self._close_current())
+        retained: deque[_PendingEvent] = deque()
         for item in self._queue:
             if self._matches_scope(
                 item, source_key=source_key, cycle_key=cycle_key
             ):
                 item.boundary_closed = True
+                if item.ready:
+                    retained.append(item)
+            else:
+                retained.append(item)
+        self._queue = retained
         for state_key, source in tuple(self._sources.items()):
-            if source.source_key != source_key:
-                continue
-            if (
-                cycle_key is not None
-                and self.event_cycle_key(source.event) != cycle_key
+            pending = source.pending
+            if source.source_key == source_key and (
+                cycle_key is None or pending.cycle_key == cycle_key
             ):
-                continue
-            self._sources.pop(state_key, None)
-        parts.extend(self._drain(self._clock()))
-        return parts
+                self._sources.pop(state_key, None)
+        return self._drain()
 
     @staticmethod
     def _matches_scope(
@@ -185,126 +113,63 @@ class OutputEventRectifier:
         )
 
     def abort(self) -> list[str]:
-        parts = self._close_current() if self._current is not None else []
         self.discard()
-        return parts
+        return []
 
     def discard(self) -> None:
         self._queue.clear()
         self._sources.clear()
-        self._current = None
 
-    def _feed_source_event(self, event: OutputEvent, now: float) -> list[str]:
+    def _feed_source_event(self, event: OutputEvent) -> None:
         source_key = self.event_source_key(event)
-        cycle_key = self.event_cycle_key(event)
         source_state_key = (source_key, event.stream_id)
         source = self._sources.get(source_state_key)
         if event.phase == "start":
             if not self._projector.enabled(event) or source is not None:
-                return []
-            source = _SourceState(source_key=source_key, event=event)
-            self._sources[source_state_key] = source
-            projection = self._projector.stream_projection(event)
+                return
             pending = _PendingEvent(
                 event=event,
                 source_key=source_key,
-                cycle_key=cycle_key,
-                projection=projection,
-                last_activity=now,
-                ready=projection is not None,
+                cycle_key=self.event_cycle_key(event),
             )
-            source.pending = pending
+            self._sources[source_state_key] = _SourceState(
+                source_key=source_key,
+                pending=pending,
+            )
             self._queue.append(pending)
-            return []
+            return
         if source is None:
-            if event.phase == "end" and self._projector.enabled(event):
-                return self._feed_atomic_event(event, now)
-            return []
-        if event.phase == "delta":
-            return self._append_source_text(source, event.message, now)
+            if event.phase == "end":
+                self._feed_atomic_event(event)
+            return
         if event.phase == "end":
-            return self._finish_source(source, event, now)
-        return []
+            source.pending.event = event
+            source.pending.ready = True
 
-    def _append_source_text(
-        self, source: _SourceState, fragment: str, now: float
-    ) -> list[str]:
-        if not fragment:
-            return []
-        source.text += fragment
-        pending = source.pending
-        if pending is None or source.closed:
-            projection = self._projector.stream_projection(source.event)
-            if projection is None:
-                return []
-            pending = _PendingEvent(
-                event=source.event,
-                source_key=source.source_key,
-                cycle_key=self.event_cycle_key(source.event),
-                projection=projection,
-                last_activity=now,
-                ready=True,
-            )
-            source.pending = pending
-            source.closed = False
-            self._queue.append(pending)
-        pending.text += fragment
-        pending.last_activity = now
-        if pending is self._current:
-            pending.sent_length = len(pending.text)
-            return [self._projector.encode_message(fragment, source.event)]
-        return []
-
-    def _finish_source(
-        self, source: _SourceState, event: OutputEvent, now: float
-    ) -> list[str]:
-        if event.message.startswith(source.text):
-            tail = event.message[len(source.text) :]
-            parts = self._append_source_text(source, tail, now)
-        else:
-            parts = []
-        pending = source.pending
-        if pending is not None and not pending.streamable:
-            pending.event = event
-            pending.ready = True
-        return parts
-
-    def _feed_atomic_event(self, event: OutputEvent, now: float) -> list[str]:
+    def _feed_atomic_event(self, event: OutputEvent) -> None:
         if not self._projector.enabled(event):
-            return []
+            return
         self._queue.append(
             _PendingEvent(
                 event=event,
                 source_key=self.event_source_key(event),
                 cycle_key=self.event_cycle_key(event),
-                text=event.message,
-                last_activity=now,
                 ready=True,
             )
         )
-        return []
 
-    def _drain(self, now: float) -> list[str]:
+    def _drain(self) -> list[str]:
         parts: list[str] = []
-        while self._current is None and self._queue:
+        while self._queue:
             item = self._next_ready_item()
             if item is None:
                 break
             self._queue.remove(item)
-            if item.streamable:
-                parts.extend(self._activate(item))
-                if item.boundary_closed:
-                    parts.extend(self._close_current())
-                    continue
-                if self._queue and now >= item.last_activity + self._quiet_seconds:
-                    parts.extend(self._close_current())
-                    continue
-                break
             parts.extend(self._render_atomic_with_pair(item))
         return parts
 
     def _next_ready_item(self) -> _PendingEvent | None:
-        """Keep tool calls pool-local until their outcome or a cycle flush."""
+        """Keep tool calls local until their outcome or an invocation boundary."""
 
         unmatched_tool_call_seen = False
         for candidate in self._queue:
@@ -324,54 +189,19 @@ class OutputEventRectifier:
             if event_type in TOOL_OUTCOME_TYPES:
                 if self._find_tool_partner(candidate) is None:
                     return candidate
-                # A queued call owns the pair's position and output order.
                 continue
             return candidate
         return None
-
-    def _activate(self, item: _PendingEvent) -> list[str]:
-        self._current = item
-        parts = (
-            [item.projection.prefix]
-            if item.projection and item.projection.prefix
-            else []
-        )
-        if item.sent_length < len(item.text):
-            unsent = item.text[item.sent_length :]
-            item.sent_length = len(item.text)
-            encoded = self._projector.encode_message(unsent, item.event)
-            if encoded:
-                parts.append(encoded)
-        return parts
-
-    def _close_current(self) -> list[str]:
-        item = self._current
-        if item is None:
-            return []
-        parts: list[str] = []
-        if item.sent_length < len(item.text):
-            unsent = item.text[item.sent_length :]
-            item.sent_length = len(item.text)
-            encoded = self._projector.encode_message(unsent, item.event)
-            if encoded:
-                parts.append(encoded)
-        if item.projection and item.projection.suffix:
-            parts.append(item.projection.suffix)
-        self._current = None
-        source_id = (self.event_source_key(item.event), item.event.stream_id)
-        source = self._sources.get(source_id)
-        if source is not None and source.pending is item:
-            source.closed = True
-        return parts
 
     def _render_atomic_with_pair(self, item: _PendingEvent) -> list[str]:
         partner = self._take_tool_partner(item)
         ordered = [item]
         if partner is not None:
-            if item.event.event_type in TOOL_OUTCOME_TYPES:
-                ordered = [partner, item]
-            else:
-                ordered.append(partner)
+            ordered = (
+                [partner, item]
+                if item.event.event_type in TOOL_OUTCOME_TYPES
+                else [item, partner]
+            )
         return [
             rendered
             for candidate in ordered

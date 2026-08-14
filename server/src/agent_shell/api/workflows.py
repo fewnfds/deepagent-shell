@@ -8,10 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from agent_shell.api.errors import management_error
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.workflows import WorkflowStore
-from agent_shell.workflow_event_output import (
-    WorkflowEventOutputSettings,
-    WorkflowEventOutputSettingsStore,
-)
 from agent_shell.validation.models import validation_failure_detail
 from agent_shell.workflow.catalog import node_catalog_payload
 from agent_shell.workflow.validation import admit_workflow_document
@@ -57,7 +53,18 @@ def _save(
             422,
             code="workflow_prepare_not_found",
             message_key="errors.workflowPrepareNotFound",
-            message="The selected Workflow Prepare component does not exist.",
+            message="The selected Prepare component does not exist.",
+        )
+    event_output_id = validated["workflow_event_output_id"]
+    if (
+        event_output_id is not None
+        and blocks.get_block("workflow-event-output", event_output_id) is None
+    ):
+        raise management_error(
+            422,
+            code="workflow_event_output_not_found",
+            message_key="errors.workflowEventOutputNotFound",
+            message="The selected event output component does not exist.",
         )
     try:
         store.save_item(item_id, validated)
@@ -76,19 +83,8 @@ def _save(
 def build_workflow_router(
     store: WorkflowStore,
     blocks: BlockStore,
-    event_output_settings: WorkflowEventOutputSettingsStore,
 ) -> APIRouter:
     router = APIRouter()
-
-    @router.get("/api/workflow-event-output")
-    async def get_workflow_event_output() -> WorkflowEventOutputSettings:
-        return event_output_settings.snapshot()
-
-    @router.put("/api/workflow-event-output")
-    async def update_workflow_event_output(
-        payload: WorkflowEventOutputSettings,
-    ) -> WorkflowEventOutputSettings:
-        return event_output_settings.update(payload)
 
     @router.get("/api/workflow-node-catalog")
     async def get_workflow_node_catalog() -> list[dict[str, object]]:

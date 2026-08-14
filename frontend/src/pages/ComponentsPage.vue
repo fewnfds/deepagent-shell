@@ -54,6 +54,7 @@ import {
   TodoListEditor,
   WorkflowInputContextEditor,
   WorkflowPrepareEditor,
+  WorkflowEventOutputEditor,
   ConditionRouterEditor,
 } from '@/editors'
 
@@ -85,6 +86,7 @@ const editorComponents: Record<ManagedComponentType, Component> = {
   'prompt-caching': PromptCachingEditor,
   'workflow-input-context': WorkflowInputContextEditor,
   'workflow-prepare': WorkflowPrepareEditor,
+  'workflow-event-output': WorkflowEventOutputEditor,
   'condition-router': ConditionRouterEditor,
 }
 
@@ -195,6 +197,7 @@ const editorProps = computed<Record<string, unknown>>(() => {
     case 'prompt-caching':
     case 'workflow-input-context':
     case 'workflow-prepare':
+    case 'workflow-event-output':
     case 'condition-router':
       return {
         defaults: activeDefaults.value,

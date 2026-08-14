@@ -132,7 +132,7 @@ describe('ValidationChecklist', () => {
     expect(wrapper.text()).toContain('当前编辑的 Main Agent 配置')
   })
 
-  it('pinpoints malformed output templates and always provides a concrete next step', () => {
+  it('pinpoints invalid output scripts and always provides a concrete next step', () => {
     const wrapper = mountChecklist({
       status: 'invalid',
       error: '',
@@ -140,14 +140,14 @@ describe('ValidationChecklist', () => {
         valid: false,
         stage: 'draft_validation',
         issues: [{
-          code: 'contract.output_template_malformed',
+          code: 'contract.output_script_invalid',
           scope: 'block',
           owner_id: 'output-id',
           owner_name: 'Default output',
           owner_type: 'output-mode',
-          path: 'event_templates.assistant_text.template',
+          path: 'event_outputs.assistant_text.output_source',
           message: 'safe backend detail',
-          message_key: 'validation.issue.contract.outputTemplateMalformed',
+          message_key: 'validation.issue.contract.outputScriptInvalid',
           message_args: { event_name: 'assistant_text' },
         }],
       },
@@ -156,10 +156,10 @@ describe('ValidationChecklist', () => {
     const card = wrapper.get('[data-testid="validation-issue"]')
     expect(card.get('[data-testid="validation-owner"]').text())
       .toBe('组件类型 输出模式 配置名称 Default output')
-    expect(card.text()).toContain('事件模板下的模型回答下的完整事件模板')
-    expect(card.text()).toContain('模型回答模板包含未闭合或缺少一侧的双花括号。')
+    expect(card.text()).toContain('事件输出脚本下的模型回答下的Python 输出脚本')
+    expect(card.text()).toContain('模型回答的 Python 输出脚本无效。')
     expect(card.get('[data-testid="validation-resolution"]').text())
-      .toContain('确保变量名称两侧各有两个完整且成对的花括号')
+      .toContain('必须定义同步函数 output(event)，并返回字符串')
     expect(card.text()).not.toMatch(/[\u300c\u300d\u201c\u201d\u00b7\u2192]/)
   })
 

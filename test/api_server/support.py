@@ -267,27 +267,29 @@ def output_mode_payload(
         "custom",
         "lifecycle",
     )
-    templates = {
+    outputs = {
         event_type: {
             "enabled": False,
-            "template": "{{message}}",
+            "output_source": 'def output(event):\n    return event["message"]\n',
         }
         for event_type in event_types
     }
-    templates["assistant_text"] = {
+    outputs["assistant_text"] = {
         "enabled": True,
-        "template": "{{message}}",
+        "output_source": 'def output(event):\n    return event["message"]\n',
     }
-    templates["lifecycle"] = {
+    outputs["lifecycle"] = {
         "enabled": include_lifecycle,
-        "template": '<status phase="{{phase}}">{{status}}</status>',
+        "output_source": (
+            'def output(event):\n'
+            '    return f\'<status phase="{event["phase"]}">{event["status"]}</status>\'\n'
+        ),
     }
     return {
         "name": name,
         "filter_mode": "blocklist",
         "filter_mappings": [],
-        "variable_encoding": "html",
-        "event_templates": templates,
+        "event_outputs": outputs,
     }
 
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { LteButton, LteTextarea } from '@adminlte/vue'
-import { computed } from 'vue'
+import { computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import FormField from '@/components/FormField.vue'
@@ -20,12 +20,23 @@ const { t } = useI18n()
 const draft = useEditorModel(() => props.modelValue, (value) => emit('update:modelValue', value))
 
 const eventRows = computed(() => props.defaults.events.flatMap((event) => {
-  const setting = draft.event_templates[event.key]
+  const setting = draft.event_outputs[event.key]
   return setting ? [{ event, setting }] : []
 }))
 
-function variableToken(variable: string): string {
-  return `{{${variable}}}`
+function insertField(eventKey: string, field: string): void {
+  const setting = draft.event_outputs[eventKey]
+  if (!setting) return
+  const token = `event[${JSON.stringify(field)}]`
+  const textarea = document.getElementById(`event-output-source-${eventKey}`) as HTMLTextAreaElement | null
+  const start = textarea?.selectionStart ?? setting.output_source.length
+  const end = textarea?.selectionEnd ?? start
+  setting.output_source = `${setting.output_source.slice(0, start)}${token}${setting.output_source.slice(end)}`
+  void nextTick(() => {
+    const target = document.getElementById(`event-output-source-${eventKey}`) as HTMLTextAreaElement | null
+    target?.focus()
+    target?.setSelectionRange(start + token.length, start + token.length)
+  })
 }
 </script>
 
@@ -38,19 +49,11 @@ function variableToken(variable: string): string {
       </header>
       <div class="card-body">
         <div class="row g-3">
-          <div class="col-md-6">
+          <div class="col-12">
             <FormField field-path="filter_mode">
               <select v-model="draft.filter_mode" class="form-select">
                 <option value="allowlist">{{ t('editors.outputMode.allowlist') }}</option>
                 <option value="blocklist">{{ t('editors.outputMode.blocklist') }}</option>
-              </select>
-            </FormField>
-          </div>
-          <div class="col-md-6">
-            <FormField field-path="variable_encoding">
-              <select v-model="draft.variable_encoding" class="form-select">
-                <option value="html">{{ t('editors.outputMode.htmlEncoding') }}</option>
-                <option value="plain">{{ t('editors.outputMode.plainEncoding') }}</option>
               </select>
             </FormField>
           </div>
@@ -83,8 +86,8 @@ function variableToken(variable: string): string {
       </div>
     </section>
 
-    <div data-testid="event-template-list">
-      <article v-for="row in eventRows" :key="row.event.key" class="card mb-3" data-testid="event-template">
+    <div data-testid="event-output-list">
+      <article v-for="row in eventRows" :key="row.event.key" class="card mb-3" data-testid="event-output-script">
         <header class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
           <h3 class="card-title">{{ t(`editors.outputMode.events.${row.event.key}.label`) }}</h3>
           <div class="form-check form-switch ms-auto">
@@ -96,21 +99,25 @@ function variableToken(variable: string): string {
         </header>
         <div class="card-body">
           <div
-            v-if="row.event.variables.length"
+            v-if="row.event.fields.length"
             class="d-flex flex-wrap gap-2 mb-3"
-            :aria-label="t('editors.outputMode.variablesTitle')"
+            :aria-label="t('editors.outputMode.fieldsTitle')"
           >
-            <span
-              v-for="variable in row.event.variables"
-              :key="variable"
-              class="badge text-bg-secondary font-monospace"
-              data-testid="template-variable"
+            <LteButton
+              v-for="field in row.event.fields"
+              :key="field"
+              class="font-monospace"
+              data-testid="output-field"
+              size="sm"
+              theme="secondary"
+              type="button"
+              @click="insertField(row.event.key, field)"
             >
-              {{ variableToken(variable) }}
-            </span>
+              {{ field }}
+            </LteButton>
           </div>
-          <FormField :field-path="`event_templates.${row.event.key}.template`">
-            <LteTextarea v-model="row.setting.template" :rows="5" />
+          <FormField :field-path="`event_outputs.${row.event.key}.output_source`" :hint="t('editors.outputMode.scriptHint')">
+            <LteTextarea :id="`event-output-source-${row.event.key}`" v-model="row.setting.output_source" :rows="9" />
           </FormField>
         </div>
       </article>

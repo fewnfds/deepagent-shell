@@ -14,8 +14,9 @@ from agent_shell.runtime.output_projection import OutputProjector, WorkflowOutpu
 from agent_shell.runtime.output_stream import V3EventNormalizer
 from agent_shell.runtime.stream_transformers import RawCustomEventTransformer
 from agent_shell.workflow.events import WorkflowCustomEventV1, WorkflowEventSourceV1
+from agent_shell.workflow_event_output import WORKFLOW_EVENT_NAMES
 
-from .support import config, noop_media_response, noop_middleware_runtime
+from .support import config, noop_media_response, noop_middleware_runtime, output_source
 
 
 class _State(TypedDict, total=False):
@@ -97,7 +98,18 @@ def test_agent_execution_projects_real_stream_writer_custom_event() -> None:
         graph=graph,
         input_state={},
         rectifier=OutputEventRectifier(
-            WorkflowOutputProjector({})
+            WorkflowOutputProjector(
+                {},
+                workflow_output_config={
+                    "event_outputs": {
+                        name: {
+                            "enabled": name == "custom",
+                            "output_source": output_source(),
+                        }
+                        for name in WORKFLOW_EVENT_NAMES
+                    }
+                },
+            )
         ),
         normalizer=V3EventNormalizer("Main Agent"),
         middleware_runtime=noop_middleware_runtime(),
@@ -128,12 +140,12 @@ def test_agent_execution_projects_real_tool_result() -> None:
     builder.add_edge("call_tool", END)
     graph = builder.compile()
 
-    output_mode = config(mode="blocklist", template="{{message}}")
-    for event_template in output_mode["event_templates"].values():
-        event_template["enabled"] = False
-    output_mode["event_templates"]["tool_result"] = {
+    output_mode = config(mode="blocklist")
+    for event_output in output_mode["event_outputs"].values():
+        event_output["enabled"] = False
+    output_mode["event_outputs"]["tool_result"] = {
         "enabled": True,
-        "template": "tool={{tool_name}} output={{output}}",
+        "output_source": output_source("tool={{tool_name}} output={{output}}"),
     }
     execution = AgentExecution(
         graph=graph,

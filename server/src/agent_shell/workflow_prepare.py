@@ -17,6 +17,7 @@ from pydantic import (
 from agent_shell.python_requirements import parse_python_requirements
 from agent_shell.script_source import validate_module_function
 from agent_shell.condition_router import ConditionRouterBlock
+from agent_shell.workflow_event_output import WorkflowEventOutputBlock
 
 
 ScriptSource = Annotated[str, StringConstraints(strip_whitespace=False)]
@@ -93,22 +94,31 @@ async def run_workflow_prepare(
 
 WORKFLOW_COMPONENT_MODELS = {
     "workflow-prepare": WorkflowPrepareBlock,
+    "workflow-event-output": WorkflowEventOutputBlock,
     "condition-router": ConditionRouterBlock,
 }
 WORKFLOW_COMPONENT_CATALOG = (
     {
         "type": "workflow-prepare",
         "terminology_key": "workflow-prepare",
-        "label": "Workflow Prepare",
+        "label": "Prepare",
         "order": 1,
         "icon_key": "play-fill",
         "editor_key": "workflow_prepare",
     },
     {
+        "type": "workflow-event-output",
+        "terminology_key": "workflow-event-output",
+        "label": "Event Output",
+        "order": 2,
+        "icon_key": "braces",
+        "editor_key": "workflow_event_output",
+    },
+    {
         "type": "condition-router",
         "terminology_key": "condition-router",
         "label": "Condition Router",
-        "order": 2,
+        "order": 3,
         "icon_key": "circle-half",
         "editor_key": "condition_router",
     },

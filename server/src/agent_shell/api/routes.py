@@ -126,6 +126,22 @@ def build_router(
             message_args={"owner": owner["name"]},
         )
 
+    def reject_workflow_event_output_reference(
+        block_type: str, block_id: str
+    ) -> None:
+        if block_type != "workflow-event-output":
+            return
+        owner = workflow_store.get_item_by_event_output(block_id)
+        if owner is None:
+            return
+        raise management_error(
+            409,
+            code="configuration_referenced",
+            message_key="errors.configurationReferencedByWorkflow",
+            message="The configuration is still referenced by a Workflow.",
+            message_args={"owner": owner["name"]},
+        )
+
     def reject_condition_router_reference(block_type: str, block_id: str) -> None:
         if block_type != "condition-router":
             return
@@ -335,6 +351,7 @@ def build_router(
                 )
             reject_workflow_filesystem_reference(block_type, block_id)
             reject_workflow_prepare_reference(block_type, block_id)
+            reject_workflow_event_output_reference(block_type, block_id)
             reject_condition_router_reference(block_type, block_id)
             manifest = CAPABILITY_BY_TYPE.get(block_type)
             if manifest is not None and manifest.required:
@@ -470,6 +487,7 @@ def build_router(
         check_type(block_type)
         reject_workflow_filesystem_reference(block_type, block_id)
         reject_workflow_prepare_reference(block_type, block_id)
+        reject_workflow_event_output_reference(block_type, block_id)
         reject_condition_router_reference(block_type, block_id)
         manifest = CAPABILITY_BY_TYPE.get(block_type)
         if manifest is not None and manifest.required:

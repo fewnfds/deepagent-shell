@@ -24,6 +24,7 @@ class WorkflowStore:
             "description": str(record["description"]),
             "filesystem_id": str(record["filesystem_id"]),
             "workflow_prepare_id": record.get("workflow_prepare_id"),
+            "workflow_event_output_id": record.get("workflow_event_output_id"),
             "enabled": bool(record["enabled"]),
         }
 
@@ -54,6 +55,12 @@ class WorkflowStore:
     def get_item_by_prepare(self, component_id: str) -> dict | None:
         for item in self._repository.config().get("workflows", []):
             if item.get("workflow_prepare_id") == component_id:
+                return self._public(item)
+        return None
+
+    def get_item_by_event_output(self, component_id: str) -> dict | None:
+        for item in self._repository.config().get("workflows", []):
+            if item.get("workflow_event_output_id") == component_id:
                 return self._public(item)
         return None
 

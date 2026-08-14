@@ -113,11 +113,10 @@ def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> d
             "name": name,
             "filter_mode": "blocklist",
             "filter_mappings": [],
-            "variable_encoding": "html",
-            "event_templates": {
+            "event_outputs": {
                 event_type: {
                     "enabled": True,
-                    "template": "{{message}}",
+                    "output_source": 'def output(event):\n    return event["message"]\n',
                 }
                 for event_type in OUTPUT_EVENT_TYPES
             },

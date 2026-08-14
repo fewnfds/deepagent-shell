@@ -47,7 +47,6 @@ def _default_system() -> dict[str, Any]:
         "runtime_control": {
             "debug_logging_enabled": False,
         },
-        "workflow_event_output": {"values": False},
         "configuration_validation": {"debounce_ms": 1000},
         "system_log": {"max_size_mib": 5},
     }

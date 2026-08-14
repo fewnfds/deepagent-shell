@@ -3,7 +3,7 @@
 ## Workflow
 
 【Workflow】是 OpenAI-compatible `model` 的唯一来源。当前 CRUD 保存名称、说明、启用状态、一个共享 Filesystem、
-可选 Workflow Prepare 引用，以及一份当前 Graph definition/layout。
+可选准备与事件输出组件引用，以及一份当前 Graph definition/layout。
 只有启用的 Workflow 出现在 `/v1/models`。
 
 Workflow root 不声明 `messages`。每个画布 Agent 节点由 wrapper 以空的私有 `messages` 调用自己的 Agent graph，
@@ -77,11 +77,18 @@ Agent 的私有对话。槽位按主文件、fallback 文件、literal 选择内
 缺失时停止后续槽位。关闭组件或从该 Agent capability 装配中移除即可跳过，不影响
 原始 `WorkflowRuntimeContext.messages`。
 
-### Workflow Prepare
+### 准备
 
-Workflow 可绑定零或一个 Workflow Prepare。Shell 先解析所有 Agent node 的纯配置装配，再把请求事实、Workflow
+Workflow 可绑定零或一个准备组件。Shell 先解析所有 Agent node 的纯配置装配，再把请求事实、Workflow
 快照和按 node ID 组织的装配事实传给 `async def prepare(input)`。当前返回的 `context` 只从
 `runtime.context.prepare` 读取；mutable graph state 仍由 LangGraph state/reducer 管理。
+
+### 事件输出
+
+Workflow 可绑定零或一个事件输出组件。它处理 `values`、`updates`、`custom` 等 Workflow-owned 非 Agent v3 事件；
+每类事件由用户编写同步 `output(event)`，直接读取稳定 dict 和其中的原始 Python `data` 对象并返回字符串。不绑定时
+这些事件不进入 OpenAI 响应。Agent Node 事件仍使用对应 Main Agent 的输出模式。完整字段见
+[事件输出](../wizard-pages/workflow-event-output-config.md)。
 
 ## 校验与生效
 

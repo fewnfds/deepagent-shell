@@ -19,9 +19,7 @@ const resolutionKeys: Record<string, string> = {
   'contract.subagent_name_duplicate': 'subagentNameDuplicate',
   'contract.subagent_reference_duplicate': 'subagentReferenceDuplicate',
   'contract.output_event_types_invalid': 'outputEventTypesInvalid',
-  'contract.output_template_empty': 'outputTemplateEmpty',
-  'contract.output_template_malformed': 'outputTemplateMalformed',
-  'contract.output_template_unknown_variables': 'outputTemplateUnknownVariables',
+  'contract.output_script_invalid': 'outputScriptInvalid',
   'contract.invalid_format': 'invalidFormat',
   'contract.provider_format_invalid': 'providerFormatInvalid',
   'contract.provider_unavailable': 'providerUnavailable',
@@ -148,7 +146,7 @@ export function useValidationIssuePresentation() {
         labels.push(capabilityLabel(token))
         continue
       }
-      if (parentPrefix === 'event_templates') {
+      if (parentPrefix === 'event_outputs') {
         labels.push(outputEventLabel(token))
         continue
       }

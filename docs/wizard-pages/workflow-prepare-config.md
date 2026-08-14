@@ -1,6 +1,6 @@
-# Workflow Prepare
+# 准备
 
-Workflow Prepare 是 Workflow-owned 组件，Workflow 可绑定零或一个。它在所有 Agent 配置解析后、LangChain 对象构造前
+准备是 Workflow-owned 组件，Workflow 可绑定零或一个。它在所有 Agent 配置解析后、LangChain 对象构造前
 执行一次：
 
 ```python

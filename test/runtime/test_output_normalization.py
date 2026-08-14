@@ -301,7 +301,7 @@ def test_complete_blocks_and_atomic_events_keep_v3_arrival_order() -> None:
     assert events[6].values["arguments"] == '{"path":"README.md"}'
 
 
-def test_projector_uses_one_template_and_exact_optional_event_scope() -> None:
+def test_projector_uses_event_scripts_and_exact_optional_event_scope() -> None:
     tool_result = OutputEvent(
         event_type="tool_result",
         phase="end",
@@ -327,31 +327,31 @@ def test_projector_uses_one_template_and_exact_optional_event_scope() -> None:
         mode="allowlist",
         mappings=[{"field": "tool_result.tool_name", "value": "commit"}],
     )
-    scoped_settings["event_templates"]["assistant_text"]["enabled"] = False
-    scoped_settings["event_templates"]["tool_result"]["enabled"] = True
-    scoped_settings["event_templates"]["tool_call"]["enabled"] = True
+    scoped_settings["event_outputs"]["assistant_text"]["enabled"] = False
+    scoped_settings["event_outputs"]["tool_result"]["enabled"] = True
+    scoped_settings["event_outputs"]["tool_call"]["enabled"] = True
     unscoped_settings = config(
         mode="allowlist",
         mappings=[{"field": "tool_name", "value": "commit"}],
     )
-    unscoped_settings["event_templates"]["assistant_text"]["enabled"] = False
-    unscoped_settings["event_templates"]["tool_result"]["enabled"] = True
-    unscoped_settings["event_templates"]["tool_call"]["enabled"] = True
+    unscoped_settings["event_outputs"]["assistant_text"]["enabled"] = False
+    unscoped_settings["event_outputs"]["tool_result"]["enabled"] = True
+    unscoped_settings["event_outputs"]["tool_call"]["enabled"] = True
     blocklist_settings = config(
         mode="blocklist",
         mappings=[{"field": "tool_result.tool_name", "value": "commit"}],
     )
-    blocklist_settings["event_templates"]["assistant_text"]["enabled"] = False
-    blocklist_settings["event_templates"]["tool_result"]["enabled"] = True
-    blocklist_settings["event_templates"]["tool_call"]["enabled"] = True
+    blocklist_settings["event_outputs"]["assistant_text"]["enabled"] = False
+    blocklist_settings["event_outputs"]["tool_result"]["enabled"] = True
+    blocklist_settings["event_outputs"]["tool_call"]["enabled"] = True
 
     scoped = OutputProjector(scoped_settings)
     unscoped = OutputProjector(unscoped_settings)
     blocklist = OutputProjector(blocklist_settings)
 
-    assert scoped.render(tool_result) == "&lt;unsafe&gt;"
+    assert scoped.render(tool_result) == "<unsafe>"
     assert scoped.render(tool_call) == ""
-    assert unscoped.render(tool_result) == "&lt;unsafe&gt;"
+    assert unscoped.render(tool_result) == "<unsafe>"
     assert unscoped.render(tool_call) == "call"
     assert blocklist.render(tool_result) == ""
     assert blocklist.render(tool_call) == "call"

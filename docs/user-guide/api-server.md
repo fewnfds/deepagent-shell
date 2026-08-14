@@ -37,7 +37,8 @@ fan-out、fan-in 或形成 LangGraph 支持的循环。画布 Start/End 直接�
 
 `stream=false` 返回标准 `chat.completion` JSON。`stream=true` 返回 `chat.completion.chunk` SSE，并以
 `data: [DONE]` 结束。两种模式都消费同一次 LangGraph v3 事件流，并按 Workflow node 对应 Main Agent 的
-`output-mode` 过滤和渲染；不会从最终 state 绕过输出策略读取原始 Agent 内容。
+`output-mode` 的同步 Python `output(event)` 过滤和渲染；Workflow-owned 非 Agent 事件由 Workflow 可选绑定的事件输出
+组件处理。脚本收到稳定 dict、必须返回字符串；两条路径都不会从最终 state 绕过输出策略读取原始 Agent 内容。
 
 ## 当前边界
 

@@ -16,6 +16,7 @@ import { systemPromptAdapter } from './blocks/systemPrompt'
 import { todoListAdapter } from './blocks/todoList'
 import { workflowInputContextAdapter } from './blocks/workflowInputContext'
 import { workflowPrepareAdapter } from './blocks/workflowPrepare'
+import { workflowEventOutputAdapter } from './blocks/workflowEventOutput'
 import { conditionRouterAdapter } from './blocks/conditionRouter'
 
 export type {
@@ -73,6 +74,7 @@ export type {
   WorkflowInputContextSlotDraft,
 } from './blocks/workflowInputContext'
 export type { WorkflowPrepareDefaults, WorkflowPrepareDraft } from './blocks/workflowPrepare'
+export type { WorkflowEventOutputDefaults, WorkflowEventOutputDraft } from './blocks/workflowEventOutput'
 export type { ConditionRouterDefaults, ConditionRouterDraft } from './blocks/conditionRouter'
 
 export {
@@ -92,6 +94,7 @@ export {
   todoListAdapter,
   workflowInputContextAdapter,
   workflowPrepareAdapter,
+  workflowEventOutputAdapter,
   conditionRouterAdapter,
 }
 
@@ -112,7 +115,7 @@ export const blockTypes = [
   'workflow-input-context',
 ] as const
 
-export const managedComponentTypes = [...blockTypes, 'workflow-prepare', 'condition-router'] as const
+export const managedComponentTypes = [...blockTypes, 'workflow-prepare', 'workflow-event-output', 'condition-router'] as const
 
 export const blockAdapters = {
   model: modelAdapter,
@@ -130,5 +133,6 @@ export const blockAdapters = {
   'prompt-caching': promptCachingAdapter,
   'workflow-input-context': workflowInputContextAdapter,
   'workflow-prepare': workflowPrepareAdapter,
+  'workflow-event-output': workflowEventOutputAdapter,
   'condition-router': conditionRouterAdapter,
 } as const

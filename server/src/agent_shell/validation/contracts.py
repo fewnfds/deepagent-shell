@@ -40,9 +40,6 @@ _ERROR_CODES = {
     "model_type": "contract.object_required",
     "model_attributes_type": "contract.object_required",
     "output_event_types_invalid": "contract.output_event_types_invalid",
-    "output_template_empty": "contract.output_template_empty",
-    "output_template_malformed": "contract.output_template_malformed",
-    "output_template_unknown_variables": "contract.output_template_unknown_variables",
 }
 
 _ERROR_MESSAGE_KEYS = {
@@ -76,9 +73,6 @@ _ERROR_MESSAGE_KEYS = {
     "model_type": "validation.issue.contract.objectRequired",
     "model_attributes_type": "validation.issue.contract.objectRequired",
     "output_event_types_invalid": "validation.issue.contract.outputEventTypesInvalid",
-    "output_template_empty": "validation.issue.contract.outputTemplateEmpty",
-    "output_template_malformed": "validation.issue.contract.outputTemplateMalformed",
-    "output_template_unknown_variables": "validation.issue.contract.outputTemplateUnknownVariables",
 }
 
 _ERROR_ARG_KEYS = {
@@ -93,9 +87,6 @@ _ERROR_ARG_KEYS = {
     "literal_error": ("expected",),
     "enum": ("expected",),
     "output_event_types_invalid": ("details",),
-    "output_template_empty": ("event_name",),
-    "output_template_malformed": ("event_name",),
-    "output_template_unknown_variables": ("event_name", "variables"),
 }
 
 
@@ -173,6 +164,15 @@ def _specific_contract_identity(
                 "contract.credential_masked",
                 "validation.issue.contract.credentialMasked",
             )
+    if (
+        error_type == "value_error"
+        and owner_type in {"output-mode", "workflow-event-output"}
+        and path.endswith("output_source")
+    ):
+        return (
+            "contract.output_script_invalid",
+            "validation.issue.contract.outputScriptInvalid",
+        )
     return None
 
 
@@ -254,15 +254,7 @@ def _issue_path(
     message_args: Mapping[str, MessageArg],
 ) -> str:
     if error_type == "output_event_types_invalid":
-        return "event_templates"
-    if error_type in {
-        "output_template_empty",
-        "output_template_malformed",
-        "output_template_unknown_variables",
-    }:
-        event_name = message_args.get("event_name")
-        if isinstance(event_name, str) and event_name:
-            return f"event_templates.{event_name}.template"
+        return "event_outputs"
     return _path(error.get("loc", ()))
 
 

@@ -34,16 +34,15 @@ const filesystemDefaults: FilesystemDefaults = {
 }
 
 const outputDefaults: OutputModeDefaults = {
-  events: [{ key: 'assistant_text', variables: ['message'] }],
+  events: [{ key: 'assistant_text', fields: ['message'] }],
   filter_fields: ['message'],
   default_value: {
     filter_mode: 'blocklist',
     filter_mappings: [],
-    variable_encoding: 'plain',
-    event_templates: {
+    event_outputs: {
       assistant_text: {
         enabled: true,
-        template: '{{message}}',
+        output_source: 'def output(event):\n    return event["message"]\n',
       },
     },
   },
@@ -127,37 +126,37 @@ describe('block adapters', () => {
 
   it('creates output drafts from an independent copy of the catalog default', () => {
     const blank = outputModeAdapter.blank(outputDefaults)
-    expect(blank.event_templates.assistant_text?.template).toBe('{{message}}')
-    expect(blank.variable_encoding).toBe('plain')
+    expect(blank.event_outputs.assistant_text?.output_source)
+      .toBe('def output(event):\n    return event["message"]\n')
     blank.filter_mappings.push({ field: 'message', value: 'hidden' })
     expect(outputDefaults.default_value.filter_mappings).toEqual([])
     expect(outputModeAdapter.toPayload(blank)).not.toHaveProperty('id')
   })
 
-  it('loads only the current output event fields before an explicit save', () => {
-    const legacy = {
+  it('loads only the current output event scripts before an explicit save', () => {
+    const saved = {
       id: 'output-id',
       name: 'Legacy output',
       filter_mode: 'blocklist',
       filter_mappings: [],
-      variable_encoding: 'html',
-      event_templates: {
+      event_outputs: {
         assistant_text: {
           enabled: true,
-          start_template: '<assistant>',
-          template: '{{message}}',
-          finish_template: '</assistant>',
+          output_source: 'def output(event):\n    return "<assistant>" + event["message"] + "</assistant>"\n',
         },
-        other: { enabled: true, template: '{{message}}' },
+        other: { enabled: true, output_source: 'def output(event):\n    return event["message"]\n' },
       },
     }
-    const draft = outputModeAdapter.fromApi(legacy as never, outputDefaults)
+    const draft = outputModeAdapter.fromApi(saved as never, outputDefaults)
 
-    expect(draft.event_templates).toEqual({
-      assistant_text: { enabled: true, template: '{{message}}' },
+    expect(draft.event_outputs).toEqual({
+      assistant_text: {
+        enabled: true,
+        output_source: 'def output(event):\n    return "<assistant>" + event["message"] + "</assistant>"\n',
+      },
     })
-    expect(outputModeAdapter.toPayload(draft).event_templates).toEqual(
-      draft.event_templates,
+    expect(outputModeAdapter.toPayload(draft).event_outputs).toEqual(
+      draft.event_outputs,
     )
   })
 
@@ -192,17 +191,21 @@ describe('block adapters', () => {
     const output = outputModeAdapter.fromApi({
       id: 'output', name: 'Output', filter_mode: 'legacy',
       filter_mappings: [{ field: 'message', value: 'kept' }, 'discarded'],
-      variable_encoding: 'legacy',
-      event_templates: {
-        assistant_text: { enabled: false, template: 'kept {{message}}' },
-        legacy_event: { enabled: true, template: 'discarded' },
+      event_outputs: {
+        assistant_text: {
+          enabled: false,
+          output_source: 'def output(event):\n    return "kept " + event["message"]\n',
+        },
+        legacy_event: { enabled: true, output_source: 'def output(event):\n    return "discarded"\n' },
       },
     } as never, outputDefaults)
     expect(output.filter_mode).toBe(outputDefaults.default_value.filter_mode)
-    expect(output.variable_encoding).toBe(outputDefaults.default_value.variable_encoding)
     expect(output.filter_mappings).toEqual([{ field: 'message', value: 'kept' }])
-    expect(output.event_templates).toEqual({
-      assistant_text: { enabled: false, template: 'kept {{message}}' },
+    expect(output.event_outputs).toEqual({
+      assistant_text: {
+        enabled: false,
+        output_source: 'def output(event):\n    return "kept " + event["message"]\n',
+      },
     })
 
     const filesystem = filesystemAdapter.fromApi({

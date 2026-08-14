@@ -14,4 +14,5 @@ class WorkflowDefinition(BaseModel):
     description: Annotated[str, Field(max_length=2_000)] = ""
     filesystem_id: RequiredReference
     workflow_prepare_id: RequiredReference | None = None
+    workflow_event_output_id: RequiredReference | None = None
     enabled: bool = True

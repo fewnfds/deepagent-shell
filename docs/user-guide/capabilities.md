@@ -18,7 +18,8 @@
 | 上下文摘要 | `SummarizationMiddleware` 阈值、保留和工具参数截断 | 可选 | 继承、替换或关闭 |
 | Prompt 缓存 | Anthropic prompt caching TTL 与最少消息数 | 可选 | 继承、替换或关闭 |
 | Workflow 输入上下文 | 从请求 `messages[]` 整理初始消息，并按规则追加文件槽位 | 可选 | 继承、替换或关闭 |
-| Workflow Prepare | 在 LangChain 构造前准备本次 Workflow 的静态 runtime context | Workflow 可选绑定 | 不属于 Agent capability |
+| 准备 | 在 LangChain 构造前准备本次 Workflow 的静态 runtime context | Workflow 可选绑定 | 不属于 Agent capability |
+| 事件输出 | 用 Python 把 Workflow-owned v3 事件投影为响应字符串 | Workflow 可选绑定 | 不属于 Agent capability |
 | 条件路由 | 读取完整 Workflow State/Context，更新 State 并激活具名 Branch Edge | 画布 Node 引用 | 不属于 Agent capability |
 
 组件编辑页从服务端 catalog 取得字段、默认值和资源发现结果。草稿校验与保存校验都以后端 contract
@@ -42,9 +43,13 @@ capability 引用及继承/替换/关闭规则决定。它支持受信任 Python
 独立 invocation。同步 Subagent 仍由 Deep Agents 官方 Middleware 在 Main Agent 内部调度，不建立隐藏归档 wrapper。
 这条父子 State 输出映射不需要额外的结束 Hook 或 Recorder 组件。
 
-Workflow Prepare 是 Workflow-owned 组件。它在所有 Agent 配置解析完成后、任何模型/Middleware/Agent/StateGraph
+准备是 Workflow-owned 组件。它在所有 Agent 配置解析完成后、任何模型/Middleware/Agent/StateGraph
 构造前执行一次 `async def prepare(input)`；当前只允许返回 `{"context": {...}}`，结果冻结到
 `runtime.context.prepare`。它不属于 Main Agent/Subagent capability，也不是通用生命周期 Hook。
+
+事件输出也是 Workflow-owned 组件。Workflow 通过 UUID 可选绑定一份配置；各事件的同步 `output(event)` 读取稳定
+dict，返回值必须是字符串。它只控制 Workflow-owned 非 Agent 事件的 OpenAI 响应投影，不改变 checkpoint、Debug、
+最终 State 或 Agent 自己的输出模式。字段和 Python 对象类型见[事件输出](../wizard-pages/workflow-event-output-config.md)。
 
 条件路由组件只保存 `async def route(state, context)` 与 requirements。用户在画布 Branch Edge 上直接填写分支 key，
 脚本通过 `activate` 返回一个或多个完全匹配的 key，并可通过 `update` 返回 State 局部更新；空列表使用必须显式连接的

@@ -16,9 +16,9 @@ from agent_shell.capability_manifest import (
 from agent_shell.contracts import (
     BLOCK_MODELS,
     FilesystemBlock,
-    OUTPUT_COMMON_TEMPLATE_VARIABLES,
+    OUTPUT_COMMON_FIELDS,
     OUTPUT_EVENT_NAMES,
-    OUTPUT_EVENT_TEMPLATE_VARIABLES,
+    OUTPUT_EVENT_FIELDS,
     OutputModeBlock,
 )
 
@@ -129,30 +129,27 @@ def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
         "min_messages_to_cache": 0,
     }
     assert [event["key"] for event in output["events"]] == list(OUTPUT_EVENT_NAMES)
-    assert output["events"][0]["variables"] == [
-        *OUTPUT_COMMON_TEMPLATE_VARIABLES,
-        *OUTPUT_EVENT_TEMPLATE_VARIABLES[OUTPUT_EVENT_NAMES[0]],
+    assert output["events"][0]["fields"] == [
+        *OUTPUT_COMMON_FIELDS,
+        *OUTPUT_EVENT_FIELDS[OUTPUT_EVENT_NAMES[0]],
     ]
     assert all("streaming" not in event for event in output["events"])
-    assert output["default_value"]["variable_encoding"] == "plain"
     assert all(
         setting["enabled"]
-        for setting in output["default_value"]["event_templates"].values()
+        for setting in output["default_value"]["event_outputs"].values()
     )
-    assert output["default_value"]["event_templates"]["assistant_text"] == {
+    assert output["default_value"]["event_outputs"]["assistant_text"] == {
         "enabled": True,
-        "template": "{{message}}",
+        "output_source": 'def output(event):\n    return event["message"]\n',
     }
     assert all(
-        "<details><summary>" in setting["template"]
-        and "{{message}}\n\n" in setting["template"]
-        and "</details>" in setting["template"]
-        for name, setting in output["default_value"]["event_templates"].items()
-        if name != "assistant_text"
+        setting["output_source"].startswith("def output(event):\n")
+        and "return event[\"message\"]" in setting["output_source"]
+        for setting in output["default_value"]["event_outputs"].values()
     )
     assert all(
-        set(setting) == {"enabled", "template"}
-        for setting in output["default_value"]["event_templates"].values()
+        set(setting) == {"enabled", "output_source"}
+        for setting in output["default_value"]["event_outputs"].values()
     )
     OutputModeBlock.model_validate(
         {"name": "Output default", **output["default_value"]}

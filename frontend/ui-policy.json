@@ -412,6 +412,7 @@
           "src/editors/PromptCachingEditor.vue",
           "src/editors/SummarizationEditor.vue",
           "src/editors/WorkflowPrepareEditor.vue",
+          "src/editors/WorkflowEventOutputEditor.vue",
           "src/editors/WorkflowInputContextEditor.vue",
           "src/components/workflow/WorkflowInspector.vue",
           "src/pages/ConfigLibraryPage.vue",

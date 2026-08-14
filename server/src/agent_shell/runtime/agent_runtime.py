@@ -35,6 +35,7 @@ from agent_shell.workflow.validation import validate_workflow_executable
 from agent_shell.validation import ValidationReport
 from agent_shell.validation.assembly import StaticAssembly
 from agent_shell.workflow_prepare import WorkflowPrepareError, run_workflow_prepare
+from agent_shell.workflow_event_output import WorkflowEventOutputBlock
 from langgraph.errors import GraphRecursionError
 from langgraph.prebuilt import ToolCallTransformer
 
@@ -168,25 +169,29 @@ class AgentExecution:
         def failure_output(error_code: str) -> list[str]:
             self.normalizer.abort_main_agent_messages()
             parts = self.rectifier.abort()
-            parts.extend(
-                project_event(
-                    self.normalizer.lifecycle(
-                        "error",
-                        status="failed",
-                        finish_reason="error",
-                        error_code=error_code,
+            try:
+                parts.extend(
+                    project_event(
+                        self.normalizer.lifecycle(
+                            "error",
+                            status="failed",
+                            finish_reason="error",
+                            error_code=error_code,
+                        )
                     )
                 )
-            )
+            except Exception:
+                # A broken user lifecycle projector must not replace the safe
+                # runtime error that is already crossing the public boundary.
+                self.rectifier.discard()
             return parts
 
-        for rendered in project_event(
-            self.normalizer.lifecycle("start", status="running")
-        ):
-            if rendered:
-                yield rendered
-
         try:
+            for rendered in project_event(
+                self.normalizer.lifecycle("start", status="running")
+            ):
+                if rendered:
+                    yield rendered
             async with asyncio.timeout(EXECUTION_TIMEOUT_SECONDS):
                 with warnings.catch_warnings():
                     warnings.filterwarnings(
@@ -225,19 +230,8 @@ class AgentExecution:
                     )
                     try:
                         while next_envelope is not None:
-                            timeout = self.rectifier.deadline_delay()
-                            done, _pending = await asyncio.wait(
-                                {next_envelope},
-                                timeout=timeout,
-                                return_when=asyncio.FIRST_COMPLETED,
-                            )
-                            if not done:
-                                for rendered in self.rectifier.expire():
-                                    if rendered:
-                                        yield rendered
-                                continue
                             try:
-                                envelope = next_envelope.result()
+                                envelope = await next_envelope
                             except StopAsyncIteration:
                                 next_envelope = None
                                 break
@@ -281,6 +275,15 @@ class AgentExecution:
                     for rendered in self.rectifier.flush():
                         if rendered:
                             yield rendered
+            for rendered in project_event(
+                self.normalizer.lifecycle(
+                    "end",
+                    status="completed",
+                    finish_reason=self.normalizer.finish_reason,
+                )
+            ):
+                if rendered:
+                    yield rendered
         except asyncio.CancelledError:
             self.normalizer.abort_main_agent_messages()
             self.rectifier.discard()
@@ -322,13 +325,6 @@ class AgentExecution:
             await finish_debug("failed", error_code=error.code, error=error)
             raise error from exc
         await finish_debug("completed")
-        for rendered in project_event(
-            self.normalizer.lifecycle(
-                "end", status="completed", finish_reason=self.normalizer.finish_reason
-            )
-        ):
-            if rendered:
-                yield rendered
 
     async def run(self) -> tuple[str, dict[str, int]]:
         parts = [part async for part in self.stream_text()]
@@ -402,7 +398,7 @@ class AgentRuntime:
         request_id: str = "",
         public_model: str = "",
         workflow_built: tuple[tuple[str, BuiltAgent], ...] = (),
-        workflow_non_agent_filter: Callable[[OutputEvent], bool] | None = None,
+        workflow_output_config: dict[str, object] | None = None,
         context: WorkflowRuntimeContext | None = None,
         run_config: dict[str, Any] | None = None,
         durability: str | None = None,
@@ -425,7 +421,7 @@ class AgentRuntime:
             }
             projector = WorkflowOutputProjector(
                 {node_id: agent.output_config for node_id, agent in workflow_agents},
-                non_agent_filter=workflow_non_agent_filter,
+                workflow_output_config=workflow_output_config,
             )
         else:
             workflow_sources = None
@@ -516,7 +512,6 @@ class AgentRuntime:
         event_observer: Callable[[OutputEvent], None] | None = None,
         request_id: str = "",
         public_model: str = "",
-        workflow_non_agent_filter: Callable[[OutputEvent], bool] | None = None,
     ) -> AgentExecution:
         from agent_shell.condition_router import ConditionRouterBlock
         from agent_shell.workflow.catalog import (
@@ -626,8 +621,27 @@ class AgentRuntime:
                         code="workflow_debug_record_failed",
                     )
         built_agents: list[tuple[str, BuiltAgent]] = []
+        workflow_output_config: dict[str, object] | None = None
         workspace = None
         try:
+            output_id = (workflow_snapshot or {}).get("workflow_event_output_id")
+            if output_id is not None:
+                stored_output = (
+                    self._blocks.get_block_internal(
+                        "workflow-event-output", str(output_id)
+                    )
+                    if self._blocks is not None
+                    else None
+                )
+                if stored_output is None:
+                    raise AgentRuntimeError(
+                        "workflow_event_output_not_found",
+                        "The selected event output component does not exist.",
+                        status_code=422,
+                    )
+                workflow_output_config = WorkflowEventOutputBlock.model_validate(
+                    {key: value for key, value in stored_output.items() if key != "id"}
+                ).model_dump(mode="python", exclude={"name"})
             resolved_agents: list[tuple[Any, StaticAssembly]] = []
             for agent_node in agent_nodes:
                 main_agent_id = str(
@@ -671,7 +685,7 @@ class AgentRuntime:
                 if prepare_block is None:
                     raise AgentRuntimeError(
                         "workflow_prepare_not_found",
-                        "The selected Workflow Prepare component does not exist.",
+                        "The selected Prepare component does not exist.",
                         status_code=422,
                     )
                 if bool(prepare_block.get("enabled", True)):
@@ -682,7 +696,7 @@ class AgentRuntime:
                     if prepare_metadata["dependency_status"] != "ready":
                         raise AgentRuntimeError(
                             "workflow_prepare_dependencies_not_ready",
-                            "Restart Agent Shell to prepare the selected Workflow Prepare dependencies.",
+                            "Restart Agent Shell to prepare the selected Prepare component dependencies.",
                             status_code=409,
                         )
                 try:
@@ -801,7 +815,7 @@ class AgentRuntime:
             model_response_observer=model_response_observer,
             request_id=request_id,
             public_model=public_model,
-            workflow_non_agent_filter=workflow_non_agent_filter,
+            workflow_output_config=workflow_output_config,
             context=context,
             run_config=debug_run.config() if debug_run is not None else None,
             durability="sync" if debug_run is not None else None,

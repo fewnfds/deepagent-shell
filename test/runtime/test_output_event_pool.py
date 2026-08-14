@@ -31,32 +31,31 @@ def _event(
 
 def _rectifier() -> OutputEventRectifier:
     settings = config(mode="blocklist")
-    settings["variable_encoding"] = "plain"
-    settings["event_templates"]["reasoning"] = {
+    settings["event_outputs"]["reasoning"] = {
         "enabled": True,
-        "template": "<reasoning>{{message}}</reasoning>",
+        "output_source": output_source("<reasoning>{{message}}</reasoning>"),
     }
-    settings["event_templates"]["assistant_text"] = {
+    settings["event_outputs"]["assistant_text"] = {
         "enabled": True,
-        "template": "<text>{{message}}</text>",
+        "output_source": output_source("<text>{{message}}</text>"),
     }
-    settings["event_templates"]["tool_call"] = {
+    settings["event_outputs"]["tool_call"] = {
         "enabled": True,
-        "template": "<call id={{tool_call_id}}>{{message}}</call>",
+        "output_source": output_source("<call id={{tool_call_id}}>{{message}}</call>"),
     }
-    settings["event_templates"]["tool_result"] = {
+    settings["event_outputs"]["tool_result"] = {
         "enabled": True,
-        "template": "<result id={{tool_call_id}}>{{message}}</result>",
+        "output_source": output_source("<result id={{tool_call_id}}>{{message}}</result>"),
     }
     return OutputEventRectifier(OutputProjector(settings))
 
 
-def test_competing_streams_wait_for_silence_and_never_cross_templates() -> None:
+def test_competing_streams_render_once_on_complete_blocks_in_source_order() -> None:
     pool = _rectifier()
 
     assert pool.feed(
-        _event("reasoning", "start", sequence=1, stream_id="run:0"), now=0.0
-    ) == ["<reasoning>"]
+        _event("reasoning", "start", sequence=1, stream_id="run:0")
+    ) == []
     assert pool.feed(
         _event(
             "reasoning",
@@ -64,12 +63,10 @@ def test_competing_streams_wait_for_silence_and_never_cross_templates() -> None:
             sequence=2,
             stream_id="run:0",
             message="think",
-        ),
-        now=0.1,
-    ) == ["think"]
+        )
+    ) == []
     assert pool.feed(
-        _event("assistant_text", "start", sequence=3, stream_id="run:1"),
-        now=0.2,
+        _event("assistant_text", "start", sequence=3, stream_id="run:1")
     ) == []
     assert pool.feed(
         _event(
@@ -78,8 +75,7 @@ def test_competing_streams_wait_for_silence_and_never_cross_templates() -> None:
             sequence=4,
             stream_id="run:1",
             message="answer",
-        ),
-        now=0.3,
+        )
     ) == []
     assert pool.feed(
         _event(
@@ -88,96 +84,23 @@ def test_competing_streams_wait_for_silence_and_never_cross_templates() -> None:
             sequence=5,
             stream_id="run:0",
             message="think",
-        ),
-        now=0.4,
-    ) == []
-    assert pool.expire(now=1.09) == []
-    assert pool.expire(now=1.1) == ["</reasoning>", "<text>", "answer"]
-    assert pool.flush() == ["</text>"]
-
-
-def test_only_the_active_source_can_extend_its_silence_window() -> None:
-    pool = _rectifier()
-    pool.feed(_event("reasoning", "start", sequence=1, stream_id="run:0"), now=0.0)
-    pool.feed(
-        _event(
-            "reasoning",
-            "delta",
-            sequence=2,
-            stream_id="run:0",
-            message="a",
-        ),
-        now=0.1,
-    )
-    pool.feed(
-        _event("assistant_text", "start", sequence=3, stream_id="run:1"),
-        now=0.2,
-    )
-    pool.feed(
-        _event(
-            "assistant_text",
-            "delta",
-            sequence=4,
-            stream_id="run:1",
-            message="queued",
-        ),
-        now=0.8,
-    )
-
-    assert pool.expire(now=1.1) == ["</reasoning>", "<text>", "queued"]
-
-    pool = _rectifier()
-    pool.feed(_event("reasoning", "start", sequence=1, stream_id="run:0"), now=0.0)
-    pool.feed(
-        _event("assistant_text", "start", sequence=2, stream_id="run:1"),
-        now=0.1,
-    )
+        )
+    ) == ["<reasoning>think</reasoning>"]
     assert pool.feed(
         _event(
-            "reasoning",
-            "delta",
-            sequence=3,
-            stream_id="run:0",
-            message="continued",
-        ),
-        now=0.9,
-    ) == ["continued"]
-    assert pool.expire(now=1.89) == []
-    assert pool.expire(now=1.9) == ["</reasoning>", "<text>"]
-
-
-def test_late_delta_after_death_gets_a_new_complete_wrapper() -> None:
-    pool = _rectifier()
-    parts = pool.feed(
-        _event("reasoning", "start", sequence=1, stream_id="run:0"), now=0.0
-    )
-    parts += pool.feed(
-        _event("assistant_text", "start", sequence=2, stream_id="run:1"),
-        now=0.1,
-    )
-    parts += pool.expire(now=1.0)
-    parts += pool.feed(
-        _event(
-            "reasoning",
-            "delta",
-            sequence=3,
-            stream_id="run:0",
-            message="late",
-        ),
-        now=1.1,
-    )
-    parts += pool.flush()
-
-    assert "".join(parts) == (
-        "<reasoning></reasoning>"
-        "<text></text>"
-        "<reasoning>late</reasoning>"
-    )
+            "assistant_text",
+            "end",
+            sequence=6,
+            stream_id="run:1",
+            message="answer",
+        )
+    ) == ["<text>answer</text>"]
+    assert pool.flush() == []
 
 
 def test_tool_call_waits_for_an_outcome_within_the_current_cycle() -> None:
     pool = _rectifier()
-    pool.feed(_event("reasoning", "start", sequence=1, stream_id="run:0"), now=0.0)
+    pool.feed(_event("reasoning", "start", sequence=1, stream_id="run:0"))
     pool.feed(
         _event(
             "tool_call",
@@ -186,10 +109,9 @@ def test_tool_call_waits_for_an_outcome_within_the_current_cycle() -> None:
             message='{"path":"README.md"}',
             tool_call_id="call-1",
             tool_name="read_file",
-        ),
-        now=0.1,
+        )
     )
-    pool.feed(
+    assert pool.feed(
         _event(
             "tool_result",
             "end",
@@ -197,15 +119,12 @@ def test_tool_call_waits_for_an_outcome_within_the_current_cycle() -> None:
             message="done",
             tool_call_id="call-1",
             tool_name="read_file",
-        ),
-        now=0.2,
-    )
-
-    assert pool.flush() == [
-        "</reasoning>",
+        )
+    ) == [
         '<call id=call-1>{"path":"README.md"}</call>',
         "<result id=call-1>done</result>",
     ]
+    assert pool.flush() == []
 
     pool = _rectifier()
     assert pool.feed(
@@ -215,20 +134,20 @@ def test_tool_call_waits_for_an_outcome_within_the_current_cycle() -> None:
             sequence=1,
             message="args",
             tool_call_id="call-missing",
-        ),
-        now=0.0,
+        )
     ) == []
     assert pool.flush() == ["<call id=call-missing>args</call>"]
 
     pool = _rectifier()
     pool.feed(_event("reasoning", "start", sequence=1, stream_id="run:0"))
+    parts: list[str] = []
     for sequence, event_type, call_id, message in (
         (2, "tool_call", "call-a", "args-a"),
         (3, "tool_call", "call-b", "args-b"),
         (4, "tool_result", "call-b", "result-b"),
         (5, "tool_result", "call-a", "result-a"),
     ):
-        pool.feed(
+        parts.extend(pool.feed(
             _event(
                 event_type,
                 "end",
@@ -237,10 +156,10 @@ def test_tool_call_waits_for_an_outcome_within_the_current_cycle() -> None:
                 tool_call_id=call_id,
                 tool_name="same_tool",
             )
-        )
+        ))
 
-    assert pool.flush() == [
-        "</reasoning>",
+    parts.extend(pool.flush())
+    assert parts == [
         "<call id=call-a>args-a</call>",
         "<result id=call-a>result-a</result>",
         "<call id=call-b>args-b</call>",
@@ -284,14 +203,13 @@ def test_tool_pairing_isolated_by_workflow_source_for_reused_call_ids() -> None:
     settings_a = config(mode="blocklist")
     settings_b = config(mode="blocklist")
     for settings, prefix in ((settings_a, "A"), (settings_b, "B")):
-        settings["variable_encoding"] = "plain"
-        settings["event_templates"]["tool_call"] = {
+        settings["event_outputs"]["tool_call"] = {
             "enabled": True,
-            "template": f"{prefix}-call:{{{{message}}}}",
+            "output_source": output_source(f"{prefix}-call:{{{{message}}}}"),
         }
-        settings["event_templates"]["tool_result"] = {
+        settings["event_outputs"]["tool_result"] = {
             "enabled": True,
-            "template": f"{prefix}-result:{{{{message}}}}",
+            "output_source": output_source(f"{prefix}-result:{{{{message}}}}"),
         }
     pool = OutputEventRectifier(
         WorkflowOutputProjector({"node-a": settings_a, "node-b": settings_b})
@@ -321,14 +239,13 @@ def test_tool_pairing_isolated_by_workflow_source_for_reused_call_ids() -> None:
     ]
 
 
-def test_local_source_flush_does_not_close_another_active_source() -> None:
+def test_complete_streams_are_isolated_by_workflow_source() -> None:
     settings_a = config(mode="blocklist")
     settings_b = config(mode="blocklist")
     for settings, prefix in ((settings_a, "A"), (settings_b, "B")):
-        settings["variable_encoding"] = "plain"
-        settings["event_templates"]["assistant_text"] = {
+        settings["event_outputs"]["assistant_text"] = {
             "enabled": True,
-            "template": f"<{prefix}>{{{{message}}}}</{prefix}>",
+            "output_source": output_source(f"<{prefix}>{{{{message}}}}</{prefix}>"),
         }
     pool = OutputEventRectifier(
         WorkflowOutputProjector({"node-a": settings_a, "node-b": settings_b})
@@ -348,36 +265,28 @@ def test_local_source_flush_does_not_close_another_active_source() -> None:
             stream_id="shared-run:0",
         )
 
-    source_a = pool.event_source_key(event("node-a", "start"))
-    source_b = pool.event_source_key(event("node-b", "start"))
-    assert pool.feed(event("node-a", "start"), now=0.0) == ["<A>"]
-    assert pool.feed(event("node-a", "delta", "a1"), now=0.1) == ["a1"]
-    assert pool.feed(event("node-b", "start"), now=0.2) == []
-    assert pool.feed(event("node-b", "delta", "b1"), now=0.3) == []
-
-    # Closing B while A is active must not close A's wrapper or lose A's state.
-    assert pool.flush_source(source_b) == []
-    assert pool.feed(event("node-a", "delta", "a2"), now=0.4) == ["a2"]
-    assert pool.feed(event("node-a", "end", "a1a2"), now=0.5) == []
-    assert pool.flush_cycle(source_a, "node-a:invocation") == [
-        "</A>",
-        "<B>",
-        "b1",
-        "</B>",
+    assert pool.feed(event("node-a", "start")) == []
+    assert pool.feed(event("node-a", "delta", "a1")) == []
+    assert pool.feed(event("node-b", "start")) == []
+    assert pool.feed(event("node-b", "delta", "b1")) == []
+    assert pool.feed(event("node-a", "delta", "a2")) == []
+    assert pool.feed(event("node-a", "end", "a1a2")) == [
+        "<A>a1a2</A>"
     ]
+    assert pool.feed(event("node-b", "end", "b1")) == ["<B>b1</B>"]
 
 
 def test_pure_tool_output_does_not_require_reasoning_or_text() -> None:
     settings = config(mode="blocklist")
-    settings["event_templates"]["assistant_text"]["enabled"] = False
-    settings["event_templates"]["reasoning"]["enabled"] = False
-    settings["event_templates"]["tool_call"] = {
+    settings["event_outputs"]["assistant_text"]["enabled"] = False
+    settings["event_outputs"]["reasoning"]["enabled"] = False
+    settings["event_outputs"]["tool_call"] = {
         "enabled": True,
-        "template": "CALL={{message}}",
+        "output_source": output_source("CALL={{message}}"),
     }
-    settings["event_templates"]["tool_result"] = {
+    settings["event_outputs"]["tool_result"] = {
         "enabled": True,
-        "template": "RESULT={{message}}",
+        "output_source": output_source("RESULT={{message}}"),
     }
     pool = OutputEventRectifier(OutputProjector(settings))
 
@@ -404,14 +313,13 @@ def test_pure_tool_output_does_not_require_reasoning_or_text() -> None:
 def test_non_streaming_model_messages_use_the_same_tool_pairing_cycle() -> None:
     async def scenario() -> list[str]:
         settings = config(mode="blocklist")
-        settings["variable_encoding"] = "plain"
-        settings["event_templates"]["tool_call"] = {
+        settings["event_outputs"]["tool_call"] = {
             "enabled": True,
-            "template": "<call id={{tool_call_id}}>{{message}}</call>",
+            "output_source": output_source("<call id={{tool_call_id}}>{{message}}</call>"),
         }
-        settings["event_templates"]["tool_result"] = {
+        settings["event_outputs"]["tool_result"] = {
             "enabled": True,
-            "template": "<result id={{tool_call_id}}>{{message}}</result>",
+            "output_source": output_source("<result id={{tool_call_id}}>{{message}}</result>"),
         }
         first_response = AIMessage(
             content="",
@@ -489,22 +397,21 @@ def test_non_streaming_model_messages_use_the_same_tool_pairing_cycle() -> None:
 def test_next_model_start_drains_compat_bridge_order_before_the_new_call() -> None:
     async def scenario() -> list[str]:
         settings = config(mode="blocklist")
-        settings["variable_encoding"] = "plain"
-        settings["event_templates"]["reasoning"] = {
+        settings["event_outputs"]["reasoning"] = {
             "enabled": True,
-            "template": "<reasoning>{{message}}</reasoning>",
+            "output_source": output_source("<reasoning>{{message}}</reasoning>"),
         }
-        settings["event_templates"]["assistant_text"] = {
+        settings["event_outputs"]["assistant_text"] = {
             "enabled": True,
-            "template": "<text>{{message}}</text>",
+            "output_source": output_source("<text>{{message}}</text>"),
         }
-        settings["event_templates"]["tool_call"] = {
+        settings["event_outputs"]["tool_call"] = {
             "enabled": True,
-            "template": "<call>{{message}}</call>",
+            "output_source": output_source("<call>{{message}}</call>"),
         }
-        settings["event_templates"]["tool_result"] = {
+        settings["event_outputs"]["tool_result"] = {
             "enabled": True,
-            "template": "<result>{{message}}</result>",
+            "output_source": output_source("<result>{{message}}</result>"),
         }
         events = [
             message_envelope(
@@ -614,12 +521,8 @@ def test_next_model_start_drains_compat_bridge_order_before_the_new_call() -> No
         return [part async for part in execution.stream_text()]
 
     assert asyncio.run(scenario()) == [
-        "<reasoning>",
-        "think",
-        "</reasoning>",
-        "<text>",
-        "answer",
-        "</text>",
+        "<reasoning>think</reasoning>",
+        "<text>answer</text>",
         '<call>{"path":"README.md"}</call>',
         "<result>file contents</result>",
     ]

@@ -66,10 +66,10 @@ def test_agent_execution_closes_v3_stream_when_consumer_is_cancelled() -> None:
                 return self.run
 
         settings = config(mode="blocklist")
-        settings["event_templates"]["assistant_text"]["enabled"] = False
-        settings["event_templates"]["lifecycle"] = {
+        settings["event_outputs"]["assistant_text"]["enabled"] = False
+        settings["event_outputs"]["lifecycle"] = {
             "enabled": True,
-            "template": "{{message}}",
+            "output_source": output_source(),
         }
         run = BlockingRun()
         execution = AgentExecution(
@@ -131,10 +131,10 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch) -> None:
             "agent_shell.runtime.agent_runtime.EXECUTION_TIMEOUT_SECONDS", 0.01
         )
         settings = config(mode="blocklist")
-        settings["event_templates"]["assistant_text"]["enabled"] = False
-        settings["event_templates"]["lifecycle"] = {
+        settings["event_outputs"]["assistant_text"]["enabled"] = False
+        settings["event_outputs"]["lifecycle"] = {
             "enabled": True,
-            "template": "{{message}}",
+            "output_source": output_source(),
         }
         run = BlockingRun()
         execution = AgentExecution(
@@ -293,10 +293,10 @@ def test_unclassified_graph_failure_is_not_mislabeled_as_provider() -> None:
                 raise RuntimeError("private middleware or graph details")
 
         settings = config(mode="blocklist")
-        settings["event_templates"]["assistant_text"]["enabled"] = False
-        settings["event_templates"]["lifecycle"] = {
+        settings["event_outputs"]["assistant_text"]["enabled"] = False
+        settings["event_outputs"]["lifecycle"] = {
             "enabled": True,
-            "template": "{{message}}",
+            "output_source": output_source(),
         }
         diagnostics = RecordingDiagnostics()
         execution = AgentExecution(
@@ -335,10 +335,10 @@ def test_classified_graph_failure_emits_matching_lifecycle_error() -> None:
                 )
 
         settings = config(mode="blocklist")
-        settings["event_templates"]["assistant_text"]["enabled"] = False
-        settings["event_templates"]["lifecycle"] = {
+        settings["event_outputs"]["assistant_text"]["enabled"] = False
+        settings["event_outputs"]["lifecycle"] = {
             "enabled": True,
-            "template": "{{phase}}:{{error_code}}",
+            "output_source": output_source("{{phase}}:{{error_code}}"),
         }
         execution = AgentExecution(
             graph=Graph(),

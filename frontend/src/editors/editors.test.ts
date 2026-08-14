@@ -18,6 +18,8 @@ import {
   type FilesystemDefaults,
   type FilesystemPermissionsDefaults,
   type OutputModeDefaults,
+  workflowEventOutputAdapter,
+  type WorkflowEventOutputDefaults,
   type PromptCachingDefaults,
   type SkillDefaults,
   type SummarizationDefaults,
@@ -35,6 +37,7 @@ import {
   SkillEditor,
   SummarizationEditor,
   SystemPromptEditor,
+  WorkflowEventOutputEditor,
 } from './index'
 
 const filesystemDefaults: FilesystemDefaults = {
@@ -56,13 +59,24 @@ const filesystemPermissionsDefaults: FilesystemPermissionsDefaults = {
   tools: filesystemDefaults.tools,
 }
 const outputDefaults: OutputModeDefaults = {
-  events: [{ key: 'assistant_text', variables: ['message'] }],
+  events: [{ key: 'assistant_text', fields: ['message'] }],
   filter_fields: ['message'],
   default_value: {
-    filter_mode: 'blocklist', filter_mappings: [], variable_encoding: 'plain',
-    event_templates: {
+    filter_mode: 'blocklist', filter_mappings: [],
+    event_outputs: {
       assistant_text: {
-        enabled: true, template: '{{message}}',
+        enabled: true, output_source: 'def output(event):\n    return event["message"]\n',
+      },
+    },
+  },
+}
+const workflowEventOutputDefaults: WorkflowEventOutputDefaults = {
+  events: [{ key: 'values', fields: ['data'] }],
+  default_value: {
+    event_outputs: {
+      values: {
+        enabled: true,
+        output_source: 'def output(event):\n    return ',
       },
     },
   },
@@ -274,6 +288,39 @@ describe('dedicated block editors', () => {
       global: { plugins: [localizedI18n] },
     })
     expect(output.findAll('[data-action="add-filter-mapping"]')).toHaveLength(1)
+  })
+
+  it('inserts field buttons as Python dict expressions for each event script', async () => {
+    const outputDraft = outputModeAdapter.blank(outputDefaults)
+    outputDraft.event_outputs.assistant_text!.output_source = 'def output(event):\n    return '
+    const output = mount(OutputModeEditor, {
+      props: { modelValue: outputDraft, defaults: outputDefaults },
+      global: { plugins: [localizedI18n] },
+    })
+    await output.get('[data-testid="output-field"]').trigger('click')
+    expect(output.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({
+      event_outputs: {
+        assistant_text: {
+          output_source: 'def output(event):\n    return event["message"]',
+        },
+      },
+    })
+
+    const workflowOutput = mount(WorkflowEventOutputEditor, {
+      props: {
+        modelValue: workflowEventOutputAdapter.blank(workflowEventOutputDefaults),
+        defaults: workflowEventOutputDefaults,
+      },
+      global: { plugins: [localizedI18n] },
+    })
+    await workflowOutput.findAll('button').find((button) => button.text() === 'data')!.trigger('click')
+    expect(workflowOutput.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({
+      event_outputs: {
+        values: {
+          output_source: 'def output(event):\n    return event["data"]',
+        },
+      },
+    })
   })
 
   it('emits model queries and resource refresh requests instead of calling APIs', async () => {

@@ -32,12 +32,14 @@ def test_health_catalog_and_readiness_are_small_and_current(
         "prompt_caching",
         "workflow_input_context",
         "workflow_prepare",
+        "workflow_event_output",
         "condition_router",
     }
     assert [item["type"] for item in catalog["block_types"]] == list(PUBLIC_TYPES)
     assert [item["order"] for item in catalog["block_types"]] == list(range(1, 15))
     assert [item["type"] for item in catalog["workflow_component_types"]] == [
         "workflow-prepare",
+        "workflow-event-output",
         "condition-router",
     ]
     by_type = {item["type"]: item for item in catalog["block_types"]}
@@ -162,7 +164,7 @@ def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) 
                 "tool_description_override"
             ]
         if block_type == "output-mode":
-            assert created["event_templates"] == payload["event_templates"]
+            assert created["event_outputs"] == payload["event_outputs"]
 
         listed = client.get(f"/api/blocks/{block_type}")
         assert listed.status_code == 200
@@ -285,7 +287,7 @@ def test_filesystem_permissions_reject_invalid_or_duplicate_paths(
         assert response.status_code == 422, response.text
 
 
-def test_output_mode_rejects_invalid_filter_and_template_contracts(
+def test_output_mode_rejects_invalid_filter_and_python_script_contracts(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
@@ -296,24 +298,26 @@ def test_output_mode_rejects_invalid_filter_and_template_contracts(
     ]
 
     missing_event = output_mode_payload("Missing event")
-    missing_event["event_templates"].pop("lifecycle")
+    missing_event["event_outputs"].pop("lifecycle")
 
     extra_event = output_mode_payload("Extra event")
-    extra_event["event_templates"]["raw_state"] = {
+    extra_event["event_outputs"]["raw_state"] = {
         "enabled": False,
-        "template": "{{message}}",
+        "output_source": 'def output(event):\n    return event["message"]\n',
     }
 
-    unknown_variable = output_mode_payload("Unknown variable")
-    unknown_variable["event_templates"]["assistant_text"]["template"] = (
-        "{{tool_name}}"
+    wrong_signature = output_mode_payload("Wrong signature")
+    wrong_signature["event_outputs"]["assistant_text"]["output_source"] = (
+        "def output(event, extra):\n    return ''\n"
     )
 
-    empty_enabled_template = output_mode_payload("Empty enabled template")
-    empty_enabled_template["event_templates"]["assistant_text"]["template"] = ""
+    async_script = output_mode_payload("Async output")
+    async_script["event_outputs"]["assistant_text"]["output_source"] = (
+        "async def output(event):\n    return ''\n"
+    )
 
     legacy_template = output_mode_payload("Legacy template")
-    legacy_template["event_templates"]["assistant_text"]["start_template"] = (
+    legacy_template["event_outputs"]["assistant_text"]["start_template"] = (
         "<assistant>"
     )
 
@@ -321,31 +325,28 @@ def test_output_mode_rejects_invalid_filter_and_template_contracts(
         invalid_mapping,
         missing_event,
         extra_event,
-        unknown_variable,
-        empty_enabled_template,
+        wrong_signature,
+        async_script,
         legacy_template,
     ):
         response = client.post("/api/blocks/output-mode", json=payload)
         assert response.status_code == 422, (payload["name"], response.text)
 
 
-def test_output_mode_reports_the_exact_malformed_event_template(
+def test_output_mode_reports_the_exact_malformed_event_script(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
-    payload = output_mode_payload("Malformed assistant template")
-    payload["event_templates"]["assistant_text"]["template"] = "{{message}"
+    payload = output_mode_payload("Malformed assistant script")
+    payload["event_outputs"]["assistant_text"]["output_source"] = (
+        "def output(event):\n    return (\n"
+    )
 
     response = client.post("/api/blocks/output-mode", json=payload)
 
     assert response.status_code == 422, response.text
     issue = response.json()["detail"]["validation"]["issues"][0]
-    assert issue["code"] == "contract.output_template_malformed"
-    assert issue["path"] == "event_templates.assistant_text.template"
-    assert issue["message_key"] == (
-        "validation.issue.contract.outputTemplateMalformed"
-    )
-    assert issue["message_args"] == {"event_name": "assistant_text"}
+    assert issue["path"] == "event_outputs.assistant_text.output_source"
 
 
 def test_output_mode_accepts_a_custom_filter_field(

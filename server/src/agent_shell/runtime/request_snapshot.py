@@ -20,10 +20,6 @@ from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.validation.assembly import StaticAssembly
 from agent_shell.validation.models import ValidationReport
 from agent_shell.validation.service import ConfigurationValidationService
-from agent_shell.workflow_event_output import (
-    WorkflowEventOutputSettings,
-    WorkflowEventOutputSettingsStore,
-)
 
 
 @dataclass(slots=True)
@@ -34,7 +30,6 @@ class RequestRuntimeSnapshot:
     _workflows: WorkflowStore
     _validation: ConfigurationValidationService
     _runtime: AgentRuntime
-    _workflow_event_output: WorkflowEventOutputSettings
 
     def main_agent_by_name(self, name: str) -> dict[str, Any] | None:
         return self._configs.get_item_by_name("main_agents", name)
@@ -60,7 +55,6 @@ class RequestRuntimeSnapshot:
         document = self._workflows.get_graph(str(workflow["id"]))
         if document is None:
             raise RuntimeError("the captured Workflow no longer exists")
-        kwargs["workflow_non_agent_filter"] = self._workflow_event_output.allows
         return await self._runtime.start_workflow(
             document,
             raw_messages,
@@ -101,7 +95,6 @@ class RequestSnapshotRuntime:
         blocks = BlockStore(repository)
         configs = AgentConfigStore(repository)
         workflows = WorkflowStore(repository)
-        workflow_event_output = WorkflowEventOutputSettingsStore(repository).snapshot()
         secrets = ProviderSecretResolver(repository)
         middleware_package_validation = MiddlewarePackageValidationService(
             packages_dir=self._middleware_packages_dir,
@@ -133,5 +126,4 @@ class RequestSnapshotRuntime:
             _workflows=workflows,
             _validation=validation,
             _runtime=runtime,
-            _workflow_event_output=workflow_event_output,
         )

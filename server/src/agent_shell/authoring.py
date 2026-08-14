@@ -10,9 +10,9 @@ from agent_shell.contracts import (
     ExceptionRetryBlock,
     FilesystemBlock,
     FilesystemToolConfigs,
-    OUTPUT_COMMON_TEMPLATE_VARIABLES,
+    OUTPUT_COMMON_FIELDS,
     OUTPUT_EVENT_NAMES,
-    OUTPUT_EVENT_TEMPLATE_VARIABLES,
+    OUTPUT_EVENT_FIELDS,
     PromptCachingBlock,
     SKILL_PROMPT_FIELDS,
     SummarizationBlock,
@@ -21,6 +21,12 @@ from agent_shell.plugins.workflow_input_context.contracts import (
     WorkflowInputContextBlock,
 )
 from agent_shell.workflow_prepare import WorkflowPrepareBlock
+from agent_shell.workflow_event_output import (
+    DEFAULT_OUTPUT_SOURCE,
+    WORKFLOW_EVENT_FIELDS,
+    WORKFLOW_EVENT_NAMES,
+    WorkflowEventOutputBlock,
+)
 from agent_shell.condition_router import ConditionRouterBlock
 
 
@@ -322,60 +328,6 @@ _OUTPUT_EVENT_UI = {
     "lifecycle": ("运行状态", "整次执行的开始、正常结束和错误状态。"),
 }
 
-_OUTPUT_TEMPLATES: dict[str, str] = {
-    "assistant_text": "{{message}}",
-    "reasoning": (
-        "<details><summary>*Reasoning*</summary>\n"
-        "{{message}}\n\n"
-        "*name={{agent_name}}* | *seq={{sequence}}* | *id={{message_id}}*\n"
-        "─────────\n"
-        "</details>\n"
-    ),
-    "tool_call": (
-        "<details><summary>*Tool Call {{tool_name}}*</summary>\n"
-        "{{message}}\n\n"
-        "*event={{phase}}* | *seq={{sequence}}* | *id={{tool_call_id}}*\n"
-        "─────────\n"
-        "</details>\n"
-    ),
-    "tool_result": (
-        "<details><summary>*Tool Result {{tool_name}}*</summary>\n"
-        "{{message}}\n\n"
-        "*status={{status}}* | *seq={{sequence}}* | *id={{tool_call_id}}*\n"
-        "─────────\n"
-        "</details>\n"
-    ),
-    "tool_error": (
-        "<details><summary>*Tool Error {{tool_name}}*</summary>\n"
-        "{{message}}\n\n"
-        "*status={{status}}* | *code={{error_code}}* | *seq={{sequence}}* | *id={{tool_call_id}}*\n"
-        "─────────\n"
-        "</details>\n"
-    ),
-    "subagent": (
-        "<details><summary>*Subagent {{subagent_name}}*</summary>\n"
-        "{{message}}\n\n"
-        "*event={{phase}}* | *status={{status}}* | *seq={{sequence}}* | *call={{tool_call_id}}*\n"
-        "─────────\n"
-        "</details>\n"
-    ),
-    "custom": (
-        "<details><summary>*Custom {{channel}}*</summary>\n"
-        "{{message}}\n\n"
-        "*event={{phase}}* | *seq={{sequence}}*\n"
-        "─────────\n"
-        "</details>\n"
-    ),
-    "lifecycle": (
-        "<details><summary>*Agent Status {{status}}*</summary>\n"
-        "{{message}}\n\n"
-        "*event={{phase}}* | *seq={{sequence}}* | *finish={{finish_reason}}* | *code={{error_code}}*\n"
-        "─────────\n"
-        "</details>\n"
-    ),
-}
-
-
 def _filesystem_tools() -> list[dict[str, object]]:
     defaults = FilesystemToolConfigs().model_dump(mode="json")
     return [
@@ -396,9 +348,9 @@ def _output_events() -> list[dict[str, object]]:
             "key": name,
             "label": _OUTPUT_EVENT_UI[name][0],
             "description": _OUTPUT_EVENT_UI[name][1],
-            "variables": [
-                *OUTPUT_COMMON_TEMPLATE_VARIABLES,
-                *OUTPUT_EVENT_TEMPLATE_VARIABLES[name],
+            "fields": [
+                *OUTPUT_COMMON_FIELDS,
+                *OUTPUT_EVENT_FIELDS[name],
             ],
         }
         for name in OUTPUT_EVENT_NAMES
@@ -406,35 +358,56 @@ def _output_events() -> list[dict[str, object]]:
 
 
 def _filter_fields() -> list[str]:
-    unscoped = list(OUTPUT_COMMON_TEMPLATE_VARIABLES)
+    unscoped = [field for field in OUTPUT_COMMON_FIELDS if field != "data"]
     for name in OUTPUT_EVENT_NAMES:
-        for variable in OUTPUT_EVENT_TEMPLATE_VARIABLES[name]:
+        for variable in OUTPUT_EVENT_FIELDS[name]:
             if variable not in unscoped:
                 unscoped.append(variable)
     scoped = [
         f"{name}.{variable}"
         for name in OUTPUT_EVENT_NAMES
         for variable in (
-            *OUTPUT_COMMON_TEMPLATE_VARIABLES,
-            *OUTPUT_EVENT_TEMPLATE_VARIABLES[name],
+            *(field for field in OUTPUT_COMMON_FIELDS if field != "data"),
+            *OUTPUT_EVENT_FIELDS[name],
         )
     ]
     return [*unscoped, *scoped]
 
 
 def _output_mode_default() -> dict[str, object]:
-    event_templates = {
+    event_outputs = {
         name: {
             "enabled": True,
-            "template": _OUTPUT_TEMPLATES[name],
+            "output_source": DEFAULT_OUTPUT_SOURCE,
         }
         for name in OUTPUT_EVENT_NAMES
     }
     return {
         "filter_mode": "blocklist",
         "filter_mappings": [],
-        "variable_encoding": "plain",
-        "event_templates": event_templates,
+        "event_outputs": event_outputs,
+    }
+
+
+def _workflow_event_output_default() -> dict[str, object]:
+    return {
+        "events": [
+            {
+                "key": name,
+                "fields": [*OUTPUT_COMMON_FIELDS, *WORKFLOW_EVENT_FIELDS[name]],
+            }
+            for name in WORKFLOW_EVENT_NAMES
+        ],
+        "default_value": WorkflowEventOutputBlock(
+            name="Event output",
+            event_outputs={
+                name: {
+                    "enabled": name in {"custom", "lifecycle"},
+                    "output_source": DEFAULT_OUTPUT_SOURCE,
+                }
+                for name in WORKFLOW_EVENT_NAMES
+            },
+        ).model_dump(mode="json", exclude={"name"}),
     }
 
 
@@ -503,6 +476,7 @@ _EDITOR_DEFAULTS = {
     "workflow_prepare": WorkflowPrepareBlock(name="Workflow prepare").model_dump(
         mode="json", exclude={"name"}
     ),
+    "workflow_event_output": _workflow_event_output_default(),
     "condition_router": ConditionRouterBlock(name="Condition router").model_dump(
         mode="json", exclude={"name"}
     ),

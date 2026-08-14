@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from types import SimpleNamespace
 
 import httpx
@@ -37,6 +38,20 @@ EVENT_TYPES = (
 )
 
 
+def output_source(template: str = "{{message}}") -> str:
+    parts: list[str] = []
+    cursor = 0
+    for match in re.finditer(r"{{\s*([^{}]+?)\s*}}", template):
+        if match.start() > cursor:
+            parts.append(repr(template[cursor:match.start()]))
+        parts.append(f"str(event.get({match.group(1).strip()!r}, ''))")
+        cursor = match.end()
+    if cursor < len(template):
+        parts.append(repr(template[cursor:]))
+    expression = " + ".join(parts) or "''"
+    return f"def output(event):\n    return {expression}\n"
+
+
 @pytest.fixture
 def provider_http_clients():
     def handler(request: httpx.Request) -> httpx.Response:
@@ -59,16 +74,15 @@ def config(
     *,
     mode: str,
     mappings: list[dict[str, str]] | None = None,
-    template: str = "{{message}}",
+    source: str | None = None,
 ) -> dict:
     return {
         "filter_mode": mode,
         "filter_mappings": mappings or [],
-        "variable_encoding": "html",
-        "event_templates": {
+        "event_outputs": {
             event_type: {
                 "enabled": event_type == "assistant_text",
-                "template": template,
+                "output_source": source or output_source(),
             }
             for event_type in EVENT_TYPES
         },

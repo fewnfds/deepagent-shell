@@ -23,7 +23,6 @@ import type {
   HealthResponse,
   ManagementEvent,
   Workflow,
-  WorkflowEventOutputSettings,
   WorkflowGraphDocument,
   WorkflowNodeCatalogItem,
   WorkflowPayload,
@@ -116,19 +115,6 @@ export const managementApi = {
 
   listWorkflows(): Promise<Workflow[]> {
     return managementRequest('/api/workflows')
-  },
-
-  getWorkflowEventOutput(): Promise<WorkflowEventOutputSettings> {
-    return managementRequest('/api/workflow-event-output')
-  },
-
-  updateWorkflowEventOutput(
-    payload: WorkflowEventOutputSettings,
-  ): Promise<WorkflowEventOutputSettings> {
-    return managementRequest('/api/workflow-event-output', {
-      method: 'PUT',
-      body: JSON.stringify(payload),
-    })
   },
 
   listWorkflowNodeCatalog(): Promise<WorkflowNodeCatalogItem[]> {

@@ -16,10 +16,11 @@
 | 12 | [上下文摘要](summarization-config.md) | `summarization` |
 | 13 | [Prompt 缓存](prompt-caching-config.md) | `prompt-caching` |
 | 14 | [Workflow 输入上下文](workflow-input-context-config.md) | `workflow-input-context` |
-| Workflow | [Workflow Prepare](workflow-prepare-config.md) | `workflow-prepare` |
+| Workflow | [准备](workflow-prepare-config.md) | `workflow-prepare` |
+| Workflow | [事件输出](workflow-event-output-config.md) | `workflow-event-output` |
 | Workflow | [条件路由](condition-router-config.md) | `condition-router` |
 
-模型和输出模式是 Main Agent 必选组件；Filesystem 由 Workflow 必选，Workflow Prepare 由 Workflow 可选绑定；条件路由由画布 Node 引用；
+模型和输出模式是 Main Agent 必选组件；Filesystem 由 Workflow 必选，准备和事件输出由 Workflow 可选绑定；条件路由由画布 Node 引用；
 Main/Sub 只显示锁定继承 Filesystem。其余 Agent capability 按需引用。
 组件使用 UUID 建立引用；名称用于显示。
 编辑页提供草稿校验、新建、重置和保存，删除集中在配置仓库。
