@@ -106,7 +106,7 @@ export const zhCN = {
     credentials: '访问凭据',
     managementPassword: '管理密码',
     runtimeControls: 'API 与运行',
-    validationDebounceMs: '配置报警间隔（毫秒）',
+    validationDebounceMs: '配置报警间隔',
     langsmith: {
       title: 'LangSmith',
       tracing: '启用',
@@ -165,7 +165,7 @@ export const zhCN = {
       defaultCard: '基础 Card',
       defaultCardDetail: '普通内容区，适合单一配置任务。',
       actionCard: '带操作区 Card',
-      actionCardDetail: '页脚承载保存或其他明确提交动作。',
+      actionCardDetail: '标题栏操作贴近 Card 末端。',
       alertCard: '告警 Card',
       alertCardDetail: '只在确有错误状态时使用危险色。',
       name: '名称',

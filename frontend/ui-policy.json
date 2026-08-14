@@ -393,7 +393,7 @@
         "name": "FormField",
         "path": "src/components/FormField.vue",
         "kind": "domain-composition",
-        "reason": "Owns localized backend field labels, technical field names and contextual hints without wrapping controls",
+        "reason": "Owns localized field labels and accessible label, help and error relationships without wrapping controls",
         "callers": [
           "src/components/RecordPicker.vue",
           "src/editors/ExceptionRetryEditor.vue",
@@ -407,6 +407,8 @@
           "src/editors/WorkflowInputContextEditor.vue",
           "src/components/workflow/WorkflowInspector.vue",
           "src/pages/ConfigLibraryPage.vue",
+          "src/pages/StyleLabPage.vue",
+          "src/pages/SystemSettingsPage.vue",
           "src/pages/WorkflowsPage.vue"
         ]
       },

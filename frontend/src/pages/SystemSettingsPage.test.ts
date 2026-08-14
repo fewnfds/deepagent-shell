@@ -47,6 +47,7 @@ function validationSettings(debounceMs: number): ConfigurationValidationSettings
 
 describe('SystemSettingsPage', () => {
   it('loads and saves the shared configuration alert interval', async () => {
+    i18n.global.locale.value = 'zh-CN'
     const api = {
       getSystemSettings: vi.fn(async () => systemSettings),
       updateSystemSettings: vi.fn(async () => systemSettings),
@@ -63,6 +64,9 @@ describe('SystemSettingsPage', () => {
 
     const interval = wrapper.get('#configuration-validation-debounce')
     expect((interval.element as HTMLInputElement).value).toBe('1000')
+    expect(wrapper.get('label[for="configuration-validation-debounce"]').text()).toBe('配置报警间隔')
+    expect(interval.attributes('aria-describedby')).toBe('configuration-validation-debounce-unit')
+    expect(wrapper.get('#configuration-validation-debounce-unit').text()).toBe('ms')
 
     await interval.setValue('500')
     await wrapper.get('#system-settings-form').trigger('submit')

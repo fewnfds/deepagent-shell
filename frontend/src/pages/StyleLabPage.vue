@@ -4,6 +4,7 @@ import { LteAlert, LteButton, LteCard, LteProgress } from '@adminlte/vue'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
+import FormField from '@/components/FormField.vue'
 import PageShell from '@/components/PageShell.vue'
 import '@/styles/style-lab.css'
 
@@ -13,6 +14,7 @@ const demoSwitch = ref(true)
 const demoCheck = ref(true)
 const demoName = ref('local-model')
 const demoProvider = ref('openai')
+const demoInterval = ref(1000)
 const demoDescription = ref(t('styleLab.samples.descriptionValue'))
 const paletteLabel = computed(() => t(`styleLab.palettes.${palette.value}`))
 
@@ -120,21 +122,46 @@ function remix(): void {
               <option value="custom">OpenAI-compatible</option>
             </select>
           </div>
-          <div class="lab-form-span">
-            <label class="form-label" for="lab-endpoint">{{ t('styleLab.samples.endpoint') }}</label>
+          <FormField
+            class="lab-form-span"
+            control-id="lab-alert-interval"
+            field-path="debounce_ms"
+            label-key="systemSettings.validationDebounceMs"
+          >
             <div class="input-group">
-              <span class="input-group-text">HTTPS</span>
-              <input id="lab-endpoint" class="form-control font-monospace" value="api.example.com/v1">
+              <input
+                id="lab-alert-interval"
+                v-model.number="demoInterval"
+                aria-describedby="lab-alert-interval-unit"
+                class="form-control"
+                min="100"
+                step="100"
+                type="number"
+              >
+              <span id="lab-alert-interval-unit" class="input-group-text">ms</span>
             </div>
-          </div>
+          </FormField>
           <div>
             <label class="form-label" for="lab-description">{{ t('styleLab.samples.description') }}</label>
             <textarea id="lab-description" v-model="demoDescription" class="form-control" rows="4" />
           </div>
-          <div>
-            <label class="form-label" for="lab-invalid">{{ t('styleLab.samples.configurationName') }}</label>
-            <input id="lab-invalid" aria-invalid="true" class="form-control is-invalid" required value="">
-          </div>
+          <FormField
+            control-id="lab-invalid"
+            :error="t('styleLab.samples.invalid')"
+            field-path="name"
+            label-key="styleLab.samples.configurationName"
+          >
+            <template #default="{ describedBy }">
+              <input
+                id="lab-invalid"
+                :aria-describedby="describedBy"
+                aria-invalid="true"
+                class="form-control is-invalid"
+                required
+                value=""
+              >
+            </template>
+          </FormField>
           <div>
             <label class="form-label" for="lab-readonly">{{ t('styleLab.samples.readonly') }}</label>
             <input id="lab-readonly" class="form-control" readonly value="agent-shell">
@@ -163,15 +190,20 @@ function remix(): void {
             <p class="card-text text-body-secondary">{{ t('styleLab.samples.defaultCardDetail') }}</p>
           </LteCard>
           <article class="card card-primary h-100">
-            <header class="card-header">
+            <header class="card-header d-flex align-items-center gap-2">
               <h3 class="card-title">{{ t('styleLab.samples.actionCard') }}</h3>
+              <button
+                class="btn btn-secondary btn-sm ms-auto"
+                type="button"
+                :aria-label="t('common.edit')"
+                :title="t('common.edit')"
+              >
+                <i class="bi bi-pencil" aria-hidden="true" />
+              </button>
             </header>
             <div class="card-body">
               <p class="card-text text-body-secondary">{{ t('styleLab.samples.actionCardDetail') }}</p>
             </div>
-            <footer class="card-footer d-flex justify-content-end">
-              <button class="btn btn-primary btn-sm" type="button">{{ t('common.save') }}</button>
-            </footer>
           </article>
           <article class="card card-outline card-danger h-100">
             <header class="card-header">

@@ -16,6 +16,7 @@ import {
   type SystemSettings,
   type SystemSettingsUpdate,
 } from '@/api'
+import FormField from '@/components/FormField.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useConfigurationValidationSettings } from '@/composables/useConfigurationValidationSettings'
 import { useManagementError } from '@/composables/useManagementError'
@@ -402,21 +403,26 @@ onMounted(() => { void load() })
                 >
               </div>
 
-              <div>
-                <label class="form-label" for="configuration-validation-debounce">
-                  {{ fieldLabel('systemSettings.validationDebounceMs', 'debounce_ms') }}
-                </label>
-                <input
-                  id="configuration-validation-debounce"
-                  v-model.number="validationDebounceMs"
-                  class="form-control"
-                  :max="validationDebounceMax"
-                  :min="validationDebounceMin"
-                  required
-                  step="100"
-                  type="number"
-                >
-              </div>
+              <FormField
+                control-id="configuration-validation-debounce"
+                field-path="debounce_ms"
+                label-key="systemSettings.validationDebounceMs"
+              >
+                <div class="input-group">
+                  <input
+                    id="configuration-validation-debounce"
+                    v-model.number="validationDebounceMs"
+                    aria-describedby="configuration-validation-debounce-unit"
+                    class="form-control"
+                    :max="validationDebounceMax"
+                    :min="validationDebounceMin"
+                    required
+                    step="100"
+                    type="number"
+                  >
+                  <span id="configuration-validation-debounce-unit" class="input-group-text">ms</span>
+                </div>
+              </FormField>
 
             </div>
           </section>

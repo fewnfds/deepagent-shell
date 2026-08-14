@@ -31,13 +31,13 @@
 
 1. 判断任务属于 API/领域、页面编排、产品行为 host 还是壳层/主题。
 2. 读取 `ui-policy.json` 中对应组件、class recipe、图标和路径例外。
-3. 按任务读取正式参考页，不通过全仓搜索随机挑页面模仿：表单页用
-   `src/pages/SystemSettingsPage.vue`，高密度实时页用 `src/pages/EventFeedPage.vue`，复杂配置工作区用
-   `src/pages/ComponentsPage.vue` 及其 `src/editors/`。只复用对应职责和批准 recipe，不整页复制。
-4. 直接复用批准组件和 recipe。没有匹配项时停止新增视觉能力，向用户说明真实场景并申请批准。
+3. `ui-patterns/README.md` 是唯一渐进式范式索引；按需求只读取它命中的 pattern 和参考页，不通过全仓搜索随机模仿。
+4. 直接复用索引指向的批准组件或 recipe。没有匹配项时停止新增视觉能力，向用户说明真实场景并申请批准。
 5. 获批后更新 `ui-policy.json` 中实际需要的组件、class、图标或路径白名单，再实现。只有形成跨页面、
    长期有效的设计原则或架构边界时才更新 UI contract；局部列宽、间距、颜色、对齐和页面微调不写入
    Agent 提示词。
+
+`ui-policy.json` 只承担静态门禁，Style Lab 只承担渲染验收；二者不是另一套渐进式写法说明。
 
 正常复用批准项、修复 bug、机械模板绑定和 API 调整不需要重复审批。
 
@@ -60,6 +60,8 @@
   不建立 Button/Input/Card wrapper、schema form、页面 builder、组件 registry 或 Storybook。
 - 页面和 editor 不写 `<style>`、`style=`、硬编码颜色、未知 class 或动态视觉 class。唯一项目样式入口是
   policy 指定的 `src/styles/management-console.css`；确有缺口必须先批准并记录。
+- 数值输入需要声明单位时，使用 Bootstrap `input-group`，在输入框后以 `input-group-text` 显示单位，并通过
+  `aria-describedby` 关联；单位不得写入标题、label 括号、帮助备注或 tooltip。
 - 图标只用 policy 中批准的 Bootstrap Icons。icon-only button 必须有清楚的可访问名称，简单英文可接受。
 - 未经用户明确要求，页面不得增加裸超链接。产品说明、连接参考和外部服务入口写入 `docs/` 说明书；真实站内
   导航或下载等产品动作使用已有导航、按钮或菜单范式。

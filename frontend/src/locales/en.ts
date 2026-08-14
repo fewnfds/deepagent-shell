@@ -108,7 +108,7 @@ export const en: MessageSchema = {
     credentials: 'Access credentials',
     managementPassword: 'Management password',
     runtimeControls: 'API and runtime',
-    validationDebounceMs: 'Configuration alert interval (ms)',
+    validationDebounceMs: 'Configuration alert interval',
     langsmith: {
       title: 'LangSmith',
       tracing: 'Enable',
@@ -167,7 +167,7 @@ export const en: MessageSchema = {
       defaultCard: 'Basic card',
       defaultCardDetail: 'A plain content area for one configuration task.',
       actionCard: 'Card with actions',
-      actionCardDetail: 'The footer owns save or another explicit submission action.',
+      actionCardDetail: 'The header action is anchored to the card edge.',
       alertCard: 'Alert card',
       alertCardDetail: 'Danger color is reserved for a real error state.',
       name: 'Name',

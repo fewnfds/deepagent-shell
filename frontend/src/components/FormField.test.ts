@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
+import { h } from 'vue'
 
 import FormField from './FormField.vue'
 import { i18n } from '@/locales'
@@ -50,5 +51,29 @@ describe('FormField', () => {
 
     expect(wrapper.get('.form-label').text()).toBe('middlewares.0.source')
     expect(wrapper.get('.form-label').classes()).toContain('font-monospace')
+  })
+
+  it('associates the label, help and error with an identified control', () => {
+    i18n.global.locale.value = 'en'
+    const wrapper = mount(FormField, {
+      props: {
+        controlId: 'timeout',
+        error: 'Choose a valid timeout.',
+        fieldPath: 'timeout',
+        hint: 'Measured in seconds.',
+      },
+      slots: {
+        default: ({ describedBy }: { describedBy?: string }) => h('input', {
+          id: 'timeout',
+          'aria-describedby': describedBy,
+        }),
+      },
+      global: { plugins: [i18n] },
+    })
+
+    expect(wrapper.get('label').attributes('for')).toBe('timeout')
+    expect(wrapper.get('input').attributes('aria-describedby')).toBe('timeout-help timeout-error')
+    expect(wrapper.get('[data-ui-slot="help"]').attributes('id')).toBe('timeout-help')
+    expect(wrapper.get('[data-ui-slot="error"]').attributes('id')).toBe('timeout-error')
   })
 })
