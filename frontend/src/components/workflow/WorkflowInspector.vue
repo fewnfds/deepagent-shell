@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type { MainAgent, WorkflowNodeHandleSpec } from '@/api'
+import type { MainAgent, SavedBlock, WorkflowNodeHandleSpec } from '@/api'
 import FormField from '@/components/FormField.vue'
 import type {
   WorkflowCanvasEdge,
@@ -18,6 +18,7 @@ const props = defineProps<{
   edgeTypeOptions: WorkflowCanvasEdgeType[]
   inputEndpoints: WorkflowNodeHandleSpec[]
   mainAgents: MainAgent[]
+  conditionRouters: SavedBlock[]
   node: WorkflowCanvasNode | null
   outputEndpoints: WorkflowNodeHandleSpec[]
   stateContract: string
@@ -32,13 +33,14 @@ const emit = defineEmits<{
   selectEdgeType: [edgeId: string, edgeType: WorkflowCanvasEdgeType]
   toggle: []
   updateAgent: [nodeId: string, mainAgentId: string]
+  updateConditionRouter: [nodeId: string, conditionRouterId: string]
+  updateBranchKey: [edgeId: string, branchKey: string]
   updateDefer: [nodeId: string, defer: boolean]
 }>()
 
 const { t } = useI18n()
-
 const contextTitle = computed(() => {
-  if (props.node) return t(`workflows.editor.${props.node.data.nodeType}`)
+  if (props.node) return t(`workflows.editor.${props.node.data.nodeType === 'condition-router' ? 'conditionRouter' : props.node.data.nodeType}`)
   if (props.edge) return edgeTypeLabel(props.edge.data?.edgeType ?? '')
   return t('workflows.editor.workflowProperties')
 })
@@ -46,11 +48,13 @@ const edgeSourceOptions = computed(() => props.edgeSourceEndpoints.filter((endpo
   endpoint.edge_type === props.edge?.data?.edgeType
 )))
 const edgeTargetOptions = computed(() => props.edgeTargetEndpoints.filter((endpoint) => (
-  endpoint.edge_type === props.edge?.data?.edgeType
+  (endpoint.accepted_edge_types ?? [endpoint.edge_type]).includes(props.edge?.data?.edgeType ?? '')
 )))
 
 function edgeTypeLabel(edgeType: string): string {
-  return edgeType === 'normal' ? t('workflows.editor.normalEdge') : edgeType
+  if (edgeType === 'normal') return t('workflows.editor.normalEdge')
+  if (edgeType === 'branch') return t('workflows.editor.branchEdge')
+  return edgeType
 }
 
 function endpointLabel(endpoint: WorkflowNodeHandleSpec): string {
@@ -62,9 +66,19 @@ function updateAgent(event: Event): void {
   emit('updateAgent', props.node.id, (event.target as HTMLSelectElement).value)
 }
 
+function updateConditionRouter(event: Event): void {
+  if (!props.node || props.node.data.nodeType !== 'condition-router') return
+  emit('updateConditionRouter', props.node.id, (event.target as HTMLSelectElement).value)
+}
+
 function updateDefer(event: Event): void {
   if (!props.node || props.node.data.nodeType !== 'agent') return
   emit('updateDefer', props.node.id, (event.target as HTMLInputElement).checked)
+}
+
+function updateBranchKey(event: Event): void {
+  if (!props.edge || props.edge.data?.edgeType !== 'branch') return
+  emit('updateBranchKey', props.edge.id, (event.target as HTMLInputElement).value)
 }
 
 function selectEdgeType(event: Event): void {
@@ -75,13 +89,11 @@ function selectEdgeType(event: Event): void {
 }
 
 function selectEdgeSourceEndpoint(event: Event): void {
-  if (!props.edge) return
-  emit('selectEdgeSourceEndpoint', props.edge.id, (event.target as HTMLSelectElement).value)
+  if (props.edge) emit('selectEdgeSourceEndpoint', props.edge.id, (event.target as HTMLSelectElement).value)
 }
 
 function selectEdgeTargetEndpoint(event: Event): void {
-  if (!props.edge) return
-  emit('selectEdgeTargetEndpoint', props.edge.id, (event.target as HTMLSelectElement).value)
+  if (props.edge) emit('selectEdgeTargetEndpoint', props.edge.id, (event.target as HTMLSelectElement).value)
 }
 </script>
 
@@ -98,156 +110,55 @@ function selectEdgeTargetEndpoint(event: Event): void {
         <i v-if="collapsed" class="bi bi-sliders" aria-hidden="true" />
         <i v-else class="bi bi-chevron-right" aria-hidden="true" />
       </button>
-      <h2 v-if="!collapsed" class="workflow-sidebar-title">
-        {{ $t('workflows.editor.inspector') }}
-      </h2>
+      <h2 v-if="!collapsed" class="workflow-sidebar-title">{{ $t('workflows.editor.inspector') }}</h2>
     </header>
 
     <div v-if="!collapsed" class="workflow-sidebar-body">
       <h3 class="workflow-inspector-context">{{ contextTitle }}</h3>
-
       <template v-if="node">
-        <div class="workflow-inspector-field">
-          <span class="workflow-inspector-label">{{ $t('workflows.editor.nodeId') }}</span>
-          <span class="workflow-inspector-value">{{ node.id }}</span>
-        </div>
-        <div class="workflow-inspector-field">
-          <span class="workflow-inspector-label">{{ $t('workflows.editor.nodeType') }}</span>
-          <span class="workflow-inspector-value">{{ node.data.nodeType }}</span>
-        </div>
-        <div class="workflow-inspector-field">
-          <span class="workflow-inspector-label">{{ $t('workflows.editor.typeVersion') }}</span>
-          <span class="workflow-inspector-value">1</span>
-        </div>
-        <div
-          v-for="endpoint in inputEndpoints"
-          :key="`input-${endpoint.id}`"
-          class="workflow-inspector-field"
-        >
-          <span class="workflow-inspector-label">{{ $t('workflows.editor.inputEndpoint') }}</span>
-          <span class="workflow-inspector-value">{{ endpointLabel(endpoint) }}</span>
-        </div>
-        <div
-          v-for="endpoint in outputEndpoints"
-          :key="`output-${endpoint.id}`"
-          class="workflow-inspector-field"
-        >
-          <span class="workflow-inspector-label">{{ $t('workflows.editor.outputEndpoint') }}</span>
-          <span class="workflow-inspector-value">{{ endpointLabel(endpoint) }}</span>
-        </div>
+        <div class="workflow-inspector-field"><span class="workflow-inspector-label">{{ $t('workflows.editor.nodeId') }}</span><span class="workflow-inspector-value">{{ node.id }}</span></div>
+        <div class="workflow-inspector-field"><span class="workflow-inspector-label">{{ $t('workflows.editor.nodeType') }}</span><span class="workflow-inspector-value">{{ node.data.nodeType }}</span></div>
+        <div class="workflow-inspector-field"><span class="workflow-inspector-label">{{ $t('workflows.editor.typeVersion') }}</span><span class="workflow-inspector-value">1</span></div>
+        <div v-for="endpoint in inputEndpoints" :key="`input-${endpoint.id}`" class="workflow-inspector-field"><span class="workflow-inspector-label">{{ $t('workflows.editor.inputEndpoint') }}</span><span class="workflow-inspector-value">{{ endpointLabel(endpoint) }}</span></div>
+        <div v-for="endpoint in outputEndpoints" :key="`output-${endpoint.id}`" class="workflow-inspector-field"><span class="workflow-inspector-label">{{ $t('workflows.editor.outputEndpoint') }}</span><span class="workflow-inspector-value">{{ endpointLabel(endpoint) }}</span></div>
 
         <template v-if="node.data.nodeType === 'agent'">
-          <FormField
-            field-path="definition.nodes[].config.main_agent_id"
-            label-key="workflows.editor.mainAgent"
-          >
-            <select
-              class="form-select workflow-inspector-select"
-              :value="node.data.mainAgentId"
-              @change="updateAgent"
-            >
-              <option v-if="mainAgents.length === 0" value="">
-                {{ $t('workflows.editor.noMainAgents') }}
-              </option>
-              <option v-for="agent in mainAgents" :key="agent.id" :value="agent.id">
-                {{ agent.name }}
-              </option>
+          <FormField field-path="definition.nodes[].config.main_agent_id" label-key="workflows.editor.mainAgent">
+            <select class="form-select workflow-inspector-select" :value="node.data.mainAgentId" @change="updateAgent">
+              <option v-if="mainAgents.length === 0" value="">{{ $t('workflows.editor.noMainAgents') }}</option>
+              <option v-for="agent in mainAgents" :key="agent.id" :value="agent.id">{{ agent.name }}</option>
             </select>
           </FormField>
-          <FormField
-            field-path="definition.nodes[].config.defer"
-            label-key="workflows.editor.defer"
-          >
-            <div class="form-check form-switch">
-              <input
-                id="workflow-node-defer"
-                class="form-check-input"
-                type="checkbox"
-                :checked="node.data.defer"
-                @change="updateDefer"
-              >
-              <label class="form-check-label" for="workflow-node-defer">
-                {{ $t('workflows.editor.deferEnabled') }}
-              </label>
-            </div>
+          <FormField field-path="definition.nodes[].config.defer" label-key="workflows.editor.defer">
+            <div class="form-check form-switch"><input id="workflow-node-defer" class="form-check-input" type="checkbox" :checked="node.data.defer" @change="updateDefer"><label class="form-check-label" for="workflow-node-defer">{{ $t('workflows.editor.deferEnabled') }}</label></div>
           </FormField>
-          <button class="workflow-inspector-delete" type="button" @click="emit('removeNode', node.id)">
-            <i class="bi bi-trash" aria-hidden="true" />
-            {{ $t('workflows.editor.removeAgent') }}
-          </button>
+          <button class="workflow-inspector-delete" type="button" @click="emit('removeNode', node.id)"><i class="bi bi-trash" aria-hidden="true" />{{ $t('workflows.editor.removeAgent') }}</button>
         </template>
-
+        <template v-else-if="node.data.nodeType === 'condition-router'">
+          <FormField field-path="definition.nodes[].config.condition_router_id" label-key="workflows.editor.conditionRouterConfig">
+            <select class="form-select workflow-inspector-select" :value="node.data.conditionRouterId" @change="updateConditionRouter">
+              <option v-if="conditionRouters.length === 0" value="">{{ $t('workflows.editor.noConditionRouters') }}</option>
+              <option v-for="router in conditionRouters" :key="router.id" :value="router.id">{{ router.name }}</option>
+            </select>
+          </FormField>
+          <button class="workflow-inspector-delete" type="button" @click="emit('removeNode', node.id)"><i class="bi bi-trash" aria-hidden="true" />{{ $t('workflows.editor.removeConditionRouter') }}</button>
+        </template>
         <p v-else class="workflow-inspector-note">{{ $t('workflows.editor.fixedNode') }}</p>
       </template>
 
       <template v-else-if="edge">
-        <div class="workflow-inspector-field">
-          <label class="workflow-inspector-label" for="workflow-edge-type">
-            {{ $t('workflows.editor.edgeType') }}
-          </label>
-          <select
-            id="workflow-edge-type"
-            class="form-select workflow-inspector-select"
-            name="edge-type"
-            :value="edge.data?.edgeType"
-            @change="selectEdgeType"
-          >
-            <option v-for="edgeType in edgeTypeOptions" :key="edgeType" :value="edgeType">
-              {{ edgeTypeLabel(edgeType) }}
-            </option>
-          </select>
-        </div>
-        <div class="workflow-inspector-field">
-          <label class="workflow-inspector-label" for="workflow-edge-source-endpoint">
-            {{ $t('workflows.editor.source') }}
-          </label>
-          <select
-            id="workflow-edge-source-endpoint"
-            class="form-select workflow-inspector-select"
-            name="source-endpoint"
-            :value="edge.sourceHandle"
-            @change="selectEdgeSourceEndpoint"
-          >
-            <option v-for="endpoint in edgeSourceOptions" :key="endpoint.id" :value="endpoint.id">
-              {{ edge.source }} · {{ endpointLabel(endpoint) }}
-            </option>
-          </select>
-        </div>
-        <div class="workflow-inspector-field">
-          <label class="workflow-inspector-label" for="workflow-edge-target-endpoint">
-            {{ $t('workflows.editor.target') }}
-          </label>
-          <select
-            id="workflow-edge-target-endpoint"
-            class="form-select workflow-inspector-select"
-            name="target-endpoint"
-            :value="edge.targetHandle"
-            @change="selectEdgeTargetEndpoint"
-          >
-            <option v-for="endpoint in edgeTargetOptions" :key="endpoint.id" :value="endpoint.id">
-              {{ edge.target }} · {{ endpointLabel(endpoint) }}
-            </option>
-          </select>
-        </div>
-        <button class="workflow-inspector-delete" type="button" @click="emit('removeEdge', edge.id)">
-          <i class="bi bi-trash" aria-hidden="true" />
-          {{ $t('workflows.editor.removeEdge') }}
-        </button>
+        <div class="workflow-inspector-field"><label class="workflow-inspector-label" for="workflow-edge-type">{{ $t('workflows.editor.edgeType') }}</label><select id="workflow-edge-type" class="form-select workflow-inspector-select" name="edge-type" :value="edge.data?.edgeType" @change="selectEdgeType"><option v-for="edgeType in edgeTypeOptions" :key="edgeType" :value="edgeType">{{ edgeTypeLabel(edgeType) }}</option></select></div>
+        <FormField v-if="edge.data?.edgeType === 'branch'" field-path="definition.edges[].branch_key" label-key="workflows.editor.branchKey">
+          <input class="form-control" type="text" :value="edge.data.branchKey ?? ''" @input="updateBranchKey">
+        </FormField>
+        <div class="workflow-inspector-field"><label class="workflow-inspector-label" for="workflow-edge-source-endpoint">{{ $t('workflows.editor.source') }}</label><select id="workflow-edge-source-endpoint" class="form-select workflow-inspector-select" name="source-endpoint" :value="edge.sourceHandle" @change="selectEdgeSourceEndpoint"><option v-for="endpoint in edgeSourceOptions" :key="endpoint.id" :value="endpoint.id">{{ edge.source }} · {{ endpointLabel(endpoint) }}</option></select></div>
+        <div class="workflow-inspector-field"><label class="workflow-inspector-label" for="workflow-edge-target-endpoint">{{ $t('workflows.editor.target') }}</label><select id="workflow-edge-target-endpoint" class="form-select workflow-inspector-select" name="target-endpoint" :value="edge.targetHandle" @change="selectEdgeTargetEndpoint"><option v-for="endpoint in edgeTargetOptions" :key="endpoint.id" :value="endpoint.id">{{ edge.target }} · {{ endpointLabel(endpoint) }}</option></select></div>
+        <button class="workflow-inspector-delete" type="button" @click="emit('removeEdge', edge.id)"><i class="bi bi-trash" aria-hidden="true" />{{ $t('workflows.editor.removeEdge') }}</button>
       </template>
 
       <template v-else>
-        <div class="workflow-inspector-field">
-          <span class="workflow-inspector-label">{{ $t('workflows.fields.name') }}</span>
-          <span class="workflow-inspector-value">{{ workflowName }}</span>
-        </div>
-        <div class="workflow-inspector-field">
-          <span class="workflow-inspector-label">{{ $t('workflows.editor.stateContract') }}</span>
-          <span class="workflow-inspector-value">{{ stateContract }}</span>
-        </div>
-        <div class="workflow-inspector-field">
-          <span class="workflow-inspector-label">{{ $t('workflows.editor.edgeType') }}</span>
-          <span class="workflow-inspector-value">normal</span>
-        </div>
+        <div class="workflow-inspector-field"><span class="workflow-inspector-label">{{ $t('workflows.fields.name') }}</span><span class="workflow-inspector-value">{{ workflowName }}</span></div>
+        <div class="workflow-inspector-field"><span class="workflow-inspector-label">{{ $t('workflows.editor.stateContract') }}</span><span class="workflow-inspector-value">{{ stateContract }}</span></div>
       </template>
     </div>
   </aside>

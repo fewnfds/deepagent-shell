@@ -191,7 +191,7 @@
       },
       {
         "name": "forms-and-actions",
-        "paths": ["src/components/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
+        "paths": ["src/components/*.vue", "src/components/data-table/*.vue", "src/components/workflow/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
         "classes": [
           "btn", "btn-check", "btn-danger", "btn-info", "btn-lg", "btn-outline-primary", "btn-primary", "btn-secondary", "btn-sm", "btn-success", "btn-warning", "form-check",
           "form-check-input", "form-check-label", "form-control", "form-label", "form-select",
@@ -200,7 +200,7 @@
       },
       {
         "name": "content-and-data",
-        "paths": ["src/components/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
+        "paths": ["src/components/*.vue", "src/components/data-table/*.vue", "src/components/workflow/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
         "classes": [
           "accordion", "alert", "alert-danger", "align-middle", "badge", "border", "breadcrumb", "breadcrumb-item", "card", "card-body", "card-danger", "card-footer",
           "card-primary", "bg-danger", "bg-info", "bg-primary", "bg-success", "bg-warning",
@@ -212,10 +212,10 @@
       },
       {
         "name": "approved-utilities",
-        "paths": ["src/components/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
+        "paths": ["src/components/*.vue", "src/components/data-table/*.vue", "src/components/workflow/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
         "classes": [
           "align-items-center", "align-items-end", "align-items-start", "bg-body-tertiary", "col", "col-12", "col-lg-3", "col-lg-4", "col-lg-6", "col-lg-8", "col-lg-9", "col-md-6", "col-xl-5", "col-xl-7", "col-xxl-4", "d-block", "d-flex", "d-none", "d-sm-inline", "flex-wrap", "font-monospace", "form-text", "fw-semibold", "g-3", "gap-1", "gap-2", "gap-3", "h-100", "h4", "h5",
-          "fs-6", "justify-content-between", "justify-content-end", "lh-sm", "mb-0", "mb-1", "mb-2", "mb-3", "me-2", "ms-auto", "mt-2", "mt-3", "overflow-auto", "p-3", "small",
+          "flex-column", "fs-6", "justify-content-between", "justify-content-end", "lh-sm", "mb-0", "mb-1", "mb-2", "mb-3", "me-2", "ms-auto", "mt-2", "mt-3", "overflow-auto", "p-3", "small",
           "text-body-secondary", "text-break", "text-center", "text-danger", "text-end", "text-start", "text-success", "text-uppercase", "visually-hidden", "w-100"
         ]
       },
@@ -287,12 +287,12 @@
           "workflow-editor-shell", "workflow-editor-toolbar", "workflow-editor-workspace",
           "workflow-inspector-context", "workflow-inspector-delete", "workflow-inspector-field",
           "workflow-inspector-label", "workflow-inspector-note", "workflow-inspector-select",
-          "workflow-inspector-value", "workflow-node", "workflow-node--agent",
+          "workflow-inspector-value", "workflow-node", "workflow-node--agent", "workflow-node--condition-router",
           "workflow-node--terminal", "workflow-node-header", "workflow-node-icon",
           "workflow-node-endpoint", "workflow-node-endpoints",
           "workflow-node-library-copy", "workflow-node-library-icon", "workflow-node-library-item",
           "workflow-node-library-meta", "workflow-node-library-title", "workflow-node-summary",
-          "workflow-node-title", "workflow-port", "workflow-port--normal", "workflow-sidebar",
+          "workflow-node-title", "workflow-port", "workflow-port--normal", "workflow-port--branch", "workflow-edge--branch", "workflow-sidebar",
           "workflow-sidebar--inspector", "workflow-sidebar--library", "workflow-sidebar-body",
           "workflow-sidebar-header", "workflow-sidebar-section-title", "workflow-sidebar-title",
           "workflow-sidebar-toggle", "form-check", "form-check-input", "form-check-label", "form-select", "form-switch"
@@ -404,6 +404,7 @@
         "callers": [
           "src/components/RecordPicker.vue",
           "src/editors/ExceptionRetryEditor.vue",
+          "src/editors/ConditionRouterEditor.vue",
           "src/editors/FilesystemEditor.vue",
           "src/editors/FilesystemPermissionsEditor.vue",
           "src/editors/ModelEditor.vue",

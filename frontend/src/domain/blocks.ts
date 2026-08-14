@@ -16,6 +16,7 @@ import { systemPromptAdapter } from './blocks/systemPrompt'
 import { todoListAdapter } from './blocks/todoList'
 import { workflowInputContextAdapter } from './blocks/workflowInputContext'
 import { workflowPrepareAdapter } from './blocks/workflowPrepare'
+import { conditionRouterAdapter } from './blocks/conditionRouter'
 
 export type {
   CustomMiddlewareCatalogItem,
@@ -72,6 +73,11 @@ export type {
   WorkflowInputContextSlotDraft,
 } from './blocks/workflowInputContext'
 export type { WorkflowPrepareDefaults, WorkflowPrepareDraft } from './blocks/workflowPrepare'
+export type {
+  ConditionRouterBranchDraft,
+  ConditionRouterDefaults,
+  ConditionRouterDraft,
+} from './blocks/conditionRouter'
 
 export {
   createMiddlewareEntry,
@@ -90,6 +96,7 @@ export {
   todoListAdapter,
   workflowInputContextAdapter,
   workflowPrepareAdapter,
+  conditionRouterAdapter,
 }
 
 export const blockTypes = [
@@ -109,7 +116,7 @@ export const blockTypes = [
   'workflow-input-context',
 ] as const
 
-export const managedComponentTypes = [...blockTypes, 'workflow-prepare'] as const
+export const managedComponentTypes = [...blockTypes, 'workflow-prepare', 'condition-router'] as const
 
 export const blockAdapters = {
   model: modelAdapter,
@@ -127,4 +134,5 @@ export const blockAdapters = {
   'prompt-caching': promptCachingAdapter,
   'workflow-input-context': workflowInputContextAdapter,
   'workflow-prepare': workflowPrepareAdapter,
+  'condition-router': conditionRouterAdapter,
 } as const

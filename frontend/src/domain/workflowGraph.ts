@@ -14,11 +14,13 @@ import type {
   WorkflowNodeHandleSpec,
   WorkflowNodeCatalogItem,
   WorkflowNodeType,
+  SavedBlock,
 } from '@/api'
 
 export interface WorkflowCanvasNodeData {
   nodeType: WorkflowNodeType
   mainAgentId: string
+  conditionRouterId?: string
   defer?: boolean
 }
 
@@ -26,14 +28,17 @@ export type WorkflowCanvasNode = Node<WorkflowCanvasNodeData>
 
 export interface WorkflowCanvasEdgeData {
   edgeType: string
+  branchKey?: string
+  branchLabel?: string
 }
 
 export type WorkflowCanvasEdge = Edge<WorkflowCanvasEdgeData>
 
 export const WORKFLOW_NODE_DRAG_MIME = 'application/x-agent-shell-workflow-node'
 export const WORKFLOW_NORMAL_EDGE_MARKER = MarkerType.ArrowClosed
+export const WORKFLOW_BRANCH_EDGE_MARKER = MarkerType.ArrowClosed
 
-export const WORKFLOW_CANVAS_EDGE_TYPES = ['normal'] as const
+export const WORKFLOW_CANVAS_EDGE_TYPES = ['normal', 'branch'] as const
 export type WorkflowCanvasEdgeType = (typeof WORKFLOW_CANVAS_EDGE_TYPES)[number]
 export type WorkflowEndpointDirection = 'input' | 'output'
 
@@ -46,7 +51,8 @@ export interface WorkflowCanvasState {
 const defaultPositions = {
   start: { x: 80, y: 180 },
   agent: { x: 360, y: 180 },
-  end: { x: 680, y: 180 },
+  'condition-router': { x: 620, y: 180 },
+  end: { x: 900, y: 180 },
 } satisfies Record<WorkflowNodeType, { x: number; y: number }>
 
 function canvasNode(node: WorkflowGraphNode, document: WorkflowGraphDocument): WorkflowCanvasNode {
@@ -54,10 +60,11 @@ function canvasNode(node: WorkflowGraphNode, document: WorkflowGraphDocument): W
     id: node.id,
     type: node.type,
     position: document.layout.nodes[node.id] ?? defaultPositions[node.type],
-    deletable: node.type === 'agent',
+    deletable: node.type === 'agent' || node.type === 'condition-router',
     data: {
       nodeType: node.type,
       mainAgentId: node.config.main_agent_id ?? '',
+      conditionRouterId: node.config.condition_router_id ?? '',
       defer: node.config.defer ?? false,
     },
   }
@@ -102,12 +109,30 @@ function documentEdgeType(
   const sourceHandle = catalogHandle(catalog, source.type, edge.source_handle, 'output')
   const targetHandle = catalogHandle(catalog, target.type, edge.target_handle, 'input')
   if (!sourceHandle || !targetHandle) return ''
-  return sourceHandle.edge_type === targetHandle.edge_type ? sourceHandle.edge_type : ''
+  const accepted = targetHandle.accepted_edge_types ?? [targetHandle.edge_type]
+  return accepted.includes(sourceHandle.edge_type) ? sourceHandle.edge_type : ''
+}
+
+function branchLabel(
+  edge: WorkflowGraphEdge,
+  document: WorkflowGraphDocument,
+  conditionRouters: readonly SavedBlock[],
+): string {
+  if (!edge.branch_key) return ''
+  const source = document.definition.nodes.find((node) => node.id === edge.source)
+  if (!source || source.type !== 'condition-router') return edge.branch_key
+  const router = conditionRouters.find((item) => item.id === source.config.condition_router_id)
+  const branches = Array.isArray(router?.branches) ? router.branches : []
+  const branch = branches.find((item) => (
+    item && typeof item === 'object' && item.key === edge.branch_key
+  ))
+  return branch && typeof branch.label === 'string' ? branch.label : edge.branch_key
 }
 
 export function workflowDocumentToCanvas(
   document: WorkflowGraphDocument,
   catalog: WorkflowNodeCatalogItem[],
+  conditionRouters: readonly SavedBlock[] = [],
 ): WorkflowCanvasState {
   const sourceNodes = document.definition.nodes.length > 0
     ? document.definition.nodes
@@ -118,16 +143,29 @@ export function workflowDocumentToCanvas(
 
   return {
     nodes: sourceNodes.map((node) => canvasNode(node, document)),
-    edges: document.definition.edges.map((edge) => ({
-      id: edge.id,
-      source: edge.source,
-      sourceHandle: edge.source_handle,
-      target: edge.target,
-      targetHandle: edge.target_handle,
-      type: 'smoothstep',
-      markerEnd: WORKFLOW_NORMAL_EDGE_MARKER,
-      data: { edgeType: documentEdgeType(edge, document, catalog) },
-    })),
+    edges: document.definition.edges.map((edge) => {
+      const edgeType = documentEdgeType(edge, document, catalog)
+      const label = branchLabel(edge, document, conditionRouters)
+      return {
+        id: edge.id,
+        source: edge.source,
+        sourceHandle: edge.source_handle,
+        target: edge.target,
+        targetHandle: edge.target_handle,
+        type: 'smoothstep',
+        markerEnd: edgeType === 'branch'
+          ? WORKFLOW_BRANCH_EDGE_MARKER
+          : WORKFLOW_NORMAL_EDGE_MARKER,
+        animated: edgeType === 'branch',
+        class: edgeType === 'branch' ? 'workflow-edge--branch' : undefined,
+        label: label || undefined,
+        data: {
+          edgeType,
+          branchKey: edge.branch_key ?? undefined,
+          branchLabel: label || undefined,
+        },
+      }
+    }),
     viewport: { ...document.layout.viewport },
   }
 }
@@ -147,6 +185,8 @@ export function workflowCanvasToDocument(
               main_agent_id: node.data.mainAgentId,
               ...(node.data.defer ? { defer: true } : {}),
             }
+          : node.data.nodeType === 'condition-router'
+            ? { condition_router_id: node.data.conditionRouterId }
           : {}
         return {
           id: node.id,
@@ -161,6 +201,9 @@ export function workflowCanvasToDocument(
         source_handle: edge.sourceHandle ?? '',
         target: edge.target,
         target_handle: edge.targetHandle ?? '',
+        ...(edge.data.edgeType === 'branch' && edge.data.branchKey
+          ? { branch_key: edge.data.branchKey }
+          : {}),
       })),
     },
     layout: {
@@ -182,7 +225,21 @@ export function newAgentCanvasNode(
     type: 'agent',
     position: { ...position },
     deletable: true,
-    data: { nodeType: 'agent', mainAgentId, defer: false },
+    data: { nodeType: 'agent', mainAgentId, conditionRouterId: '', defer: false },
+  }
+}
+
+export function newConditionRouterCanvasNode(
+  id: string,
+  conditionRouterId: string,
+  position: XYPosition = defaultPositions['condition-router'],
+): WorkflowCanvasNode {
+  return {
+    id,
+    type: 'condition-router',
+    position: { ...position },
+    deletable: true,
+    data: { nodeType: 'condition-router', mainAgentId: '', conditionRouterId },
   }
 }
 
@@ -218,7 +275,7 @@ export function workflowConnectionEdgeType(
     !sourceHandle
     || !targetHandle
     || !isWorkflowCanvasEdgeType(sourceHandle.edge_type)
-    || targetHandle.edge_type !== sourceHandle.edge_type
+    || !(targetHandle.accepted_edge_types ?? [targetHandle.edge_type]).includes(sourceHandle.edge_type)
   ) return null
 
   const duplicate = edges.some((edge) => (
@@ -228,7 +285,8 @@ export function workflowConnectionEdgeType(
     && edge.target === connection.target
     && edge.targetHandle === connection.targetHandle
   ))
-  return duplicate ? null : sourceHandle.edge_type
+  if (duplicate && sourceHandle.edge_type !== 'branch') return null
+  return sourceHandle.edge_type
 }
 
 export function workflowCanvasEdgeTypesBetween(
@@ -244,6 +302,6 @@ export function workflowCanvasEdgeTypesBetween(
   return WORKFLOW_CANVAS_EDGE_TYPES.filter((edgeType) => (
     sourceTypes.has(edgeType)
     && workflowCanvasNodeEndpoints(catalog, target.data.nodeType, 'input')
-      .some((endpoint) => endpoint.edge_type === edgeType)
+      .some((endpoint) => (endpoint.accepted_edge_types ?? [endpoint.edge_type]).includes(edgeType))
   ))
 }

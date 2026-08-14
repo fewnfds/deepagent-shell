@@ -46,6 +46,19 @@ const sectionNavigationGroups: SectionNavigationGroup[] = [
       { path: '/agents/subagents', labelKey: 'navigation.sections.subagents' },
     ],
   },
+  {
+    prefix: '/workflow-components',
+    items: [
+      {
+        path: '/workflow-components/workflow-prepare',
+        labelKey: 'navigation.sections.workflowPrepare',
+      },
+      {
+        path: '/workflow-components/condition-router',
+        labelKey: 'navigation.sections.conditionRouter',
+      },
+    ],
+  },
 ]
 
 export function sectionNavigationForPath(path: string): SectionNavigationItem[] {

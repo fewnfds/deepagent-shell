@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { MainAgent, WorkflowNodeCatalogItem } from '@/api'
 import {
   newAgentCanvasNode,
+  newConditionRouterCanvasNode,
   nextWorkflowCanvasEdgeId,
   WORKFLOW_NODE_DRAG_MIME,
   workflowCanvasEdgeTypesBetween,
@@ -55,6 +56,17 @@ const endCatalog: WorkflowNodeCatalogItem = {
   output_handles: [],
 }
 
+const conditionRouterCatalog: WorkflowNodeCatalogItem = {
+  type: 'condition-router',
+  type_version: 1,
+  runtime_kind: 'command_router',
+  title_key: 'workflow.nodes.conditionRouter.title',
+  description_key: 'workflow.nodes.conditionRouter.description',
+  config_schema: {},
+  input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', accepted_edge_types: ['normal', 'branch'], max_connections: null }],
+  output_handles: [{ id: 'branch', kind: 'control', edge_type: 'branch', accepted_edge_types: ['branch'], max_connections: null }],
+}
+
 const agents: MainAgent[] = [
   { id: 'agent-1', name: 'Research Agent', capability_refs: [], subagents: [] },
   { id: 'agent-2', name: 'Review Agent', capability_refs: [], subagents: [] },
@@ -63,7 +75,13 @@ const agents: MainAgent[] = [
 describe('Workflow canvas panels', () => {
   it('exposes the backend Agent node as the only drag source', async () => {
     const wrapper = mount(WorkflowNodeLibrary, {
-      props: { agent: agentCatalog, collapsed: false, disabled: false },
+      props: {
+        agent: agentCatalog,
+        conditionRouter: null,
+        collapsed: false,
+        agentDisabled: false,
+        conditionRouterDisabled: true,
+      },
       global: { plugins: [i18n()] },
     })
     const item = wrapper.get('.workflow-node-library-item')
@@ -89,6 +107,7 @@ describe('Workflow canvas panels', () => {
         edgeTypeOptions: [],
         inputEndpoints: agentCatalog.input_handles,
         mainAgents: agents,
+        conditionRouters: [],
         node,
         outputEndpoints: agentCatalog.output_handles,
         stateContract: 'agent-shell.workflow.agent-invocations.v1',
@@ -123,6 +142,7 @@ describe('Workflow canvas panels', () => {
         edgeTypeOptions: ['normal'],
         inputEndpoints: [],
         mainAgents: agents,
+        conditionRouters: [],
         node: null,
         outputEndpoints: [],
         stateContract: 'agent-shell.workflow.agent-invocations.v1',
@@ -194,5 +214,56 @@ describe('Workflow canvas panels', () => {
       targetHandle: 'in',
     }, nodes, [existing], catalog)).toBeNull()
     expect(workflowConnectionEdgeType(existing, nodes, [existing], catalog)).toBe('normal')
+  })
+
+  it('uses one output endpoint and stores the explicit key on a Branch Edge', async () => {
+    const router = newConditionRouterCanvasNode('router-1', 'router-config-1')
+    const end: WorkflowCanvasNode = {
+      id: 'end',
+      type: 'end',
+      position: { x: 720, y: 0 },
+      data: { nodeType: 'end', mainAgentId: '' },
+    }
+    const branchEdge: WorkflowCanvasEdge = {
+      id: 'edge-review',
+      source: router.id,
+      sourceHandle: 'branch',
+      target: end.id,
+      targetHandle: 'in',
+      animated: true,
+      label: 'review',
+      data: { edgeType: 'branch', branchKey: 'review' },
+    }
+    const endWithBranchInput = {
+      ...endCatalog,
+      input_handles: [{ ...endCatalog.input_handles[0]!, accepted_edge_types: ['normal', 'branch'] }],
+    }
+    expect(conditionRouterCatalog.output_handles).toHaveLength(1)
+    expect(workflowConnectionEdgeType({
+      source: router.id,
+      sourceHandle: 'branch',
+      target: end.id,
+      targetHandle: 'in',
+    }, [router, end], [], [conditionRouterCatalog, endWithBranchInput])).toBe('branch')
+
+    const wrapper = mount(WorkflowInspector, {
+      props: {
+        collapsed: false,
+        edge: branchEdge,
+        edgeSourceEndpoints: conditionRouterCatalog.output_handles,
+        edgeTargetEndpoints: endWithBranchInput.input_handles,
+        edgeTypeOptions: ['branch'],
+        inputEndpoints: [],
+        mainAgents: agents,
+        conditionRouters: [],
+        node: null,
+        outputEndpoints: [],
+        stateContract: 'agent-shell.workflow.agent-invocations.v1',
+        workflowName: 'Routing Workflow',
+      },
+      global: { plugins: [i18n()] },
+    })
+    await wrapper.get('input[type="text"]').setValue('audit')
+    expect(wrapper.emitted('updateBranchKey')).toEqual([[branchEdge.id, 'audit']])
   })
 })

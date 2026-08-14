@@ -80,6 +80,7 @@ def build_router(
         if block is None:
             return None
         if block_type not in {
+            "condition-router",
             "workflow-input-context",
             "workflow-prepare",
         }:
@@ -115,6 +116,20 @@ def build_router(
         if block_type != "workflow-prepare":
             return
         owner = workflow_store.get_item_by_prepare(block_id)
+        if owner is None:
+            return
+        raise management_error(
+            409,
+            code="configuration_referenced",
+            message_key="errors.configurationReferencedByWorkflow",
+            message="The configuration is still referenced by a Workflow.",
+            message_args={"owner": owner["name"]},
+        )
+
+    def reject_condition_router_reference(block_type: str, block_id: str) -> None:
+        if block_type != "condition-router":
+            return
+        owner = workflow_store.get_item_by_condition_router(block_id)
         if owner is None:
             return
         raise management_error(
@@ -320,6 +335,7 @@ def build_router(
                 )
             reject_workflow_filesystem_reference(block_type, block_id)
             reject_workflow_prepare_reference(block_type, block_id)
+            reject_condition_router_reference(block_type, block_id)
             manifest = CAPABILITY_BY_TYPE.get(block_type)
             if manifest is not None and manifest.required:
                 owner = main_agent_block_reference_owner(
@@ -454,6 +470,7 @@ def build_router(
         check_type(block_type)
         reject_workflow_filesystem_reference(block_type, block_id)
         reject_workflow_prepare_reference(block_type, block_id)
+        reject_condition_router_reference(block_type, block_id)
         manifest = CAPABILITY_BY_TYPE.get(block_type)
         if manifest is not None and manifest.required:
             owner = main_agent_block_reference_owner(config_store, block_type, block_id)

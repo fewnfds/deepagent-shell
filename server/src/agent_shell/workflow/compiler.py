@@ -6,7 +6,13 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
+from langgraph.types import Command
 
+from agent_shell.condition_router import (
+    ConditionRouterBlock,
+    ConditionRouterError,
+    run_condition_router,
+)
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.runtime.state import WorkflowState
@@ -115,10 +121,40 @@ def _make_agent_node(*, node_id: str, built_agent: Any):
     return call_agent
 
 
+def _make_condition_router_node(
+    *,
+    configuration: ConditionRouterBlock,
+    route_targets: Mapping[str, str],
+):
+    async def call_router(
+        state: WorkflowState,
+        runtime: Runtime[WorkflowRuntimeContext],
+    ) -> Command:
+        try:
+            result = await run_condition_router(
+                configuration.model_dump(mode="python"),
+                state=state,
+                context=runtime.context,
+            )
+        except ConditionRouterError as exc:
+            raise AgentRuntimeError(
+                "workflow.condition_router_failed",
+                "The Condition Router script failed.",
+                status_code=422,
+            ) from exc
+        targets = list(
+            dict.fromkeys(route_targets[branch] for branch in result.activate)
+        )
+        return Command(update=result.update, goto=targets)
+
+    return call_router
+
+
 def compile_workflow(
     document: WorkflowGraphDocumentV1,
     *,
     node_agents: Mapping[str, Any],
+    condition_routers: Mapping[str, ConditionRouterBlock] | None = None,
     checkpointer: Any | None = None,
 ) -> Any:
     """Compile catalog-declared canvas nodes into an official StateGraph."""
@@ -128,7 +164,11 @@ def compile_workflow(
         issue = admission.issues[0]
         raise _compile_error(issue.code, issue.message)
 
-    topology_issues = validate_workflow_topology(normalized)
+    router_configs = condition_routers or {}
+    topology_issues = validate_workflow_topology(
+        normalized,
+        condition_routers=router_configs,
+    )
     if topology_issues:
         issue = topology_issues[0]
         raise _compile_error(issue.code, issue.message)
@@ -147,8 +187,46 @@ def compile_workflow(
         else:
             executable_nodes.append(node)
 
+    node_by_id = {node.id: node for node in nodes}
+    edge_types: dict[str, str] = {}
+    branch_targets: dict[str, dict[str, str]] = {}
+    for edge in normalized.definition.edges:
+        source_node = node_by_id[edge.source]
+        source_spec = node_type_spec(source_node.type, source_node.type_version)
+        assert source_spec is not None
+        source_handle = next(
+            handle
+            for handle in source_spec.output_handles
+            if handle.id == edge.source_handle
+        )
+        edge_types[edge.id] = source_handle.edge_type
+        if source_handle.edge_type == "branch":
+            assert edge.branch_key is not None
+            branch_targets.setdefault(edge.source, {})[edge.branch_key] = (
+                END if edge.target in exit_ids else edge.target
+            )
+
     builder = StateGraph(WorkflowState, context_schema=WorkflowRuntimeContext)
     for node in executable_nodes:
+        spec = node_type_spec(node.type, node.type_version)
+        assert spec is not None
+        if spec.runtime_kind == "command_router":
+            configuration = router_configs.get(node.id)
+            if configuration is None:
+                raise _compile_error(
+                    "workflow.condition_router_not_found",
+                    "The selected Condition Router configuration does not exist.",
+                )
+            targets = branch_targets.get(node.id, {})
+            builder.add_node(
+                node.id,
+                _make_condition_router_node(
+                    configuration=configuration,
+                    route_targets=targets,
+                ),
+                destinations=tuple(dict.fromkeys(targets.values())),
+            )
+            continue
         built_agent = node_agents.get(node.id)
         if built_agent is None:
             raise _compile_error(
@@ -165,6 +243,8 @@ def compile_workflow(
     # waiting edge per target instead of several independent triggers.
     incoming: dict[str, list[str]] = {}
     for edge in normalized.definition.edges:
+        if edge_types[edge.id] != "normal":
+            continue
         source = START if edge.source in entry_ids else edge.source
         target = END if edge.target in exit_ids else edge.target
         sources = incoming.setdefault(target, [])

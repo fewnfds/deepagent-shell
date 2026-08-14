@@ -14,6 +14,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   managementApi,
   type MainAgent,
+  type SavedBlock,
   type Workflow,
   type WorkflowNodeCatalogItem,
   type WorkflowNodeType,
@@ -25,9 +26,11 @@ import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
 import {
   newAgentCanvasNode,
+  newConditionRouterCanvasNode,
   nextWorkflowCanvasEdgeId,
   WORKFLOW_NODE_DRAG_MIME,
   WORKFLOW_NORMAL_EDGE_MARKER,
+  WORKFLOW_BRANCH_EDGE_MARKER,
   workflowCanvasEdgeTypesBetween,
   workflowCanvasNodeEndpoints,
   workflowCanvasToDocument,
@@ -46,6 +49,7 @@ const managementError = useManagementError()
 const { notify } = useToasts()
 const workflow = ref<Workflow | null>(null)
 const mainAgents = ref<MainAgent[]>([])
+const conditionRouters = ref<SavedBlock[]>([])
 const nodeCatalog = ref<WorkflowNodeCatalogItem[]>([])
 const nodes = ref<WorkflowCanvasNode[]>([])
 const edges = ref<WorkflowCanvasEdge[]>([])
@@ -66,10 +70,20 @@ const canAddAgent = computed(() => (
   && mainAgents.value.length > 0
   && agentCatalogItem.value !== null
 ))
+const conditionRouterCatalogItem = computed(() => (
+  nodeCatalog.value.find((item) => item.type === 'condition-router') ?? null
+))
+const canAddConditionRouter = computed(() => (
+  loaded.value
+  && conditionRouters.value.length > 0
+  && conditionRouterCatalogItem.value !== null
+))
 const canSave = computed(() => (
   loaded.value
   && !saving.value
   && !nodes.value.some((node) => node.data.nodeType === 'agent' && !node.data.mainAgentId)
+  && !nodes.value.some((node) => node.data.nodeType === 'condition-router' && !node.data.conditionRouterId)
+  && !edges.value.some((edge) => edge.data.edgeType === 'branch' && !edge.data.branchKey)
 ))
 const selectedNode = computed(() => nodes.value.find((node) => node.selected) ?? null)
 const selectedEdge = computed(() => (
@@ -139,7 +153,9 @@ function connect(connection: Connection): void {
       target: connection.target,
       targetHandle: connection.targetHandle,
       type: 'smoothstep',
-      markerEnd: WORKFLOW_NORMAL_EDGE_MARKER,
+      markerEnd: edgeType === 'branch' ? WORKFLOW_BRANCH_EDGE_MARKER : WORKFLOW_NORMAL_EDGE_MARKER,
+      animated: edgeType === 'branch',
+      class: edgeType === 'branch' ? 'workflow-edge--branch' : undefined,
       selected: true,
       data: { edgeType },
     },
@@ -152,6 +168,24 @@ function addAgent(position?: XYPosition): void {
   if (!canAddAgent.value || !firstAgent) return
   const nodeId = nextAgentNodeId()
   const node = newAgentCanvasNode(nodeId, firstAgent.id, position ?? nextAgentPosition())
+  node.selected = true
+  nodes.value = [
+    ...nodes.value.map((item) => ({ ...item, selected: false })),
+    node,
+  ]
+  edges.value = edges.value.map((edge) => ({ ...edge, selected: false }))
+  rightCollapsed.value = false
+}
+
+function addConditionRouter(position?: XYPosition): void {
+  const firstRouter = conditionRouters.value[0]
+  if (!canAddConditionRouter.value || !firstRouter) return
+  const nodeId = nextConditionRouterNodeId()
+  const node = newConditionRouterCanvasNode(
+    nodeId,
+    firstRouter.id,
+    position ?? nextConditionRouterPosition(),
+  )
   node.selected = true
   nodes.value = [
     ...nodes.value.map((item) => ({ ...item, selected: false })),
@@ -175,23 +209,36 @@ function nextAgentNodeId(): string {
   return `agent-${index}`
 }
 
+function nextConditionRouterPosition(): XYPosition {
+  const count = nodes.value.filter((node) => node.data.nodeType === 'condition-router').length
+  return { x: 620 + (count % 3) * 280, y: 180 + Math.floor(count / 3) * 160 }
+}
+
+function nextConditionRouterNodeId(): string {
+  let index = 1
+  while (nodes.value.some((node) => node.id === `condition-router-${index}`)) index += 1
+  return `condition-router-${index}`
+}
+
 function dragOver(event: DragEvent): void {
-  if (!canAddAgent.value || !event.dataTransfer?.types.includes(WORKFLOW_NODE_DRAG_MIME)) return
+  if ((!canAddAgent.value && !canAddConditionRouter.value) || !event.dataTransfer?.types.includes(WORKFLOW_NODE_DRAG_MIME)) return
   event.preventDefault()
   event.dataTransfer.dropEffect = 'copy'
 }
 
 function dropNode(event: DragEvent): void {
   if (
-    !canAddAgent.value
+    (!canAddAgent.value && !canAddConditionRouter.value)
     || !flow.value
-    || event.dataTransfer?.getData(WORKFLOW_NODE_DRAG_MIME) !== 'agent'
+    || !['agent', 'condition-router'].includes(event.dataTransfer?.getData(WORKFLOW_NODE_DRAG_MIME) ?? '')
   ) return
   event.preventDefault()
-  addAgent(flow.value.screenToFlowCoordinate({ x: event.clientX, y: event.clientY }))
+  const position = flow.value.screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
+  if (event.dataTransfer?.getData(WORKFLOW_NODE_DRAG_MIME) === 'agent') addAgent(position)
+  else addConditionRouter(position)
 }
 
-function removeAgent(nodeId: string): void {
+function removeNode(nodeId: string): void {
   nodes.value = nodes.value.filter((node) => node.id !== nodeId)
   edges.value = edges.value.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
 }
@@ -226,6 +273,9 @@ function replaceEdgeEndpoints(
           sourceHandle,
           targetHandle,
           data: { ...item.data, edgeType },
+          markerEnd: edgeType === 'branch' ? WORKFLOW_BRANCH_EDGE_MARKER : WORKFLOW_NORMAL_EDGE_MARKER,
+          animated: edgeType === 'branch',
+          class: edgeType === 'branch' ? 'workflow-edge--branch' : undefined,
         }
       : item
   ))
@@ -240,7 +290,7 @@ function selectEdgeType(edgeId: string, edgeType: WorkflowCanvasEdgeType): void 
   const sourceEndpoint = nodeEndpoints(source.data.nodeType, 'output')
     .find((endpoint) => endpoint.edge_type === edgeType)
   const targetEndpoint = nodeEndpoints(target.data.nodeType, 'input')
-    .find((endpoint) => endpoint.edge_type === edgeType)
+    .find((endpoint) => (endpoint.accepted_edge_types ?? [endpoint.edge_type]).includes(edgeType))
   if (!sourceEndpoint || !targetEndpoint) return
   replaceEdgeEndpoints(edgeId, sourceEndpoint.id, targetEndpoint.id)
 }
@@ -265,6 +315,22 @@ function selectAgent(nodeId: string, mainAgentId: string): void {
   ))
 }
 
+function selectConditionRouter(nodeId: string, conditionRouterId: string): void {
+  nodes.value = nodes.value.map((node) => (
+    node.id === nodeId
+      ? { ...node, data: { ...node.data, conditionRouterId } }
+      : node
+  ))
+}
+
+function updateBranchKey(edgeId: string, branchKey: string): void {
+  edges.value = edges.value.map((edge) => (
+    edge.id === edgeId && edge.data.edgeType === 'branch'
+      ? { ...edge, label: branchKey, data: { ...edge.data, branchKey, branchLabel: branchKey } }
+      : edge
+  ))
+}
+
 function selectDefer(nodeId: string, defer: boolean): void {
   nodes.value = nodes.value.map((node) => (
     node.id === nodeId
@@ -285,6 +351,11 @@ function showInspector(): void {
 function mainAgentName(mainAgentId: string): string {
   return mainAgents.value.find((agent) => agent.id === mainAgentId)?.name
     ?? t('workflows.editor.noMainAgentSelected')
+}
+
+function conditionRouterName(conditionRouterId: string): string {
+  return conditionRouters.value.find((router) => router.id === conditionRouterId)?.name
+    ?? t('workflows.editor.noConditionRouterSelected')
 }
 
 async function initializeFlow(instance: VueFlowStore): Promise<void> {
@@ -319,17 +390,19 @@ async function save(): Promise<void> {
 
 onMounted(async () => {
   try {
-    const [metadata, graph, agents, catalog] = await Promise.all([
+    const [metadata, graph, agents, conditionRouterRecords, catalog] = await Promise.all([
       managementApi.getWorkflow(workflowId.value),
       managementApi.getWorkflowGraph(workflowId.value),
       managementApi.listMainAgents(),
+      managementApi.listBlocks('condition-router'),
       managementApi.listWorkflowNodeCatalog(),
     ])
     workflow.value = metadata
     mainAgents.value = agents
+    conditionRouters.value = conditionRouterRecords
     nodeCatalog.value = catalog
     stateContract.value = graph.definition.state_contract
-    const canvas = workflowDocumentToCanvas(graph, nodeCatalog.value)
+    const canvas = workflowDocumentToCanvas(graph, nodeCatalog.value, conditionRouters.value)
     nodes.value = canvas.nodes
     edges.value = canvas.edges
     savedViewport.value = canvas.viewport
@@ -361,9 +434,12 @@ onMounted(async () => {
     >
       <WorkflowNodeLibrary
         :agent="agentCatalogItem"
+        :condition-router="conditionRouterCatalogItem"
         :collapsed="leftCollapsed"
-        :disabled="!canAddAgent"
+        :agent-disabled="!canAddAgent"
+        :condition-router-disabled="!canAddConditionRouter"
         @add-agent="addAgent()"
+        @add-condition-router="addConditionRouter()"
         @toggle="leftCollapsed = !leftCollapsed"
       />
 
@@ -420,6 +496,18 @@ onMounted(async () => {
             </div>
           </template>
 
+          <template #node-condition-router="{ data }">
+            <div class="workflow-node workflow-node--condition-router">
+              <WorkflowNodeEndpoints direction="input" :endpoints="nodeEndpoints('condition-router', 'input')" />
+              <div class="workflow-node-header">
+                <span class="workflow-node-icon" aria-hidden="true"><i class="bi bi-circle-half" /></span>
+                <span class="workflow-node-title">{{ t('workflows.editor.conditionRouter') }}</span>
+              </div>
+              <span class="workflow-node-summary">{{ conditionRouterName(data.conditionRouterId ?? '') }}</span>
+              <WorkflowNodeEndpoints direction="output" :endpoints="nodeEndpoints('condition-router', 'output')" />
+            </div>
+          </template>
+
           <template #node-end>
             <div class="workflow-node workflow-node--terminal">
               <WorkflowNodeEndpoints
@@ -441,17 +529,20 @@ onMounted(async () => {
         :edge-type-options="selectedEdgeTypeOptions"
         :input-endpoints="selectedNodeInputEndpoints"
         :main-agents="mainAgents"
+        :condition-routers="conditionRouters"
         :node="selectedNode"
         :output-endpoints="selectedNodeOutputEndpoints"
         :state-contract="stateContract"
         :workflow-name="workflow?.name ?? ''"
         @remove-edge="removeEdge"
-        @remove-node="removeAgent"
+        @remove-node="removeNode"
         @select-edge-source-endpoint="selectEdgeSourceEndpoint"
         @select-edge-target-endpoint="selectEdgeTargetEndpoint"
         @select-edge-type="selectEdgeType"
         @toggle="rightCollapsed = !rightCollapsed"
         @update-agent="selectAgent"
+        @update-condition-router="selectConditionRouter"
+        @update-branch-key="updateBranchKey"
         @update-defer="selectDefer"
       />
     </div>

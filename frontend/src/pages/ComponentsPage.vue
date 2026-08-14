@@ -54,6 +54,7 @@ import {
   TodoListEditor,
   WorkflowInputContextEditor,
   WorkflowPrepareEditor,
+  ConditionRouterEditor,
 } from '@/editors'
 
 interface PageBlockAdapter {
@@ -84,6 +85,7 @@ const editorComponents: Record<ManagedComponentType, Component> = {
   'prompt-caching': PromptCachingEditor,
   'workflow-input-context': WorkflowInputContextEditor,
   'workflow-prepare': WorkflowPrepareEditor,
+  'condition-router': ConditionRouterEditor,
 }
 
 const { t } = useI18n()
@@ -91,7 +93,7 @@ const managementError = useManagementError()
 const route = useRoute()
 const router = useRouter()
 const componentBasePath = computed(() => (
-  props.scope === 'workflow' ? '/workflow-components/prepare' : '/components'
+  props.scope === 'workflow' ? '/workflow-components' : '/components'
 ))
 const { confirm } = useConfirmation()
 const { notify } = useToasts()
@@ -193,6 +195,7 @@ const editorProps = computed<Record<string, unknown>>(() => {
     case 'prompt-caching':
     case 'workflow-input-context':
     case 'workflow-prepare':
+    case 'condition-router':
       return {
         defaults: activeDefaults.value,
         ...(activeType.value === 'filesystem-permissions'
@@ -597,7 +600,7 @@ onMounted(() => {
     </template>
 
     <SectionNav
-      v-if="navigationItems.length"
+      v-if="props.scope === 'agent' && navigationItems.length"
       :active-id="activeType ?? ''"
       :aria-label="t('components.navigationLabel')"
       class="mb-3"

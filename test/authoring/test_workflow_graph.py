@@ -104,22 +104,30 @@ def valid_main_agent(_main_agent_id: str) -> ValidationReport:
 
 
 def test_catalog_exposes_the_first_supported_node_and_handle_paradigms() -> None:
-    assert [item.type for item in NODE_CATALOG] == ["start", "agent", "end"]
+    assert [item.type for item in NODE_CATALOG] == [
+        "start",
+        "agent",
+        "condition-router",
+        "end",
+    ]
     assert [item.runtime_kind for item in NODE_CATALOG] == [
         "graph_entry",
         "agent_wrapper",
+        "command_router",
         "graph_exit",
     ]
     assert [handle.id for handle in NODE_CATALOG[0].output_handles] == ["next"]
     assert [handle.id for handle in NODE_CATALOG[1].input_handles] == ["in"]
     assert [handle.id for handle in NODE_CATALOG[1].output_handles] == ["next"]
     assert [handle.id for handle in NODE_CATALOG[2].input_handles] == ["in"]
+    assert [handle.id for handle in NODE_CATALOG[2].output_handles] == ["branch"]
+    assert [handle.id for handle in NODE_CATALOG[3].input_handles] == ["in"]
     assert {
         handle.edge_type for item in NODE_CATALOG for handle in (
             *item.input_handles,
             *item.output_handles,
         )
-    } == {"normal"}
+    } == {"normal", "branch"}
     assert all(
         handle.max_connections is None
         for item in NODE_CATALOG

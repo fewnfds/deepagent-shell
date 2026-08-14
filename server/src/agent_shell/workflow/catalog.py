@@ -19,10 +19,17 @@ class AgentNodeConfig(BaseModel):
     defer: bool = False
 
 
+class ConditionRouterNodeConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    condition_router_id: UUID
+
+
 @dataclass(frozen=True, slots=True)
 class NodeHandleSpec:
     id: str
     edge_type: str = "normal"
+    accepted_edge_types: tuple[str, ...] = ()
     # None follows Vue Flow/LangGraph semantics: the control handle is not
     # cardinality-limited by the catalog. Graph topology remains authoritative.
     max_connections: int | None = None
@@ -32,6 +39,9 @@ class NodeHandleSpec:
             "id": self.id,
             "kind": "control",
             "edge_type": self.edge_type,
+            "accepted_edge_types": list(
+                self.accepted_edge_types or (self.edge_type,)
+            ),
             "max_connections": self.max_connections,
         }
 
@@ -40,7 +50,12 @@ class NodeHandleSpec:
 class NodeTypeSpec:
     type: str
     type_version: int
-    runtime_kind: Literal["graph_entry", "graph_exit", "agent_wrapper"]
+    runtime_kind: Literal[
+        "graph_entry",
+        "graph_exit",
+        "agent_wrapper",
+        "command_router",
+    ]
     title_key: str
     description_key: str
     config_model: type[BaseModel]
@@ -60,8 +75,11 @@ class NodeTypeSpec:
         }
 
 
-_IN = (NodeHandleSpec("in"),)
+_IN = (
+    NodeHandleSpec("in", accepted_edge_types=("normal", "branch")),
+)
 _NEXT = (NodeHandleSpec("next"),)
+_BRANCH = (NodeHandleSpec("branch", edge_type="branch"),)
 
 NODE_CATALOG: tuple[NodeTypeSpec, ...] = (
     NodeTypeSpec(
@@ -83,6 +101,16 @@ NODE_CATALOG: tuple[NodeTypeSpec, ...] = (
         config_model=AgentNodeConfig,
         input_handles=_IN,
         output_handles=_NEXT,
+    ),
+    NodeTypeSpec(
+        type="condition-router",
+        type_version=1,
+        runtime_kind="command_router",
+        title_key="workflow.nodes.conditionRouter.title",
+        description_key="workflow.nodes.conditionRouter.description",
+        config_model=ConditionRouterNodeConfig,
+        input_handles=_IN,
+        output_handles=_BRANCH,
     ),
     NodeTypeSpec(
         type="end",
@@ -119,6 +147,7 @@ def node_catalog_payload() -> list[dict[str, object]]:
 
 __all__ = [
     "AgentNodeConfig",
+    "ConditionRouterNodeConfig",
     "EmptyNodeConfig",
     "NODE_CATALOG",
     "NodeHandleSpec",

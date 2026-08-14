@@ -360,6 +360,7 @@ def prepare_windows_dependencies(
 
     repository = FileConfigRepository(data_root)
     for component_type in (
+        "condition-router",
         "workflow-input-context",
         "workflow-prepare",
     ):

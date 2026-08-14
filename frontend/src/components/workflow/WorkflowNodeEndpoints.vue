@@ -13,9 +13,9 @@ const props = defineProps<{
 const { t } = useI18n()
 
 function endpointTypeLabel(endpoint: WorkflowNodeHandleSpec): string {
-  return endpoint.edge_type === 'normal'
-    ? t('workflows.editor.normalEdge')
-    : endpoint.edge_type
+  if (endpoint.edge_type === 'normal') return t('workflows.editor.normalEdge')
+  if (endpoint.edge_type === 'branch') return t('workflows.editor.branchEdge')
+  return endpoint.edge_type
 }
 
 function endpointAriaLabel(endpoint: WorkflowNodeHandleSpec): string {
@@ -33,7 +33,8 @@ function endpointAriaLabel(endpoint: WorkflowNodeHandleSpec): string {
     <div v-for="endpoint in endpoints" :key="endpoint.id" class="workflow-node-endpoint">
       <Handle
         :id="endpoint.id"
-        class="workflow-port workflow-port--normal"
+        class="workflow-port"
+        :data-edge-type="endpoint.edge_type"
         :type="direction === 'input' ? 'target' : 'source'"
         :aria-label="endpointAriaLabel(endpoint)"
         :connectable="endpoint.max_connections ?? true"

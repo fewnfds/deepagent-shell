@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+
+from agent_shell.condition_router import ConditionRouterBlock
 from agent_shell.validation import ValidationIssue
 from agent_shell.workflow.catalog import NodeHandleSpec, NodeTypeSpec, node_type_spec
 from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
@@ -64,6 +67,8 @@ def _handle(
 
 def validate_workflow_topology(
     document: WorkflowGraphDocumentV1,
+    *,
+    condition_routers: Mapping[str, ConditionRouterBlock] | None = None,
 ) -> tuple[ValidationIssue, ...]:
     nodes = document.definition.nodes
     edges = document.definition.edges
@@ -75,7 +80,8 @@ def validate_workflow_topology(
         specs[node.id] = spec
 
     issues: list[ValidationIssue] = []
-    connections: set[tuple[str, str, str, str]] = set()
+    connections: set[tuple[str, str, str, str, str | None]] = set()
+    routed_branches: dict[str, dict[str, int]] = {}
 
     for index, edge in enumerate(edges):
         source = node_by_id.get(edge.source)
@@ -141,7 +147,8 @@ def validate_workflow_topology(
         if (
             source_handle is not None
             and target_handle is not None
-            and source_handle.edge_type != target_handle.edge_type
+            and source_handle.edge_type
+            not in (target_handle.accepted_edge_types or (target_handle.edge_type,))
         ):
             issues.append(
                 _edge_issue(
@@ -162,6 +169,7 @@ def validate_workflow_topology(
             edge.source_handle,
             edge.target,
             edge.target_handle,
+            edge.branch_key,
         )
         if connection in connections:
             issues.append(
@@ -176,6 +184,94 @@ def validate_workflow_topology(
             )
         else:
             connections.add(connection)
+
+        if source_handle is not None and source_handle.edge_type == "branch":
+            if edge.branch_key is None:
+                issues.append(
+                    _edge_issue(
+                        edge.id,
+                        index,
+                        "workflow.branch_key_required",
+                        "branch_key",
+                        "A branch edge requires an explicit branch key.",
+                        "validation.issue.workflow.branchKeyRequired",
+                    )
+                )
+            else:
+                by_key = routed_branches.setdefault(edge.source, {})
+                if edge.branch_key in by_key:
+                    issues.append(
+                        _edge_issue(
+                            edge.id,
+                            index,
+                            "workflow.branch_key_duplicate",
+                            "branch_key",
+                            "A condition router branch can connect to only one target.",
+                            "validation.issue.workflow.branchKeyDuplicate",
+                            message_args={"branch_key": edge.branch_key},
+                        )
+                    )
+                else:
+                    by_key[edge.branch_key] = index
+        elif source_handle is not None and edge.branch_key is not None:
+            issues.append(
+                _edge_issue(
+                    edge.id,
+                    index,
+                    "workflow.branch_key_not_allowed",
+                    "branch_key",
+                    "A normal Workflow edge cannot declare a branch key.",
+                    "validation.issue.workflow.branchKeyNotAllowed",
+                )
+            )
+
+    if condition_routers is not None:
+        node_indexes = {node.id: index for index, node in enumerate(nodes)}
+        for node in nodes:
+            spec = specs[node.id]
+            if spec.runtime_kind != "command_router":
+                continue
+            router = condition_routers.get(node.id)
+            if router is None:
+                issues.append(
+                    _issue(
+                        "workflow.condition_router_not_found",
+                        f"definition.nodes[{node_indexes[node.id]}].config.condition_router_id",
+                        "The selected Condition Router configuration does not exist.",
+                        "validation.issue.workflow.conditionRouterNotFound",
+                        owner_id=node.id,
+                        owner_type=node.type,
+                    )
+                )
+                continue
+            declared = {branch.key for branch in router.branches}
+            connected = set(routed_branches.get(node.id, {}))
+            for branch_key in sorted(declared - connected):
+                issues.append(
+                    _issue(
+                        "workflow.condition_router_branch_missing",
+                        f"definition.nodes[{node_indexes[node.id]}]",
+                        "Every Condition Router branch must connect to a target.",
+                        "validation.issue.workflow.conditionRouterBranchMissing",
+                        owner_id=node.id,
+                        owner_type=node.type,
+                        message_args={"branch_key": branch_key},
+                    )
+                )
+            for branch_key in sorted(connected - declared):
+                edge_index = routed_branches[node.id][branch_key]
+                edge = edges[edge_index]
+                issues.append(
+                    _edge_issue(
+                        edge.id,
+                        edge_index,
+                        "workflow.condition_router_branch_unknown",
+                        "branch_key",
+                        "The branch is not declared by the selected Condition Router configuration.",
+                        "validation.issue.workflow.conditionRouterBranchUnknown",
+                        message_args={"branch_key": branch_key},
+                    )
+                )
 
     node_indexes = {node.id: index for index, node in enumerate(nodes)}
     start_ids = {node.id for node in nodes if node.type == "start"}

@@ -518,11 +518,20 @@ class AgentRuntime:
         public_model: str = "",
         workflow_non_agent_filter: Callable[[OutputEvent], bool] | None = None,
     ) -> AgentExecution:
-        from agent_shell.workflow.catalog import AgentNodeConfig
+        from agent_shell.condition_router import ConditionRouterBlock
+        from agent_shell.workflow.catalog import (
+            AgentNodeConfig,
+            ConditionRouterNodeConfig,
+        )
         from agent_shell.workflow.compiler import compile_workflow
 
         agent_nodes = [
             node for node in document.definition.nodes if node.type == "agent"
+        ]
+        condition_router_nodes = [
+            node
+            for node in document.definition.nodes
+            if node.type == "condition-router"
         ]
         messages = validate_client_messages(raw_messages)
         assemblies: dict[str, StaticAssembly] = {}
@@ -541,9 +550,35 @@ class AgentRuntime:
                 raise
             return ValidationReport(stage="workflow_publish")
 
+        condition_routers: dict[str, ConditionRouterBlock] = {}
+        for router_node in condition_router_nodes:
+            router_id = str(
+                ConditionRouterNodeConfig.model_validate(
+                    router_node.config
+                ).condition_router_id
+            )
+            stored_router = (
+                self._blocks.get_block_internal("condition-router", router_id)
+                if self._blocks is not None
+                else None
+            )
+            if stored_router is None:
+                continue
+            try:
+                condition_routers[router_node.id] = ConditionRouterBlock.model_validate(
+                    {key: value for key, value in stored_router.items() if key != "id"}
+                )
+            except Exception as exc:
+                raise AgentRuntimeError(
+                    "workflow.condition_router_invalid",
+                    "The selected Condition Router configuration is invalid.",
+                    status_code=422,
+                ) from exc
+
         executable = validate_workflow_executable(
             document,
             validate_main_agent=validate_main_agent,
+            condition_routers=condition_routers,
         )
         if not executable.valid:
             issue = executable.issues[0]
@@ -605,6 +640,25 @@ class AgentRuntime:
                     )
                 )
             prepare_context: Mapping[str, Any] = {}
+            for router_node in condition_router_nodes:
+                router = condition_routers.get(router_node.id)
+                if router is None:
+                    continue
+                router_id = str(
+                    ConditionRouterNodeConfig.model_validate(
+                        router_node.config
+                    ).condition_router_id
+                )
+                router_metadata = self._builder.script_dependency_metadata(
+                    "condition-router",
+                    {"id": router_id, **router.model_dump(mode="json")},
+                )
+                if router_metadata["dependency_status"] != "ready":
+                    raise AgentRuntimeError(
+                        "condition_router_dependencies_not_ready",
+                        "Restart Agent Shell to prepare the selected Condition Router dependencies.",
+                        status_code=409,
+                    )
             prepare_id = (workflow_snapshot or {}).get("workflow_prepare_id")
             if prepare_id is not None:
                 prepare_block = (
@@ -686,6 +740,7 @@ class AgentRuntime:
             graph = compile_workflow(
                 document,
                 node_agents=dict(built_agents),
+                condition_routers=condition_routers,
                 checkpointer=(
                     workflow_debug.checkpointer
                     if workflow_debug is not None

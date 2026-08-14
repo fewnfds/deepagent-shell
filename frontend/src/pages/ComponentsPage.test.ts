@@ -8,6 +8,7 @@ import {
   type BlockType,
   type CapabilityManifest,
   type SavedBlock,
+  type WorkflowComponentManifest,
 } from '@/api'
 import { useConfirmation } from '@/composables/useConfirmation'
 
@@ -67,6 +68,15 @@ const skillManifest: CapabilityManifest = {
   order: 2,
   editor_key: 'skill',
   required: false,
+}
+
+const workflowPrepareManifest: WorkflowComponentManifest = {
+  type: 'workflow-prepare',
+  terminology_key: 'workflow_prepare',
+  label: 'Workflow Prepare',
+  order: 1,
+  icon_key: 'workflow',
+  editor_key: 'workflow-prepare',
 }
 
 function modelRecord(id: string): SavedBlock {
@@ -166,6 +176,40 @@ beforeEach(() => {
 })
 
 describe('ComponentsPage', () => {
+  it('uses the Workflow Components section navigation without a duplicate type navigation', async () => {
+    api.getCatalog.mockResolvedValueOnce({
+      block_types: [skillManifest, modelManifest],
+      workflow_component_types: [workflowPrepareManifest],
+      editor_defaults: {},
+    })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{
+        path: '/workflow-components/:type',
+        component: ComponentsPage,
+        props: { scope: 'workflow' },
+      }],
+    })
+    await router.push('/workflow-components/workflow-prepare')
+    await router.isReady()
+    const wrapper = mount(ComponentsPage, {
+      props: { scope: 'workflow' },
+      global: { plugins: [router] },
+    })
+    await flushPromises()
+
+    expect(wrapper.findAll('[data-testid="section-nav"] button').map((item) => item.text())).toEqual([
+      'navigation.sections.workflowPrepare',
+      'navigation.sections.conditionRouter',
+    ])
+    expect(wrapper.get('.page-action-dock').findAll('button').map((button) => button.text())).toEqual([
+      'common.new',
+      'common.reset',
+      'common.save',
+    ])
+    wrapper.unmount()
+  })
+
   it('uses catalog order and loads only the routed type and explicit UUID', async () => {
     const id = '00000000-0000-0000-0000-000000000001'
     const { wrapper } = await mountAt(`/components/model?id=${id}`)

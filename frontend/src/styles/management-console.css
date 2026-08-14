@@ -710,7 +710,7 @@ pre code {
   top: 50%;
 }
 
-.workflow-port.workflow-port--normal {
+.workflow-port[data-edge-type='normal'] {
   width: 12px;
   height: 12px;
   border: 2px solid var(--bs-body-bg);
@@ -718,10 +718,23 @@ pre code {
   box-shadow: 0 0 0 1px var(--bs-primary);
 }
 
+.workflow-port[data-edge-type='branch'] {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--bs-body-bg);
+  background: var(--bs-warning);
+  box-shadow: 0 0 0 1px var(--bs-warning);
+}
+
 .workflow-editor-flow .vue-flow__connection-path,
 .workflow-editor-flow .vue-flow__edge-path {
   stroke: var(--bs-primary);
   stroke-width: 2;
+}
+
+.workflow-editor-flow .vue-flow__edge.workflow-edge--branch .vue-flow__edge-path {
+  stroke: var(--bs-warning);
+  stroke-dasharray: 7 5;
 }
 
 .workflow-editor-flow .vue-flow__edge.selected .vue-flow__edge-path {

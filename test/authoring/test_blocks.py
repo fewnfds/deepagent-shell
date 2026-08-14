@@ -32,11 +32,13 @@ def test_health_catalog_and_readiness_are_small_and_current(
         "prompt_caching",
         "workflow_input_context",
         "workflow_prepare",
+        "condition_router",
     }
     assert [item["type"] for item in catalog["block_types"]] == list(PUBLIC_TYPES)
     assert [item["order"] for item in catalog["block_types"]] == list(range(1, 15))
     assert [item["type"] for item in catalog["workflow_component_types"]] == [
-        "workflow-prepare"
+        "workflow-prepare",
+        "condition-router",
     ]
     by_type = {item["type"]: item for item in catalog["block_types"]}
     assert set(by_type["model"]) == {
@@ -79,6 +81,52 @@ def test_health_catalog_and_readiness_are_small_and_current(
     )
     assert readiness["sections"]["runtime_dependencies"]["status"] == "ready"
     assert readiness["sections"]["runtime_dependencies"]["code"] == "model_streaming"
+
+
+def test_condition_router_uses_component_crud_storage_and_repository_validation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = make_client(tmp_path, monkeypatch)
+    payload = {
+        "name": "Risk routing",
+        "branches": [
+            {"key": "review", "label": "Manual review"},
+            {"key": "otherwise", "label": "Otherwise"},
+        ],
+        "route_source": (
+            "async def route(state, context):\n"
+            "    return {'activate': ['review'], 'update': {}}\n"
+        ),
+        "python_requirements": [],
+    }
+
+    created_response = client.post("/api/blocks/condition-router", json=payload)
+    assert created_response.status_code == 200
+    created = created_response.json()
+    assert created["dependency_status"] == "ready"
+    assert client.get(
+        f"/api/blocks/condition-router/{created['id']}"
+    ).json() == created
+    assert (
+        tmp_path
+        / "data"
+        / "config"
+        / "components"
+        / "condition-router"
+        / f"{created['id']}.yaml"
+    ).is_file()
+    assert client.get("/api/validation/repository").json()["valid"] is True
+
+    invalid = {**payload, "branches": [{"key": "review", "label": "Review"}]}
+    rejected = client.put(
+        f"/api/blocks/condition-router/{created['id']}",
+        json=invalid,
+    )
+    assert rejected.status_code == 422
+
+    assert client.delete(
+        f"/api/blocks/condition-router/{created['id']}"
+    ).json() == {"ok": True}
 
 
 def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) -> None:

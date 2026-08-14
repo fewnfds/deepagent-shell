@@ -21,6 +21,7 @@ from agent_shell.plugins.workflow_input_context.contracts import (
     WorkflowInputContextBlock,
 )
 from agent_shell.workflow_prepare import WorkflowPrepareBlock
+from agent_shell.condition_router import ConditionRouterBlock
 
 
 # These text snapshots are management-editor data. Production catalog reads must not
@@ -500,6 +501,9 @@ _EDITOR_DEFAULTS = {
         name="Workflow input context"
     ).model_dump(mode="json", exclude={"name"}),
     "workflow_prepare": WorkflowPrepareBlock(name="Workflow prepare").model_dump(
+        mode="json", exclude={"name"}
+    ),
+    "condition_router": ConditionRouterBlock(name="Condition router").model_dump(
         mode="json", exclude={"name"}
     ),
 }

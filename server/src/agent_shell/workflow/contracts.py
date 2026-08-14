@@ -6,6 +6,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
+from agent_shell.condition_router import BranchKey
+
 
 WORKFLOW_SCHEMA_VERSION = 1
 WORKFLOW_STATE_CONTRACT = "agent-shell.workflow.agent-invocations.v1"
@@ -44,6 +46,7 @@ class WorkflowEdgeV1(BaseModel):
     source_handle: HandleId
     target: NodeId
     target_handle: HandleId
+    branch_key: BranchKey | None = None
 
 
 class WorkflowGraphDefinitionV1(BaseModel):
