@@ -2,6 +2,7 @@
 import {
   LteAlert,
   LteButton,
+  LteInput,
   LteTextarea,
 } from '@adminlte/vue'
 import { computed, onMounted, ref } from 'vue'
@@ -278,23 +279,22 @@ onMounted(() => { void load() })
             <div class="card-body">
               <div class="row g-3">
                 <div class="col-md-6">
-                  <FormField control-id="system-host" field-path="host" label-key="systemSettings.host">
-                    <input id="system-host" v-model="host" class="form-control" spellcheck="false">
-                  </FormField>
+                  <LteInput v-model="host" :label="fieldLabel('systemSettings.host', 'host')" spellcheck="false" />
                 </div>
                 <div class="col-md-6">
-                  <FormField control-id="system-port" field-path="port" label-key="systemSettings.port">
-                    <input
-                      id="system-port"
-                      v-model.number="port"
-                      class="form-control"
-                      max="65535"
-                      min="1"
-                      required
-                      step="1"
-                      type="number"
-                    >
-                  </FormField>
+                  <label class="form-label" for="system-port">
+                    {{ fieldLabel('systemSettings.port', 'port') }}
+                  </label>
+                  <input
+                    id="system-port"
+                    v-model.number="port"
+                    class="form-control"
+                    max="65535"
+                    min="1"
+                    required
+                    step="1"
+                    type="number"
+                  >
                 </div>
               </div>
               <div class="mt-3">
@@ -322,7 +322,10 @@ onMounted(() => { void load() })
               </h2>
             </header>
             <div class="card-body">
-              <FormField control-id="management-password" field-path="management_token" label-key="systemSettings.managementPassword">
+              <div class="mb-3">
+                <label class="form-label" for="management-password">
+                  {{ fieldLabel('systemSettings.managementPassword', 'management_token') }}
+                </label>
                 <div class="input-group">
                   <input
                     id="management-password"
@@ -344,9 +347,10 @@ onMounted(() => { void load() })
                     <i v-else class="bi bi-eye" aria-hidden="true" />
                   </LteButton>
                 </div>
-              </FormField>
+              </div>
 
-              <FormField control-id="api-server-key" field-path="api_key" label-key="apiServer.key.title">
+              <div>
+                <label class="form-label" for="api-server-key">{{ fieldLabel('apiServer.key.title', 'api_key') }}</label>
                 <div class="input-group">
                   <input
                     id="api-server-key"
@@ -369,7 +373,7 @@ onMounted(() => { void load() })
                     <i v-else class="bi bi-eye" aria-hidden="true" />
                   </LteButton>
                 </div>
-              </FormField>
+              </div>
             </div>
           </section>
         </div>
@@ -383,7 +387,10 @@ onMounted(() => { void load() })
               </h2>
             </header>
             <div class="card-body">
-              <FormField control-id="max-initial-messages" field-path="max_initial_messages" label-key="apiServer.request.maxInitialMessages">
+              <div class="mb-3">
+                <label class="form-label" for="max-initial-messages">
+                  {{ fieldLabel('apiServer.request.maxInitialMessages', 'max_initial_messages') }}
+                </label>
                 <input
                   id="max-initial-messages"
                   v-model.number="maxInitialMessages"
@@ -394,7 +401,7 @@ onMounted(() => { void load() })
                   step="1"
                   type="number"
                 >
-              </FormField>
+              </div>
 
               <FormField
                 control-id="configuration-validation-debounce"
@@ -441,7 +448,10 @@ onMounted(() => { void load() })
                 </label>
               </div>
 
-              <FormField control-id="langsmith-endpoint" field-path="langsmith_endpoint" label-key="systemSettings.langsmith.endpoint">
+              <div class="mb-3">
+                <label class="form-label" for="langsmith-endpoint">
+                  {{ fieldLabel('systemSettings.langsmith.endpoint', 'langsmith_endpoint') }}
+                </label>
                 <input
                   id="langsmith-endpoint"
                   v-model="langsmithEndpoint"
@@ -451,60 +461,63 @@ onMounted(() => { void load() })
                   spellcheck="false"
                   type="url"
                 >
-              </FormField>
+              </div>
 
               <div class="row g-3 mb-3">
                 <div class="col-md-6">
-                  <FormField control-id="langsmith-project" field-path="langsmith_project" label-key="systemSettings.langsmith.project">
-                    <input
-                      id="langsmith-project"
-                      v-model="langsmithProject"
-                      class="form-control"
-                      maxlength="200"
-                      required
-                      spellcheck="false"
-                      type="text"
-                    >
-                  </FormField>
+                  <label class="form-label" for="langsmith-project">
+                    {{ fieldLabel('systemSettings.langsmith.project', 'langsmith_project') }}
+                  </label>
+                  <input
+                    id="langsmith-project"
+                    v-model="langsmithProject"
+                    class="form-control"
+                    maxlength="200"
+                    required
+                    spellcheck="false"
+                    type="text"
+                  >
                 </div>
                 <div class="col-md-6">
-                  <FormField control-id="langsmith-workspace-id" field-path="langsmith_workspace_id" label-key="systemSettings.langsmith.workspaceId">
-                    <input
-                      id="langsmith-workspace-id"
-                      v-model="langsmithWorkspaceId"
-                      class="form-control"
-                      maxlength="200"
-                      spellcheck="false"
-                      type="text"
-                    >
-                  </FormField>
+                  <label class="form-label" for="langsmith-workspace-id">
+                    {{ fieldLabel('systemSettings.langsmith.workspaceId', 'langsmith_workspace_id') }}
+                  </label>
+                  <input
+                    id="langsmith-workspace-id"
+                    v-model="langsmithWorkspaceId"
+                    class="form-control"
+                    maxlength="200"
+                    spellcheck="false"
+                    type="text"
+                  >
                 </div>
               </div>
 
-              <FormField control-id="langsmith-api-key" field-path="langsmith_api_key" label-key="systemSettings.langsmith.apiKey">
-                <div class="input-group">
-                  <input
-                    id="langsmith-api-key"
-                    v-model="langsmithApiKey"
-                    autocomplete="off"
-                    class="form-control"
-                    :placeholder="langsmithApiKeyPlaceholder"
-                    spellcheck="false"
-                    :type="showLangsmithApiKey ? 'text' : 'password'"
-                    @input="langsmithApiKeyDirty = true"
-                  >
-                  <LteButton
-                    :aria-label="showLangsmithApiKey ? t('common.hide') : t('common.show')"
-                    :aria-pressed="showLangsmithApiKey"
-                    theme="info"
-                    type="button"
-                    @click="showLangsmithApiKey = !showLangsmithApiKey"
-                  >
-                    <i v-if="showLangsmithApiKey" class="bi bi-eye-slash" aria-hidden="true" />
-                    <i v-else class="bi bi-eye" aria-hidden="true" />
-                  </LteButton>
-                </div>
-              </FormField>
+              <label class="form-label" for="langsmith-api-key">
+                {{ fieldLabel('systemSettings.langsmith.apiKey', 'langsmith_api_key') }}
+              </label>
+              <div class="input-group">
+                <input
+                  id="langsmith-api-key"
+                  v-model="langsmithApiKey"
+                  autocomplete="off"
+                  class="form-control"
+                  :placeholder="langsmithApiKeyPlaceholder"
+                  spellcheck="false"
+                  :type="showLangsmithApiKey ? 'text' : 'password'"
+                  @input="langsmithApiKeyDirty = true"
+                >
+                <LteButton
+                  :aria-label="showLangsmithApiKey ? t('common.hide') : t('common.show')"
+                  :aria-pressed="showLangsmithApiKey"
+                  theme="info"
+                  type="button"
+                  @click="showLangsmithApiKey = !showLangsmithApiKey"
+                >
+                  <i v-if="showLangsmithApiKey" class="bi bi-eye-slash" aria-hidden="true" />
+                  <i v-else class="bi bi-eye" aria-hidden="true" />
+                </LteButton>
+              </div>
             </div>
           </section>
 

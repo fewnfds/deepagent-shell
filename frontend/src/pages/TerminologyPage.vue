@@ -6,7 +6,6 @@ import type { DataTableConfig } from '@/components/data-table/types'
 import PageShell from '@/components/PageShell.vue'
 import { glossaryEntries, type GlossaryEntry, type GlossaryScope } from '@/glossary'
 
-const scopes: GlossaryScope[] = ['ai-agent-concept', 'project-technology']
 const { t } = useI18n()
 
 function scopeLabel(scope: GlossaryScope): string {
@@ -33,13 +32,6 @@ const table: DataTableConfig<GlossaryEntry> = {
       ...row.variants,
     ],
   },
-  filters: [{
-    key: 'scope',
-    kind: 'multi',
-    label: () => t('terminology.categoryFilter'),
-    options: scopes.map((scope) => ({ value: scope, label: () => scopeLabel(scope) })),
-    values: (row) => row.scope,
-  }],
   columns: [
     { key: 'term', label: () => t('terminology.termColumn'), value: (row) => row.english },
     { key: 'variants', label: () => t('terminology.variantsColumn'), value: (row) => row.variants.join(', ') },

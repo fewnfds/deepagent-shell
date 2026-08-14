@@ -851,7 +851,6 @@ export const zhCN = {
     title: '词库',
     searchLabel: '搜索词条',
     searchPlaceholder: '输入英文、变体、中文或说明内容',
-    categoryFilter: '分类',
     pagination: { ariaLabel: '词库列表分页' },
     empty: '没有匹配的词条。',
     termColumn: '词条',

@@ -92,28 +92,25 @@ function packageLabel(item: CustomMiddlewareCatalogItem): string {
 
     <div v-if="draft.middlewares.length" class="list-group list-group-flush">
       <div v-for="(entry, index) in draft.middlewares" :key="entry._key" class="list-group-item">
-        <div class="row g-3">
-          <div class="col-12 col-lg-8 management-control-field">
+        <div class="row g-3 align-items-end">
+          <div class="col-12 col-lg-8">
             <label class="form-label" :for="`middleware-package-${entry._key}`">
               {{ t('editors.customMiddleware.package') }}
             </label>
-            <div class="management-control">
-              <select
-                :id="`middleware-package-${entry._key}`"
-                class="form-select"
-                :value="entry.package_id"
-                @change="selectPackage(index, ($event.target as HTMLSelectElement).value)"
-              >
-                <option value="">{{ t('agents.capability.notAttached') }}</option>
-                <option v-for="item in catalog" :key="item.id" :value="item.id">
-                  {{ packageLabel(item) }}
-                </option>
-              </select>
-            </div>
+            <select
+              :id="`middleware-package-${entry._key}`"
+              class="form-select"
+              :value="entry.package_id"
+              @change="selectPackage(index, ($event.target as HTMLSelectElement).value)"
+            >
+              <option value="">{{ t('agents.capability.notAttached') }}</option>
+              <option v-for="item in catalog" :key="item.id" :value="item.id">
+                {{ packageLabel(item) }}
+              </option>
+            </select>
           </div>
-          <div class="col-12 col-lg-4 management-control-field">
-            <span class="form-label">{{ t('editors.common.enabled') }}</span>
-            <div class="management-control justify-content-end gap-2">
+          <div class="col-12 col-lg-4">
+            <div class="d-flex align-items-center gap-2">
               <div class="form-check form-switch">
                 <input
                   :id="`middleware-enabled-${entry._key}`"

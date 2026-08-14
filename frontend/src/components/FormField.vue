@@ -29,7 +29,7 @@ const describedBy = computed(() => [hintId.value, errorId.value].filter(Boolean)
 </script>
 
 <template>
-  <div class="mb-3 management-control-field" data-ui-pattern="form-field">
+  <div class="mb-3" data-ui-pattern="form-field">
     <label v-if="controlId && technicalLabel" class="form-label d-block font-monospace" data-ui-slot="label" :for="controlId">
       {{ label }}
     </label>
@@ -42,9 +42,7 @@ const describedBy = computed(() => [hintId.value, errorId.value].filter(Boolean)
     <span v-else class="form-label d-block" data-ui-slot="label">
       {{ label }}
     </span>
-    <div class="management-control">
-      <slot :control-id="controlId" :described-by="describedBy" :invalid="Boolean(error)" />
-    </div>
+    <slot :control-id="controlId" :described-by="describedBy" :invalid="Boolean(error)" />
     <div v-if="hint" :id="hintId" class="form-text" data-ui-slot="help">{{ hint }}</div>
     <div v-if="error" :id="errorId" class="invalid-feedback d-block" data-ui-slot="error">{{ error }}</div>
   </div>

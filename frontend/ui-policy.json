@@ -213,11 +213,6 @@
         ]
       },
       {
-        "name": "management-control-layout",
-        "paths": ["src/components/*.vue", "src/components/data-table/*.vue", "src/editors/*.vue", "src/pages/*.vue"],
-        "classes": ["management-control", "management-control--stacked", "management-control-field"]
-      },
-      {
         "name": "collection-workbench",
         "paths": [
           "src/components/data-table/*.vue",

@@ -422,7 +422,7 @@ onMounted(() => { void loadControls() })
           <form
             v-for="source in (['runtime'] as const)"
             :key="source"
-            class="col-lg-3 management-control-field"
+            class="col-lg-3"
             :data-testid="`retention-${source}`"
             @submit.prevent="saveRetention(source)"
           >
@@ -443,7 +443,7 @@ onMounted(() => { void loadControls() })
               </LteButton>
             </div>
           </form>
-          <form class="col-lg-3 management-control-field" data-testid="system-log-settings" @submit.prevent="saveSystemLogSettings">
+          <form class="col-lg-3" data-testid="system-log-settings" @submit.prevent="saveSystemLogSettings">
             <label class="form-label" for="system-log-max-size">{{ t('eventFeed.retention.systemMaxSize') }}</label>
             <div class="input-group">
               <input
@@ -462,23 +462,20 @@ onMounted(() => { void loadControls() })
               </LteButton>
             </div>
           </form>
-          <div class="col-lg-3 management-control-field" data-testid="runtime-debug">
-            <span class="form-label">{{ t('eventFeed.debug.label') }}</span>
-            <div class="management-control">
-              <div class="form-check form-switch">
-                <input
-                  id="runtime-debug-enabled"
-                  v-model="runtimeDebugEnabled"
-                  class="form-check-input"
-                  :disabled="savingControl === 'runtime-debug'"
-                  role="switch"
-                  type="checkbox"
-                  @change="saveRuntimeDebug"
-                >
-                <label class="visually-hidden" for="runtime-debug-enabled">
-                  {{ t('eventFeed.debug.label') }}
-                </label>
-              </div>
+          <div class="col-lg-3 d-flex align-items-center" data-testid="runtime-debug">
+            <div class="form-check form-switch">
+              <input
+                id="runtime-debug-enabled"
+                v-model="runtimeDebugEnabled"
+                class="form-check-input"
+                :disabled="savingControl === 'runtime-debug'"
+                role="switch"
+                type="checkbox"
+                @change="saveRuntimeDebug"
+              >
+              <label class="form-check-label" for="runtime-debug-enabled">
+                {{ t('eventFeed.debug.label') }}
+              </label>
             </div>
           </div>
         </div>
@@ -491,7 +488,7 @@ onMounted(() => { void loadControls() })
       @query-applied="stale = false"
     >
       <template #filter-actions>
-        <LteButton :disabled="controlsLoading" theme="primary" type="button" @click="refreshAll">
+        <LteButton class="fs-6" :disabled="controlsLoading" theme="primary" type="button" @click="refreshAll">
           <span v-if="controlsLoading" class="spinner-border spinner-border-sm" aria-hidden="true" />
           {{ t('common.refresh') }}
         </LteButton>

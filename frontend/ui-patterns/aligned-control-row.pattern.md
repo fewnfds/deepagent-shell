@@ -1,25 +1,15 @@
-# Aligned control row
+# AdminLTE control row
 
-Find as: 并排字段、统一高度、搜索工具栏、筛选工具栏、操作按钮、switch 同排、aligned controls、control row。
+Find as: 并排字段、搜索工具栏、筛选工具栏、switch 同排、操作按钮、control row。
 
-Use: 同一网格并排放置 label、input、input-group、switch 或操作按钮。Source of truth: `management-control-field`。
+Use: 直接复用 AdminLTE/Bootstrap 现成结构，不增加项目级布局 class。
 
 Contract:
 
-- 同级标签统一使用 `.form-label`，不在 pattern 或页面单独设字号；标题层级使用 `h2/h3`。
-- 控件区使用同一最小行高，按钮、input-group 和 switch 通过父级对齐，不互相追加视觉补丁。
-- 操作和筛选属于控件区，不另起一套按钮尺寸；没有匹配项时不要自创局部布局。
+- 普通字段使用 `.form-label` + `.form-control` / `.form-select`；需要字段语义、help 或 error 时使用 `FormField`。
+- 单位或同行动作使用 `.input-group`；开关使用 `.form-check.form-switch`。
+- 并排布局使用 Bootstrap `row g-3` 和列 class；确需底部对齐时只在该行使用 `align-items-end`。
+- 控件保持组件默认宽高。禁止为统一外观增加固定高度、最小行高、等高 grid、slot flex wrapper 或页面私有尺寸补丁。
+- `btn-sm` 只用于现有表格/列表行的紧凑操作；普通搜索、提交和表单动作沿用参考源码中的尺寸。
 
-Correct:
-
-```vue
-<div class="management-control-field">
-  <label class="form-label" for="query">Search</label>
-  <div class="input-group">
-    <input id="query" class="form-control" type="search">
-    <button class="btn btn-primary" type="submit">Search</button>
-  </div>
-</div>
-```
-
-Verify: `src/components/data-table/DataTableWorkbench.vue`、`src/pages/EventFeedPage.vue`、`src/pages/WorkflowsPage.vue`。
+Reference: `src/components/data-table/DataTableWorkbench.vue`、`src/editors/CustomMiddlewareEditor.vue`、`src/editors/WorkflowInputContextEditor.vue`。

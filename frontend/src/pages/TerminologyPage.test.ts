@@ -16,7 +16,6 @@ const i18n = createI18n({
         searchLabel: 'Search terminology',
         searchPlaceholder: 'Search',
         resultCount: '{count} of {total}',
-        categoryFilter: 'Categories',
         applied: 'Applied: {filters}',
         appliedQuery: 'search {query}',
         appliedCategories: 'categories {categories}',

@@ -128,39 +128,6 @@ pre code {
   opacity: 0.65;
 }
 
-.management-control-field {
-  display: grid;
-  grid-template-rows: minmax(1.5rem, auto) minmax(2.375rem, auto);
-  gap: 0.5rem;
-  min-width: 0;
-}
-
-.management-control-field > .form-label,
-.management-control-field > .collection-filter-legend {
-  margin-bottom: 0;
-}
-
-.management-control-field > .form-control,
-.management-control-field > .form-select,
-.management-control-field > .input-group,
-.management-control-field > .management-control,
-.management-control-field > .collection-filter-options {
-  min-height: 2.375rem;
-}
-
-.management-control {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-
-.management-control--stacked {
-  display: grid;
-  align-content: start;
-  align-items: start;
-  gap: 0.5rem;
-}
-
 .record-picker-name-field .invalid-feedback {
   display: none;
 }
@@ -301,13 +268,16 @@ pre code {
   float: none;
   width: auto;
   padding: 0;
-  margin: 0;
+  margin: 0 0 0.625rem;
+  color: var(--bs-secondary-color);
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25;
 }
 
 .collection-filter-options {
   display: flex;
   flex-wrap: wrap;
-  align-items: stretch;
   gap: 0.5rem;
 }
 

@@ -853,7 +853,6 @@ export const en: MessageSchema = {
     title: 'Terminology',
     searchLabel: 'Search terminology',
     searchPlaceholder: 'Search English, variants, Chinese, or explanations',
-    categoryFilter: 'Categories',
     pagination: { ariaLabel: 'Terminology pagination' },
     empty: 'No terminology matches the search.',
     termColumn: 'Term',
