@@ -61,6 +61,11 @@
 - 页面和 editor 不写 `<style>`、`style=`、硬编码颜色、未知 class 或动态视觉 class。唯一项目样式入口是
   policy 指定的 `src/styles/management-console.css`；确有缺口必须先批准并记录。
 - 图标只用 policy 中批准的 Bootstrap Icons。icon-only button 必须有清楚的可访问名称，简单英文可接受。
+- 未经用户明确要求，页面不得增加裸超链接。产品说明、连接参考和外部服务入口写入 `docs/` 说明书；真实站内
+  导航或下载等产品动作使用已有导航、按钮或菜单范式。
+- 右侧操作必须位于 flex 父级，并在最终 DOM 的直接 flex item 上使用 `ms-auto`；不得只依赖
+  `justify-content-between`，也不得假设 AdminLTE 组件会把对齐 class 转发到目标节点。实现后检查目标是否确实贴近
+  容器右边界，无法直接控制时先使用普通布局容器承接组件。
 - 不 patch/fork `node_modules`。上游成品不合格时使用官方 Bootstrap/AdminLTE 结构和现有产品行为层。
 
 ## 按任务读取

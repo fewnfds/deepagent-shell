@@ -422,14 +422,11 @@ onMounted(() => { void load() })
           </section>
 
           <section class="card mb-3" data-testid="system-card-langsmith">
-            <header class="card-header d-flex align-items-center justify-content-between">
+            <header class="card-header">
               <h2 class="card-title">
                 <i class="bi bi-gear me-2" aria-hidden="true" />
                 {{ t('systemSettings.langsmith.title') }}
               </h2>
-              <a href="https://smith.langchain.com" rel="noreferrer" target="_blank">
-                {{ t('systemSettings.langsmith.open') }}
-              </a>
             </header>
             <div class="card-body">
               <div class="form-check form-switch mb-3">
@@ -514,12 +511,6 @@ onMounted(() => { void load() })
                   <i v-if="showLangsmithApiKey" class="bi bi-eye-slash" aria-hidden="true" />
                   <i v-else class="bi bi-eye" aria-hidden="true" />
                 </LteButton>
-              </div>
-              <div class="form-text">
-                <a href="https://docs.langchain.com/langsmith/trace-with-langchain" rel="noreferrer" target="_blank">
-                  {{ t('systemSettings.langsmith.docs') }}
-                </a>
-                {{ t('systemSettings.langsmith.restart') }}
               </div>
             </div>
           </section>

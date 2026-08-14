@@ -45,6 +45,14 @@ LangSmith tracing、Endpoint、Project、可选 Workspace ID 与 write-only API 
 CIDR。secret 只显示是否配置，不回显明文。启用 LangSmith 或修改连接字段时，系统会在保存前验证 API Key、
 Endpoint 区域和 Workspace ID 是否匹配；验证失败时不保存本次修改。
 
+LangSmith 配置项含义如下：
+
+- 启用：控制是否向 LangSmith 发送 trace；
+- 服务地址：LangSmith API Endpoint，按账号区域或自托管部署填写；
+- 项目：接收 trace 的 LangSmith Project；
+- Workspace ID：API Key 可访问多个 Workspace 时填写，否则留空；
+- API Key：只写 secret；已配置的值不会回显，留空保存时保留原值。
+
 API Key、消息上限和拦截测试立即生效；host、端口、远程访问、管理密码、LangSmith、CORS 和可信代理重启后生效。
 远程部署要求见[安全与部署](../security-and-deployment.md)。
 
