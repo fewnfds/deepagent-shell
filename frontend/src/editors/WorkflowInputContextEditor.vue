@@ -78,12 +78,6 @@ function setRequirements(value: string): void {
 
 <template>
   <div data-editor="workflow-input-context">
-    <div class="form-check form-switch mb-3">
-      <input id="workflow-input-context-enabled" v-model="draft.enabled" class="form-check-input" type="checkbox">
-      <label class="form-check-label" for="workflow-input-context-enabled">
-        {{ draft.enabled ? t('common.enabled') : t('common.disabled') }}
-      </label>
-    </div>
     <p v-if="draft.dependency_status !== 'ready'" class="form-text">
       {{ t(`editors.scriptRequirements.status.${draft.dependency_status}`) }}
     </p>

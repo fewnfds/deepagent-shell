@@ -13,12 +13,10 @@ def materialize_workflow_input_context_middleware(
     *,
     backend: Any,
     agent_scope: str,
-) -> WorkflowInputContextMiddleware | None:
+) -> WorkflowInputContextMiddleware:
     from .middleware import WorkflowInputContextMiddleware
 
     configuration = WorkflowInputContextBlock.model_validate(block)
-    if not configuration.enabled:
-        return None
     return WorkflowInputContextMiddleware(
         configuration,
         backend=backend,

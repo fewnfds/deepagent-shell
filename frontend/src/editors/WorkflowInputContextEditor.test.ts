@@ -11,7 +11,6 @@ import { zhCN } from '@/locales/zh-CN'
 import WorkflowInputContextEditor from './WorkflowInputContextEditor.vue'
 
 const defaults: WorkflowInputContextDefaults = {
-  enabled: true,
   python_requirements: [],
   custom_transform_enabled: false,
   custom_transform_source: '',

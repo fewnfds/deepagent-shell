@@ -71,7 +71,6 @@ class WorkflowInputContextBlock(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: Annotated[str, Field(min_length=1, max_length=120)]
-    enabled: bool = True
     custom_transform_enabled: bool = False
     custom_transform_source: PluginText = Field(
         default=DEFAULT_CUSTOM_TRANSFORM_SOURCE,

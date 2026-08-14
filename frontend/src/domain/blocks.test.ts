@@ -59,7 +59,6 @@ const todoDefaults: TodoListDefaults = {
   tool_description: 'write_todos default',
 }
 const workflowInputDefaults: WorkflowInputContextDefaults = {
-  enabled: true,
   python_requirements: [],
   custom_transform_enabled: false,
   custom_transform_source: '',
@@ -321,7 +320,6 @@ describe('block adapters', () => {
     })
     expect(workflowInputContextAdapter.toPayload(inputContext)).toEqual({
       name: 'Input context',
-      enabled: true,
       python_requirements: ['PyYAML>=6'],
       custom_transform_enabled: true,
       custom_transform_source: 'def transform(read_file, config, workflow_state, agent_state, context):\n    return {}',

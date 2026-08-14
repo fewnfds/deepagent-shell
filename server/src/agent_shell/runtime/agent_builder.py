@@ -218,7 +218,7 @@ class AgentBuilder:
     ) -> MaterializedAgentProfile:
         for component_type in ("workflow-input-context",):
             component = selected_blocks.get(component_type)
-            if component is None or not bool(component.get("enabled", True)):
+            if component is None:
                 continue
             metadata = self.script_dependency_metadata(component_type, component)
             if metadata["dependency_status"] != "ready":
@@ -395,17 +395,17 @@ class AgentBuilder:
         workflow_input_context = selected_blocks.get("workflow-input-context")
         if workflow_input_context is not None:
             try:
-                input_context_middleware = materialize_workflow_input_context_middleware(
-                    {
-                        key: value
-                        for key, value in workflow_input_context.items()
-                        if key != "id"
-                    },
-                    backend=backend,
-                    agent_scope=scope,
+                extra_middleware.append(
+                    materialize_workflow_input_context_middleware(
+                        {
+                            key: value
+                            for key, value in workflow_input_context.items()
+                            if key != "id"
+                        },
+                        backend=backend,
+                        agent_scope=scope,
+                    )
                 )
-                if input_context_middleware is not None:
-                    extra_middleware.append(input_context_middleware)
             except Exception as exc:
                 raise configuration_error(
                     "middleware_materialization_failed",

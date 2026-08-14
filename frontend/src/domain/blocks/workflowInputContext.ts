@@ -22,7 +22,6 @@ export interface WorkflowInputContextSlotDraft {
 }
 
 export interface WorkflowInputContextDraft extends BlockDraftBase {
-  enabled: boolean
   python_requirements: string[]
   dependency_status: 'ready' | 'restart_required' | 'failed'
   custom_transform_enabled: boolean
@@ -34,7 +33,6 @@ export interface WorkflowInputContextDraft extends BlockDraftBase {
 }
 
 export interface WorkflowInputContextDefaults {
-  enabled: boolean
   python_requirements: string[]
   custom_transform_enabled: boolean
   custom_transform_source: string
@@ -45,7 +43,6 @@ export interface WorkflowInputContextDefaults {
 }
 
 interface WorkflowInputContextPayload extends BlockPayloadBase {
-  enabled: boolean
   python_requirements: string[]
   custom_transform_enabled: boolean
   custom_transform_source: string
@@ -91,7 +88,6 @@ export const workflowInputContextAdapter = {
     return {
       id: '',
       name: '',
-      enabled: defaults.enabled,
       python_requirements: [...defaults.python_requirements],
       dependency_status: 'ready',
       custom_transform_enabled: defaults.custom_transform_enabled,
@@ -107,7 +103,6 @@ export const workflowInputContextAdapter = {
     return {
       id: stringValue(source.id),
       name: stringValue(source.name),
-      enabled: typeof source.enabled === 'boolean' ? source.enabled : defaults.enabled,
       python_requirements: stringList(source.python_requirements),
       dependency_status: source.dependency_status === 'failed' || source.dependency_status === 'restart_required'
         ? source.dependency_status
@@ -129,7 +124,6 @@ export const workflowInputContextAdapter = {
   toPayload(value: WorkflowInputContextDraft): WorkflowInputContextPayload {
     return {
       name: cleanName(value.name),
-      enabled: value.enabled,
       python_requirements: uniqueStrings(value.python_requirements),
       custom_transform_enabled: value.custom_transform_enabled,
       custom_transform_source: value.custom_transform_source,
