@@ -148,6 +148,13 @@
     "allowedSfcStyleBlocks": [],
     "allowedInlineStylePaths": [],
     "hardcodedColorsAllowed": false,
+    "controlSemantics": {
+      "visibleLabelClass": "form-label",
+      "hiddenLabelClass": "visually-hidden",
+      "controlRowAttribute": "data-ui-control-row",
+      "controlColumnPrefixes": ["col-"],
+      "peerLegendClasses": ["collection-filter-legend"]
+    },
     "classRecipes": [
       {
         "name": "app-shell",

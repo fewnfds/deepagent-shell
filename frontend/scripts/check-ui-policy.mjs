@@ -207,11 +207,85 @@ function checkWorkspace(root, policyPath) {
       return
     }
     const allowedClasses = allowedClassesFor(file)
+    const controlSemantics = policy.styles.controlSemantics ?? {}
+    const visibleLabelClass = controlSemantics.visibleLabelClass
+    const hiddenLabelClass = controlSemantics.hiddenLabelClass
+    const controlRowAttribute = controlSemantics.controlRowAttribute
+    const controlColumnPrefixes = controlSemantics.controlColumnPrefixes ?? []
+    const peerLegendClasses = new Set(controlSemantics.peerLegendClasses ?? [])
+
+    function staticClasses(node) {
+      if (node.type !== NodeTypes.ELEMENT) return new Set()
+      const classAttribute = node.props.find((prop) => (
+        prop.type === NodeTypes.ATTRIBUTE && prop.name === 'class'
+      ))
+      return new Set((classAttribute?.value?.content ?? '').split(/\s+/).filter(Boolean))
+    }
+
+    function hasProp(node, name) {
+      return node.props.some((prop) => (
+        (prop.type === NodeTypes.ATTRIBUTE && prop.name === name)
+        || (
+          prop.type === NodeTypes.DIRECTIVE
+          && prop.name === 'bind'
+          && prop.arg?.type === NodeTypes.SIMPLE_EXPRESSION
+          && prop.arg.content === name
+        )
+      ))
+    }
+
+    function ownedElementMatches(root, predicate) {
+      function search(node, nested) {
+        if (node.type !== NodeTypes.ELEMENT) return false
+        const classes = staticClasses(node)
+        if (nested && (
+          classes.has('row')
+          || classes.has('card')
+          || classes.has('card-header')
+          || classes.has('list-group-item')
+        )) return false
+        if (predicate(node, classes)) return true
+        return (node.children ?? []).some((child) => search(child, true))
+      }
+      return search(root, false)
+    }
+
+    function directControlColumns(node) {
+      const columns = []
+      function collect(children) {
+        for (const child of children ?? []) {
+          if (child.type !== NodeTypes.ELEMENT) continue
+          if (child.tag === 'template') {
+            collect(child.children)
+            continue
+          }
+          const classes = staticClasses(child)
+          if ([...classes].some((className) => controlColumnPrefixes.some((prefix) => className.startsWith(prefix)))) {
+            columns.push(child)
+          }
+        }
+      }
+      collect(node.children)
+      return columns
+    }
+
+    function columnHasFieldLabel(column) {
+      return ownedElementMatches(column, (node, classes) => (
+        (visibleLabelClass && classes.has(visibleLabelClass))
+        || node.tag === 'FormField'
+        || (['LteInput', 'LteSelect', 'LteTextarea'].includes(node.tag) && hasProp(node, 'label'))
+      ))
+    }
+
+    function columnHasSwitch(column) {
+      return ownedElementMatches(column, (_node, classes) => classes.has('form-switch'))
+    }
 
     function visit(node) {
       if (node.type === NodeTypes.ELEMENT) {
         const line = node.loc.start.line
         const tag = node.tag
+        const classes = staticClasses(node)
         if (tag.startsWith('El')) addError(file, `Element Plus component <${tag}> is forbidden`, line)
         if (tag.startsWith('Lte') && !adminImportAllowed(tag, file)) {
           addError(file, `AdminLTE component <${tag}> is not approved for this path`, line)
@@ -256,6 +330,33 @@ function checkWorkspace(root, policyPath) {
               const dynamicPaths = policy.adminLteVue.dynamicPropPaths?.[tag]?.[name] ?? []
               if (!dynamicPaths.includes(file)) {
                 addError(file, `dynamic visual prop ${tag}.${name} is forbidden`, prop.loc.start.line)
+              }
+            }
+          }
+        }
+
+        if (
+          tag === 'legend'
+          && [...classes].some((className) => peerLegendClasses.has(className))
+          && visibleLabelClass
+          && !classes.has(visibleLabelClass)
+          && !(hiddenLabelClass && classes.has(hiddenLabelClass))
+        ) {
+          addError(file, `peer control legend must use Bootstrap .${visibleLabelClass}`, line)
+        }
+
+        if (
+          classes.has('row')
+          && controlRowAttribute
+          && hasProp(node, controlRowAttribute)
+          && visibleLabelClass
+          && controlColumnPrefixes.length > 0
+        ) {
+          const columns = directControlColumns(node)
+          if (columns.length > 1 && columns.some(columnHasFieldLabel)) {
+            for (const column of columns) {
+              if (columnHasSwitch(column) && !columnHasFieldLabel(column)) {
+                addError(file, `switch column beside labelled controls must include .${visibleLabelClass}`, column.loc.start.line)
               }
             }
           }

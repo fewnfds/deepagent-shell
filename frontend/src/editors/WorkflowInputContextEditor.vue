@@ -118,16 +118,17 @@ function setRequirements(value: string): void {
           <input id="workflow-input-context-promote" v-model="draft.system_promote_enabled" class="form-check-input" type="checkbox">
           <label class="form-check-label" for="workflow-input-context-promote">{{ t('editors.workflowInputContext.promoteEnabled') }}</label>
         </div>
-        <div class="row g-3">
+        <div class="row g-3" data-ui-control-row>
           <div class="col-md-6">
             <FormField field-path="system_promote_min_chars">
               <input v-model.number="draft.system_promote_min_chars" class="form-control" min="0" step="1" type="number">
             </FormField>
           </div>
-          <div class="col-md-6 d-flex align-items-end">
-            <div class="form-check form-switch mb-2">
+          <div class="col-md-6">
+            <span class="form-label d-block">{{ t('editors.workflowInputContext.demoteEnabled') }}</span>
+            <div class="form-check form-switch">
               <input id="workflow-input-context-demote" v-model="draft.demote_non_top_system" class="form-check-input" type="checkbox">
-              <label class="form-check-label" for="workflow-input-context-demote">{{ t('editors.workflowInputContext.demoteEnabled') }}</label>
+              <label class="visually-hidden" for="workflow-input-context-demote">{{ t('editors.workflowInputContext.demoteEnabled') }}</label>
             </div>
           </div>
         </div>

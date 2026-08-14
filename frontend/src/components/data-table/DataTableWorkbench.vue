@@ -268,7 +268,7 @@ defineExpose<{
             </select>
           </div>
           <fieldset v-else class="collection-filter-fieldset">
-            <legend class="collection-filter-legend">{{ label(filter.label) }}</legend>
+            <legend class="collection-filter-legend form-label">{{ label(filter.label) }}</legend>
             <div class="collection-filter-options">
               <template v-for="option in filter.options" :key="option.value">
                 <input
@@ -287,14 +287,14 @@ defineExpose<{
         </template>
 
         <fieldset v-if="slots['filter-controls']" class="collection-filter-fieldset">
-          <legend class="collection-filter-legend">
+          <legend class="collection-filter-legend form-label">
             <slot name="filter-controls-title" />
           </legend>
           <slot name="filter-controls" />
         </fieldset>
 
         <fieldset v-if="hasFilterActions" class="collection-filter-fieldset">
-          <legend class="collection-filter-legend">{{ t('common.dataTable.operations') }}</legend>
+          <legend class="collection-filter-legend form-label">{{ t('common.dataTable.operations') }}</legend>
           <div class="collection-filter-options">
             <template v-if="!config.search && filters.length">
               <LteButton class="fs-6" :disabled="loading" theme="primary" type="submit">

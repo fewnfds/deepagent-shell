@@ -75,6 +75,9 @@ describe('EventFeedPage', () => {
 
     expect(wrapper.find('[data-testid="retention-runtime"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="retention-api_call"]').exists()).toBe(false)
+    const debugControl = wrapper.get('[data-testid="runtime-debug"]')
+    expect(debugControl.get('.form-label').text()).toBe('Full DEBUG logs')
+    expect(debugControl.get('label[for="runtime-debug-enabled"]').classes()).toContain('visually-hidden')
     const debugSwitch = wrapper.get<HTMLInputElement>('#runtime-debug-enabled')
     expect(debugSwitch.element.checked).toBe(false)
     await debugSwitch.setValue(true)

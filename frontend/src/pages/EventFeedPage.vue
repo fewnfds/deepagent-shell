@@ -418,7 +418,7 @@ onMounted(() => { void loadControls() })
       </div>
 
       <div v-if="controlsReady">
-        <div class="row g-3">
+        <div class="row g-3" data-ui-control-row>
           <form
             v-for="source in (['runtime'] as const)"
             :key="source"
@@ -462,7 +462,8 @@ onMounted(() => { void loadControls() })
               </LteButton>
             </div>
           </form>
-          <div class="col-lg-3 d-flex align-items-center" data-testid="runtime-debug">
+          <div class="col-lg-3" data-testid="runtime-debug">
+            <span class="form-label d-block">{{ t('eventFeed.debug.label') }}</span>
             <div class="form-check form-switch">
               <input
                 id="runtime-debug-enabled"
@@ -473,7 +474,7 @@ onMounted(() => { void loadControls() })
                 type="checkbox"
                 @change="saveRuntimeDebug"
               >
-              <label class="form-check-label" for="runtime-debug-enabled">
+              <label class="visually-hidden" for="runtime-debug-enabled">
                 {{ t('eventFeed.debug.label') }}
               </label>
             </div>

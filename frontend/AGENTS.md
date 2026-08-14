@@ -62,6 +62,9 @@
   policy 指定的 `src/styles/management-console.css`；确有缺口必须先批准并记录。
 - 数值输入需要声明单位时，使用 Bootstrap `input-group`，在输入框后以 `input-group-text` 显示单位，并通过
   `aria-describedby` 关联；单位不得写入标题、label 括号、帮助备注或 tooltip。
+- 页面与章节层级使用 heading。真实表单中将 switch 与 label-input 并排时，在 Bootstrap `row` 标记
+  `data-ui-control-row`，各控制列标题统一使用 `.form-label`；不得把无标题的居中 switch 列塞入该行。
+  `list-group-item` 等重复列表行、卡片/分组标题和独立 switch 不使用这条规则，不得为了视觉对齐补 `.form-label`。
 - 图标只用 policy 中批准的 Bootstrap Icons。icon-only button 必须有清楚的可访问名称，简单英文可接受。
 - 未经用户明确要求，页面不得增加裸超链接。产品说明、连接参考和外部服务入口写入 `docs/` 说明书；真实站内
   导航或下载等产品动作使用已有导航、按钮或菜单范式。

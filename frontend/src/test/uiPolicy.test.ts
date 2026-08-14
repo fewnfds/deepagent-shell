@@ -39,11 +39,21 @@ const basePolicy = {
     allowedSfcStyleBlocks: [],
     allowedInlineStylePaths: [],
     hardcodedColorsAllowed: false,
+    controlSemantics: {
+      visibleLabelClass: 'form-label',
+      hiddenLabelClass: 'visually-hidden',
+      controlRowAttribute: 'data-ui-control-row',
+      controlColumnPrefixes: ['col-'],
+      peerLegendClasses: ['collection-filter-legend'],
+    },
     classRecipes: [
       {
         name: 'fixture',
         paths: ['src/pages/*.vue'],
-        classes: ['approved'],
+        classes: [
+          'approved', 'col-md-6', 'collection-filter-legend', 'form-check', 'form-check-input',
+          'form-label', 'form-switch', 'row', 'visually-hidden',
+        ],
       },
     ],
   },
@@ -202,5 +212,65 @@ describe('ui-policy checker', () => {
 
     expect(result.status).toBe(1)
     expect(result.stderr).toContain('local UI component is not approved in ui-policy.json')
+  })
+
+  it('rejects a peer control legend with a different visual label style', () => {
+    const result = runFixture({
+      'src/pages/ExamplePage.vue': `
+        <template>
+          <fieldset>
+            <legend class="collection-filter-legend">Operations</legend>
+          </fieldset>
+        </template>
+      `,
+    })
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('peer control legend must use Bootstrap .form-label')
+  })
+
+  it('rejects an unlabelled switch column beside a labelled input', () => {
+    const result = runFixture({
+      'src/pages/ExamplePage.vue': `
+        <template>
+          <div class="row" data-ui-control-row>
+            <div class="col-md-6"><label class="form-label">Name</label><input></div>
+            <div class="col-md-6">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox">
+                <label class="visually-hidden">Enabled</label>
+              </div>
+            </div>
+          </div>
+        </template>
+      `,
+    })
+
+    expect(result.status).toBe(1)
+    expect(result.stderr).toContain('switch column beside labelled controls must include .form-label')
+  })
+
+  it('does not treat a repeated list row as a labelled form-control row', () => {
+    const result = runFixture({
+      'src/pages/ExamplePage.vue': `
+        <template>
+          <ul>
+            <li>
+              <div class="row">
+                <div class="col-md-6"><label class="form-label">Name</label><input></div>
+                <div class="col-md-6">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox">
+                    <label class="visually-hidden">Enabled</label>
+                  </div>
+                </div>
+              </div>
+            </li>
+          </ul>
+        </template>
+      `,
+    })
+
+    expect(result.status).toBe(0)
   })
 })
