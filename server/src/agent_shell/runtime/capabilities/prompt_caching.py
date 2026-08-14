@@ -27,8 +27,6 @@ def materialize_prompt_caching_middleware(
     block = PromptCachingBlock.model_validate(
         {key: value for key, value in capability.items() if key != "id"}
     )
-    if not block.enabled:
-        return _DisabledAnthropicPromptCachingMiddleware()
 
     from langchain_anthropic.middleware import AnthropicPromptCachingMiddleware
 

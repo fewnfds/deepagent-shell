@@ -117,7 +117,6 @@ export const summarizationAdapter = {
     })
     return {
       name: cleanName(value.name),
-      enabled: value.enabled,
       trigger: threshold(value.trigger),
       keep: threshold(value.keep),
       truncate_args_enabled: value.truncate_args_enabled,

@@ -133,17 +133,19 @@ function setRequirements(value: string): void {
             </span>
           </div>
         </FormField>
-        <div class="form-check form-switch mb-3">
-          <input id="workflow-input-context-promote" v-model="draft.system_promote_enabled" class="form-check-input" type="checkbox">
-          <label class="form-check-label" for="workflow-input-context-promote">
-            {{ t('editors.workflowInputContext.promoteEnabled') }}
-          </label>
-        </div>
-        <div class="form-check form-switch">
-          <input id="workflow-input-context-demote" v-model="draft.demote_non_top_system" class="form-check-input" type="checkbox">
-          <label class="form-check-label" for="workflow-input-context-demote">
-            {{ t('editors.workflowInputContext.demoteEnabled') }}
-          </label>
+        <div class="d-flex flex-column align-items-start gap-3" data-testid="workflow-input-context-system-rules">
+          <div class="form-check form-switch">
+            <input id="workflow-input-context-promote" v-model="draft.system_promote_enabled" class="form-check-input" type="checkbox">
+            <label class="form-check-label" for="workflow-input-context-promote">
+              {{ t('editors.workflowInputContext.promoteEnabled') }}
+            </label>
+          </div>
+          <div class="form-check form-switch">
+            <input id="workflow-input-context-demote" v-model="draft.demote_non_top_system" class="form-check-input" type="checkbox">
+            <label class="form-check-label" for="workflow-input-context-demote">
+              {{ t('editors.workflowInputContext.demoteEnabled') }}
+            </label>
+          </div>
         </div>
       </div>
     </section>

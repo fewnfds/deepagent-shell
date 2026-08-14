@@ -84,7 +84,6 @@ const summarizationDefaults: SummarizationDefaults = {
   summary_prompt_override: '',
 }
 const promptCachingDefaults: PromptCachingDefaults = {
-  enabled: true,
   type: 'ephemeral',
   ttl: '5m',
   min_messages_to_cache: 0,

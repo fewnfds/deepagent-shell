@@ -7,7 +7,6 @@ import {
 } from './shared'
 
 export interface PromptCachingDraft extends BlockDraftBase {
-  enabled: boolean
   type: 'ephemeral'
   ttl: '5m' | '1h'
   min_messages_to_cache: number | string
@@ -16,7 +15,6 @@ export interface PromptCachingDraft extends BlockDraftBase {
 export type PromptCachingDefaults = Omit<PromptCachingDraft, 'id' | 'name'>
 
 interface PromptCachingApiRecord extends BlockDraftBase {
-  enabled?: unknown
   type?: unknown
   ttl?: unknown
   min_messages_to_cache?: unknown
@@ -41,7 +39,6 @@ export const promptCachingAdapter = {
   fromApi(value: PromptCachingApiRecord, defaults: PromptCachingDefaults): PromptCachingDraft {
     return {
       ...identity(value),
-      enabled: typeof value.enabled === 'boolean' ? value.enabled : defaults.enabled,
       type: 'ephemeral',
       ttl: value.ttl === '1h' || value.ttl === '5m' ? value.ttl : defaults.ttl,
       min_messages_to_cache: normalizeTokenLimit(
@@ -53,7 +50,6 @@ export const promptCachingAdapter = {
   toPayload(value: PromptCachingDraft): PromptCachingPayload {
     return {
       name: cleanName(value.name),
-      enabled: value.enabled,
       type: value.type,
       ttl: value.ttl,
       min_messages_to_cache: normalizeTokenLimit(value.min_messages_to_cache, null)

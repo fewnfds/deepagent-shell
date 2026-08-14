@@ -117,7 +117,6 @@ def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
         DEEPAGENTS_DEFAULT_SUMMARY_PROMPT
     )
     assert defaults["prompt_caching"] == {
-        "enabled": True,
         "type": "ephemeral",
         "ttl": "5m",
         "min_messages_to_cache": 0,

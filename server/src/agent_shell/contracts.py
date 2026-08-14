@@ -861,7 +861,6 @@ class SummarizationBlock(StrictBlock):
 
 
 class PromptCachingBlock(StrictBlock):
-    enabled: bool = True
     type: Literal["ephemeral"] = "ephemeral"
     ttl: Literal["5m", "1h"] = "5m"
     min_messages_to_cache: Annotated[int, Field(ge=0)] = 0

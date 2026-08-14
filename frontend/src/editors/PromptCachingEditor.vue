@@ -16,12 +16,6 @@ const draft = useEditorModel(() => props.modelValue, (value) => emit('update:mod
 
 <template>
   <div data-editor="prompt-caching">
-    <div class="form-check form-switch mb-3">
-      <input id="prompt-caching-enabled" v-model="draft.enabled" class="form-check-input" type="checkbox">
-      <label class="form-check-label" for="prompt-caching-enabled">
-        {{ draft.enabled ? t('common.enabled') : t('common.disabled') }}
-      </label>
-    </div>
     <div class="row g-3">
       <div class="col-lg-4">
         <FormField field-path="type">
