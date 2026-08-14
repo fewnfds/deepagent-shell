@@ -16,7 +16,10 @@ import { systemPromptAdapter } from './blocks/systemPrompt'
 import { todoListAdapter } from './blocks/todoList'
 import { workflowInputContextAdapter } from './blocks/workflowInputContext'
 import { workflowPrepareAdapter } from './blocks/workflowPrepare'
-import { conditionRouterAdapter } from './blocks/conditionRouter'
+import {
+  conditionRouterAdapter,
+  newConditionRouterBranch,
+} from './blocks/conditionRouter'
 
 export type {
   CustomMiddlewareCatalogItem,
@@ -97,6 +100,7 @@ export {
   workflowInputContextAdapter,
   workflowPrepareAdapter,
   conditionRouterAdapter,
+  newConditionRouterBranch,
 }
 
 export const blockTypes = [
