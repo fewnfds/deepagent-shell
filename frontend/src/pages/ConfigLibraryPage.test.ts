@@ -23,6 +23,8 @@ const messages = {
     validationTitle: 'Repository validation',
     groups: {
       components: 'Components',
+      agentComponents: 'Agent components',
+      workflowComponents: 'Workflow components',
       agents: 'Agents',
       plugins: 'Plugins',
     },
@@ -297,7 +299,7 @@ describe('ConfigLibraryPage', () => {
     const { wrapper } = await mountPage(api.service)
 
     expect(api.listBlocks).toHaveBeenCalledWith('model')
-    expect(wrapper.get('[data-testid="library-component-group"] > span').text()).toBe('Components')
+    expect(wrapper.get('[data-testid="library-component-group"] > span').text()).toBe('Agent components')
     expect(wrapper
       .get('[data-testid="library-component-group"] [data-testid="section-nav"]')
       .findAll('button')

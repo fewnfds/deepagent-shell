@@ -137,7 +137,7 @@ class OutputEvent:
     agent_profile_id: str = ""
     subagent_profile_id: str = ""
     message: str = ""
-    data: object = None
+    data: object = field(default=None, repr=False)
     values: dict[str, str] = field(default_factory=dict)
     stream_id: str = ""
     raw_seq: int = 0

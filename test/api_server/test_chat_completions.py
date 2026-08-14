@@ -68,9 +68,7 @@ def test_models_publish_only_enabled_workflows_and_chat_runs_current_graph(
     assert workflow_reply.status_code == 200, workflow_reply.text
     message = workflow_reply.json()["choices"][0]["message"]
     assert message["role"] == "assistant"
-    assert message["content"].startswith("running")
-    assert "runtime reply" in message["content"]
-    assert message["content"].endswith("completed")
+    assert message["content"] == "runtime reply"
     for response in (main_agent_name_reply, main_agent_id_reply):
         assert response.status_code == 404
         assert response.json()["error"]["code"] == "model_not_found"
@@ -142,9 +140,7 @@ def test_chat_completion_stream_runs_current_graph(
     content = "".join(
         chunk["choices"][0]["delta"].get("content", "") for chunk in chunks
     )
-    assert content.startswith("running")
-    assert "runtime reply" in content
-    assert content.endswith("completed")
+    assert content == "runtime reply"
     assert chunks[-1]["choices"][0]["finish_reason"] == "unknown"
 
 
