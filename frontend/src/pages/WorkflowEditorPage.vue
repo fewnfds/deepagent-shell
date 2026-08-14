@@ -243,6 +243,23 @@ function removeNode(nodeId: string): void {
   edges.value = edges.value.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
 }
 
+function updateNodeId(nodeId: string, nextNodeId: string): void {
+  if (
+    !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(nextNodeId)
+    || nodes.value.some((node) => node.id === nextNodeId)
+  ) return
+  const source = nodes.value.find((node) => node.id === nodeId)
+  if (!source || source.data.nodeType === 'start' || source.data.nodeType === 'end') return
+  nodes.value = nodes.value.map((node) => (
+    node.id === nodeId ? { ...node, id: nextNodeId } : node
+  ))
+  edges.value = edges.value.map((edge) => ({
+    ...edge,
+    source: edge.source === nodeId ? nextNodeId : edge.source,
+    target: edge.target === nodeId ? nextNodeId : edge.target,
+  }))
+}
+
 function removeEdge(edgeId: string): void {
   edges.value = edges.value.filter((edge) => edge.id !== edgeId)
 }
@@ -402,7 +419,7 @@ onMounted(async () => {
     conditionRouters.value = conditionRouterRecords
     nodeCatalog.value = catalog
     stateContract.value = graph.definition.state_contract
-    const canvas = workflowDocumentToCanvas(graph, nodeCatalog.value, conditionRouters.value)
+    const canvas = workflowDocumentToCanvas(graph, nodeCatalog.value)
     nodes.value = canvas.nodes
     edges.value = canvas.edges
     savedViewport.value = canvas.viewport
@@ -467,10 +484,10 @@ onMounted(async () => {
           @node-click="showInspector"
           @pane-click="clearSelection"
         >
-          <template #node-start>
+          <template #node-start="{ id }">
             <div class="workflow-node workflow-node--terminal">
               <span class="workflow-node-icon" aria-hidden="true"><i class="bi bi-play-fill" /></span>
-              <span class="workflow-node-title">{{ t('workflows.editor.start') }}</span>
+              <span class="workflow-node-title">{{ id }}</span>
               <WorkflowNodeEndpoints
                 direction="output"
                 :endpoints="nodeEndpoints('start', 'output')"
@@ -478,7 +495,7 @@ onMounted(async () => {
             </div>
           </template>
 
-          <template #node-agent="{ data }">
+          <template #node-agent="{ id, data }">
             <div class="workflow-node workflow-node--agent">
               <WorkflowNodeEndpoints
                 direction="input"
@@ -486,7 +503,7 @@ onMounted(async () => {
               />
               <div class="workflow-node-header">
                 <span class="workflow-node-icon" aria-hidden="true"><i class="bi bi-robot" /></span>
-                <span class="workflow-node-title">{{ t('workflows.editor.agent') }}</span>
+                <span class="workflow-node-title">{{ id }}</span>
               </div>
               <span class="workflow-node-summary">{{ mainAgentName(data.mainAgentId) }}</span>
               <WorkflowNodeEndpoints
@@ -496,26 +513,26 @@ onMounted(async () => {
             </div>
           </template>
 
-          <template #node-condition-router="{ data }">
+          <template #node-condition-router="{ id, data }">
             <div class="workflow-node workflow-node--condition-router">
               <WorkflowNodeEndpoints direction="input" :endpoints="nodeEndpoints('condition-router', 'input')" />
               <div class="workflow-node-header">
                 <span class="workflow-node-icon" aria-hidden="true"><i class="bi bi-circle-half" /></span>
-                <span class="workflow-node-title">{{ t('workflows.editor.conditionRouter') }}</span>
+                <span class="workflow-node-title">{{ id }}</span>
               </div>
               <span class="workflow-node-summary">{{ conditionRouterName(data.conditionRouterId ?? '') }}</span>
               <WorkflowNodeEndpoints direction="output" :endpoints="nodeEndpoints('condition-router', 'output')" />
             </div>
           </template>
 
-          <template #node-end>
+          <template #node-end="{ id }">
             <div class="workflow-node workflow-node--terminal">
               <WorkflowNodeEndpoints
                 direction="input"
                 :endpoints="nodeEndpoints('end', 'input')"
               />
               <span class="workflow-node-icon" aria-hidden="true"><i class="bi bi-stop-fill" /></span>
-              <span class="workflow-node-title">{{ t('workflows.editor.end') }}</span>
+              <span class="workflow-node-title">{{ id }}</span>
             </div>
           </template>
         </VueFlow>
@@ -531,6 +548,7 @@ onMounted(async () => {
         :main-agents="mainAgents"
         :condition-routers="conditionRouters"
         :node="selectedNode"
+        :node-ids="nodes.map((node) => node.id)"
         :output-endpoints="selectedNodeOutputEndpoints"
         :state-contract="stateContract"
         :workflow-name="workflow?.name ?? ''"
@@ -542,6 +560,7 @@ onMounted(async () => {
         @toggle="rightCollapsed = !rightCollapsed"
         @update-agent="selectAgent"
         @update-condition-router="selectConditionRouter"
+        @update-node-id="updateNodeId"
         @update-branch-key="updateBranchKey"
         @update-defer="selectDefer"
       />

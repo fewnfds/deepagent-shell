@@ -244,32 +244,17 @@ def validate_workflow_topology(
                     )
                 )
                 continue
-            declared = {branch.key for branch in router.branches}
             connected = set(routed_branches.get(node.id, {}))
-            for branch_key in sorted(declared - connected):
+            if "otherwise" not in connected:
                 issues.append(
                     _issue(
                         "workflow.condition_router_branch_missing",
                         f"definition.nodes[{node_indexes[node.id]}]",
-                        "Every Condition Router branch must connect to a target.",
+                        "A Condition Router requires an otherwise branch edge.",
                         "validation.issue.workflow.conditionRouterBranchMissing",
                         owner_id=node.id,
                         owner_type=node.type,
-                        message_args={"branch_key": branch_key},
-                    )
-                )
-            for branch_key in sorted(connected - declared):
-                edge_index = routed_branches[node.id][branch_key]
-                edge = edges[edge_index]
-                issues.append(
-                    _edge_issue(
-                        edge.id,
-                        edge_index,
-                        "workflow.condition_router_branch_unknown",
-                        "branch_key",
-                        "The branch is not declared by the selected Condition Router configuration.",
-                        "validation.issue.workflow.conditionRouterBranchUnknown",
-                        message_args={"branch_key": branch_key},
+                        message_args={"branch_key": "otherwise"},
                     )
                 )
 

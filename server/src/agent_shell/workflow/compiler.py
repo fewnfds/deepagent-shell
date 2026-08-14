@@ -135,6 +135,7 @@ def _make_condition_router_node(
                 configuration.model_dump(mode="python"),
                 state=state,
                 context=runtime.context,
+                allowed_branches=route_targets,
             )
         except ConditionRouterError as exc:
             raise AgentRuntimeError(

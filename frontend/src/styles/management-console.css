@@ -550,6 +550,11 @@ pre code {
   cursor: grab;
 }
 
+.workflow-node-library-list {
+  display: grid;
+  gap: 10px;
+}
+
 .workflow-node-library-item:active {
   cursor: grabbing;
 }

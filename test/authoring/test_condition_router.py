@@ -15,6 +15,7 @@ from agent_shell.runtime.agent_builder import BuiltAgent
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.runtime.state import AgentShellState
 from agent_shell.workflow import admit_workflow_document, compile_workflow
+from agent_shell.workflow.topology import validate_workflow_topology
 
 
 ROUTER_ID = "11111111-1111-4111-8111-111111111111"
@@ -52,11 +53,6 @@ def _built_agent(agent_id: str, content: str) -> BuiltAgent:
 def _configuration(source: str) -> ConditionRouterBlock:
     return ConditionRouterBlock(
         name="Risk routing",
-        branches=[
-            {"key": "review", "label": "Manual review"},
-            {"key": "audit", "label": "Audit"},
-            {"key": "otherwise", "label": "Otherwise"},
-        ],
         route_source=source,
     )
 
@@ -77,6 +73,7 @@ def test_condition_router_receives_complete_values_and_converts_state_mutation()
                 workflow={"id": "workflow-1"},
                 prepare={"approved": True},
             ),
+            allowed_branches={"review", "audit", "otherwise"},
         )
     )
 
@@ -84,13 +81,7 @@ def test_condition_router_receives_complete_values_and_converts_state_mutation()
     assert result.update == {"shared_vars": {"risk": 90, "approved": True}}
 
 
-def test_condition_router_requires_explicit_otherwise_and_uses_it_for_empty_result() -> None:
-    with pytest.raises(ValueError, match="exactly one otherwise"):
-        ConditionRouterBlock(
-            name="Invalid",
-            branches=[{"key": "review", "label": "Review"}],
-        )
-
+def test_condition_router_uses_otherwise_for_empty_result_and_rejects_unmapped_keys() -> None:
     router = _configuration(
         "async def route(state, context):\n"
         "    return {'activate': [], 'update': {}}\n"
@@ -100,6 +91,7 @@ def test_condition_router_requires_explicit_otherwise_and_uses_it_for_empty_resu
             router.model_dump(mode="python"),
             state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
             context=WorkflowRuntimeContext(),
+            allowed_branches={"review", "audit", "otherwise"},
         )
     )
     assert result.activate == ["otherwise"]
@@ -114,6 +106,21 @@ def test_condition_router_requires_explicit_otherwise_and_uses_it_for_empty_resu
                 invalid.model_dump(mode="python"),
                 state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
                 context=WorkflowRuntimeContext(),
+                allowed_branches={"review", "audit", "otherwise"},
+            )
+        )
+
+    unmapped = _configuration(
+        "async def route(state, context):\n"
+        "    return {'activate': ['missing edge'], 'update': {}}\n"
+    )
+    with pytest.raises(ConditionRouterError):
+        asyncio.run(
+            run_condition_router(
+                unmapped.model_dump(mode="python"),
+                state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
+                context=WorkflowRuntimeContext(),
+                allowed_branches={"review", "audit", "otherwise"},
             )
         )
 
@@ -152,6 +159,20 @@ def test_compiler_uses_command_for_named_multi_branch_routing() -> None:
     router = _configuration(
         "async def route(state, context):\n"
         "    return {'activate': ['review', 'audit'], 'update': {'shared_vars': {'routed': True}}}\n"
+    )
+    missing_otherwise = document.model_copy(deep=True)
+    missing_otherwise.definition.edges = [
+        edge
+        for edge in missing_otherwise.definition.edges
+        if edge.branch_key != "otherwise"
+    ]
+    assert any(
+        issue.code == "workflow.condition_router_branch_missing"
+        and issue.message_args == {"branch_key": "otherwise"}
+        for issue in validate_workflow_topology(
+            missing_otherwise,
+            condition_routers={"router": router},
+        )
     )
     graph = compile_workflow(
         document,

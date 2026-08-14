@@ -14,7 +14,6 @@ import type {
   WorkflowNodeHandleSpec,
   WorkflowNodeCatalogItem,
   WorkflowNodeType,
-  SavedBlock,
 } from '@/api'
 
 export interface WorkflowCanvasNodeData {
@@ -113,26 +112,9 @@ function documentEdgeType(
   return accepted.includes(sourceHandle.edge_type) ? sourceHandle.edge_type : ''
 }
 
-function branchLabel(
-  edge: WorkflowGraphEdge,
-  document: WorkflowGraphDocument,
-  conditionRouters: readonly SavedBlock[],
-): string {
-  if (!edge.branch_key) return ''
-  const source = document.definition.nodes.find((node) => node.id === edge.source)
-  if (!source || source.type !== 'condition-router') return edge.branch_key
-  const router = conditionRouters.find((item) => item.id === source.config.condition_router_id)
-  const branches = Array.isArray(router?.branches) ? router.branches : []
-  const branch = branches.find((item) => (
-    item && typeof item === 'object' && item.key === edge.branch_key
-  ))
-  return branch && typeof branch.label === 'string' ? branch.label : edge.branch_key
-}
-
 export function workflowDocumentToCanvas(
   document: WorkflowGraphDocument,
   catalog: WorkflowNodeCatalogItem[],
-  conditionRouters: readonly SavedBlock[] = [],
 ): WorkflowCanvasState {
   const sourceNodes = document.definition.nodes.length > 0
     ? document.definition.nodes
@@ -145,7 +127,7 @@ export function workflowDocumentToCanvas(
     nodes: sourceNodes.map((node) => canvasNode(node, document)),
     edges: document.definition.edges.map((edge) => {
       const edgeType = documentEdgeType(edge, document, catalog)
-      const label = branchLabel(edge, document, conditionRouters)
+      const label = edge.branch_key ?? ''
       return {
         id: edge.id,
         source: edge.source,

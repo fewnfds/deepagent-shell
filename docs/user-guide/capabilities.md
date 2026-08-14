@@ -19,6 +19,7 @@
 | Prompt 缓存 | Anthropic prompt caching TTL 与最少消息数 | 可选 | 继承、替换或关闭 |
 | Workflow 输入上下文 | 从请求 `messages[]` 整理初始消息，并按规则追加文件槽位 | 可选 | 继承、替换或关闭 |
 | Workflow Prepare | 在 LangChain 构造前准备本次 Workflow 的静态 runtime context | Workflow 可选绑定 | 不属于 Agent capability |
+| 条件路由 | 读取完整 Workflow State/Context，更新 State 并激活具名 Branch Edge | 画布 Node 引用 | 不属于 Agent capability |
 
 组件编辑页从服务端 catalog 取得字段、默认值和资源发现结果。草稿校验与保存校验都以后端 contract
 为准；记录使用 UUID 引用，重命名不会断开引用。
@@ -44,6 +45,10 @@ capability 引用及继承/替换/关闭规则决定。它支持受信任 Python
 Workflow Prepare 是 Workflow-owned 组件。它在所有 Agent 配置解析完成后、任何模型/Middleware/Agent/StateGraph
 构造前执行一次 `async def prepare(input)`；当前只允许返回 `{"context": {...}}`，结果冻结到
 `runtime.context.prepare`。它不属于 Main Agent/Subagent capability，也不是通用生命周期 Hook。
+
+条件路由组件只保存 `async def route(state, context)` 与 requirements。用户在画布 Branch Edge 上直接填写分支 key，
+脚本通过 `activate` 返回一个或多个完全匹配的 key，并可通过 `update` 返回 State 局部更新；空列表使用必须显式连接的
+`otherwise`。完整返回契约见[条件路由](../wizard-pages/condition-router-config.md)。
 
 这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。各组件用自己的 `python_requirements` 声明外部包；
 它们共享现有启动期依赖层，但 fingerprint 和状态彼此独立。requirements 修改后重启生效，源码修改在下次调用生效。

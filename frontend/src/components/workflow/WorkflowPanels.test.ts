@@ -109,6 +109,7 @@ describe('Workflow canvas panels', () => {
         mainAgents: agents,
         conditionRouters: [],
         node,
+        nodeIds: [node.id],
         outputEndpoints: agentCatalog.output_handles,
         stateContract: 'agent-shell.workflow.agent-invocations.v1',
         workflowName: 'Research Workflow',
@@ -117,8 +118,11 @@ describe('Workflow canvas panels', () => {
     })
 
     await wrapper.get('select').setValue(agents[1]!.id)
+    await wrapper.get('#workflow-node-id').setValue('research_agent')
+    await wrapper.get('#workflow-node-id').trigger('blur')
 
     expect(wrapper.emitted('updateAgent')).toEqual([[node.id, agents[1]!.id]])
+    expect(wrapper.emitted('updateNodeId')).toEqual([[node.id, 'research_agent']])
     expect(wrapper.text()).toContain('Main Agent')
     expect(wrapper.text()).toContain('Input endpoint')
     expect(wrapper.text()).toContain('Normal Edge · in')
@@ -144,6 +148,7 @@ describe('Workflow canvas panels', () => {
         mainAgents: agents,
         conditionRouters: [],
         node: null,
+        nodeIds: ['agent-1', 'end'],
         outputEndpoints: [],
         stateContract: 'agent-shell.workflow.agent-invocations.v1',
         workflowName: 'Research Workflow',
@@ -257,6 +262,7 @@ describe('Workflow canvas panels', () => {
         mainAgents: agents,
         conditionRouters: [],
         node: null,
+        nodeIds: [router.id, end.id],
         outputEndpoints: [],
         stateContract: 'agent-shell.workflow.agent-invocations.v1',
         workflowName: 'Routing Workflow',

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { MainAgent, SavedBlock, WorkflowNodeHandleSpec } from '@/api'
@@ -20,6 +20,7 @@ const props = defineProps<{
   mainAgents: MainAgent[]
   conditionRouters: SavedBlock[]
   node: WorkflowCanvasNode | null
+  nodeIds: string[]
   outputEndpoints: WorkflowNodeHandleSpec[]
   stateContract: string
   workflowName: string
@@ -34,11 +35,22 @@ const emit = defineEmits<{
   toggle: []
   updateAgent: [nodeId: string, mainAgentId: string]
   updateConditionRouter: [nodeId: string, conditionRouterId: string]
+  updateNodeId: [nodeId: string, nextNodeId: string]
   updateBranchKey: [edgeId: string, branchKey: string]
   updateDefer: [nodeId: string, defer: boolean]
 }>()
 
 const { t } = useI18n()
+const nodeIdDraft = ref('')
+const nodeIdError = ref('')
+watch(
+  () => props.node?.id,
+  (value) => {
+    nodeIdDraft.value = value ?? ''
+    nodeIdError.value = ''
+  },
+  { immediate: true },
+)
 const contextTitle = computed(() => {
   if (props.node) return t(`workflows.editor.${props.node.data.nodeType === 'condition-router' ? 'conditionRouter' : props.node.data.nodeType}`)
   if (props.edge) return edgeTypeLabel(props.edge.data?.edgeType ?? '')
@@ -69,6 +81,22 @@ function updateAgent(event: Event): void {
 function updateConditionRouter(event: Event): void {
   if (!props.node || props.node.data.nodeType !== 'condition-router') return
   emit('updateConditionRouter', props.node.id, (event.target as HTMLSelectElement).value)
+}
+
+function commitNodeId(): void {
+  if (!props.node || ['start', 'end'].includes(props.node.data.nodeType)) return
+  const value = nodeIdDraft.value.trim()
+  if (!/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(value)) {
+    nodeIdError.value = t('workflows.editor.nodeIdInvalid')
+    return
+  }
+  if (props.nodeIds.some((nodeId) => nodeId === value && nodeId !== props.node?.id)) {
+    nodeIdError.value = t('workflows.editor.nodeIdDuplicate')
+    return
+  }
+  nodeIdError.value = ''
+  nodeIdDraft.value = value
+  if (value !== props.node.id) emit('updateNodeId', props.node.id, value)
 }
 
 function updateDefer(event: Event): void {
@@ -116,7 +144,28 @@ function selectEdgeTargetEndpoint(event: Event): void {
     <div v-if="!collapsed" class="workflow-sidebar-body">
       <h3 class="workflow-inspector-context">{{ contextTitle }}</h3>
       <template v-if="node">
-        <div class="workflow-inspector-field"><span class="workflow-inspector-label">{{ $t('workflows.editor.nodeId') }}</span><span class="workflow-inspector-value">{{ node.id }}</span></div>
+        <FormField
+          v-if="node.data.nodeType !== 'start' && node.data.nodeType !== 'end'"
+          v-slot="{ describedBy, invalid }"
+          control-id="workflow-node-id"
+          :error="nodeIdError"
+          field-path="definition.nodes[].id"
+          :hint="$t('workflows.editor.nodeIdHint')"
+          label-key="workflows.editor.nodeId"
+        >
+          <input
+            id="workflow-node-id"
+            v-model="nodeIdDraft"
+            :aria-describedby="describedBy"
+            :aria-invalid="invalid"
+            class="form-control font-monospace"
+            maxlength="64"
+            type="text"
+            @blur="commitNodeId"
+            @keydown.enter.prevent="commitNodeId"
+          >
+        </FormField>
+        <div v-else class="workflow-inspector-field"><span class="workflow-inspector-label">{{ $t('workflows.editor.nodeId') }}</span><span class="workflow-inspector-value">{{ node.id }}</span></div>
         <div class="workflow-inspector-field"><span class="workflow-inspector-label">{{ $t('workflows.editor.nodeType') }}</span><span class="workflow-inspector-value">{{ node.data.nodeType }}</span></div>
         <div class="workflow-inspector-field"><span class="workflow-inspector-label">{{ $t('workflows.editor.typeVersion') }}</span><span class="workflow-inspector-value">1</span></div>
         <div v-for="endpoint in inputEndpoints" :key="`input-${endpoint.id}`" class="workflow-inspector-field"><span class="workflow-inspector-label">{{ $t('workflows.editor.inputEndpoint') }}</span><span class="workflow-inspector-value">{{ endpointLabel(endpoint) }}</span></div>

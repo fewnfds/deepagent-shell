@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ast
 import builtins
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import fields
 from typing import Annotated, Any
@@ -24,7 +24,7 @@ from agent_shell.script_source import validate_module_function
 
 BranchKey = Annotated[
     str,
-    StringConstraints(strip_whitespace=True, pattern=r"^[a-z][a-z0-9-]*$"),
+    StringConstraints(strip_whitespace=True),
     Field(min_length=1, max_length=64),
 ]
 ScriptSource = Annotated[str, StringConstraints(strip_whitespace=False)]
@@ -34,24 +34,10 @@ DEFAULT_CONDITION_ROUTER_SOURCE = (
 )
 
 
-class ConditionRouterBranch(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-    key: BranchKey
-    label: Annotated[str, Field(min_length=1, max_length=120)]
-
-
 class ConditionRouterBlock(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: Annotated[str, Field(min_length=1, max_length=120)]
-    branches: list[ConditionRouterBranch] = Field(
-        default_factory=lambda: [
-            ConditionRouterBranch(key="otherwise", label="Otherwise")
-        ],
-        min_length=1,
-        max_length=100,
-    )
     route_source: ScriptSource = Field(
         default=DEFAULT_CONDITION_ROUTER_SOURCE,
         max_length=100_000,
@@ -65,11 +51,6 @@ class ConditionRouterBlock(BaseModel):
 
     @model_validator(mode="after")
     def validate_router(self) -> "ConditionRouterBlock":
-        keys = [branch.key for branch in self.branches]
-        if len(keys) != len(set(keys)):
-            raise ValueError("condition router branch keys must be unique")
-        if keys.count("otherwise") != 1:
-            raise ValueError("condition router requires exactly one otherwise branch")
         validate_module_function(self.route_source, "route", asynchronous=True)
         tree = ast.parse(self.route_source, filename="route.py")
         function = next(
@@ -160,6 +141,7 @@ async def run_condition_router(
     *,
     state: Mapping[str, Any],
     context: WorkflowRuntimeContext,
+    allowed_branches: Collection[str],
 ) -> ConditionRouterResult:
     configuration = ConditionRouterBlock.model_validate(block)
     namespace: dict[str, Any] = {"__builtins__": builtins.__dict__}
@@ -187,11 +169,11 @@ async def run_condition_router(
                 + ", ".join(unsupported_updates)
             )
         activate = result.activate or ["otherwise"]
-        declared = {branch.key for branch in configuration.branches}
-        unknown = sorted(set(activate) - declared)
+        unknown = sorted(set(activate) - set(allowed_branches))
         if unknown:
             raise ValueError(
-                "route activated undeclared branches: " + ", ".join(unknown)
+                "route activated branches without a matching Workflow edge: "
+                + ", ".join(unknown)
             )
         if "otherwise" in activate and len(activate) != 1:
             raise ValueError("otherwise cannot be activated with another branch")
@@ -203,7 +185,6 @@ async def run_condition_router(
 __all__ = [
     "BranchKey",
     "ConditionRouterBlock",
-    "ConditionRouterBranch",
     "ConditionRouterError",
     "ConditionRouterResult",
     "DEFAULT_CONDITION_ROUTER_SOURCE",

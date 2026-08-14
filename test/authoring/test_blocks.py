@@ -89,10 +89,6 @@ def test_condition_router_uses_component_crud_storage_and_repository_validation(
     client = make_client(tmp_path, monkeypatch)
     payload = {
         "name": "Risk routing",
-        "branches": [
-            {"key": "review", "label": "Manual review"},
-            {"key": "otherwise", "label": "Otherwise"},
-        ],
         "route_source": (
             "async def route(state, context):\n"
             "    return {'activate': ['review'], 'update': {}}\n"
@@ -117,7 +113,7 @@ def test_condition_router_uses_component_crud_storage_and_repository_validation(
     ).is_file()
     assert client.get("/api/validation/repository").json()["valid"] is True
 
-    invalid = {**payload, "branches": [{"key": "review", "label": "Review"}]}
+    invalid = {**payload, "route_source": "async def route(state):\n    return {}\n"}
     rejected = client.put(
         f"/api/blocks/condition-router/{created['id']}",
         json=invalid,
