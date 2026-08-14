@@ -204,12 +204,7 @@ def test_workflow_graph_catalog_save_and_reload(
 
     assert empty.status_code == 200
     assert empty.json()["definition"]["nodes"] == []
-    assert [item["type"] for item in catalog.json()] == [
-        "start",
-        "agent",
-        "condition",
-        "end",
-    ]
+    assert [item["type"] for item in catalog.json()] == ["start", "agent", "end"]
     assert saved.status_code == 200, saved.text
     assert saved.json() == document
     assert metadata.status_code == 200, metadata.text

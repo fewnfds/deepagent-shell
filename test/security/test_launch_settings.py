@@ -182,6 +182,31 @@ def test_official_launcher_prints_effective_settings_for_windows_script(
     assert captured.err == ""
 
 
+def test_official_launcher_port_help_is_compact(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from agent_shell import __main__ as launcher
+
+    assert launcher.run_cli(["--help"]) == 0
+    captured = capsys.readouterr()
+    assert "--port PORT" in captured.out
+    assert "--port {1,2,3" not in captured.out
+    assert captured.err == ""
+
+
+@pytest.mark.parametrize("port", ["0", "65536", "not-a-port"])
+def test_official_launcher_rejects_invalid_port(
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+    port: str,
+) -> None:
+    from agent_shell import __main__ as launcher
+
+    assert launcher.run_cli(["--home", str(tmp_path), "--port", port]) == 2
+    captured = capsys.readouterr()
+    assert "port must be" in captured.err
+
+
 def test_official_launcher_warns_when_remote_http_backend_is_enabled(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

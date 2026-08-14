@@ -11,7 +11,6 @@ import type {
   WorkflowGraphDocument,
   WorkflowGraphEdge,
   WorkflowGraphNode,
-  WorkflowConditionOperator,
   WorkflowNodeHandleSpec,
   WorkflowNodeCatalogItem,
   WorkflowNodeType,
@@ -21,10 +20,6 @@ export interface WorkflowCanvasNodeData {
   nodeType: WorkflowNodeType
   mainAgentId: string
   defer?: boolean
-  conditionSource?: 'state' | 'context'
-  conditionPath?: string
-  conditionOperator?: WorkflowConditionOperator
-  conditionValueJson?: string
 }
 
 export type WorkflowCanvasNode = Node<WorkflowCanvasNodeData>
@@ -36,9 +31,9 @@ export interface WorkflowCanvasEdgeData {
 export type WorkflowCanvasEdge = Edge<WorkflowCanvasEdgeData>
 
 export const WORKFLOW_NODE_DRAG_MIME = 'application/x-agent-shell-workflow-node'
-export const WORKFLOW_EDGE_MARKER = MarkerType.ArrowClosed
+export const WORKFLOW_NORMAL_EDGE_MARKER = MarkerType.ArrowClosed
 
-export const WORKFLOW_CANVAS_EDGE_TYPES = ['normal', 'conditional'] as const
+export const WORKFLOW_CANVAS_EDGE_TYPES = ['normal'] as const
 export type WorkflowCanvasEdgeType = (typeof WORKFLOW_CANVAS_EDGE_TYPES)[number]
 export type WorkflowEndpointDirection = 'input' | 'output'
 
@@ -51,7 +46,6 @@ export interface WorkflowCanvasState {
 const defaultPositions = {
   start: { x: 80, y: 180 },
   agent: { x: 360, y: 180 },
-  condition: { x: 620, y: 180 },
   end: { x: 680, y: 180 },
 } satisfies Record<WorkflowNodeType, { x: number; y: number }>
 
@@ -60,15 +54,11 @@ function canvasNode(node: WorkflowGraphNode, document: WorkflowGraphDocument): W
     id: node.id,
     type: node.type,
     position: document.layout.nodes[node.id] ?? defaultPositions[node.type],
-    deletable: node.type === 'agent' || node.type === 'condition',
+    deletable: node.type === 'agent',
     data: {
       nodeType: node.type,
       mainAgentId: node.config.main_agent_id ?? '',
       defer: node.config.defer ?? false,
-      conditionSource: node.config.source ?? 'state',
-      conditionPath: node.config.path ?? '',
-      conditionOperator: node.config.operator ?? 'equals',
-      conditionValueJson: JSON.stringify(node.config.value ?? null),
     },
   }
 }
@@ -128,23 +118,16 @@ export function workflowDocumentToCanvas(
 
   return {
     nodes: sourceNodes.map((node) => canvasNode(node, document)),
-    edges: document.definition.edges.map((edge) => {
-      const edgeType = documentEdgeType(edge, document, catalog)
-      if (!isWorkflowCanvasEdgeType(edgeType)) {
-        throw new Error(`Unsupported Workflow edge: ${edge.id}`)
-      }
-      return {
-        id: edge.id,
-        source: edge.source,
-        sourceHandle: edge.source_handle,
-        target: edge.target,
-        targetHandle: edge.target_handle,
-        type: 'smoothstep',
-        markerEnd: WORKFLOW_EDGE_MARKER,
-        class: edgeType === 'conditional' ? 'workflow-edge--conditional' : undefined,
-        data: { edgeType },
-      }
-    }),
+    edges: document.definition.edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      sourceHandle: edge.source_handle,
+      target: edge.target,
+      targetHandle: edge.target_handle,
+      type: 'smoothstep',
+      markerEnd: WORKFLOW_NORMAL_EDGE_MARKER,
+      data: { edgeType: documentEdgeType(edge, document, catalog) },
+    })),
     viewport: { ...document.layout.viewport },
   }
 }
@@ -164,15 +147,6 @@ export function workflowCanvasToDocument(
               main_agent_id: node.data.mainAgentId,
               ...(node.data.defer ? { defer: true } : {}),
             }
-          : node.data.nodeType === 'condition'
-            ? {
-                source: node.data.conditionSource ?? 'state',
-                path: node.data.conditionPath ?? '',
-                operator: node.data.conditionOperator ?? 'equals',
-                value: ['equals', 'not_equals'].includes(node.data.conditionOperator ?? 'equals')
-                  ? JSON.parse(node.data.conditionValueJson ?? 'null') as unknown
-                  : null,
-              }
           : {}
         return {
           id: node.id,
@@ -209,37 +183,6 @@ export function newAgentCanvasNode(
     position: { ...position },
     deletable: true,
     data: { nodeType: 'agent', mainAgentId, defer: false },
-  }
-}
-
-export function newConditionCanvasNode(
-  id: string,
-  position: XYPosition = defaultPositions.condition,
-): WorkflowCanvasNode {
-  return {
-    id,
-    type: 'condition',
-    position: { ...position },
-    deletable: true,
-    data: {
-      nodeType: 'condition',
-      mainAgentId: '',
-      conditionSource: 'context',
-      conditionPath: '/prepare/approved',
-      conditionOperator: 'equals',
-      conditionValueJson: 'true',
-    },
-  }
-}
-
-export function isConditionValueJsonValid(node: WorkflowCanvasNode): boolean {
-  if (node.data.nodeType !== 'condition') return true
-  if (!['equals', 'not_equals'].includes(node.data.conditionOperator ?? 'equals')) return true
-  try {
-    JSON.parse(node.data.conditionValueJson ?? '')
-    return true
-  } catch {
-    return false
   }
 }
 
@@ -285,27 +228,7 @@ export function workflowConnectionEdgeType(
     && edge.target === connection.target
     && edge.targetHandle === connection.targetHandle
   ))
-  if (duplicate) return null
-
-  const sourceConnections = edges.filter((edge) => (
-    edge.id !== connection.id
-    && edge.source === connection.source
-    && edge.sourceHandle === connection.sourceHandle
-  )).length
-  if (
-    sourceHandle.max_connections !== null
-    && sourceConnections >= sourceHandle.max_connections
-  ) return null
-  const targetConnections = edges.filter((edge) => (
-    edge.id !== connection.id
-    && edge.target === connection.target
-    && edge.targetHandle === connection.targetHandle
-  )).length
-  if (
-    targetHandle.max_connections !== null
-    && targetConnections >= targetHandle.max_connections
-  ) return null
-  return sourceHandle.edge_type
+  return duplicate ? null : sourceHandle.edge_type
 }
 
 export function workflowCanvasEdgeTypesBetween(

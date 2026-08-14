@@ -43,5 +43,8 @@ export function editLocation(category: LibraryCategoryId, id: string): {
 } {
   if (category === 'main-agent') return { path: '/agents/main', query: { id } }
   if (category === 'subagent-profile') return { path: '/agents/subagents', query: { id } }
+  if (category === 'workflow-prepare') {
+    return { path: '/workflow-components/prepare/workflow-prepare', query: { id } }
+  }
   return { path: `/components/${category}`, query: { id } }
 }

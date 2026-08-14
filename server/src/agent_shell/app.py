@@ -22,6 +22,7 @@ from agent_shell.api.provider_integrations import build_provider_integrations_ro
 from agent_shell.api.system_settings import build_system_settings_router
 from agent_shell.api.validation import build_validation_router
 from agent_shell.api.workflows import build_workflow_router
+from agent_shell.api.workflow_components import build_workflow_component_router
 from agent_shell.api.workflow_debug import build_workflow_debug_router
 from agent_shell.provider_http import ProviderHttpClients
 from agent_shell.provider_secrets import ProviderSecretResolver
@@ -57,6 +58,7 @@ from agent_shell.storage.runtime_diagnostics import RuntimeDiagnosticStore
 from agent_shell.storage.system_log_settings import MIB_BYTES, SystemLogSettingsStore
 from agent_shell.storage.validation_settings import ConfigurationValidationSettingsStore
 from agent_shell.storage.workflows import WorkflowStore
+from agent_shell.storage.workflow_components import WorkflowComponentStore
 from agent_shell.workflow_event_output import WorkflowEventOutputSettingsStore
 from agent_shell.storage.workflow_runs import WorkflowRunStore
 from agent_shell.validation.service import ConfigurationValidationService
@@ -130,6 +132,7 @@ def create_app(
     block_store = BlockStore(configuration, event_logger)
     config_store = AgentConfigStore(configuration, event_logger)
     workflow_store = WorkflowStore(configuration, event_logger)
+    workflow_component_store = WorkflowComponentStore(configuration, event_logger)
     workflow_event_output = WorkflowEventOutputSettingsStore(configuration)
     middleware_package_validation = MiddlewarePackageValidationService(
         packages_dir=custom_middlewares_dir,
@@ -460,6 +463,12 @@ def create_app(
             workflow_store,
             block_store,
             workflow_event_output,
+        )
+    )
+    app.include_router(
+        build_workflow_component_router(
+            workflow_component_store,
+            workflow_store,
         )
     )
     app.include_router(build_workflow_debug_router(workflow_debug))

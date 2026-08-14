@@ -62,6 +62,12 @@ interface PageBlockAdapter {
   toPayload(value: BlockDraftBase, defaults?: unknown): BlockPayload
 }
 
+const props = withDefaults(defineProps<{
+  scope?: 'agent' | 'workflow'
+}>(), {
+  scope: 'agent',
+})
+
 const editorComponents: Record<ManagedComponentType, Component> = {
   model: ModelEditor,
   'system-prompt': SystemPromptEditor,
@@ -84,6 +90,9 @@ const { t } = useI18n()
 const managementError = useManagementError()
 const route = useRoute()
 const router = useRouter()
+const componentBasePath = computed(() => (
+  props.scope === 'workflow' ? '/workflow-components/prepare' : '/components'
+))
 const { confirm } = useConfirmation()
 const { notify } = useToasts()
 
@@ -285,7 +294,7 @@ async function loadRoute(): Promise<void> {
   const manifest = manifests.value.find((item) => item.type === requestedType)
   if (!manifest) {
     const fallback = manifests.value[0]
-    if (fallback) await router.replace({ path: `/components/${fallback.type}` })
+    if (fallback) await router.replace({ path: `${componentBasePath.value}/${fallback.type}` })
     return
   }
 
@@ -352,10 +361,11 @@ async function loadCatalog(): Promise<void> {
   pageError.value = ''
   try {
     const catalog = await managementApi.getCatalog()
-    manifests.value = [
-      ...catalog.block_types,
-      ...catalog.workflow_component_types,
-    ].sort((left, right) => left.order - right.order)
+    manifests.value = (
+      props.scope === 'workflow'
+        ? catalog.workflow_component_types
+        : catalog.block_types
+    ).slice().sort((left, right) => left.order - right.order)
     editorDefaults.value = catalog.editor_defaults
     await loadRoute()
   } catch (error) {
@@ -366,7 +376,7 @@ async function loadCatalog(): Promise<void> {
 
 async function selectType(type: string): Promise<void> {
   await runAfterDiscard(async () => {
-    await router.push({ path: `/components/${type}` })
+    await router.push({ path: `${componentBasePath.value}/${type}` })
   })
 }
 
@@ -374,7 +384,7 @@ async function selectRecord(id: string): Promise<void> {
   if (!activeType.value) return
   await runAfterDiscard(async () => {
     await router.push({
-      path: `/components/${activeType.value}`,
+      path: `${componentBasePath.value}/${activeType.value}`,
       ...(id ? { query: { id } } : {}),
     })
   })
@@ -383,7 +393,7 @@ async function selectRecord(id: string): Promise<void> {
 async function startNew(): Promise<void> {
   if (!activeType.value) return
   await runAfterDiscard(async () => {
-    await router.push({ path: `/components/${activeType.value}` })
+    await router.push({ path: `${componentBasePath.value}/${activeType.value}` })
     if (!routeId()) {
       selectedId.value = ''
       draft.value = blankDraft(activeType.value!)
@@ -452,7 +462,7 @@ async function save(): Promise<void> {
     upsertRecord(saved)
     markClean()
     await router.replace({
-      path: `/components/${activeType.value}`,
+      path: `${componentBasePath.value}/${activeType.value}`,
       query: { id: saved.id },
     })
     notify({ tone: 'success', title: t('components.feedback.saved') })

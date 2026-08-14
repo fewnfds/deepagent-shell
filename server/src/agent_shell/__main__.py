@@ -26,6 +26,18 @@ from agent_shell.storage.permissions import secure_file
 _MISSING_LOCAL_MANAGEMENT_TOKEN_ACTION = "Configure the management Bearer token."
 
 
+def _parse_port(value: str) -> int:
+    try:
+        port = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "port must be an integer between 1 and 65535"
+        ) from exc
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError("port must be between 1 and 65535")
+    return port
+
+
 def _read_confirmed_credential(
     read_password: Callable[[str], str],
     *,
@@ -265,7 +277,7 @@ def run_cli(arguments: list[str] | None = None) -> int:
         default="portable",
         help="Controls whether the allowed secret values may come from the process environment; system settings remain in system.yaml.",
     )
-    parser.add_argument("--port", type=int, choices=range(1, 65536))
+    parser.add_argument("--port", type=_parse_port, metavar="PORT")
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--initialize-local-settings", action="store_true")
     action.add_argument("--print-launch-settings", action="store_true")

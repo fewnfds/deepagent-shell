@@ -1,4 +1,5 @@
 export type JsonPrimitive = boolean | number | string | null
+export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue }
 
 export type BlockType =
   | 'model'
@@ -57,6 +58,49 @@ export type SavedBlock<TPayload extends BlockPayload = BlockPayload> = TPayload 
   requirements_fingerprint?: string
   dependency_status?: 'ready' | 'restart_required' | 'failed'
   dependency_error_code?: string
+}
+
+export interface WorkflowComponentInputEndpoint {
+  id: string
+  label: string
+  activation: 'any' | 'all'
+  accepted_edge_types: Array<'normal' | 'conditional'>
+  max_connections: number | null
+}
+
+export interface WorkflowComponentOutputEndpoint {
+  id: string
+  label: string
+  edge_type: 'normal' | 'conditional'
+  max_connections: number | null
+}
+
+export interface WorkflowComponentDefinitionPayload {
+  name: string
+  description: string
+  runtime_kind: 'python-command'
+  state_contract: 'agent-shell.workflow.agent-invocations.v1'
+  input_endpoints: WorkflowComponentInputEndpoint[]
+  output_endpoints: WorkflowComponentOutputEndpoint[]
+  config_schema: Record<string, JsonValue>
+  python_source: string
+  python_requirements: string[]
+}
+
+export interface WorkflowComponentDefinition extends WorkflowComponentDefinitionPayload {
+  id: string
+  requirements_fingerprint: string
+}
+
+export interface WorkflowComponentInstancePayload {
+  definition_id: string
+  name: string
+  description: string
+  config: Record<string, JsonValue>
+}
+
+export interface WorkflowComponentInstance extends WorkflowComponentInstancePayload {
+  id: string
 }
 
 export interface ModelProviderCatalogItem {
@@ -248,8 +292,7 @@ export interface Workflow extends WorkflowPayload {
   id: string
 }
 
-export type WorkflowNodeType = 'start' | 'agent' | 'condition' | 'end'
-export type WorkflowConditionOperator = 'equals' | 'not_equals' | 'exists' | 'not_exists'
+export type WorkflowNodeType = 'start' | 'agent' | 'end'
 
 export interface WorkflowNodeHandleSpec {
   id: string
@@ -261,7 +304,7 @@ export interface WorkflowNodeHandleSpec {
 export interface WorkflowNodeCatalogItem {
   type: WorkflowNodeType
   type_version: 1
-  runtime_kind: 'graph_entry' | 'graph_exit' | 'agent_wrapper' | 'state_condition'
+  runtime_kind: 'graph_entry' | 'graph_exit' | 'agent_wrapper'
   title_key: string
   description_key: string
   config_schema: Record<string, unknown>
@@ -276,10 +319,6 @@ export interface WorkflowGraphNode {
   config: {
     main_agent_id?: string
     defer?: boolean
-    source?: 'state' | 'context'
-    path?: string
-    operator?: WorkflowConditionOperator
-    value?: unknown
   }
 }
 

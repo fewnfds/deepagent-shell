@@ -76,8 +76,6 @@ def validate_workflow_topology(
 
     issues: list[ValidationIssue] = []
     connections: set[tuple[str, str, str, str]] = set()
-    endpoint_connections: dict[tuple[str, bool, str], list[int]] = {}
-    outgoing_edge_types: dict[str, set[str]] = {}
 
     for index, edge in enumerate(edges):
         source = node_by_id.get(edge.source)
@@ -159,17 +157,6 @@ def validate_workflow_topology(
                     },
                 )
             )
-        if source_handle is not None:
-            endpoint_connections.setdefault(
-                (edge.source, True, source_handle.id), []
-            ).append(index)
-            outgoing_edge_types.setdefault(edge.source, set()).add(
-                source_handle.edge_type
-            )
-        if target_handle is not None:
-            endpoint_connections.setdefault(
-                (edge.target, False, target_handle.id), []
-            ).append(index)
         connection = (
             edge.source,
             edge.source_handle,
@@ -189,70 +176,6 @@ def validate_workflow_topology(
             )
         else:
             connections.add(connection)
-
-    for node in nodes:
-        spec = specs[node.id]
-        for output, handles in (
-            (False, spec.input_handles),
-            (True, spec.output_handles),
-        ):
-            for handle in handles:
-                if handle.max_connections is None:
-                    continue
-                indexes = endpoint_connections.get((node.id, output, handle.id), [])
-                for index in indexes[handle.max_connections :]:
-                    edge = edges[index]
-                    issues.append(
-                        _edge_issue(
-                            edge.id,
-                            index,
-                            "workflow.endpoint_connection_limit_exceeded",
-                            "source_handle" if output else "target_handle",
-                            "The Workflow endpoint connection limit was exceeded.",
-                            "validation.issue.workflow.endpointConnectionLimitExceeded",
-                            message_args={
-                                "handle": handle.id,
-                                "max_connections": handle.max_connections,
-                            },
-                        )
-                    )
-
-        if len(outgoing_edge_types.get(node.id, set())) > 1:
-            index = next(
-                edge_index
-                for edge_index, edge in enumerate(edges)
-                if edge.source == node.id
-            )
-            edge = edges[index]
-            issues.append(
-                _edge_issue(
-                    edge.id,
-                    index,
-                    "workflow.node_routing_mixed",
-                    "",
-                    "A Workflow node cannot mix static and conditional routing.",
-                    "validation.issue.workflow.nodeRoutingMixed",
-                )
-            )
-
-        if spec.runtime_kind == "state_condition":
-            for handle in spec.output_handles:
-                if not endpoint_connections.get((node.id, True, handle.id)):
-                    node_index = next(
-                        index for index, candidate in enumerate(nodes)
-                        if candidate.id == node.id
-                    )
-                    issues.append(
-                        _issue(
-                            "workflow.condition_route_missing",
-                            f"definition.nodes[{node_index}]",
-                            "Every Condition route must connect to a target.",
-                            "validation.issue.workflow.conditionRouteMissing",
-                            owner_id=node.id,
-                            owner_type=node.type,
-                            message_args={"handle": handle.id},
-                        )
-                    )
 
     node_indexes = {node.id: index for index, node in enumerate(nodes)}
     start_ids = {node.id for node in nodes if node.type == "start"}

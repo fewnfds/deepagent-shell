@@ -22,6 +22,8 @@ def _default_config() -> dict[str, Any]:
         "main_agents": [],
         "subagents": [],
         "workflows": [],
+        "workflow_component_definitions": [],
+        "workflow_component_instances": [],
     }
 
 
@@ -119,6 +121,13 @@ class FileConfigRepository:
         self.components_root = self.config_root / self._COMPONENT_DIR
         self.agents_root = self.config_root / "agents"
         self.workflows_root = self.config_root / "workflows"
+        self.workflow_components_root = self.config_root / "workflow-components"
+        self.workflow_component_definitions_root = (
+            self.workflow_components_root / "definitions"
+        )
+        self.workflow_component_instances_root = (
+            self.workflow_components_root / "instances"
+        )
         self.system_path = self.config_root / "system.yaml"
         self.environment_path = self.config_root / "agent-shell.env"
         self._lock = threading.RLock()
@@ -172,6 +181,32 @@ class FileConfigRepository:
                 if not isinstance(payload, dict):
                     raise ValueError(f"workflow payload must be a mapping: {path}")
                 config["workflows"].append({**deepcopy(payload), "id": document.get("id")})
+        for directory, key, label in (
+            (
+                self.workflow_component_definitions_root,
+                "workflow_component_definitions",
+                "workflow component definition",
+            ),
+            (
+                self.workflow_component_instances_root,
+                "workflow_component_instances",
+                "workflow component instance",
+            ),
+        ):
+            if not directory.exists():
+                continue
+            for path in sorted(directory.glob("*.yaml")):
+                document = _read_yaml(path, {})
+                payload = document.get("payload")
+                if not isinstance(payload, dict):
+                    raise ValueError(f"{label} payload must be a mapping: {path}")
+                config[key].append(
+                    {
+                        **deepcopy(payload),
+                        "id": document.get("id"),
+                        "name": document.get("name"),
+                    }
+                )
         return config
 
     def _normalize(self) -> None:
@@ -180,6 +215,8 @@ class FileConfigRepository:
         self._config.setdefault("main_agents", [])
         self._config.setdefault("subagents", [])
         self._config.setdefault("workflows", [])
+        self._config.setdefault("workflow_component_definitions", [])
+        self._config.setdefault("workflow_component_instances", [])
         self._system.setdefault("config_version", CONFIG_VERSION)
         defaults = _default_system()
         for section, value in defaults.items():
@@ -278,7 +315,13 @@ class FileConfigRepository:
                 _write_atomic(path, _dump_yaml(document))
         self._write_agents(expected)
         self._write_workflows(expected)
-        for directory in (self.components_root, self.agents_root, self.workflows_root):
+        self._write_workflow_components(expected)
+        for directory in (
+            self.components_root,
+            self.agents_root,
+            self.workflows_root,
+            self.workflow_components_root,
+        ):
             if not directory.exists():
                 continue
             for path in directory.rglob("*.yaml"):
@@ -306,6 +349,43 @@ class FileConfigRepository:
             expected.add(path)
             payload = {k: deepcopy(v) for k, v in record.items() if k != "id"}
             _write_atomic(path, _dump_yaml({"kind": "workflow", "schema_version": CONFIG_VERSION, "id": record["id"], "payload": payload}))
+
+    def _write_workflow_components(self, expected: set[Path]) -> None:
+        for directory, key, kind in (
+            (
+                self.workflow_component_definitions_root,
+                "workflow_component_definitions",
+                "workflow_component_definition",
+            ),
+            (
+                self.workflow_component_instances_root,
+                "workflow_component_instances",
+                "workflow_component_instance",
+            ),
+        ):
+            directory.mkdir(parents=True, exist_ok=True)
+            for record in self._config.get(key, []):
+                if not isinstance(record, dict) or not record.get("id"):
+                    continue
+                path = directory / f"{record['id']}.yaml"
+                expected.add(path)
+                payload = {
+                    item_key: deepcopy(value)
+                    for item_key, value in record.items()
+                    if item_key not in {"id", "name"}
+                }
+                _write_atomic(
+                    path,
+                    _dump_yaml(
+                        {
+                            "kind": kind,
+                            "schema_version": CONFIG_VERSION,
+                            "id": record["id"],
+                            "name": record.get("name", ""),
+                            "payload": payload,
+                        }
+                    ),
+                )
 
     @staticmethod
     def _serialize_record(record: dict, block_type: str) -> dict:

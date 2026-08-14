@@ -104,35 +104,27 @@ def valid_main_agent(_main_agent_id: str) -> ValidationReport:
 
 
 def test_catalog_exposes_the_first_supported_node_and_handle_paradigms() -> None:
-    assert [item.type for item in NODE_CATALOG] == [
-        "start",
-        "agent",
-        "condition",
-        "end",
-    ]
+    assert [item.type for item in NODE_CATALOG] == ["start", "agent", "end"]
     assert [item.runtime_kind for item in NODE_CATALOG] == [
         "graph_entry",
         "agent_wrapper",
-        "state_condition",
         "graph_exit",
     ]
     assert [handle.id for handle in NODE_CATALOG[0].output_handles] == ["next"]
-    assert [handle.id for handle in NODE_CATALOG[1].input_handles] == ["in", "when"]
+    assert [handle.id for handle in NODE_CATALOG[1].input_handles] == ["in"]
     assert [handle.id for handle in NODE_CATALOG[1].output_handles] == ["next"]
-    assert [handle.id for handle in NODE_CATALOG[2].output_handles] == [
-        "match",
-        "otherwise",
-    ]
-    assert [handle.id for handle in NODE_CATALOG[3].input_handles] == ["in", "when"]
+    assert [handle.id for handle in NODE_CATALOG[2].input_handles] == ["in"]
     assert {
         handle.edge_type for item in NODE_CATALOG for handle in (
             *item.input_handles,
             *item.output_handles,
         )
-    } == {"normal", "conditional"}
-    assert [
-        handle.max_connections for handle in NODE_CATALOG[2].output_handles
-    ] == [1, 1]
+    } == {"normal"}
+    assert all(
+        handle.max_connections is None
+        for item in NODE_CATALOG
+        for handle in (*item.input_handles, *item.output_handles)
+    )
     assert NODE_CATALOG[1].config_model.model_json_schema()["required"] == [
         "main_agent_id"
     ]
@@ -141,64 +133,6 @@ def test_catalog_exposes_the_first_supported_node_and_handle_paradigms() -> None
         "title": "Defer",
         "type": "boolean",
     }
-    condition_schema = NODE_CATALOG[2].config_model.model_json_schema()
-    assert condition_schema["properties"]["source"]["enum"] == ["state", "context"]
-    assert condition_schema["properties"]["path"]["pattern"] == (
-        r"^(?:/(?:~[01]|[^~/])*)*$"
-    )
-
-
-def condition_graph_payload(
-    *,
-    source: str,
-    path: str,
-    value: object,
-) -> dict[str, object]:
-    payload = graph_payload(AGENT_A)
-    nodes = payload["definition"]["nodes"]  # type: ignore[index]
-    nodes.insert(2, {  # type: ignore[attr-defined]
-        "id": "condition-1",
-        "type": "condition",
-        "type_version": 1,
-        "config": {
-            "source": source,
-            "path": path,
-            "operator": "equals",
-            "value": value,
-        },
-    })
-    payload["definition"]["edges"] = [  # type: ignore[index]
-        {
-            "id": "start-agent",
-            "source": "start",
-            "source_handle": "next",
-            "target": "agent-1",
-            "target_handle": "in",
-        },
-        {
-            "id": "agent-condition",
-            "source": "agent-1",
-            "source_handle": "next",
-            "target": "condition-1",
-            "target_handle": "in",
-        },
-        {
-            "id": "condition-end",
-            "source": "condition-1",
-            "source_handle": "match",
-            "target": "end",
-            "target_handle": "when",
-        },
-        {
-            "id": "condition-agent",
-            "source": "condition-1",
-            "source_handle": "otherwise",
-            "target": "agent-1",
-            "target_handle": "when",
-        },
-    ]
-    payload["layout"]["nodes"]["condition-1"] = {"x": 480, "y": 160}  # type: ignore[index]
-    return payload
 
 
 def test_admission_accepts_incomplete_drafts_and_layout_does_not_change_execution_sha() -> None:
@@ -378,31 +312,6 @@ def test_executable_validation_accepts_multiple_normal_inputs_and_outputs() -> N
     ).valid is True
 
 
-def test_condition_requires_one_target_per_named_route() -> None:
-    payload = condition_graph_payload(
-        source="context",
-        path="/prepare/approved",
-        value=True,
-    )
-    payload["definition"]["edges"] = [  # type: ignore[index]
-        edge
-        for edge in payload["definition"]["edges"]  # type: ignore[index]
-        if edge["source_handle"] != "match"
-    ]
-    admission, document = admit_workflow_document(payload)
-    assert admission.valid is True
-    assert document is not None
-
-    report = validate_workflow_executable(
-        document,
-        validate_main_agent=valid_main_agent,
-    )
-
-    assert "workflow.condition_route_missing" in {
-        issue.code for issue in report.issues
-    }
-
-
 def test_topology_does_not_forbid_langgraph_cycles() -> None:
     payload = graph_payload(AGENT_A, AGENT_B)
     payload["definition"]["edges"] = [  # type: ignore[index]
@@ -557,105 +466,6 @@ def test_compiler_maps_canvas_start_and_end_to_langgraph_sentinels() -> None:
     assert record["agent_id"] == AGENT_A
     assert isinstance(record["invoked_at"], float)
     assert record["messages"][-1].content == "compiled workflow response"
-
-
-def test_condition_reads_runtime_context_through_conditional_edges() -> None:
-    admission, document = admit_workflow_document(
-        condition_graph_payload(
-            source="context",
-            path="/prepare/approved",
-            value=True,
-        )
-    )
-    assert admission.valid is True
-    assert document is not None
-
-    def answer(_state: AgentShellState) -> dict[str, list[AIMessage]]:
-        return {"messages": [AIMessage(content="context route matched")]}
-
-    agent_graph = (
-        StateGraph(AgentShellState)
-        .add_node("answer", answer)
-        .add_edge(START, "answer")
-        .add_edge("answer", END)
-        .compile()
-    )
-    graph = compile_workflow(
-        document,
-        node_agents={
-            "agent-1": _built_agent(
-                agent_graph,
-                agent_id=AGENT_A,
-                agent_name="Agent A",
-            )
-        },
-    )
-
-    result = asyncio.run(
-        graph.ainvoke(
-            {"shared_vars": {}, "agent_invocations": {}},
-            context=WorkflowRuntimeContext(
-                request_id="request-1",
-                workflow={"id": "workflow-id"},
-                prepare={"approved": True},
-            ),
-        )
-    )
-
-    assert len(result["agent_invocations"]) == 1
-
-
-def test_condition_reads_full_state_and_terminates_a_loop() -> None:
-    admission, document = admit_workflow_document(
-        condition_graph_payload(
-            source="state",
-            path="/shared_vars/approved",
-            value=True,
-        )
-    )
-    assert admission.valid is True
-    assert document is not None
-
-    def answer(state: AgentShellState) -> dict[str, object]:
-        attempts = int(state.get("shared_vars", {}).get("attempts", 0)) + 1
-        return {
-            "messages": [AIMessage(content=f"attempt {attempts}")],
-            "shared_vars": {
-                "attempts": attempts,
-                "approved": attempts >= 2,
-            },
-        }
-
-    agent_graph = (
-        StateGraph(AgentShellState)
-        .add_node("answer", answer)
-        .add_edge(START, "answer")
-        .add_edge("answer", END)
-        .compile()
-    )
-    graph = compile_workflow(
-        document,
-        node_agents={
-            "agent-1": _built_agent(
-                agent_graph,
-                agent_id=AGENT_A,
-                agent_name="Agent A",
-            )
-        },
-    )
-
-    result = asyncio.run(
-        graph.ainvoke(
-            {"shared_vars": {}, "agent_invocations": {}},
-            context=WorkflowRuntimeContext(
-                request_id="request-1",
-                workflow={"id": "workflow-id"},
-            ),
-        )
-    )
-
-    assert result["shared_vars"] == {"attempts": 2, "approved": True}
-    assert len(result["agent_invocations"]) == 2
 
 
 def test_serial_agents_have_private_messages_and_explicit_parent_snapshot() -> None:

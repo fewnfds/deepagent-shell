@@ -10,6 +10,11 @@ export const navigationItems: NavigationItem[] = [
   { path: '/workflows', labelKey: 'navigation.workflows', icon: 'bi-diagram-3' },
   { path: '/agents', labelKey: 'navigation.agents', icon: 'bi-robot' },
   { path: '/components', labelKey: 'navigation.components', icon: 'bi-boxes' },
+  {
+    path: '/workflow-components',
+    labelKey: 'navigation.workflowComponents',
+    icon: 'bi-node-plus',
+  },
   { path: '/library', labelKey: 'navigation.library', icon: 'bi-archive' },
   { path: '/terminology', labelKey: 'navigation.terminology', icon: 'bi-book' },
   { path: '/style-lab', labelKey: 'navigation.styleLab', icon: 'bi-sliders' },

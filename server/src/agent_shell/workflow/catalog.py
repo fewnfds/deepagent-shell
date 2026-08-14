@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict
 
 
 class EmptyNodeConfig(BaseModel):
@@ -17,19 +17,6 @@ class AgentNodeConfig(BaseModel):
     main_agent_id: UUID
     # Reserved execution policy for LangGraph's deferred node scheduling.
     defer: bool = False
-
-
-class ConditionNodeConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    source: Literal["state", "context"] = "state"
-    path: str = Field(
-        default="",
-        max_length=512,
-        pattern=r"^(?:/(?:~[01]|[^~/])*)*$",
-    )
-    operator: Literal["equals", "not_equals", "exists", "not_exists"] = "equals"
-    value: JsonValue = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,12 +40,7 @@ class NodeHandleSpec:
 class NodeTypeSpec:
     type: str
     type_version: int
-    runtime_kind: Literal[
-        "graph_entry",
-        "graph_exit",
-        "agent_wrapper",
-        "state_condition",
-    ]
+    runtime_kind: Literal["graph_entry", "graph_exit", "agent_wrapper"]
     title_key: str
     description_key: str
     config_model: type[BaseModel]
@@ -78,15 +60,8 @@ class NodeTypeSpec:
         }
 
 
-_IN = (
-    NodeHandleSpec("in"),
-    NodeHandleSpec("when", edge_type="conditional"),
-)
+_IN = (NodeHandleSpec("in"),)
 _NEXT = (NodeHandleSpec("next"),)
-_CONDITION_OUTPUTS = (
-    NodeHandleSpec("match", edge_type="conditional", max_connections=1),
-    NodeHandleSpec("otherwise", edge_type="conditional", max_connections=1),
-)
 
 NODE_CATALOG: tuple[NodeTypeSpec, ...] = (
     NodeTypeSpec(
@@ -108,16 +83,6 @@ NODE_CATALOG: tuple[NodeTypeSpec, ...] = (
         config_model=AgentNodeConfig,
         input_handles=_IN,
         output_handles=_NEXT,
-    ),
-    NodeTypeSpec(
-        type="condition",
-        type_version=1,
-        runtime_kind="state_condition",
-        title_key="workflow.nodes.condition.title",
-        description_key="workflow.nodes.condition.description",
-        config_model=ConditionNodeConfig,
-        input_handles=_IN,
-        output_handles=_CONDITION_OUTPUTS,
     ),
     NodeTypeSpec(
         type="end",
@@ -154,7 +119,6 @@ def node_catalog_payload() -> list[dict[str, object]]:
 
 __all__ = [
     "AgentNodeConfig",
-    "ConditionNodeConfig",
     "EmptyNodeConfig",
     "NODE_CATALOG",
     "NodeHandleSpec",

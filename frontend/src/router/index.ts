@@ -12,6 +12,7 @@ const SubagentPage = () => import('@/pages/SubagentPage.vue')
 const TerminologyPage = () => import('@/pages/TerminologyPage.vue')
 const WorkflowsPage = () => import('@/pages/WorkflowsPage.vue')
 const WorkflowEditorPage = () => import('@/pages/WorkflowEditorPage.vue')
+const WorkflowComponentsPage = () => import('@/pages/WorkflowComponentsPage.vue')
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -28,6 +29,21 @@ export const router = createRouter({
     { path: '/agents/subagents', component: SubagentPage, meta: { titleKey: 'navigation.agents' } },
     { path: '/components', redirect: '/components/model' },
     { path: '/components/:type', component: ComponentsPage, meta: { titleKey: 'components.title' } },
+    {
+      path: '/workflow-components',
+      component: WorkflowComponentsPage,
+      meta: { titleKey: 'workflowComponents.title' },
+    },
+    {
+      path: '/workflow-components/prepare',
+      redirect: '/workflow-components/prepare/workflow-prepare',
+    },
+    {
+      path: '/workflow-components/prepare/:type',
+      component: ComponentsPage,
+      props: { scope: 'workflow' },
+      meta: { titleKey: 'workflowComponents.title' },
+    },
     { path: '/library', redirect: '/library/model' },
     { path: '/library/:type', component: ConfigLibraryPage, meta: { titleKey: 'library.title' } },
     { path: '/system', redirect: '/system/config' },

@@ -17,10 +17,18 @@ const route = useRoute()
 const router = useRouter()
 
 const activeCategoryId = computed(() => routeCategory(route.params.type))
-const componentItems = computed<SectionNavItem[]>(() => props.manifests.map((manifest) => ({
+const agentComponentItems = computed<SectionNavItem[]>(() => props.manifests
+  .filter((manifest): manifest is CapabilityManifest => 'subagent_policy' in manifest)
+  .map((manifest) => ({
   id: manifest.type,
   label: t(`capabilities.${manifest.type}.label`),
 })))
+const workflowComponentItems = computed<SectionNavItem[]>(() => props.manifests
+  .filter((manifest): manifest is WorkflowComponentManifest => !('subagent_policy' in manifest))
+  .map((manifest) => ({
+    id: manifest.type,
+    label: t(`capabilities.${manifest.type}.label`),
+  })))
 const agentItems = computed<SectionNavItem[]>(() => agentLibraryCategories.map((id) => ({
   id,
   label: t(`capabilities.${id}.label`),
@@ -34,15 +42,29 @@ function selectCategory(id: string): void {
 
 <template>
   <div
-    v-if="componentItems.length"
+    v-if="agentComponentItems.length"
     class="d-flex flex-wrap align-items-center gap-2 mb-2"
     data-testid="library-component-group"
   >
-    <span class="fw-semibold">{{ t('library.groups.components') }}</span>
+    <span class="fw-semibold">{{ t('library.groups.agentComponents') }}</span>
     <SectionNav
       :active-id="activeCategoryId"
-      :aria-label="t('library.groups.components')"
-      :items="componentItems"
+      :aria-label="t('library.groups.agentComponents')"
+      :items="agentComponentItems"
+      layout="inline"
+      @select="selectCategory"
+    />
+  </div>
+  <div
+    v-if="workflowComponentItems.length"
+    class="d-flex flex-wrap align-items-center gap-2 mb-2"
+    data-testid="library-workflow-component-group"
+  >
+    <span class="fw-semibold">{{ t('library.groups.workflowComponents') }}</span>
+    <SectionNav
+      :active-id="activeCategoryId"
+      :aria-label="t('library.groups.workflowComponents')"
+      :items="workflowComponentItems"
       layout="inline"
       @select="selectCategory"
     />

@@ -23,6 +23,10 @@ import type {
   HealthResponse,
   ManagementEvent,
   Workflow,
+  WorkflowComponentDefinition,
+  WorkflowComponentDefinitionPayload,
+  WorkflowComponentInstance,
+  WorkflowComponentInstancePayload,
   WorkflowEventOutputSettings,
   WorkflowGraphDocument,
   WorkflowNodeCatalogItem,
@@ -305,6 +309,64 @@ export const managementApi = {
 
   deleteBlocks(type: ManagedComponentType, ids: string[]): Promise<{ deleted: number }> {
     return managementRequest(`/api/blocks/${type}/delete`, jsonBody({ ids }))
+  },
+
+  listWorkflowComponentDefinitions(): Promise<WorkflowComponentDefinition[]> {
+    return managementRequest('/api/workflow-component-definitions')
+  },
+
+  saveWorkflowComponentDefinition(
+    data: WorkflowComponentDefinitionPayload & { id?: string },
+  ): Promise<WorkflowComponentDefinition> {
+    const id = data.id ?? ''
+    const payload = { ...data }
+    delete payload.id
+    return managementRequest(
+      id
+        ? recordPath('/api/workflow-component-definitions', id)
+        : '/api/workflow-component-definitions',
+      {
+        method: id ? 'PUT' : 'POST',
+        body: JSON.stringify(payload),
+      },
+    )
+  },
+
+  deleteWorkflowComponentDefinition(id: string): Promise<{ ok: boolean }> {
+    return managementRequest(
+      recordPath('/api/workflow-component-definitions', id),
+      { method: 'DELETE' },
+    )
+  },
+
+  listWorkflowComponentInstances(definitionId?: string): Promise<WorkflowComponentInstance[]> {
+    return managementRequest(
+      `/api/workflow-component-instances${buildQuery({ definition_id: definitionId })}`,
+    )
+  },
+
+  saveWorkflowComponentInstance(
+    data: WorkflowComponentInstancePayload & { id?: string },
+  ): Promise<WorkflowComponentInstance> {
+    const id = data.id ?? ''
+    const payload = { ...data }
+    delete payload.id
+    return managementRequest(
+      id
+        ? recordPath('/api/workflow-component-instances', id)
+        : '/api/workflow-component-instances',
+      {
+        method: id ? 'PUT' : 'POST',
+        body: JSON.stringify(payload),
+      },
+    )
+  },
+
+  deleteWorkflowComponentInstance(id: string): Promise<{ ok: boolean }> {
+    return managementRequest(
+      recordPath('/api/workflow-component-instances', id),
+      { method: 'DELETE' },
+    )
   },
 
   validateRepository(): Promise<ValidationReport> {
