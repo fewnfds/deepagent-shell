@@ -112,6 +112,8 @@ describe('WorkflowsPage', () => {
     await flushPromises()
 
     const values = wrapper.get('#workflow-event-output-values')
+    expect(wrapper.get('.collection-filter-fieldset').classes()).toContain('management-control-field')
+    expect(wrapper.get('.management-control--stacked').exists()).toBe(true)
     expect((values.element as HTMLInputElement).checked).toBe(false)
 
     await values.setValue(true)

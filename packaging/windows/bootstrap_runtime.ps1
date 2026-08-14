@@ -132,6 +132,56 @@ function Wait-PortablePythonReady {
     }
 }
 
+function Copy-ReusablePythonRuntime {
+    param(
+        [Parameter(Mandatory = $true)][string]$ApplicationRoot,
+        [Parameter(Mandatory = $true)][string]$BuildRoot,
+        [Parameter(Mandatory = $true)][string]$ExpectedPython
+    )
+    $manifestPath = Join-Path $ApplicationRoot "runtime-manifest.json"
+    $pythonHomeFile = Join-Path $ApplicationRoot "python-home.txt"
+    if (
+        -not (Test-Path -LiteralPath $manifestPath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $pythonHomeFile -PathType Leaf)
+    ) {
+        return $false
+    }
+
+    try {
+        $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+        $relativePythonHome = (Get-Content -LiteralPath $pythonHomeFile -Raw).Trim()
+    }
+    catch {
+        return $false
+    }
+    if (
+        [string]$manifest.python -ne $ExpectedPython -or
+        [string]::IsNullOrWhiteSpace($relativePythonHome)
+    ) {
+        return $false
+    }
+
+    $sourcePythonRoot = Assert-ChildPath (Join-Path $ApplicationRoot "python") $ApplicationRoot
+    $sourcePythonHome = Assert-ChildPath (Join-Path $ApplicationRoot $relativePythonHome) $ApplicationRoot
+    $sourcePythonExe = Join-Path $sourcePythonHome "python.exe"
+    if (
+        -not (Test-Path -LiteralPath $sourcePythonRoot -PathType Container) -or
+        -not (Test-Path -LiteralPath $sourcePythonExe -PathType Leaf)
+    ) {
+        return $false
+    }
+
+    $destinationPythonRoot = Join-Path $BuildRoot "python"
+    Copy-Item -LiteralPath $sourcePythonRoot -Destination $destinationPythonRoot -Recurse -Force
+    $destinationPythonHome = Assert-ChildPath (Join-Path $BuildRoot $relativePythonHome) $BuildRoot
+    if (-not (Test-Path -LiteralPath (Join-Path $destinationPythonHome "python.exe") -PathType Leaf)) {
+        Remove-Item -LiteralPath $destinationPythonRoot -Recurse -Force
+        return $false
+    }
+    Write-Host "Reusing the verified portable Python runtime."
+    return $true
+}
+
 function Remove-UvPythonInstallArtifacts {
     param(
         [Parameter(Mandatory = $true)][string]$InstallRoot,
@@ -312,11 +362,17 @@ foreach ($name in $runtimeEnvironment.Keys) {
 $completed = $false
 try {
     $pythonInstallRoot = Join-Path $buildRoot "python"
-    Invoke-Native $uvExe @(
-        "python", "install", ([string]$lock.python),
-        "--install-dir", $pythonInstallRoot,
-        "--no-bin", "--no-registry", "--managed-python"
-    ) $project
+    $reusedPython = Copy-ReusablePythonRuntime `
+        -ApplicationRoot $applicationRoot `
+        -BuildRoot $buildRoot `
+        -ExpectedPython ([string]$lock.python)
+    if (-not $reusedPython) {
+        Invoke-Native $uvExe @(
+            "python", "install", ([string]$lock.python),
+            "--install-dir", $pythonInstallRoot,
+            "--no-bin", "--no-registry", "--managed-python"
+        ) $project
+    }
 
     $pythonInstallFullPath = Get-FullPath $pythonInstallRoot
     $pythonCandidates = @(

@@ -219,9 +219,9 @@ defineExpose<{
   <LteCard v-if="hasControls" class="mb-3">
     <form class="collection-filter-form" role="search" @submit.prevent="submitQuery">
       <div v-if="config.search || filters.length || slots['filter-controls']" class="collection-filter-grid">
-        <div v-if="config.search" class="collection-query">
+        <div v-if="config.search" class="collection-query management-control-field">
           <label class="form-label" :for="`${config.id}-query`">{{ label(config.search.label) }}</label>
-          <div class="input-group">
+          <div class="input-group management-control">
             <input
               :id="`${config.id}-query`"
               v-model="draftQuery"
@@ -229,18 +229,18 @@ defineExpose<{
               :placeholder="label(config.search.placeholder)"
               type="search"
             >
-            <LteButton class="fs-6" :disabled="loading" theme="primary" type="submit">
+            <LteButton :disabled="loading" theme="primary" type="submit">
               <i class="bi bi-search" aria-hidden="true" />
               {{ t('common.search') }}
             </LteButton>
-            <LteButton class="fs-6" :disabled="loading" theme="warning" type="button" @click="clearQuery">
+            <LteButton :disabled="loading" theme="warning" type="button" @click="clearQuery">
               {{ t('common.reset') }}
             </LteButton>
           </div>
         </div>
 
         <template v-for="filter in filters" :key="filter.key">
-          <div v-if="filter.kind === 'text' || filter.kind === 'datetime'">
+          <div v-if="filter.kind === 'text' || filter.kind === 'datetime'" class="management-control-field">
             <label class="form-label" :for="`${config.id}-filter-${filter.key}`">{{ label(filter.label) }}</label>
             <input
               :id="`${config.id}-filter-${filter.key}`"
@@ -253,7 +253,7 @@ defineExpose<{
               @input="updateFilter(filter.key, inputValue($event))"
             >
           </div>
-          <div v-else-if="filter.kind === 'single'">
+          <div v-else-if="filter.kind === 'single'" class="management-control-field">
             <label class="form-label" :for="`${config.id}-filter-${filter.key}`">{{ label(filter.label) }}</label>
             <select
               :id="`${config.id}-filter-${filter.key}`"
@@ -267,8 +267,8 @@ defineExpose<{
               </option>
             </select>
           </div>
-          <fieldset v-else class="collection-filter-fieldset">
-            <legend class="collection-filter-legend">{{ label(filter.label) }}</legend>
+          <fieldset v-else class="collection-filter-fieldset management-control-field">
+            <legend class="collection-filter-legend form-label">{{ label(filter.label) }}</legend>
             <div class="collection-filter-options">
               <template v-for="option in filter.options" :key="option.value">
                 <input
@@ -278,7 +278,7 @@ defineExpose<{
                   :checked="multiValue(draftFilters[filter.key]).includes(option.value)"
                   @change="toggleMulti(filter.key, option.value, ($event.target as HTMLInputElement).checked)"
                 >
-                <label class="btn btn-outline-primary btn-sm" :for="`${config.id}-filter-${filter.key}-${option.value}`">
+                <label class="btn btn-outline-primary" :for="`${config.id}-filter-${filter.key}-${option.value}`">
                   {{ label(option.label) }}
                 </label>
               </template>
@@ -286,29 +286,28 @@ defineExpose<{
           </fieldset>
         </template>
 
-        <fieldset v-if="slots['filter-controls']" class="collection-filter-fieldset">
-          <legend class="collection-filter-legend">
+        <fieldset v-if="slots['filter-controls']" class="collection-filter-fieldset management-control-field">
+          <legend class="collection-filter-legend form-label">
             <slot name="filter-controls-title" />
           </legend>
           <slot name="filter-controls" />
         </fieldset>
 
-        <fieldset v-if="hasFilterActions" class="collection-filter-fieldset">
-          <legend class="collection-filter-legend">{{ t('common.dataTable.operations') }}</legend>
+        <fieldset v-if="hasFilterActions" class="collection-filter-fieldset management-control-field">
+          <legend class="collection-filter-legend form-label">{{ t('common.dataTable.operations') }}</legend>
           <div class="collection-filter-options">
             <template v-if="!config.search && filters.length">
-              <LteButton class="fs-6" :disabled="loading" theme="primary" type="submit">
+              <LteButton :disabled="loading" theme="primary" type="submit">
                 <i class="bi bi-search" aria-hidden="true" />
                 {{ t('common.search') }}
               </LteButton>
-              <LteButton class="fs-6" :disabled="loading" theme="warning" type="button" @click="clearQuery">
+              <LteButton :disabled="loading" theme="warning" type="button" @click="clearQuery">
                 {{ t('common.reset') }}
               </LteButton>
             </template>
             <slot name="filter-actions" />
             <LteButton
               v-if="config.bulkAction"
-              class="fs-6"
               :disabled="loading || runningBulkAction || !bulkEnabled"
               theme="danger"
               type="button"

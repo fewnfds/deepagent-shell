@@ -212,7 +212,7 @@ const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
         {{ t('workflows.eventOutput.title') }}
       </template>
       <template #filter-controls>
-        <div :aria-busy="eventOutputLoading || eventOutputSaving">
+        <div class="management-control management-control--stacked" :aria-busy="eventOutputLoading || eventOutputSaving">
           <div v-if="eventOutputLoading" class="d-flex align-items-center gap-2" role="status">
             <span class="spinner-border spinner-border-sm" aria-hidden="true" />
             <span>{{ t('common.loading') }}</span>
