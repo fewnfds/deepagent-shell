@@ -142,6 +142,7 @@ class OutputEvent:
     raw_seq: int = 0
     source_key: str = ""
     cycle_key: str = ""
+    workflow_event_kind: str = ""
 
     def template_values(self) -> dict[str, str]:
         return {
@@ -425,6 +426,7 @@ class V3EventNormalizer:
             channel=method or "unknown",
             data_json=serialized,
             source_type_override="non_agent",
+            workflow_event_kind="values" if method == "values" else "",
         )
 
     def _lifecycle_events(
@@ -1317,6 +1319,7 @@ class V3EventNormalizer:
         source: WorkflowEventSourceV1 | None = None,
         source_agent_name: str = "",
         source_type_override: str = "",
+        workflow_event_kind: str = "",
         **values: str,
     ) -> OutputEvent:
         self._sequence += 1
@@ -1358,6 +1361,7 @@ class V3EventNormalizer:
             raw_seq=self._raw_seq,
             source_key=effective_source_key,
             cycle_key=self._cycle_key(namespace),
+            workflow_event_kind=workflow_event_kind,
         )
 
     def _source_for(

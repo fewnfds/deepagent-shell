@@ -3,6 +3,23 @@ from __future__ import annotations
 from .support import *
 
 
+def test_workflow_event_output_settings_are_global_and_persisted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    expected = {"values": True}
+    with make_client(tmp_path, monkeypatch) as client:
+        defaults = client.get("/api/workflow-event-output")
+        assert defaults.status_code == 200, defaults.text
+        assert defaults.json() == {"values": False}
+
+        updated = client.put("/api/workflow-event-output", json=expected)
+        assert updated.status_code == 200, updated.text
+        assert updated.json() == expected
+
+    with make_client(tmp_path, monkeypatch) as client:
+        assert client.get("/api/workflow-event-output").json() == expected
+
+
 def test_workflow_crud_publishes_enabled_tbd_entries_without_main_agent_reference(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

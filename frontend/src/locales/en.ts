@@ -34,6 +34,11 @@ export const en: MessageSchema = {
     empty: 'No Workflow has been created.',
     filteredEmpty: 'No Workflow matches the current query.',
     searchPlaceholder: 'Search name or description',
+    eventOutput: {
+      title: 'Workflow event output',
+      help: 'Controls whether the full Workflow State (values) enters the OpenAI-compatible response. Custom node events, internal execution, checkpoints, and final state are unchanged.',
+      values: 'Full State (values)',
+    },
     loadFailed: 'Could not load Workflows',
     filesystemLoadFailed: 'Could not load filesystem configurations',
     createTitle: 'Create Workflow',

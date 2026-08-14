@@ -5,6 +5,7 @@ from langchain_core.messages import AIMessage
 from agent_shell.runtime.output_event_pool import OutputEventRectifier
 from agent_shell.runtime.output_projection import WorkflowOutputProjector
 from agent_shell.runtime.output_stream import OutputEvent, V3EventNormalizer
+from agent_shell.workflow_event_output import WorkflowEventOutputSettings
 from agent_shell.workflow.events import (
     WorkflowCustomEventV1,
     WorkflowEventSourceV1,
@@ -405,7 +406,7 @@ def test_registered_script_custom_event_uses_bounded_builtin_passthrough() -> No
     assert unregistered[0].source_type == "non_agent"
 
 
-def test_workflow_non_agent_filter_hook_is_optional_and_future_facing() -> None:
+def test_workflow_non_agent_filter_hook_applies_to_non_agent_events() -> None:
     event = OutputEvent(
         event_type="custom",
         phase="end",
@@ -469,3 +470,75 @@ def test_non_agent_raw_channels_default_to_string_while_agent_state_stays_intern
     assert script_output[0].source_type == "non_agent"
     assert script_output[0].source_key == "unknown|script-node:invocation"
     assert rectifier.feed(script_output[0]) == ['{"result":"ready"}']
+
+
+def test_workflow_event_output_settings_only_filter_full_state() -> None:
+    settings = WorkflowEventOutputSettings()
+    values = OutputEvent(
+        event_type="custom",
+        phase="end",
+        sequence=1,
+        timestamp="2026-01-01T00:00:00Z",
+        source_type="non_agent",
+        workflow_event_kind="values",
+    )
+    custom_or_other = OutputEvent(
+        event_type="custom",
+        phase="end",
+        sequence=2,
+        timestamp="2026-01-01T00:00:00Z",
+        source_type="non_agent",
+    )
+
+    assert settings.allows(values) is False
+    assert settings.allows(custom_or_other) is True
+    assert settings.model_copy(update={"values": True}).allows(values) is True
+
+
+def test_v3_marks_only_the_full_state_channel_for_filtering() -> None:
+    normalizer = V3EventNormalizer(
+        "Writer",
+        workflow_sources={
+            "agent-a": WorkflowEventSourceV1(
+                source_type="agent",
+                workflow_node_id="agent-a",
+                agent_profile_id=MAIN_A,
+            )
+        },
+    )
+
+    values = normalizer.feed(
+        {
+            "method": "values",
+            "params": {
+                "namespace": ["script-node:invocation"],
+                "data": {"result": "ready"},
+            },
+        }
+    )
+    updates = normalizer.feed(
+        {
+            "method": "updates",
+            "params": {
+                "namespace": ["script-node:invocation"],
+                "data": {"result": "ready"},
+            },
+        }
+    )
+    custom = normalizer.feed(
+        {
+            "method": "custom:progress",
+            "params": {
+                "namespace": ["script-node:invocation"],
+                "data": {"result": "ready"},
+            },
+        }
+    )
+
+    assert len(values) == len(updates) == len(custom) == 1
+    assert isinstance(values[0], OutputEvent)
+    assert isinstance(updates[0], OutputEvent)
+    assert isinstance(custom[0], OutputEvent)
+    assert values[0].workflow_event_kind == "values"
+    assert updates[0].workflow_event_kind == ""
+    assert custom[0].workflow_event_kind == ""

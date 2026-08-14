@@ -60,7 +60,11 @@ const {
 const filters = computed(() => props.config.filters ?? [])
 const rowActions = computed(() => props.config.rowActions ?? [])
 const hasControls = computed(() => Boolean(
-  props.config.search || filters.value.length || props.config.bulkAction || slots['filter-actions'],
+  props.config.search
+    || filters.value.length
+    || props.config.bulkAction
+    || slots['filter-controls']
+    || slots['filter-actions'],
 ))
 const hasFilterActions = computed(() => Boolean(
   props.config.bulkAction || slots['filter-actions'] || (!props.config.search && filters.value.length),
@@ -214,7 +218,7 @@ defineExpose<{
 <template>
   <LteCard v-if="hasControls" class="mb-3">
     <form class="collection-filter-form" role="search" @submit.prevent="submitQuery">
-      <div v-if="config.search || filters.length" class="collection-filter-grid">
+      <div v-if="config.search || filters.length || slots['filter-controls']" class="collection-filter-grid">
         <div v-if="config.search" class="collection-query">
           <label class="form-label" :for="`${config.id}-query`">{{ label(config.search.label) }}</label>
           <div class="input-group">
@@ -281,6 +285,13 @@ defineExpose<{
             </div>
           </fieldset>
         </template>
+
+        <fieldset v-if="slots['filter-controls']" class="collection-filter-fieldset">
+          <legend class="collection-filter-legend">
+            <slot name="filter-controls-title" />
+          </legend>
+          <slot name="filter-controls" />
+        </fieldset>
 
         <fieldset v-if="hasFilterActions" class="collection-filter-fieldset">
           <legend class="collection-filter-legend">{{ t('common.dataTable.operations') }}</legend>

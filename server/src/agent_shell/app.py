@@ -57,6 +57,7 @@ from agent_shell.storage.runtime_diagnostics import RuntimeDiagnosticStore
 from agent_shell.storage.system_log_settings import MIB_BYTES, SystemLogSettingsStore
 from agent_shell.storage.validation_settings import ConfigurationValidationSettingsStore
 from agent_shell.storage.workflows import WorkflowStore
+from agent_shell.workflow_event_output import WorkflowEventOutputSettingsStore
 from agent_shell.storage.workflow_runs import WorkflowRunStore
 from agent_shell.validation.service import ConfigurationValidationService
 from agent_shell.middleware_packages.validation import MiddlewarePackageValidationService
@@ -129,6 +130,7 @@ def create_app(
     block_store = BlockStore(configuration, event_logger)
     config_store = AgentConfigStore(configuration, event_logger)
     workflow_store = WorkflowStore(configuration, event_logger)
+    workflow_event_output = WorkflowEventOutputSettingsStore(configuration)
     middleware_package_validation = MiddlewarePackageValidationService(
         packages_dir=custom_middlewares_dir,
         runtime_root=runtime_dir,
@@ -453,7 +455,13 @@ def create_app(
             configuration_validation,
         )
     )
-    app.include_router(build_workflow_router(workflow_store, block_store))
+    app.include_router(
+        build_workflow_router(
+            workflow_store,
+            block_store,
+            workflow_event_output,
+        )
+    )
     app.include_router(build_workflow_debug_router(workflow_debug))
     app.include_router(
         build_validation_router(

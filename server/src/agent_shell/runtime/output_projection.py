@@ -113,7 +113,7 @@ class OutputProjector:
 
 
 class WorkflowOutputProjector:
-    """Route Agent policies and leave non-Agent filtering as a future hook."""
+    """Route Agent policies and optionally hide the Workflow full-state event."""
 
     def __init__(
         self,
@@ -161,8 +161,6 @@ class WorkflowOutputProjector:
         return value if self._passthrough(event) else ""
 
     def _passthrough(self, event: OutputEvent) -> bool:
-        # Development TBD: non-Agent Workflow events stay visible while the
-        # Workflow-level filter is still being tested. This is temporary.
         return (
             event.source_type not in {"agent", "subagent"}
             and (

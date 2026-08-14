@@ -32,6 +32,11 @@ export const zhCN = {
     empty: '尚未创建 Workflow。',
     filteredEmpty: '没有符合当前条件的 Workflow。',
     searchPlaceholder: '搜索名称或说明',
+    eventOutput: {
+      title: 'Workflow 事件输出',
+      help: '控制完整 Workflow State（values）是否进入 OpenAI 兼容响应；不影响 Node 自定义事件、内部执行、Checkpoint 和最终 State。',
+      values: '完整 State（values）',
+    },
     loadFailed: '无法载入 Workflow',
     filesystemLoadFailed: '无法载入文件系统配置',
     createTitle: '新建 Workflow',

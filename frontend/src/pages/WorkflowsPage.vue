@@ -8,6 +8,7 @@ import {
   managementApi,
   type SavedBlock,
   type Workflow,
+  type WorkflowEventOutputSettings,
   type WorkflowPayload,
 } from '@/api'
 import DataTableWorkbench from '@/components/data-table/DataTableWorkbench.vue'
@@ -30,6 +31,10 @@ const saving = ref(false)
 const formError = ref('')
 const filesystems = ref<SavedBlock[]>([])
 const workflowPrepares = ref<SavedBlock[]>([])
+const eventOutput = ref<WorkflowEventOutputSettings>({ values: false })
+const eventOutputLoading = ref(true)
+const eventOutputSaving = ref(false)
+const eventOutputError = ref('')
 const form = ref<WorkflowPayload>(blankWorkflow())
 
 function blankWorkflow(): WorkflowPayload {
@@ -95,19 +100,50 @@ function filesystemName(id: string): string {
   return filesystems.value.find((item) => item.id === id)?.name ?? id
 }
 
-onMounted(async () => {
+async function updateEventOutput(enabled: boolean): Promise<void> {
+  if (eventOutputLoading.value || eventOutputSaving.value) return
+  const previous = eventOutput.value
+  const next = { values: enabled }
+  eventOutput.value = next
+  eventOutputSaving.value = true
+  eventOutputError.value = ''
   try {
-    ;[filesystems.value, workflowPrepares.value] = await Promise.all([
+    eventOutput.value = await managementApi.updateWorkflowEventOutput(next)
+  } catch (error) {
+    eventOutput.value = previous
+    eventOutputError.value = managementError.describe(error).display
+  } finally {
+    eventOutputSaving.value = false
+  }
+}
+
+function checked(event: Event): boolean {
+  return (event.target as HTMLInputElement).checked
+}
+
+onMounted(async () => {
+  const [blocksResult, eventOutputResult] = await Promise.allSettled([
+    Promise.all([
       managementApi.listBlocks('filesystem'),
       managementApi.listBlocks('workflow-prepare'),
-    ])
-  } catch (error) {
+    ]),
+    managementApi.getWorkflowEventOutput(),
+  ])
+  if (blocksResult.status === 'fulfilled') {
+    ;[filesystems.value, workflowPrepares.value] = blocksResult.value
+  } else {
     notify({
       tone: 'danger',
       title: t('workflows.filesystemLoadFailed'),
-      message: managementError.describe(error).display,
+      message: managementError.describe(blocksResult.reason).display,
     })
   }
+  if (eventOutputResult.status === 'fulfilled') {
+    eventOutput.value = eventOutputResult.value
+  } else {
+    eventOutputError.value = managementError.describe(eventOutputResult.reason).display
+  }
+  eventOutputLoading.value = false
 })
 
 const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
@@ -171,7 +207,36 @@ const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
 
 <template>
   <PageShell>
-    <DataTableWorkbench ref="table" :config="tableConfig" />
+    <DataTableWorkbench ref="table" :config="tableConfig">
+      <template #filter-controls-title>
+        {{ t('workflows.eventOutput.title') }}
+      </template>
+      <template #filter-controls>
+        <div :aria-busy="eventOutputLoading || eventOutputSaving">
+          <div v-if="eventOutputLoading" class="d-flex align-items-center gap-2" role="status">
+            <span class="spinner-border spinner-border-sm" aria-hidden="true" />
+            <span>{{ t('common.loading') }}</span>
+          </div>
+          <div v-else class="form-check form-switch">
+            <input
+              id="workflow-event-output-values"
+              class="form-check-input"
+              type="checkbox"
+              :checked="eventOutput.values"
+              :disabled="eventOutputSaving"
+              @change="updateEventOutput(checked($event))"
+            >
+            <label class="form-check-label" for="workflow-event-output-values">
+              {{ t('workflows.eventOutput.values') }}
+            </label>
+          </div>
+          <p class="text-body-secondary mb-0 mt-2">{{ t('workflows.eventOutput.help') }}</p>
+          <p v-if="eventOutputError" class="text-danger mb-0 mt-2" role="alert">
+            {{ eventOutputError }}
+          </p>
+        </div>
+      </template>
+    </DataTableWorkbench>
     <template #actions>
       <LteButton theme="success" type="button" @click="openNew">
         <i class="bi bi-plus-lg" aria-hidden="true" />

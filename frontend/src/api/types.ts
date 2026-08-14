@@ -232,6 +232,10 @@ export interface MiddlewarePackageResource {
   dependency_error_code: string
 }
 
+export interface WorkflowEventOutputSettings {
+  values: boolean
+}
+
 export interface WorkflowPayload {
   name: string
   description: string

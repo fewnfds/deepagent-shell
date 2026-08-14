@@ -7,6 +7,7 @@ import {
   managementApi,
   type SavedBlock,
   type Workflow,
+  type WorkflowEventOutputSettings,
   type WorkflowGraphDocument,
 } from '@/api'
 import { useConfirmation } from '@/composables/useConfirmation'
@@ -35,6 +36,7 @@ const filesystem: SavedBlock = {
   id: 'filesystem-1',
   name: 'Shared Filesystem',
 }
+const eventOutput: WorkflowEventOutputSettings = { values: false }
 
 function testRouter() {
   return createRouter({
@@ -57,6 +59,7 @@ describe('WorkflowsPage', () => {
   it('loads Workflows and performs create and delete operations', async () => {
     vi.spyOn(managementApi, 'listWorkflows').mockResolvedValue([workflow])
     vi.spyOn(managementApi, 'listBlocks').mockResolvedValue([filesystem])
+    vi.spyOn(managementApi, 'getWorkflowEventOutput').mockResolvedValue(eventOutput)
     const create = vi.spyOn(managementApi, 'createWorkflow').mockResolvedValue(workflow)
     const remove = vi.spyOn(managementApi, 'deleteWorkflow').mockResolvedValue({ ok: true })
     const router = testRouter()
@@ -91,6 +94,30 @@ describe('WorkflowsPage', () => {
     await flushPromises()
 
     expect(remove).toHaveBeenCalledWith(workflow.id)
+    wrapper.unmount()
+  })
+
+  it('updates the global Workflow full-state output setting', async () => {
+    vi.spyOn(managementApi, 'listWorkflows').mockResolvedValue([workflow])
+    vi.spyOn(managementApi, 'listBlocks').mockResolvedValue([filesystem])
+    vi.spyOn(managementApi, 'getWorkflowEventOutput').mockResolvedValue(eventOutput)
+    const update = vi.spyOn(managementApi, 'updateWorkflowEventOutput').mockImplementation(
+      async (payload) => payload,
+    )
+    const router = testRouter()
+    await router.push('/workflows')
+    await router.isReady()
+
+    const wrapper = mount(WorkflowsPage, { global: { plugins: [i18n(), router] } })
+    await flushPromises()
+
+    const values = wrapper.get('#workflow-event-output-values')
+    expect((values.element as HTMLInputElement).checked).toBe(false)
+
+    await values.setValue(true)
+    await flushPromises()
+
+    expect(update).toHaveBeenCalledWith({ values: true })
     wrapper.unmount()
   })
 

@@ -8,6 +8,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from agent_shell.api.errors import management_error
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.workflows import WorkflowStore
+from agent_shell.workflow_event_output import (
+    WorkflowEventOutputSettings,
+    WorkflowEventOutputSettingsStore,
+)
 from agent_shell.validation.models import validation_failure_detail
 from agent_shell.workflow.catalog import node_catalog_payload
 from agent_shell.workflow.validation import admit_workflow_document
@@ -69,8 +73,22 @@ def _save(
     return item
 
 
-def build_workflow_router(store: WorkflowStore, blocks: BlockStore) -> APIRouter:
+def build_workflow_router(
+    store: WorkflowStore,
+    blocks: BlockStore,
+    event_output_settings: WorkflowEventOutputSettingsStore,
+) -> APIRouter:
     router = APIRouter()
+
+    @router.get("/api/workflow-event-output")
+    async def get_workflow_event_output() -> WorkflowEventOutputSettings:
+        return event_output_settings.snapshot()
+
+    @router.put("/api/workflow-event-output")
+    async def update_workflow_event_output(
+        payload: WorkflowEventOutputSettings,
+    ) -> WorkflowEventOutputSettings:
+        return event_output_settings.update(payload)
 
     @router.get("/api/workflow-node-catalog")
     async def get_workflow_node_catalog() -> list[dict[str, object]]:
