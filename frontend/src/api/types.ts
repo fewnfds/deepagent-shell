@@ -307,9 +307,14 @@ export interface SubagentReference {
   subagent_id: string
 }
 
+export interface MiddlewareReference {
+  middleware_id: string
+}
+
 export interface MainAgentPayload {
   name: string
   capability_refs: CapabilityReference[]
+  middleware_refs: MiddlewareReference[]
   subagents: SubagentReference[]
 }
 
@@ -323,6 +328,7 @@ export interface CapabilityOverride {
 
 export interface SubagentSettings {
   capability_overrides: CapabilityOverride[]
+  middleware_refs: MiddlewareReference[]
 }
 
 export interface SubagentPayload {

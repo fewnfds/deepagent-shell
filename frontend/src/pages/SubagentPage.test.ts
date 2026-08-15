@@ -5,6 +5,7 @@ import {
   buttonByText,
   filesystemManifest,
   filesystemPermissionsManifest,
+  middlewareManifest,
   modelManifest,
   mountMainAgentPage,
   mountSubagentPage,
@@ -18,6 +19,48 @@ import {
 beforeEach(resetAgentPageTestState)
 
 describe('Subagent authoring page', () => {
+  it('orders independent Middleware references for Main Agent and Subagent', async () => {
+    const firstId = '00000000-0000-0000-0000-000000000071'
+    const secondId = '00000000-0000-0000-0000-000000000072'
+    const api = service({
+      getCatalog: vi.fn(async () => ({
+        block_types: [modelManifest, promptManifest, middlewareManifest],
+        editor_defaults: {},
+      })),
+      listBlocks: vi.fn(async (type) => (
+        type === 'custom-middleware'
+          ? [{ id: firstId, name: 'First' }, { id: secondId, name: 'Second' }]
+          : [{ id: `00000000-0000-0000-0000-${type === 'model' ? '000000000001' : '000000000002'}`, name: `${type} block` }]
+      )),
+    })
+
+    for (const mountPage of [mountMainAgentPage, mountSubagentPage]) {
+      const { wrapper } = await mountPage(api)
+      const add = wrapper.get('[data-action="add-middleware-reference"]')
+      await add.trigger('click')
+      await add.trigger('click')
+      const rows = wrapper.findAll('[data-testid="middleware-reference-row"]')
+      expect(rows).toHaveLength(2)
+      expect(rows.every((row) => row.classes().includes('col-md-6'))).toBe(true)
+      expect(rows.every((row) => row.classes().includes('col-lg-4'))).toBe(true)
+      await rows[0]!.get('[data-testid="middleware-reference"]').setValue(firstId)
+      await rows[1]!.get('[data-testid="middleware-reference"]').setValue(secondId)
+      await rows[0]!.get('[data-action="move-middleware-reference-down"]').trigger('click')
+      await buttonByText(wrapper, 'common.save').trigger('click')
+      await flushPromises()
+      wrapper.unmount()
+    }
+
+    expect(api.createMainAgent).toHaveBeenCalledWith(expect.objectContaining({
+      middleware_refs: [{ middleware_id: secondId }, { middleware_id: firstId }],
+    }))
+    expect(api.createSubagent).toHaveBeenCalledWith(expect.objectContaining({
+      settings: expect.objectContaining({
+        middleware_refs: [{ middleware_id: secondId }, { middleware_id: firstId }],
+      }),
+    }))
+  })
+
   it('adds, selects, and removes ordered Subagent entity references', async () => {
     const api = service()
     const { wrapper } = await mountMainAgentPage(api)
@@ -26,9 +69,7 @@ describe('Subagent authoring page', () => {
     await addButton.trigger('click')
     await addButton.trigger('click')
     expect(wrapper.findAll('[data-testid="subagent-reference-row"]')).toHaveLength(2)
-    expect(wrapper.findAll('[data-action="remove-subagent-reference"]').every((button) => (
-      button.classes().includes('ms-auto')
-    ))).toBe(true)
+    expect(wrapper.findAll('[data-action="remove-subagent-reference"]')).toHaveLength(2)
 
     await wrapper.findAll('[data-action="remove-subagent-reference"]')[0]?.trigger('click')
     expect(wrapper.findAll('[data-testid="subagent-reference-row"]')).toHaveLength(1)
@@ -149,6 +190,7 @@ describe('Subagent authoring page', () => {
           { type: 'model', mode: 'replace', block_id: '00000000-0000-0000-0000-000000000001' },
           { type: 'system-prompt', mode: 'disabled', block_id: '' },
         ],
+        middleware_refs: [],
       },
     })
     wrapper.unmount()

@@ -10,7 +10,10 @@ import tempfile
 from typing import Any
 from uuid import uuid4
 
-from agent_shell.python_packages.contracts import validate_package_relative_path
+from agent_shell.python_packages.contracts import (
+    EMPTY_TEMPLATE_KEY,
+    validate_package_relative_path,
+)
 from agent_shell.python_packages.packages import (
     PythonPackageManifest,
     inspect_python_package_draft,
@@ -95,13 +98,6 @@ def _restore_file(path: Path, existed: bool, content: bytes) -> None:
         _write_bytes_atomic(path, content)
     else:
         path.unlink(missing_ok=True)
-
-
-def _template_slug(key: str) -> str:
-    slug = key.lower().replace("_", "-")
-    while "--" in slug:
-        slug = slug.replace("--", "-")
-    return slug.strip("-")[:64]
 
 
 def _file_entries(value: object) -> list[dict[str, str]]:
@@ -401,45 +397,54 @@ class PythonPackageAuthoringService:
     ) -> tuple[dict[str, Any], PackageChange]:
         spec = self._spec(block_type)
         entries = _file_entries(files)
-        template_root = self._template_root(spec)
-        template = template_root / template_key
-        if template.parent != template_root:
+        template: Path | None = None
+        if template_key != EMPTY_TEMPLATE_KEY:
+            template_root = self._template_root(spec)
+            template = template_root / template_key
+            if template.parent != template_root:
+                raise PythonPackageAuthoringError(
+                    "python_package_template_invalid",
+                    "The selected Python package template key must name one template folder.",
+                )
+            try:
+                metadata = scan_python_package_template(
+                    template,
+                    family=spec.family,  # type: ignore[arg-type]
+                    adapter=spec.adapter,  # type: ignore[arg-type]
+                    factory_name=spec.factory_name,
+                    factory_parameters=spec.factory_parameters,
+                )
+            except ResourceScanError as exc:
+                raise PythonPackageAuthoringError(
+                    "python_package_template_invalid",
+                    "The selected Python package template is invalid.",
+                ) from exc
+            if metadata["revision"] != template_revision:
+                raise PythonPackageAuthoringError(
+                    "python_package_template_revision_conflict",
+                    "The Python package template changed after it was loaded.",
+                    status_code=409,
+                )
+        elif template_revision:
             raise PythonPackageAuthoringError(
                 "python_package_template_invalid",
-                "The selected Python package template key must name one template folder.",
+                "The empty Python package template does not have a revision.",
             )
-        try:
-            metadata = scan_python_package_template(
-                template,
-                family=spec.family,  # type: ignore[arg-type]
-                adapter=spec.adapter,  # type: ignore[arg-type]
-                factory_name=spec.factory_name,
-                factory_parameters=spec.factory_parameters,
-            )
-        except ResourceScanError as exc:
-            raise PythonPackageAuthoringError(
-                "python_package_template_invalid",
-                "The selected Python package template is invalid.",
-            ) from exc
-        if metadata["revision"] != template_revision:
-            raise PythonPackageAuthoringError(
-                "python_package_template_revision_conflict",
-                "The Python package template changed after it was loaded.",
-                status_code=409,
-            )
-        instance_id = str(uuid4())
-        folder_name = f"{owner_id}--{_template_slug(template_key)}--{instance_id}"
+        folder_name = owner_id
         adapter_root = self._adapter_root(spec)
         adapter_root.mkdir(parents=True, exist_ok=True)
         staging_root = Path(tempfile.mkdtemp(prefix=".authoring-", dir=adapter_root))
         staged = staging_root / folder_name
         final = adapter_root / folder_name
         try:
-            shutil.copytree(template, staged)
+            if template is not None:
+                shutil.copytree(template, staged)
+            else:
+                staged.mkdir(parents=True)
             manifest = PythonPackageManifest.model_validate(
                 {
                     "format_version": 1,
-                    "id": instance_id,
+                    "id": owner_id,
                     "family": spec.family,
                     "adapter": spec.adapter,
                 }
@@ -557,9 +562,7 @@ class PythonPackageAuthoringService:
             block_type, source_owner_id, str(reference.get("folder", ""))
         )
         spec = self._spec(block_type)
-        instance_id = str(uuid4())
-        template_slug = source.name.split("--", 2)[1]
-        folder_name = f"{target_owner_id}--{template_slug}--{instance_id}"
+        folder_name = target_owner_id
         final = self._adapter_root(spec) / folder_name
         staging_root = Path(tempfile.mkdtemp(prefix=".authoring-", dir=self._adapter_root(spec)))
         staged = staging_root / folder_name
@@ -567,7 +570,7 @@ class PythonPackageAuthoringService:
             shutil.copytree(source, staged)
             manifest_path = staged / "package.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            manifest["id"] = instance_id
+            manifest["id"] = target_owner_id
             _write_bytes_atomic(
                 manifest_path,
                 (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),

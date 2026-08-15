@@ -188,10 +188,9 @@ def test_validation_issue_rejects_non_primitive_message_arguments() -> None:
             {
                 "name": "Invalid package",
                 "python_package": {
-                    "folder": (
-                        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa--Invalid--"
-                        "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
-                    ),
+                        "folder": (
+                            "AAAAAAAA-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+                        ),
                     "config": {},
                 },
             },

@@ -108,7 +108,7 @@ def build_router(
                 422,
                 code="python_package_template_required",
                 message_key="errors.pythonPackageTemplateRequired",
-                message="Select a Python package template before saving.",
+                message="Select a Python package template or apply the empty template before saving.",
             )
         package = candidate.get("python_package")
         if not isinstance(package, dict) or set(package) != {"folder", "editable_files"}:

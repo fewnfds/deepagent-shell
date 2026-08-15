@@ -4,6 +4,7 @@ import { computed, inject, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import PageShell from '@/components/PageShell.vue'
+import MiddlewareReferencesEditor from '@/components/MiddlewareReferencesEditor.vue'
 import RecordPicker from '@/components/RecordPicker.vue'
 import SubagentReferencesEditor from '@/components/SubagentReferencesEditor.vue'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
@@ -53,7 +54,7 @@ let profileLoadSequence = 0
 const obsoleteReferences = computed(() => {
   const supported = new Set<string>(
     manifests.value
-      .filter((manifest) => manifest.type !== 'filesystem')
+      .filter((manifest) => !['filesystem', 'custom-middleware'].includes(manifest.type))
       .map((manifest) => manifest.type),
   )
   return form.value.capability_refs
@@ -63,6 +64,7 @@ const obsoleteReferences = computed(() => {
 const workspaceCapabilityTypes = new Set<CapabilityType>([
   'filesystem',
   'filesystem-permissions',
+  'custom-middleware',
 ])
 const generalManifests = computed(() => manifests.value.filter(
   (manifest) => !workspaceCapabilityTypes.has(manifest.type),
@@ -405,6 +407,12 @@ watch(
             </div>
           </div>
         </section>
+
+        <MiddlewareReferencesEditor
+          v-model:references="form.middleware_refs"
+          id-prefix="main-agent-middleware"
+          :middlewares="capabilityBlocks('custom-middleware')"
+        />
 
         <SubagentReferencesEditor
           v-model:references="form.subagents"

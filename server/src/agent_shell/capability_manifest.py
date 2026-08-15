@@ -101,7 +101,7 @@ CAPABILITY_MANIFESTS = (
     CapabilityManifest(
         "custom-middleware", "middleware", "自定义中间件", 8,
         "layers", "custom_middleware",
-        subagent_overrideable=True, required=False, subagent_policy="inherit",
+        subagent_overrideable=False, required=False, subagent_policy="force-remove",
     ),
     CapabilityManifest(
         "output-mode", "output-policy", "输出模式", 9,

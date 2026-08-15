@@ -8,6 +8,8 @@ import type {
 
 import { isRecord, stringValue } from './shared'
 
+export const EMPTY_PYTHON_PACKAGE_TEMPLATE_KEY = '__empty__'
+
 export interface PythonPackageDraftState {
   python_package: PythonPackageReference
   python_package_files: PythonPackageFiles
@@ -106,6 +108,11 @@ export function applyPythonPackageTemplate(
   target.python_package_error = null
   target.dependency_status = ''
   target.editable_paths_source = 'main.py'
+}
+
+export function applyEmptyPythonPackageTemplate(target: PythonPackageDraftState): void {
+  Object.assign(target, blankPythonPackage())
+  target.python_package_files.template_key = EMPTY_PYTHON_PACKAGE_TEMPLATE_KEY
 }
 
 export function pythonPackagePayload(value: PythonPackageDraftState): {

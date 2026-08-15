@@ -469,7 +469,7 @@ class AgentBuilder:
                     scope=scope,
                     owner_id=owner_id,
                     owner_name=owner_name,
-                    path="capability_refs.custom-middleware",
+                    path="middleware_refs",
                 ) from exc
 
         system_prompt = selected_blocks.get("system-prompt")

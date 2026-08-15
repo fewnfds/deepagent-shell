@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,8 +18,7 @@ class MiddlewareOwner:
     id: str
     type: str
     name: str
-    package_owner_id: str
-    package: dict[str, Any] | None
+    packages: tuple[tuple[str, dict[str, Any]], ...]
 
 
 class MiddlewarePackageRuntime:
@@ -67,22 +65,22 @@ class MiddlewarePackageRuntime:
     ) -> "MiddlewarePackageRuntime":
         owners: list[MiddlewareOwner] = []
 
-        def middleware_package(
-            blocks: dict[str, dict[str, Any]],
-        ) -> dict[str, Any] | None:
-            selected = blocks.get("custom-middleware", {})
-            package = selected.get("python_package")
-            return deepcopy(package) if isinstance(package, dict) else None
+        def middleware_packages(
+            blocks: tuple[dict[str, Any], ...],
+        ) -> tuple[tuple[str, dict[str, Any]], ...]:
+            result: list[tuple[str, dict[str, Any]]] = []
+            for block in blocks:
+                package = block.get("python_package")
+                if isinstance(package, dict):
+                    result.append((str(block.get("id", "")), deepcopy(package)))
+            return tuple(result)
 
         owners.append(
             MiddlewareOwner(
                 id=main_agent_id,
                 type="main_agent",
                 name=str(assembly.main_agent.get("name", "")),
-                package_owner_id=str(
-                    assembly.blocks.get("custom-middleware", {}).get("id", "")
-                ),
-                package=middleware_package(assembly.blocks),
+                packages=middleware_packages(assembly.middleware_blocks),
             )
         )
         for edge in assembly.subagents:
@@ -93,10 +91,7 @@ class MiddlewarePackageRuntime:
                     id=node.key,
                     type="subagent",
                     name=node.name,
-                    package_owner_id=str(
-                        node.blocks.get("custom-middleware", {}).get("id", "")
-                    ),
-                    package=middleware_package(node.blocks),
+                    packages=middleware_packages(node.middleware_blocks),
                 )
             )
         return cls(
@@ -111,46 +106,42 @@ class MiddlewarePackageRuntime:
         if cached is not None:
             return cached
         owner = self._owner_by_id[owner_id]
-        if owner.package is None:
+        if not owner.packages:
             result: tuple[AgentMiddleware, ...] = ()
             self._middleware[owner_id] = result
             return result
-        folder = str(owner.package["folder"])
-        factory, metadata, _package_dir = self._loader.entrypoint(
-            owner.id,
-            "middleware",
-            0,
-            folder,
-            package_owner_id=owner.package_owner_id,
-        )
-        try:
-            produced = factory(
-                {
-                    "id": owner.id,
-                    "type": owner.type,
-                    "name": owner.name,
-                    "package_id": metadata["id"],
-                },
+        values: list[AgentMiddleware] = []
+        for index, (package_owner_id, package) in enumerate(owner.packages):
+            folder = str(package["folder"])
+            factory, metadata, _package_dir = self._loader.entrypoint(
+                owner.id,
+                "middleware",
+                index,
+                folder,
+                package_owner_id=package_owner_id,
             )
-        except Exception as exc:
-            raise AgentRuntimeError(
-                "middleware_package_materialization_failed",
-                f"Middleware package {folder!r} could not create Middleware.",
-                status_code=422,
-            ) from exc
-        values: Sequence[Any]
-        if isinstance(produced, AgentMiddleware):
-            values = (produced,)
-        elif isinstance(produced, (list, tuple)):
-            values = produced
-        else:
-            values = ()
-        if not values or any(not isinstance(item, AgentMiddleware) for item in values):
-            raise AgentRuntimeError(
-                "middleware_package_result_invalid",
-                f"Middleware package {folder!r} must return AgentMiddleware instances.",
-                status_code=422,
-            )
+            try:
+                produced = factory(
+                    {
+                        "id": owner.id,
+                        "type": owner.type,
+                        "name": owner.name,
+                        "package_id": metadata["id"],
+                    },
+                )
+            except Exception as exc:
+                raise AgentRuntimeError(
+                    "middleware_package_materialization_failed",
+                    f"Middleware package {folder!r} could not create Middleware.",
+                    status_code=422,
+                ) from exc
+            if not isinstance(produced, AgentMiddleware):
+                raise AgentRuntimeError(
+                    "middleware_package_result_invalid",
+                    f"Middleware package {folder!r} must return one AgentMiddleware instance.",
+                    status_code=422,
+                )
+            values.append(produced)
         for item in values:
             middleware_type = type(item)
             for sync_name, async_name in (

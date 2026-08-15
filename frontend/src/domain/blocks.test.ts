@@ -113,7 +113,7 @@ describe('block adapters', () => {
     const middlewareDraft = customMiddlewareAdapter.fromApi({
       id: 'middleware-id',
       name: 'Middleware',
-      python_package: { folder: 'owner--template--instance', editable_files: ['main.py', 'requirements.txt'] },
+      python_package: { folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', editable_files: ['main.py', 'requirements.txt'] },
       python_package_files: {
         files: [
           { path: 'main.py', content: 'def create_middleware(agent):\n    return middleware\n', exists: true },
@@ -128,7 +128,7 @@ describe('block adapters', () => {
     })
     const payload = customMiddlewareAdapter.toPayload(middlewareDraft)
     expect(payload.python_package).toEqual({
-      folder: 'owner--template--instance', editable_files: ['main.py', 'requirements.txt'],
+      folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', editable_files: ['main.py', 'requirements.txt'],
     })
     expect(payload.python_package_files).toMatchObject({
       files: [
@@ -199,7 +199,7 @@ describe('block adapters', () => {
     const middleware = customMiddlewareAdapter.fromApi({
       id: 'middleware', name: 'Middleware',
       python_package: {
-        folder: 'owner--template--instance',
+        folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         editable_files: ['main.py', 42],
       },
       python_package_files: {
@@ -208,7 +208,7 @@ describe('block adapters', () => {
       },
     } as never)
     expect(middleware.python_package).toEqual({
-      folder: 'owner--template--instance', editable_files: ['main.py'],
+      folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', editable_files: ['main.py'],
     })
     expect(middleware.python_package_files).toMatchObject({
       files: [{ path: 'main.py', content: '', exists: false }], revision: '',

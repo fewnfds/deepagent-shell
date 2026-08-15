@@ -8,6 +8,7 @@ import type {
   CatalogResponse,
   DraftValidationRequest as ApiDraftValidationRequest,
   MainAgent,
+  MiddlewareReference as ApiMiddlewareReference,
   MainAgentPayload as ApiMainAgentPayload,
   SavedBlock,
   Subagent,
@@ -24,6 +25,7 @@ export type CapabilityManifest = ApiCapabilityManifest
 type AgentCatalog = CatalogResponse
 export type StoredBlock = SavedBlock
 export type SubagentReference = ApiSubagentReference
+export type MiddlewareReference = ApiMiddlewareReference
 
 export interface MainAgentProfile extends Omit<MainAgent, 'subagents'> {
   id: string
@@ -88,6 +90,10 @@ export function blankSubagentReference(): SubagentReference {
   return { subagent_id: '' }
 }
 
+export function blankMiddlewareReference(): MiddlewareReference {
+  return { middleware_id: '' }
+}
+
 export function normalizeSubagentReference(value: unknown): SubagentReference {
   const source = record(value)
   return { subagent_id: text(source.subagent_id) }
@@ -98,6 +104,7 @@ export function blankMainAgent(): MainAgentProfile {
     id: '',
     name: '',
     capability_refs: [],
+    middleware_refs: [],
     subagents: [],
   }
 }
@@ -106,12 +113,17 @@ export function normalizeMainAgent(value: unknown): MainAgentProfile {
   const source = record(value)
   const references = Array.isArray(source.capability_refs) ? source.capability_refs : []
   const subagents = Array.isArray(source.subagents) ? source.subagents : []
+  const middlewareRefs = Array.isArray(source.middleware_refs) ? source.middleware_refs : []
   return {
     id: text(source.id),
     name: text(source.name),
     capability_refs: references.map((item) => {
       const reference = record(item)
       return { type: text(reference.type), block_id: text(reference.block_id) }
+    }),
+    middleware_refs: middlewareRefs.map((item) => {
+      const reference = record(item)
+      return { middleware_id: text(reference.middleware_id) }
     }),
     subagents: subagents.map(normalizeSubagentReference),
   }
@@ -122,6 +134,9 @@ export function mainAgentPayload(value: MainAgentProfile): MainAgentPayload {
     name: value.name.trim(),
     capability_refs: value.capability_refs
       .map((reference) => ({ type: reference.type, block_id: reference.block_id })),
+    middleware_refs: value.middleware_refs.map((reference) => ({
+      middleware_id: reference.middleware_id,
+    })),
     subagents: value.subagents.map((reference) => ({
       subagent_id: reference.subagent_id,
     })),
@@ -145,6 +160,7 @@ export function blankSubagent(): SubagentProfile {
     description: '',
     settings: {
       capability_overrides: [],
+      middleware_refs: [],
     },
   }
 }
@@ -154,6 +170,9 @@ export function normalizeSubagent(value: unknown): SubagentProfile {
   const settings = record(source.settings)
   const overrides = Array.isArray(settings.capability_overrides)
     ? settings.capability_overrides
+    : []
+  const middlewareRefs = Array.isArray(settings.middleware_refs)
+    ? settings.middleware_refs
     : []
   return {
     id: text(source.id),
@@ -168,6 +187,10 @@ export function normalizeSubagent(value: unknown): SubagentProfile {
           mode: text(override.mode) as StoredOverrideMode,
           block_id: text(override.block_id),
         }
+      }),
+      middleware_refs: middlewareRefs.map((item) => {
+        const reference = record(item)
+        return { middleware_id: text(reference.middleware_id) }
       }),
     },
   }
@@ -203,6 +226,9 @@ export function subagentPayload(value: SubagentProfile): SubagentPayload {
     settings: {
       capability_overrides: value.settings.capability_overrides
         .map((selection) => ({ ...selection })),
+      middleware_refs: value.settings.middleware_refs.map((reference) => ({
+        middleware_id: reference.middleware_id,
+      })),
     },
   }
 }

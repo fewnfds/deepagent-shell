@@ -89,8 +89,23 @@ def main_agent_block_reference_owner(
     config_store: AgentConfigStore, block_type: str, block_id: str
 ) -> tuple[str, str] | None:
     for item in config_store.list_items(MAIN_AGENT_TABLE):
+        if block_type == "custom-middleware" and any(
+            isinstance(reference, dict)
+            and reference.get("middleware_id") == block_id
+            for reference in item.get("middleware_refs", [])
+        ):
+            return "main_agent", str(item.get("name", ""))
         if capability_reference_id(item, block_type) == block_id:
             return "main_agent", str(item.get("name", ""))
+    if block_type == "custom-middleware":
+        for item in config_store.list_items(SUBAGENT_TABLE):
+            settings = item.get("settings", {})
+            if isinstance(settings, dict) and any(
+                isinstance(reference, dict)
+                and reference.get("middleware_id") == block_id
+                for reference in settings.get("middleware_refs", [])
+            ):
+                return "subagent", str(item.get("component_name", ""))
     return None
 
 

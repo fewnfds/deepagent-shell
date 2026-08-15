@@ -90,6 +90,7 @@ def test_manifest_free_template_creates_owned_package_and_keeps_missing_file_war
     )
     block_id = created["id"]
     folder_name = created["python_package"]["folder"]
+    assert folder_name == block_id
     assert created["python_package"]["editable_files"] == [
         "main.py",
         "helpers/rules.py",
@@ -114,7 +115,7 @@ def test_manifest_free_template_creates_owned_package_and_keeps_missing_file_war
         "format_version": 1,
         "family": "workflow-node",
         "adapter": "condition-router",
-        "id": folder_name.rsplit("--", 1)[1],
+        "id": folder_name,
     }
     assert not (private_folder / "missing.py").exists()
     stored = yaml.safe_load(
@@ -132,6 +133,34 @@ def test_manifest_free_template_creates_owned_package_and_keeps_missing_file_war
             "editable_files": ["main.py", "helpers/rules.py", "missing.py"],
         }
     }
+
+
+def test_condition_router_can_be_created_from_empty_template_selection(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = make_client(tmp_path, monkeypatch)
+    source = (
+        "def create_router():\n"
+        "    async def route(state, context):\n"
+        "        return {'activate': ['otherwise'], 'update': {}}\n"
+        "    return route\n"
+    )
+
+    response = client.post(
+        "/api/blocks/condition-router",
+        json={
+            "name": "Empty template router",
+            "python_package": {"folder": "", "editable_files": ["main.py"]},
+            "python_package_files": {
+                "template_key": "__empty__",
+                "revision": "",
+                "files": [{"path": "main.py", "content": source}],
+            },
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["python_package"]["folder"] == response.json()["id"]
 
 
 def test_existing_package_updates_ordered_text_files_and_creates_new_file(

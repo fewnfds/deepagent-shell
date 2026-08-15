@@ -224,7 +224,7 @@ def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) 
             assert created["instruction_override"] is None
             assert created["task_description_override"] is None
         if block_type == "custom-middleware":
-            assert created["python_package"]["folder"].startswith(f"{created['id']}--")
+            assert created["python_package"]["folder"] == created["id"]
         if block_type == "todo-list":
             assert created["system_prompt_override"] == payload[
                 "system_prompt_override"

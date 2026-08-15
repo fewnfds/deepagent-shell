@@ -16,7 +16,7 @@ PUBLIC_TYPES = tuple(manifest.type for manifest in CAPABILITY_MANIFESTS)
 MAIN_AGENT_TYPES = tuple(
     capability_type
     for capability_type in PUBLIC_TYPES
-    if capability_type != "filesystem"
+    if capability_type not in {"filesystem", "custom-middleware"}
 )
 OVERRIDEABLE_TYPES = tuple(
     manifest.type for manifest in CAPABILITY_MANIFESTS if manifest.subagent_overrideable
@@ -39,6 +39,7 @@ def subagent_payload(
         "description": description,
         "settings": {
             "capability_overrides": capability_overrides or [],
+            "middleware_refs": [],
         },
     }
 OUTPUT_EVENT_TYPES = (

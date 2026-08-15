@@ -466,6 +466,16 @@
         ]
       },
       {
+        "name": "MiddlewareReferencesEditor",
+        "path": "src/components/MiddlewareReferencesEditor.vue",
+        "kind": "domain-composition",
+        "reason": "Owns ordered Custom Middleware references for Main Agent and Subagent configurations",
+        "callers": [
+          "src/pages/MainAgentPage.vue",
+          "src/pages/SubagentPage.vue"
+        ]
+      },
+      {
         "name": "RecordPicker",
         "path": "src/components/RecordPicker.vue",
         "kind": "domain-composition",

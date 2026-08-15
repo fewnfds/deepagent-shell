@@ -383,7 +383,7 @@ describe('ComponentsPage', () => {
     wrapper.unmount()
   })
 
-  it('requires a template and rejects duplicate names for Python extensions', async () => {
+  it('offers the empty template and rejects duplicate names for Python extensions', async () => {
     api.getCatalog.mockResolvedValueOnce({
       block_types: [skillManifest, modelManifest],
       workflow_component_types: [conditionRouterManifest],
@@ -393,7 +393,7 @@ describe('ComponentsPage', () => {
       id: '00000000-0000-4000-8000-000000000010',
       name: 'Existing router',
       python_package: {
-        folder: '00000000-0000-4000-8000-000000000010--basic-router--00000000-0000-4000-8000-000000000011',
+        folder: '00000000-0000-4000-8000-000000000010',
         editable_files: ['main.py'],
       },
     }])
@@ -417,6 +417,9 @@ describe('ComponentsPage', () => {
     })
     await flushPromises()
 
+    expect(wrapper.findAll('button').some((button) => (
+      button.text() === 'editors.pythonPackage.applyEmptyTemplate'
+    ))).toBe(true)
     await buttonByText(wrapper, 'common.save').trigger('click')
     expect(wrapper.get('[data-testid="page-error"]').text())
       .toContain('errors.pythonPackageTemplateRequired')

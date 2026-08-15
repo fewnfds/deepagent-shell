@@ -282,7 +282,7 @@ def scan_python_package(
     runtime_root: Path | None = None,
 ) -> dict[str, object]:
     parsed = parse_package_folder(folder.name)
-    if parsed is None or parsed[0] != owner_id:
+    if parsed is None or parsed != owner_id:
         raise ResourceScanError(
             "resource.error.pythonPackage.ownerMismatch",
             "The Python package folder does not belong to the component configuration.",
@@ -295,10 +295,10 @@ def scan_python_package(
         model=PythonPackageManifest,
     )
     assert isinstance(manifest, PythonPackageManifest)
-    if manifest.id != parsed[2]:
+    if manifest.id != parsed:
         raise ResourceScanError(
             "resource.error.pythonPackage.idMismatch",
-            "The manifest id must match the instance UUID in the folder name.",
+            "The manifest id must match the configuration UUID in the folder name.",
             {"declared_id": manifest.id},
         )
     if manifest.family != family or manifest.adapter != adapter:
@@ -328,7 +328,7 @@ def resolve_owned_python_package_folder(
     adapter: PythonPackageAdapter,
 ) -> Path | None:
     parsed = parse_package_folder(folder_name)
-    if parsed is None or parsed[0] != owner_id:
+    if parsed is None or parsed != owner_id:
         return None
     folder = directory / adapter / folder_name
     if not folder.is_dir() or _is_link(folder):
@@ -347,7 +347,7 @@ def inspect_python_package_draft(
     runtime_root: Path | None = None,
 ) -> dict[str, object]:
     parsed = parse_package_folder(folder.name)
-    if parsed is None or parsed[0] != owner_id:
+    if parsed is None or parsed != owner_id:
         raise ResourceScanError(
             "resource.error.pythonPackage.ownerMismatch",
             "The Python package folder does not belong to the component configuration.",
@@ -382,10 +382,10 @@ def inspect_python_package_draft(
             model=PythonPackageManifest,
         )
         assert isinstance(parsed_manifest, PythonPackageManifest)
-        if parsed_manifest.id != parsed[2]:
+        if parsed_manifest.id != parsed:
             raise ResourceScanError(
                 "resource.error.pythonPackage.idMismatch",
-                "The manifest id must match the instance UUID in the folder name.",
+                "The manifest id must match the configuration UUID in the folder name.",
                 {"declared_id": parsed_manifest.id},
             )
         if parsed_manifest.family != family or parsed_manifest.adapter != adapter:

@@ -26,6 +26,7 @@ def test_main_agent_reference_delete_detaches_optional_and_protects_required_typ
         json={
             "name": "Main Agent matrix",
             "capability_refs": references(original, MAIN_AGENT_TYPES),
+            "middleware_refs": [{"middleware_id": original["custom-middleware"]["id"]}],
             "subagents": [{"subagent_id": subagent["id"]}],
         },
     )
@@ -45,6 +46,7 @@ def test_main_agent_reference_delete_detaches_optional_and_protects_required_typ
         json={
             "name": main_agent["name"],
             "capability_refs": references(replacement, MAIN_AGENT_TYPES),
+            "middleware_refs": [{"middleware_id": replacement["custom-middleware"]["id"]}],
             "subagents": main_agent["subagents"],
         },
     )

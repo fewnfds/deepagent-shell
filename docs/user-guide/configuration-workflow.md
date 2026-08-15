@@ -42,7 +42,7 @@ Filesystem 不再由 Main Agent 或 Subagent 选择；两处界面只显示锁�
 每个 Main Agent 可以选择自己的 `filesystem-permissions`，Subagent 可以继承、替换或关闭该权限装配。权限配置同时控制
 路径权限和该身份可见的文件工具；运行时由后端把 Workflow 的共享 Filesystem 与各身份权限组合并冻结。
 
-Subagent settings 只定义身份、说明和 capability 覆写。它没有 child 引用字段。当前固定为一层同步
+Subagent settings 只定义身份、说明、capability 覆写和自己的有序 Middleware 引用。它没有 child 引用字段。当前固定为一层同步
 `Main -> Subagent`，运行时使用 Deep Agents 官方 dictionary-based CompiledSubAgent。这是 Agent 内部
 `SubAgentMiddleware`/`task` 能力，不决定外层 Workflow 的节点和边；多阶段、并行、条件和 join 属于后续 Workflow
 图编辑器。
@@ -53,8 +53,8 @@ Summarization 与 Prompt Caching 是两个独立组件。Main Agent 可以分别
 继承/替换/关闭规则得到自己的最终配置；后端为每个身份显式物化官方 middleware，不依赖声明式 Subagent 自动继承
 Main Agent 的 middleware 实例。
 
-Custom Middleware 组件保存有序 Middleware 包引用。Main Agent 选择组件后，直接 Subagent 按 capability 的
-继承/替换/关闭规则得到自己的最终列表。Shell 只负责包加载并把官方 `AgentMiddleware` 实例交给
+每个 Custom Middleware 组件只定义一个 Middleware。Main Agent 和 Subagent 各自保存有序 `middleware_refs`，列表顺序就是
+多个用户 Middleware 的装配顺序，不走 capability 的继承/替换/关闭规则。Shell 只负责包加载并把官方 `AgentMiddleware` 实例交给
 `create_deep_agent()`，不存在 prepare、周期循环或结束 Hook。
 
 客户端 `messages[]` 是外围不可变请求事实，不会自动成为 Main Agent 活动消息。需要消息策略时，由 Middleware

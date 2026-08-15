@@ -9,7 +9,9 @@ import type {
   PythonPackageTemplate,
 } from '@/api'
 import {
+  applyEmptyPythonPackageTemplate,
   applyPythonPackageTemplate,
+  EMPTY_PYTHON_PACKAGE_TEMPLATE_KEY,
   type PythonPackageDraftState,
 } from '@/domain/blocks/pythonPackage'
 import { useEditorModel } from '@/editors/shared/useEditorModel'
@@ -44,7 +46,15 @@ const selectedTemplate = computed(() => props.catalog.find(
 ))
 
 function selectTemplate(key: string): void {
+  if (key === EMPTY_PYTHON_PACKAGE_TEMPLATE_KEY) {
+    applyEmptyTemplate()
+    return
+  }
   applyPythonPackageTemplate(draft, props.catalog.find((item) => item.key === key))
+}
+
+function applyEmptyTemplate(): void {
+  applyEmptyPythonPackageTemplate(draft)
 }
 
 function templateFile(path: string): PythonPackageFile | undefined {
@@ -120,33 +130,27 @@ function resourceError(error: LocalizedMessagePayload): string {
       </LteButton>
     </header>
     <div class="card-body">
-      <template v-if="saved">
-        <label class="form-label" :for="`${idPrefix}-folder`">
-          {{ t('editors.pythonPackage.folder') }}
-        </label>
-        <input
-          :id="`${idPrefix}-folder`"
-          class="form-control font-monospace"
-          :value="draft.python_package.folder"
-          readonly
-          type="text"
-        >
-      </template>
-      <template v-else>
+      <template v-if="!saved">
         <label class="form-label" :for="`${idPrefix}-template`">
           {{ t('editors.pythonPackage.template') }}
         </label>
-        <select
-          :id="`${idPrefix}-template`"
-          class="form-select"
-          :value="draft.python_package_files.template_key"
-          @change="selectTemplate(($event.target as HTMLSelectElement).value)"
-        >
-          <option value="">{{ t('editors.pythonPackage.selectTemplate') }}</option>
-          <option v-for="item in catalog" :key="item.key" :value="item.key">
-            {{ item.name }} ({{ item.key }})
-          </option>
-        </select>
+        <div class="input-group">
+          <select
+            :id="`${idPrefix}-template`"
+            class="form-select"
+            :value="draft.python_package_files.template_key"
+            @change="selectTemplate(($event.target as HTMLSelectElement).value)"
+          >
+            <option value="">{{ t('editors.pythonPackage.selectTemplate') }}</option>
+            <option :value="EMPTY_PYTHON_PACKAGE_TEMPLATE_KEY">{{ t('editors.pythonPackage.emptyTemplate') }}</option>
+            <option v-for="item in catalog" :key="item.key" :value="item.key">
+              {{ item.name }} ({{ item.key }})
+            </option>
+          </select>
+          <LteButton theme="secondary" type="button" @click="applyEmptyTemplate">
+            {{ t('editors.pythonPackage.applyEmptyTemplate') }}
+          </LteButton>
+        </div>
       </template>
 
       <LteAlert

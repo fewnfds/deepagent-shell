@@ -16,14 +16,14 @@ from agent_shell.storage.file_config import FileConfigRepository
 
 
 def write_package(root: Path, owner_id: str, package_id: str) -> tuple[str, Path]:
-    folder_name = f"{owner_id}--dependency-test--{package_id}"
+    folder_name = owner_id
     folder = root / "agent-middleware" / folder_name
     folder.mkdir(parents=True)
     (folder / "package.json").write_text(
         json.dumps(
             {
                 "format_version": 1,
-                "id": package_id,
+                "id": owner_id,
                 "family": "middleware",
                 "adapter": "agent-middleware",
             }
@@ -136,9 +136,10 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
         main_agent_id,
         {
             "name": "Main",
-            "capability_refs": [
-                {"type": "custom-middleware", "block_id": owner_id},
-                {"type": "custom-middleware", "block_id": invalid_owner_id},
+            "capability_refs": [],
+            "middleware_refs": [
+                {"middleware_id": owner_id},
+                {"middleware_id": invalid_owner_id},
             ],
             "subagents": [],
         },
@@ -201,12 +202,12 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
     assert state is not None
     assert state["status"] == "ready"
     assert set(state["records"]) == {
-        f"python-package:{package_id}",
+        f"python-package:{owner_id}",
         "workflow-input-context:input-context",
         "workflow-prepare:prepare",
     }
-    assert f"python-package:{unused_package_id}" not in state["records"]
-    assert f"python-package:{invalid_package_id}" not in state["records"]
+    assert f"python-package:{unused_owner_id}" not in state["records"]
+    assert f"python-package:{invalid_owner_id}" not in state["records"]
     assert all(item["status"] == "ready" for item in state["records"].values())
     assert (dependencies.package_site_packages(runtime_root) / "PIL").is_dir()
     assert "--only-binary" in calls[0]
@@ -226,7 +227,7 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
     failed_state = dependencies.load_dependency_state(runtime_root)
     assert failed_state is not None
     assert failed_state["status"] == "failed"
-    assert failed_state["records"][f"python-package:{package_id}"]["status"] == "failed"
+    assert failed_state["records"][f"python-package:{owner_id}"]["status"] == "failed"
     assert (dependencies.package_site_packages(runtime_root) / "PIL").is_dir()
     failed = scan_middleware_package(
         folder, owner_id=owner_id, runtime_root=runtime_root

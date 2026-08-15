@@ -399,6 +399,10 @@ def prepare_windows_dependencies(
             for reference in agent.get("capability_refs", []):
                 if isinstance(reference, dict) and reference.get("type") == component_type:
                     found.add(str(reference.get("block_id", "")))
+            if component_type == "custom-middleware":
+                for reference in agent.get("middleware_refs", []):
+                    if isinstance(reference, dict):
+                        found.add(str(reference.get("middleware_id", "")))
             for reference in agent.get("subagents", []):
                 if isinstance(reference, dict):
                     active_subagent_ids.add(str(reference.get("subagent_id", "")))
@@ -417,6 +421,10 @@ def prepare_windows_dependencies(
                     and override.get("mode") == "replace"
                 ):
                     found.add(str(override.get("block_id", "")))
+            if component_type == "custom-middleware" and isinstance(settings, dict):
+                for reference in settings.get("middleware_refs", []):
+                    if isinstance(reference, dict):
+                        found.add(str(reference.get("middleware_id", "")))
         return {item for item in found if item}
 
     records: list[dict[str, object]] = []

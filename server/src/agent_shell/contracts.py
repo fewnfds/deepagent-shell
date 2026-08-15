@@ -829,6 +829,10 @@ class CapabilityReference(BaseModel):
         manifest = CAPABILITY_BY_TYPE.get(value)
         if manifest is None:
             raise ValueError(f"unknown Main Agent capability: {value}")
+        if value == "custom-middleware":
+            raise ValueError(
+                "custom-middleware must be selected through middleware_refs"
+            )
         if value == "filesystem":
             raise ValueError(
                 "filesystem is selected by Workflow and cannot be selected by Main Agent"
@@ -836,8 +840,15 @@ class CapabilityReference(BaseModel):
         return value
 
 
+class MiddlewareReference(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    middleware_id: RequiredReference
+
+
 class MainAgentProfile(StrictBlock):
     capability_refs: list[CapabilityReference] = Field(default_factory=list, max_length=100)
+    middleware_refs: list[MiddlewareReference] = Field(default_factory=list, max_length=100)
     subagents: list[SubagentReference] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
@@ -845,6 +856,9 @@ class MainAgentProfile(StrictBlock):
         capability_types = [item.type for item in self.capability_refs]
         if len(capability_types) != len(set(capability_types)):
             raise ValueError("Main Agent capability_refs must contain at most one item per type")
+        middleware_ids = [item.middleware_id for item in self.middleware_refs]
+        if len(middleware_ids) != len(set(middleware_ids)):
+            raise ValueError("Main Agent middleware_refs must not contain duplicates")
         return self
 
 
@@ -859,7 +873,11 @@ class CapabilityOverride(BaseModel):
     @classmethod
     def validate_type(cls, value: str) -> str:
         manifest = CAPABILITY_BY_TYPE.get(value)
-        if manifest is None or not manifest.subagent_overrideable:
+        if (
+            manifest is None
+            or value == "custom-middleware"
+            or not manifest.subagent_overrideable
+        ):
             raise ValueError(f"capability is not overrideable by Subagent: {value}")
         return value
 
@@ -881,6 +899,8 @@ class SubagentSettings(BaseModel):
     capability_overrides: list[CapabilityOverride] = Field(
         default_factory=list, max_length=100
     )
+    middleware_refs: list[MiddlewareReference] = Field(default_factory=list, max_length=100)
+
     @model_validator(mode="after")
     def validate_overrides(self) -> "SubagentSettings":
         capability_types = [item.type for item in self.capability_overrides]
@@ -888,6 +908,9 @@ class SubagentSettings(BaseModel):
             raise ValueError(
                 "Subagent capability_overrides must contain at most one item per type"
             )
+        middleware_ids = [item.middleware_id for item in self.middleware_refs]
+        if len(middleware_ids) != len(set(middleware_ids)):
+            raise ValueError("Subagent middleware_refs must not contain duplicates")
         return self
 
 

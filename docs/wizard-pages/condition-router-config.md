@@ -6,7 +6,7 @@
 ## Package 与入口
 
 静态模板位于 `data/templates/workflow/condition_router/<template-key>/`。新配置首次保存时复制为
-`data/config/python_package_instances/condition-router/<configuration-uuid>--<template-slug>--<instance-uuid>/` 下的配置扩展。
+`data/config/python_package_instances/condition-router/<configuration-uuid>/` 下的配置扩展。
 配置扩展至少包含 `package.json` 和 `main.py`，并可包含 `requirements.txt`、本地模块和测试。Router manifest 固定使用 `family: workflow-node` 与
 `adapter: condition-router`。完整目录、manifest、imports 和依赖规则见[文件化 Python 扩展包](../user-guide/middleware-packages.md)。
 
@@ -27,7 +27,7 @@ def create_router():
     return route
 ```
 
-新建页自动加载模板并默认显示 `main.py`。用户可以逐行增加包内相对文件路径；编辑器按清单顺序显示并保存这些文本文件。
+新建页可以选择现有模板，也可以【套用空模板】从空的 `main.py` 开始。用户可以逐行增加包内相对文件路径；编辑器按清单顺序显示并保存这些文本文件。
 不存在的文件只显示警告，填写内容并保存后创建。已有配置只读取自己的扩展代码目录，未列出的额外文件保持原样。
 
 每个 Condition Router 配置都拥有独立的 Python 扩展。复制配置会复制新的扩展目录；模板或其他配置的扩展发生变化都不会影响它。

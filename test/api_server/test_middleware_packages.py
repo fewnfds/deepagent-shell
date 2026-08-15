@@ -36,7 +36,7 @@ def write_private_middleware(
     *,
     owner_id: str = OWNER_ID,
 ) -> tuple[str, Path]:
-    folder_name = f"{owner_id}--request-label--{package_id}"
+    folder_name = owner_id
     folder = (
         tmp_path
         / "data"
@@ -50,7 +50,7 @@ def write_private_middleware(
         json.dumps(
             {
                 "format_version": 1,
-                "id": package_id,
+                "id": owner_id,
                 "family": "middleware",
                 "adapter": "agent-middleware",
             }
@@ -97,6 +97,32 @@ def test_middleware_template_catalog_and_private_package_creation(
     assert "dependency_status" not in catalog.json()["catalog"][0]
     assert created.status_code == 200, created.text
     assert created.json()["python_package"]["editable_files"] == ["main.py"]
+
+
+def test_middleware_can_be_created_from_empty_template_selection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = (
+        "from langchain.agents.middleware import AgentMiddleware\n"
+        "def create_middleware(agent):\n"
+        "    return AgentMiddleware()\n"
+    )
+    with make_client(tmp_path, monkeypatch) as client:
+        created = client.post(
+            "/api/blocks/custom-middleware",
+            json={
+                "name": "From empty template",
+                "python_package": {"folder": "", "editable_files": ["main.py"]},
+                "python_package_files": {
+                    "template_key": "__empty__",
+                    "revision": "",
+                    "files": [{"path": "main.py", "content": source}],
+                },
+            },
+        )
+
+    assert created.status_code == 200, created.text
+    assert created.json()["python_package"]["folder"] == created.json()["id"]
 
 
 def test_missing_private_middleware_is_rejected_when_projected(
@@ -156,8 +182,10 @@ def test_package_materializes_official_langchain_middleware(tmp_path: Path) -> N
                 id="main",
                 type="main_agent",
                 name="Main",
-                package_owner_id=OWNER_ID,
-                package={"folder": folder_name, "editable_files": ["main.py"]},
+                packages=((
+                    OWNER_ID,
+                    {"folder": folder_name, "editable_files": ["main.py"]},
+                ),),
             )
         ],
         packages_dir=tmp_path / "data" / "config" / "python_package_instances",
@@ -168,6 +196,85 @@ def test_package_materializes_official_langchain_middleware(tmp_path: Path) -> N
 
     assert len(materialized) == 1
     assert isinstance(materialized[0], ModelCallLimitMiddleware)
+    asyncio.run(runtime.close())
+
+
+def test_package_runtime_preserves_ordered_middleware_references(tmp_path: Path) -> None:
+    first_id = "11111111-1111-4111-8111-111111111111"
+    second_id = "22222222-2222-4222-8222-222222222222"
+    first_folder, _ = write_private_middleware(
+        tmp_path,
+        first_id,
+        "from langchain.agents.middleware import AgentMiddleware\n"
+        "class First(AgentMiddleware):\n"
+        "    pass\n"
+        "def create_middleware(agent):\n"
+        "    return First()\n",
+        owner_id=first_id,
+    )
+    second_folder, _ = write_private_middleware(
+        tmp_path,
+        second_id,
+        "from langchain.agents.middleware import AgentMiddleware\n"
+        "class Second(AgentMiddleware):\n"
+        "    pass\n"
+        "def create_middleware(agent):\n"
+        "    return Second()\n",
+        owner_id=second_id,
+    )
+    runtime = MiddlewarePackageRuntime(
+        request_id="request-order",
+        owners=[
+            MiddlewareOwner(
+                id="main",
+                type="main_agent",
+                name="Main",
+                packages=(
+                    (second_id, {"folder": second_folder, "editable_files": ["main.py"]}),
+                    (first_id, {"folder": first_folder, "editable_files": ["main.py"]}),
+                ),
+            )
+        ],
+        packages_dir=tmp_path / "data" / "config" / "python_package_instances",
+        runtime_root=tmp_path / "runtime",
+    )
+
+    assert [type(item).__name__ for item in runtime.middleware_for("main")] == [
+        "Second",
+        "First",
+    ]
+    asyncio.run(runtime.close())
+
+
+def test_package_runtime_rejects_multiple_middleware_result(tmp_path: Path) -> None:
+    folder_name, _ = write_private_middleware(
+        tmp_path,
+        OWNER_ID,
+        "from langchain.agents.middleware import AgentMiddleware\n"
+        "def create_middleware(agent):\n"
+        "    return [AgentMiddleware(), AgentMiddleware()]\n",
+    )
+    runtime = MiddlewarePackageRuntime(
+        request_id="request-group-result",
+        owners=[
+            MiddlewareOwner(
+                id="main",
+                type="main_agent",
+                name="Main",
+                packages=((
+                    OWNER_ID,
+                    {"folder": folder_name, "editable_files": ["main.py"]},
+                ),),
+            )
+        ],
+        packages_dir=tmp_path / "data" / "config" / "python_package_instances",
+        runtime_root=tmp_path / "runtime",
+    )
+
+    with pytest.raises(AgentRuntimeError) as caught:
+        runtime.middleware_for("main")
+
+    assert caught.value.code == "middleware_package_result_invalid"
     asyncio.run(runtime.close())
 
 
@@ -189,8 +296,10 @@ def test_async_agent_runtime_rejects_sync_only_middleware_hooks(tmp_path: Path) 
                 id="main",
                 type="main_agent",
                 name="Main",
-                package_owner_id=OWNER_ID,
-                package={"folder": folder_name, "editable_files": ["main.py"]},
+                packages=((
+                    OWNER_ID,
+                    {"folder": folder_name, "editable_files": ["main.py"]},
+                ),),
             )
         ],
         packages_dir=tmp_path / "data" / "config" / "python_package_instances",

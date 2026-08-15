@@ -22,16 +22,16 @@ data/
     components/<type>/<configuration-uuid>.yaml
     python_package_instances/
       condition-router/
-        <configuration-uuid>--<template-slug>--<instance-uuid>/
+        <configuration-uuid>/
       agent-middleware/
-        <configuration-uuid>--<template-slug>--<instance-uuid>/
+        <configuration-uuid>/
 ```
 
 模板至少包含 `main.py`，可以包含 `requirements.txt`、本地模块、实体第三方包和测试。模板目录名是小写
 `template-key`；模板没有 package UUID，也不属于任何配置。
 
-配置扩展至少包含 `package.json` 和 `main.py`。文件夹首段必须是拥有它的组件配置 UUID，末段是该扩展的 UUID；
-`package.json.id` 必须等于末段 UUID。系统据此拒绝配置引用其他配置的扩展代码目录。
+配置扩展至少包含 `package.json` 和 `main.py`。文件夹名就是拥有它的组件配置 UUID，`package.json.id` 必须等于该 UUID。
+系统据此拒绝配置引用其他配置的扩展代码目录，也避免模板名和额外 UUID 增加 Windows 路径长度。
 
 ## Manifest
 
@@ -42,11 +42,11 @@ data/
   "format_version": 1,
   "family": "workflow-node",
   "adapter": "condition-router",
-  "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+  "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 }
 ```
 
-`package.json` 由 Agent Shell 管理，不能列入前端可编辑文件。它只承担实例 UUID 与 adapter 身份校验。
+`package.json` 由 Agent Shell 管理，不能列入前端可编辑文件。它只承担配置 UUID 与 adapter 身份校验。
 
 ## 配置引用
 
@@ -54,7 +54,7 @@ Condition Router 和 Custom Middleware 使用同一 YAML 外壳：
 
 ```yaml
 python_package:
-  folder: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa--risk-router--bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb
+  folder: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
   editable_files:
     - main.py
     - helpers/rules.py
@@ -63,7 +63,8 @@ python_package:
 YAML 不保存源码、requirements、manifest 投影、模板引用、revision 或绝对路径。复制组件配置时会复制一份新的配置扩展；删除组件
 配置时会删除其扩展代码目录。
 
-新配置编辑器自动读取对应类别的模板目录。选择模板后默认编辑 `main.py`；用户可以在两行高的文件清单中逐行增加
+新配置编辑器读取对应类别的模板目录。用户可以选择模板，或【套用空模板】得到空的 `main.py` 草稿；最终保存时仍必须补全
+对应 adapter 要求的有效工厂。用户可以在两行高的文件清单中逐行增加
 包内相对路径，编辑器按该顺序显示文本文件内容；
 首次保存才创建配置扩展。已有配置每次打开都从自己的扩展代码目录读取文件，保存时只能更新原目录，不能改指向另一模板或配置扩展。
 不存在的相对路径显示非阻塞警告；填写内容后保存会创建文件，保持空内容则继续缺失。未列出的文件保持原样。
@@ -90,8 +91,7 @@ def create_router():
 
 ## Custom Middleware
 
-Middleware 使用 `family: middleware`、`adapter: agent-middleware`。工厂返回官方 `AgentMiddleware` 或非空
-`list`/`tuple`：
+Middleware 使用 `family: middleware`、`adapter: agent-middleware`。每个配置的工厂只返回一个官方 `AgentMiddleware`：
 
 ```python
 from langchain.agents.middleware import ModelCallLimitMiddleware
@@ -102,7 +102,9 @@ def create_middleware(agent):
 ```
 
 `agent` 是 Agent Shell 提供的身份字典，只包含 `id`、`type`、`name` 和 `package_id`，不是 LangChain Agent 对象。
-返回值直接进入 Agent 的 middleware 列表。Agent Shell 不代理官方 hook、state schema、tools 或 stream transformer。运行链使用
+Main Agent/Subagent 的有序 `middleware_refs` 决定多个实例进入列表的顺序。一个实例可以实现多个官方 hook，但 hook 不作为独立
+排序项。LangChain 对 `before_*` 正序执行、对 `after_*` 逆序执行，并把 `wrap_*` 按列表嵌套。Agent Shell 不代理官方
+hook、state schema、tools 或 stream transformer。运行链使用
 异步执行；自定义类覆盖同步 hook 时也必须提供对应 async hook。
 
 ## Imports 与依赖

@@ -278,10 +278,8 @@ def test_workflow_agent_middleware_injects_frozen_client_messages(
             f"/api/main-agents/{main_agent['id']}",
             json={
                 "name": main_agent["name"],
-                "capability_refs": [
-                    *main_agent["capability_refs"],
-                    {"type": "custom-middleware", "block_id": custom.json()["id"]},
-                ],
+                "capability_refs": main_agent["capability_refs"],
+                "middleware_refs": [{"middleware_id": custom.json()["id"]}],
                 "subagents": [],
             },
         )

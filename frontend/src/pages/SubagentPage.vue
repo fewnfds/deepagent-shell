@@ -4,6 +4,7 @@ import { computed, inject, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import PageShell from '@/components/PageShell.vue'
+import MiddlewareReferencesEditor from '@/components/MiddlewareReferencesEditor.vue'
 import RecordPicker from '@/components/RecordPicker.vue'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
 import { useConfigurationValidation } from '@/composables/useConfigurationValidation'
@@ -56,7 +57,9 @@ const recordOptions = computed(() => profiles.value.map((profile) => ({
 let profileLoadSequence = 0
 
 const obsoleteOverrides = computed(() => {
-  const supported = new Set<string>(manifests.value.map((manifest) => manifest.type))
+  const supported = new Set<string>(manifests.value
+    .filter((manifest) => manifest.type !== 'custom-middleware')
+    .map((manifest) => manifest.type))
   return form.value.settings.capability_overrides
     .map((override, index) => ({ index, override }))
     .filter(({ override }) => !supported.has(override.type))
@@ -65,6 +68,7 @@ const nonGeneralCapabilityTypes = new Set<CapabilityType>([
   'filesystem',
   'filesystem-permissions',
   'subagent',
+  'custom-middleware',
 ])
 const generalManifests = computed(() => manifests.value.filter(
   (manifest) => !nonGeneralCapabilityTypes.has(manifest.type),
@@ -235,7 +239,9 @@ async function loadWorkspace(): Promise<void> {
     manifests.value = [...catalog.block_types].sort((left, right) => left.order - right.order)
     profiles.value = profileItems.map(normalizeSubagent)
     const entries = await Promise.all(manifests.value
-      .filter((manifest) => manifest.subagent_overrideable)
+      .filter((manifest) => (
+        manifest.subagent_overrideable || manifest.type === 'custom-middleware'
+      ))
       .map(async (manifest) => [
         manifest.type,
         await service.value?.listBlocks(manifest.type) ?? [],
@@ -471,6 +477,12 @@ watch(
             </div>
           </div>
         </section>
+
+        <MiddlewareReferencesEditor
+          v-model:references="form.settings.middleware_refs"
+          id-prefix="subagent-middleware"
+          :middlewares="capabilityBlocks('custom-middleware')"
+        />
       </section>
 
       <aside class="col-lg-3 validation-sidebar">

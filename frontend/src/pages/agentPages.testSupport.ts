@@ -82,6 +82,16 @@ export const filesystemPermissionsManifest: CapabilityManifest = {
   subagent_policy: 'inherit',
 }
 
+export const middlewareManifest: CapabilityManifest = {
+  ...modelManifest,
+  type: 'custom-middleware',
+  terminology_key: 'middleware',
+  order: 8,
+  subagent_overrideable: false,
+  required: false,
+  subagent_policy: 'force-remove',
+}
+
 export const outputModeManifest: CapabilityManifest = {
   ...modelManifest,
   type: 'output-mode',
@@ -106,6 +116,7 @@ export function service(overrides: Partial<AgentAuthoringService> = {}): AgentAu
     id: '00000000-0000-0000-0000-000000000010',
     name: 'Shared name',
     capability_refs: [],
+    middleware_refs: [],
     subagents: [],
   }
   const subagent: SubagentProfile = {
@@ -115,6 +126,7 @@ export function service(overrides: Partial<AgentAuthoringService> = {}): AgentAu
     description: 'Handles delegated work.',
     settings: {
       capability_overrides: [],
+      middleware_refs: [],
     },
   }
   return {

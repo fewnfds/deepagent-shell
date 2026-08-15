@@ -61,11 +61,12 @@ describe('ConditionRouterEditor', () => {
   })
 
   it('keeps selected files visible when the saved package is invalid', () => {
+    const folder = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
     const draft = conditionRouterAdapter.fromApi({
       id: 'router-id',
       name: 'Broken router',
       python_package: {
-        folder: 'owner--template--instance',
+        folder,
         editable_files: ['main.py'],
       },
       python_package_manifest: null,
@@ -90,6 +91,30 @@ describe('ConditionRouterEditor', () => {
 
     expect(wrapper.findAll('textarea').some((item) => item.element.value.includes('return ('))).toBe(true)
     expect(wrapper.text()).toContain('main.py contains a Python syntax error on line 2.')
+    expect(wrapper.text()).not.toContain(folder)
+  })
+
+  it('applies an empty template without a catalog entry', async () => {
+    const wrapper = mount(ConditionRouterEditor, {
+      props: { modelValue: conditionRouterAdapter.blank(), catalog: [] },
+      global: { plugins: [i18n()] },
+    })
+
+    const applyEmpty = wrapper.findAll('button').find((button) => (
+      button.text() === 'Apply empty template'
+    ))
+    expect(applyEmpty).toBeDefined()
+    await applyEmpty!.trigger('click')
+
+    const emitted = wrapper.emitted('update:modelValue')?.at(-1)?.[0]
+    expect(emitted).toMatchObject({
+      python_package: { folder: '', editable_files: ['main.py'] },
+      python_package_files: {
+        template_key: '__empty__',
+        revision: '',
+        files: [{ path: 'main.py', content: '', exists: false }],
+      },
+    })
   })
 
   it('requests newly selected files from a saved package', async () => {
@@ -97,7 +122,7 @@ describe('ConditionRouterEditor', () => {
       id: 'router-id',
       name: 'Router',
       python_package: {
-        folder: 'owner--template--instance',
+        folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
         editable_files: ['main.py'],
       },
       python_package_files: {

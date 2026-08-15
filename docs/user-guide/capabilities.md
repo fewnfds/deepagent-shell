@@ -11,7 +11,7 @@
 | 待办计划 | `write_todos` 与规划提示 | 可选 | 继承、替换或关闭 |
 | 自定义工具 | 选择 `data/resources/custom_tools/` 中的工具 | 可选 | 继承、替换或关闭 |
 | Skill | 选择 `data/resources/skills/` 中的 Skill | 可选 | 继承、替换或关闭 |
-| 自定义 Middleware | 有序构造 LangChain Middleware | 可选 | 继承、替换或关闭 |
+| 自定义 Middleware | 定义一个 LangChain Middleware | 通过有序引用装配 | Subagent 独立有序引用 |
 | 输出模式 | 把 v3 事件投影为响应文本 | 必选 | 只用于顶层 Main Agent |
 | 异常重试 | Provider 或 ModelRetryMiddleware 重试 | 可选 | 继承、替换或关闭 |
 | 委派能力 | 同步 Subagent 的提示与 `task` 说明 | 可选 | 只用于顶层 Main Agent |
@@ -28,7 +28,8 @@
 详细字段见[组件说明](../wizard-pages/README.md)。Agent 组合方式见
 [装配 Main Agent 与 Subagent](configuration-workflow.md)。
 
-自定义 Middleware 组件保存一个配置独占的 Python 扩展引用；扩展返回官方 LangChain `AgentMiddleware`。格式、安全边界和依赖管理见
+自定义 Middleware 组件保存一个配置独占的 Python 扩展引用，并只返回一个官方 LangChain `AgentMiddleware`。Main Agent 和
+Subagent 分别通过有序 `middleware_refs` 装配多个配置。格式、安全边界和依赖管理见
 [自定义 Middleware 扩展](middleware-packages.md)。
 
 Workflow 输入上下文是一个内置但可替换的 first-party Middleware。它在 Agent invocation 的

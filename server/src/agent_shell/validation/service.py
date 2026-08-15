@@ -303,18 +303,14 @@ class ConfigurationValidationService:
             owner_name=validated["component_name"],
             path_prefix="settings.capability_overrides",
         )
-        custom_middleware = selected.get("custom-middleware")
-        if custom_middleware is not None:
-            issues.extend(
-                self._python_package_validation.middleware_issues(
-                    custom_middleware.get("python_package", {}),
-                    scope="subagent",
-                    owner_id=owner_id,
-                    package_owner_id=str(custom_middleware.get("id", "")),
-                    owner_name=validated["component_name"],
-                    path_prefix="settings.capability_overrides.custom-middleware.python_package",
-                )
-            )
+        _, middleware_issues = self._load_middleware_references(
+            settings["middleware_refs"],
+            scope="subagent",
+            owner_id=owner_id,
+            owner_name=validated["component_name"],
+            path_prefix="settings.middleware_refs",
+        )
+        issues.extend(middleware_issues)
         if owner_id and not issues:
             prospective = dict(validated)
             prospective["id"] = owner_id
@@ -591,6 +587,67 @@ class ConfigurationValidationService:
                 issues.append(issue)
         return selected, issues
 
+    def _load_middleware_references(
+        self,
+        references: list[dict[str, Any]],
+        *,
+        scope: str,
+        owner_id: str,
+        owner_name: str,
+        path_prefix: str,
+        block_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
+    ) -> tuple[tuple[dict[str, Any], ...], list[ValidationIssue]]:
+        selected: list[dict[str, Any]] = []
+        issues: list[ValidationIssue] = []
+        for index, reference in enumerate(references):
+            block_id = str(reference.get("middleware_id", ""))
+            path = f"{path_prefix}[{index}].middleware_id"
+            override_key = ("custom-middleware", block_id)
+            prospective = bool(block_overrides and override_key in block_overrides)
+            block = (
+                block_overrides[override_key]
+                if prospective
+                else self._blocks.get_block_internal("custom-middleware", block_id)
+            )
+            if block is None:
+                issues.append(
+                    ValidationIssue(
+                        code="assembly.reference_not_found",
+                        scope=scope,
+                        owner_id=owner_id,
+                        owner_name=owner_name,
+                        path=path,
+                        message="The referenced custom-middleware configuration does not exist.",
+                        message_key="validation.issue.assembly.referenceNotFound",
+                        message_args={"capability_type": "custom-middleware"},
+                    )
+                )
+                continue
+            selected.append(block)
+            issue = self._block_contract_issue(
+                "custom-middleware",
+                block,
+                scope=scope,
+                owner_id=owner_id,
+                owner_name=owner_name,
+                path=path,
+                stored=not prospective,
+            )
+            if issue is not None:
+                issues.append(issue)
+                continue
+            issues.extend(
+                self._python_package_validation.middleware_issues(
+                    block.get("python_package", {}),
+                    scope=scope,
+                    owner_id=owner_id,
+                    package_owner_id=str(block.get("id", "")),
+                    owner_name=owner_name,
+                    path_prefix=f"{path_prefix}[{index}].python_package",
+                )
+            )
+        return tuple(selected), issues
+
     def _resolve_capability_subject(
         self,
         references: dict[str, str],
@@ -813,18 +870,15 @@ class ConfigurationValidationService:
         disabled_capabilities = frozenset(
             DEFAULT_MIDDLEWARE_CAPABILITY_TYPES.difference(references)
         )
-        custom_middleware = selected.get("custom-middleware")
-        if custom_middleware is not None:
-            issues.extend(
-                self._python_package_validation.middleware_issues(
-                    custom_middleware.get("python_package", {}),
-                    scope="main_agent",
-                    owner_id=owner_id,
-                    package_owner_id=str(custom_middleware.get("id", "")),
-                    owner_name=owner_name,
-                    path_prefix="capability_refs.custom-middleware.python_package",
-                )
-            )
+        middleware_blocks, middleware_issues = self._load_middleware_references(
+            list(main_agent.get("middleware_refs", [])),
+            scope="main_agent",
+            owner_id=owner_id,
+            owner_name=owner_name,
+            path_prefix="middleware_refs",
+            block_overrides=block_overrides,
+        )
+        issues.extend(middleware_issues)
 
         delegation_selected = selected.get("subagent") is not None
         root_references = list(main_agent.get("subagents", []))
@@ -899,6 +953,17 @@ class ConfigurationValidationService:
                     if capability_type in DEFAULT_MIDDLEWARE_CAPABILITY_TYPES:
                         child_disabled_capabilities.add(capability_type)
 
+            child_middleware_blocks, child_middleware_issues = (
+                self._load_middleware_references(
+                    settings["middleware_refs"],
+                    scope="subagent",
+                    owner_id=profile_id,
+                    owner_name=str(profile["name"]),
+                    path_prefix="settings.middleware_refs",
+                    block_overrides=block_overrides,
+                )
+            )
+
             subagent_name = str(profile["name"])
             child_blocks, child_issues, child_filesystem_mode = (
                 self._resolve_capability_subject(
@@ -921,18 +986,7 @@ class ConfigurationValidationService:
             )
             if child_tool_issue is not None:
                 child_issues.append(child_tool_issue)
-            child_custom_middleware = child_blocks.get("custom-middleware")
-            if child_custom_middleware is not None:
-                child_issues.extend(
-                    self._python_package_validation.middleware_issues(
-                        child_custom_middleware.get("python_package", {}),
-                        scope="subagent",
-                        owner_id=profile_id,
-                        package_owner_id=str(child_custom_middleware.get("id", "")),
-                        owner_name=subagent_name,
-                        path_prefix="settings.capability_overrides.custom-middleware.python_package",
-                    )
-                )
+            child_issues.extend(child_middleware_issues)
             issues.extend(child_issues)
             if child_issues:
                 continue
@@ -943,6 +997,7 @@ class ConfigurationValidationService:
                 description=str(profile["description"]),
                 references=child_references,
                 blocks=child_blocks,
+                middleware_blocks=child_middleware_blocks,
                 filesystem_mode=child_filesystem_mode,
                 disabled_capabilities=frozenset(child_disabled_capabilities),
             )
@@ -998,6 +1053,7 @@ class ConfigurationValidationService:
             main_agent=main_agent,
             references=references,
             blocks=selected,
+            middleware_blocks=middleware_blocks,
             filesystem_mode=filesystem_mode,
             disabled_capabilities=disabled_capabilities,
             subagents=resolved_subagents,
@@ -1064,6 +1120,13 @@ class ConfigurationValidationService:
                 and item.get("block_id") == block_id
                 for item in references
             )
+            if block_type == "custom-middleware":
+                middleware_refs = main_agent.get("middleware_refs", [])
+                direct = isinstance(middleware_refs, list) and any(
+                    isinstance(item, dict)
+                    and item.get("middleware_id") == block_id
+                    for item in middleware_refs
+                )
             subagent_references = main_agent.get("subagents", [])
             if not isinstance(subagent_references, list):
                 subagent_references = []
@@ -1124,6 +1187,14 @@ class ConfigurationValidationService:
             if not isinstance(settings, dict):
                 continue
             selections = settings.get("capability_overrides", [])
+            if block_type == "custom-middleware":
+                middleware_refs = settings.get("middleware_refs", [])
+                if isinstance(middleware_refs, list) and any(
+                    isinstance(item, dict)
+                    and item.get("middleware_id") == block_id
+                    for item in middleware_refs
+                ):
+                    return True
             if isinstance(selections, list) and any(
                 isinstance(item, dict)
                 and item.get("type") == block_type

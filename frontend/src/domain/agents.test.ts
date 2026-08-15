@@ -24,6 +24,7 @@ describe('agent profile adapters', () => {
         type: 'model',
         block_id: '00000000-0000-0000-0000-000000000001',
       }],
+      middleware_refs: [],
       subagents: [{ subagent_id: '00000000-0000-0000-0000-000000000020' }],
     })
   })
@@ -37,6 +38,7 @@ describe('agent profile adapters', () => {
     expect(overrideSelection(draft, 'model').mode).toBe('inherit')
     expect(subagentPayload(draft).settings).toEqual({
       capability_overrides: [],
+      middleware_refs: [],
     })
   })
 
@@ -51,6 +53,7 @@ describe('agent profile adapters', () => {
       description: 'Research delegated topics.',
       settings: {
         capability_overrides: [],
+        middleware_refs: [],
       },
     })
   })
