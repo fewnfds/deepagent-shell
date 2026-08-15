@@ -40,8 +40,8 @@ git pull --ff-only
 停止服务后可以整体移动 Windows 运行 Clone。启动器根据自身位置重新解析源码、`data/` 和 `runtime/`；
 `runtime/cache` 中的旧下载缓存可按需重建，不是安装位置契约。
 
-文件化 Python 私有包的 `requirements.txt` 不进入项目 `pyproject.toml`。Windows 启动器在核心 runtime 准备完成后，
-只按启用 Workflow 可达配置所引用私有包的需求指纹生成 `runtime/python_packages/site-packages`；静态模板和未触达私有包
+文件化 Python 配置扩展的 `requirements.txt` 不进入项目 `pyproject.toml`。Windows 启动器在核心 runtime 准备完成后，
+只按启用 Workflow 可达配置所引用扩展的需求指纹生成 `runtime/python_packages/site-packages`；静态模板和未触达的配置扩展
 不参与，输入未变化时复用。扩展层只能
 增加与核心锁兼容的二进制 wheel，不能修改 `runtime/app`。
 

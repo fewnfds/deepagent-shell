@@ -443,7 +443,7 @@ def prepare_windows_dependencies(
             reference = component.get("python_package") if component else None
             if not isinstance(reference, dict):
                 print(
-                    "WARNING: Skipping invalid private Python package reference "
+                    "WARNING: Skipping invalid Python extension reference "
                     f"for {component_type}/{component_id}."
                 )
                 continue
@@ -456,13 +456,13 @@ def prepare_windows_dependencies(
                 )
             except ResourceScanError as exc:
                 print(
-                    "WARNING: Skipping invalid private Python package "
+                    "WARNING: Skipping invalid Python extension "
                     f"for {component_type}/{component_id}: {exc.message_key}."
                 )
                 continue
             if resolved is None:
                 print(
-                    "WARNING: Skipping missing private Python package "
+                    "WARNING: Skipping missing Python extension "
                     f"for {component_type}/{component_id}."
                 )
                 continue

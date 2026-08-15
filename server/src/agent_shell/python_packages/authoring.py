@@ -132,7 +132,7 @@ class PythonPackageAuthoringService:
         except KeyError as exc:
             raise PythonPackageAuthoringError(
                 "python_package_component_unsupported",
-                "The component type does not support a private Python package.",
+                "The component type does not support a Python extension.",
             ) from exc
 
     def _template_root(self, spec: PackageAdapterSpec) -> Path:
@@ -172,12 +172,12 @@ class PythonPackageAuthoringService:
         except ResourceScanError as exc:
             raise PythonPackageAuthoringError(
                 "python_package_invalid",
-                "The private Python package is invalid.",
+                "The configuration-owned Python extension is invalid.",
             ) from exc
         if resolved is None:
             raise PythonPackageAuthoringError(
                 "python_package_not_found",
-                "The private Python package does not exist or is not owned by this configuration.",
+                "The Python extension directory is missing or is not owned by this configuration.",
                 status_code=404,
             )
         return resolved
@@ -198,7 +198,7 @@ class PythonPackageAuthoringService:
         if folder is None:
             raise PythonPackageAuthoringError(
                 "python_package_not_found",
-                "The private Python package does not exist or is not owned by this configuration.",
+                "The Python extension directory is missing or is not owned by this configuration.",
                 status_code=404,
             )
         try:
@@ -217,7 +217,7 @@ class PythonPackageAuthoringService:
         except ResourceScanError as exc:
             raise PythonPackageAuthoringError(
                 "python_package_read_failed",
-                f"The private Python package could not be inspected ({exc.message_key}).",
+                f"The configuration-owned Python extension could not be inspected ({exc.message_key}).",
             ) from exc
 
     def project(
@@ -335,7 +335,7 @@ class PythonPackageAuthoringService:
             shutil.rmtree(staging_root, ignore_errors=True)
             raise PythonPackageAuthoringError(
                 "python_package_invalid",
-                "The private Python package does not satisfy its adapter contract.",
+                "The Python extension does not satisfy its adapter contract.",
             ) from exc
         except BaseException:
             shutil.rmtree(staging_root, ignore_errors=True)
@@ -362,7 +362,7 @@ class PythonPackageAuthoringService:
         if inspection["revision"] != revision:
             raise PythonPackageAuthoringError(
                 "python_package_revision_conflict",
-                "The private Python package changed after it was loaded.",
+                "The Python extension changed after it was loaded.",
                 status_code=409,
             )
         spec = self._spec(block_type)
@@ -385,7 +385,7 @@ class PythonPackageAuthoringService:
             shutil.rmtree(staging_root, ignore_errors=True)
             raise PythonPackageAuthoringError(
                 "python_package_invalid",
-                "The private Python package does not satisfy its adapter contract.",
+                "The Python extension does not satisfy its adapter contract.",
             ) from exc
         except BaseException:
             shutil.rmtree(staging_root, ignore_errors=True)
@@ -402,7 +402,7 @@ class PythonPackageAuthoringService:
             shutil.rmtree(staging_root, ignore_errors=True)
             raise PythonPackageAuthoringError(
                 "python_package_revision_conflict",
-                "The private Python package changed after it was loaded.",
+                "The Python extension changed after it was loaded.",
                 status_code=409,
             )
         try:
@@ -488,7 +488,7 @@ class PythonPackageAuthoringService:
         )
         if folder is None:
             logger.warning(
-                "Skipping private Python package cleanup: code=python_package_not_found owner_id=%s folder=%s",
+                "Skipping Python extension cleanup: code=python_package_not_found owner_id=%s folder=%s",
                 owner_id,
                 folder_name,
             )
@@ -505,7 +505,7 @@ class PythonPackageAuthoringService:
             )
         except ResourceScanError as exc:
             logger.warning(
-                "Skipping unsafe private Python package cleanup: code=%s owner_id=%s folder=%s",
+                "Skipping unsafe Python extension cleanup: code=%s owner_id=%s folder=%s",
                 exc.message_key,
                 owner_id,
                 folder_name,

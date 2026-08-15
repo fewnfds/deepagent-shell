@@ -1,1 +1,1 @@
-"""AgentMiddleware adapter for configuration-private Python packages."""
+"""AgentMiddleware adapter for configuration-owned Python extensions."""

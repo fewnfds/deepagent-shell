@@ -631,7 +631,7 @@ def build_router(
                     409,
                     code="python_package_folder_immutable",
                     message_key="errors.pythonPackageFolderImmutable",
-                    message="An existing component cannot change its private package folder reference.",
+                    message="An existing component cannot change its extension code directory reference.",
                 )
             try:
                 change = python_package_authoring.update(

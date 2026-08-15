@@ -104,7 +104,7 @@ describe('block adapters', () => {
     })
   })
 
-  it('keeps the private package reference and file payload mechanical', () => {
+  it('keeps the configuration extension reference and file payload mechanical', () => {
     const toolDraft = customToolAdapter.blank()
     toolDraft.name = ' Tools '
     toolDraft.tools = ['one', ' one ', '', 'two']

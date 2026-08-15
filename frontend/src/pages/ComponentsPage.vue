@@ -237,6 +237,22 @@ function payloadFromDraft(type: ManagedComponentType, value: BlockDraftBase): Bl
   return adapter(type).toPayload(value, defaultsForType(type))
 }
 
+function usesPythonExtension(type: ManagedComponentType): boolean {
+  return type === 'custom-middleware' || type === 'condition-router'
+}
+
+function validationPayloadFromDraft(
+  type: ManagedComponentType,
+  value: BlockDraftBase,
+): BlockPayload | null {
+  const payload = payloadFromDraft(type, value)
+  if (!usesPythonExtension(type)) return payload
+  if (!value.id) return null
+  const persisted = { ...payload } as BlockPayload & { python_package_files?: unknown }
+  delete persisted.python_package_files
+  return persisted
+}
+
 function routeId(): string {
   return typeof route.query.id === 'string' ? route.query.id : ''
 }
@@ -262,13 +278,15 @@ const { validation } = useConfigurationValidation({
   source: draft,
   buildRequest: () => {
     if (!activeType.value || !draft.value) return null
+    const payload = validationPayloadFromDraft(activeType.value, draft.value)
+    if (payload === null) return null
     return {
       target: {
         kind: 'block',
         type: activeType.value,
         id: draft.value.id,
       },
-      payload: payloadFromDraft(activeType.value, draft.value),
+      payload,
     }
   },
   validate: (request) => managementApi.validateDraft(request),
@@ -282,6 +300,14 @@ const displayedValidation = computed<ConfigurationValidationState>(() => {
   if (saveValidation.value) return { status: 'invalid', report: saveValidation.value, error: '' }
   return validation.value
 })
+
+const showDraftValidation = computed(() => (
+  saveValidation.value !== null
+  || !activeType.value
+  || !draft.value
+  || !usesPythonExtension(activeType.value)
+  || Boolean(draft.value.id)
+))
 
 watch(draft, () => {
   saveValidation.value = null
@@ -467,8 +493,7 @@ function upsertRecord(saved: SavedBlock): void {
 async function save(): Promise<void> {
   if (!activeType.value || !draft.value) return
   pageError.value = ''
-  const packageType = activeType.value === 'custom-middleware'
-    || activeType.value === 'condition-router'
+  const packageType = usesPythonExtension(activeType.value)
   const packageDraft = packageType
     ? draft.value as BlockDraftBase & PythonPackageDraftState
     : null
@@ -710,6 +735,7 @@ onMounted(() => {
 
       <aside class="col-lg-3 validation-sidebar" data-testid="inspector-region">
         <ValidationChecklist
+          v-if="showDraftValidation"
           :title="t('validation.draftTitle')"
           :validation="displayedValidation"
         />

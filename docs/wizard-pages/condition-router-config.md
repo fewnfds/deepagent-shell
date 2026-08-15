@@ -1,13 +1,13 @@
 # 条件路由
 
-条件路由是 Workflow 画布上的可编程控制节点。组件配置保存一个配置私有 Python package 引用和该 package 声明的普通
+条件路由是 Workflow 画布上的可编程控制节点。组件配置保存一个独占的 Python 扩展目录引用和该扩展声明的普通
 `config`；分支不在组件页重复配置，而由画布上从该节点发出的具名 Branch Edge 定义。
 
 ## Package 与入口
 
 静态模板位于 `data/templates/workflow/condition_router/<template-key>/`。新配置首次保存时复制为
-`data/config/python_package_instances/condition-router/<configuration-uuid>--<template-slug>--<instance-uuid>/` 下的私有包。
-私有包至少包含 `package.json` 和 `main.py`，并可包含 `requirements.txt`、本地模块和测试。Router manifest 固定使用 `family: workflow-node` 与
+`data/config/python_package_instances/condition-router/<configuration-uuid>--<template-slug>--<instance-uuid>/` 下的配置扩展。
+配置扩展至少包含 `package.json` 和 `main.py`，并可包含 `requirements.txt`、本地模块和测试。Router manifest 固定使用 `family: workflow-node` 与
 `adapter: condition-router`。完整目录、manifest、imports 和依赖规则见[文件化 Python 扩展包](../user-guide/middleware-packages.md)。
 
 `main.py` 必须提供同步工厂 `create_router(config)`，工厂返回固定签名的 async callable：
@@ -28,10 +28,10 @@ def create_router(config):
 ```
 
 `package.json.config_schema` 声明的扁平字符串、整数、数字、布尔和枚举字段会机械生成组件配置控件。新建页自动加载模板并
-提供完整 `main.py`、`requirements.txt` 和普通 config；已有配置只读取自己的私有包。Schema 输入只更新组件 YAML，
-代码输入更新对应私有包文件。额外文件由用户直接在私有包目录维护，前端不解析或改写。
+提供完整 `main.py`、`requirements.txt` 和普通 config；已有配置只读取自己的扩展代码目录。Schema 输入只更新组件 YAML，
+代码输入更新对应扩展文件。额外文件由用户直接在扩展代码目录维护，前端不解析或改写。
 
-每个 Condition Router 配置都拥有独立私有包。复制配置会复制新包；模板或其他配置的包发生变化都不会影响它。
+每个 Condition Router 配置都拥有独立的 Python 扩展。复制配置会复制新的扩展目录；模板或其他配置的扩展发生变化都不会影响它。
 
 ## Route 返回值
 

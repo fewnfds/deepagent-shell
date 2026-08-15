@@ -359,7 +359,7 @@ describe('ComponentsPage', () => {
     wrapper.unmount()
   })
 
-  it('loads the template catalog when opening a new private-package component', async () => {
+  it('loads templates without validating an extension before its first save', async () => {
     api.getCatalog.mockResolvedValueOnce({
       block_types: [skillManifest, modelManifest],
       workflow_component_types: [conditionRouterManifest],
@@ -385,10 +385,11 @@ describe('ComponentsPage', () => {
 
     expect(api.listConditionRouterTemplates).toHaveBeenCalledOnce()
     expect(api.listMiddlewareTemplates).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="validation-checklist"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
-  it('requires a template and rejects duplicate names for private-package components', async () => {
+  it('requires a template and rejects duplicate names for Python extensions', async () => {
     api.getCatalog.mockResolvedValueOnce({
       block_types: [skillManifest, modelManifest],
       workflow_component_types: [conditionRouterManifest],

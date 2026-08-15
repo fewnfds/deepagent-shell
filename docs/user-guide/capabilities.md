@@ -28,8 +28,8 @@
 详细字段见[组件说明](../wizard-pages/README.md)。Agent 组合方式见
 [装配 Main Agent 与 Subagent](configuration-workflow.md)。
 
-自定义 Middleware 组件保存一个配置私有包引用；包返回官方 LangChain `AgentMiddleware`。格式、安全边界和依赖管理见
-[自定义 Middleware 包](middleware-packages.md)。
+自定义 Middleware 组件保存一个配置独占的 Python 扩展引用；扩展返回官方 LangChain `AgentMiddleware`。格式、安全边界和依赖管理见
+[自定义 Middleware 扩展](middleware-packages.md)。
 
 Workflow 输入上下文是一个内置但可替换的 first-party Middleware。它在 Agent invocation 的
 `before_agent`/`abefore_agent` 中规划当前私有 Agent 的初始消息，不会修改请求快照；Main Agent 默认使用
@@ -51,12 +51,12 @@ capability 引用及继承/替换/关闭规则决定。它支持受信任 Python
 dict，返回值必须是字符串。它只控制 Workflow-owned 非 Agent 事件的 OpenAI 响应投影，不改变 checkpoint、Debug、
 最终 State 或 Agent 自己的输出模式。字段和 Python 对象类型见[事件输出](../wizard-pages/workflow-event-output-config.md)。
 
-条件路由组件保存一个 `workflow-node/condition-router` 私有 Python package 引用和普通 config。package 通过同步
+条件路由组件保存一个 `workflow-node/condition-router` Python 扩展引用和普通 config。扩展通过同步
 `create_router(config)` 工厂物化 `async route(state, context)`；用户在画布 Branch Edge 上直接填写分支 key，route 通过
 `activate` 返回一个或多个完全匹配的 key，并可通过 `update` 返回 State 局部更新，空列表使用必须显式连接的 `otherwise`。
 完整 package 和返回契约见[条件路由](../wizard-pages/condition-router-config.md)。
 
 这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。自定义 Middleware 和 Condition Router 从分类静态模板
-创建配置私有包，并在私有包可选的 `requirements.txt` 声明外部包；模板本身不运行也不参与依赖。Workflow Prepare 和
+创建配置独占的 Python 扩展，并在扩展目录可选的 `requirements.txt` 声明外部包；模板本身不运行也不参与依赖。Workflow Prepare 和
 Workflow 输入上下文变换目前仍在组件配置中保存源码与 `python_requirements`。生效配置共享启动期扩展依赖层。
-requirements 修改后重启生效；文件化私有包源码在下一次请求重新加载，仍为内联形式的组件源码按各自组件说明生效。
+requirements 修改后重启生效；文件化扩展源码在下一次请求重新加载，仍为内联形式的组件源码按各自组件说明生效。
