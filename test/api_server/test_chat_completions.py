@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from typing import ClassVar
 
 from agent_shell.api import api_server
@@ -126,25 +127,8 @@ def test_chat_materializes_condition_router_package_before_compiling_workflow(
         / "always-run"
     )
     package_dir.mkdir(parents=True)
-    (package_dir / "template.json").write_text(
-        json.dumps(
-            {
-                "format_version": 1,
-                "family": "workflow-node",
-                "adapter": "condition-router",
-                "name": "Always run",
-                "description": "Routes to the Agent branch.",
-                "config_schema": {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": False,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
     (package_dir / "main.py").write_text(
-        "def create_router(config):\n"
+        "def create_router():\n"
         "    async def route(state, context):\n"
         "        return {'activate': ['run'], 'update': {}}\n"
         "    return route\n",
@@ -159,12 +143,14 @@ def test_chat_materializes_condition_router_package_before_compiling_workflow(
             "/api/blocks/condition-router",
             json={
                 "name": "Always run",
-                "python_package": {"folder": "", "config": {}},
+                "python_package": {"folder": "", "editable_files": ["main.py"]},
                 "python_package_files": {
                     "template_key": selected["key"],
                     "revision": selected["revision"],
-                    "main_source": selected["main_source"],
-                    "requirements_source": selected["requirements_source"],
+                    "files": [
+                        {"path": file["path"], "content": file["content"]}
+                        for file in selected["files"] if file["path"] == "main.py"
+                    ],
                 },
             },
         )
@@ -259,7 +245,7 @@ def test_workflow_agent_middleware_injects_frozen_client_messages(
         "    async def abefore_agent(self, state, runtime):\n"
         "        content = runtime.context.messages[-1]['content']\n"
         "        return {'messages': [HumanMessage(content=content)]}\n"
-        "def create_middleware(config, agent):\n"
+        "def create_middleware(agent):\n"
         "    return InjectRequest()\n",
     )
 
@@ -276,12 +262,14 @@ def test_workflow_agent_middleware_injects_frozen_client_messages(
             "/api/blocks/custom-middleware",
             json={
                 "name": "Request message injection",
-                "python_package": {"folder": "", "config": {}},
+                "python_package": {"folder": "", "editable_files": ["main.py"]},
                 "python_package_files": {
                     "template_key": selected["key"],
                     "revision": selected["revision"],
-                    "main_source": selected["main_source"],
-                    "requirements_source": selected["requirements_source"],
+                    "files": [
+                        {"path": file["path"], "content": file["content"]}
+                        for file in selected["files"] if file["path"] == "main.py"
+                    ],
                 },
             },
         )

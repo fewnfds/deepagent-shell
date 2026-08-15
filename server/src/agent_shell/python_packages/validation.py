@@ -6,7 +6,6 @@ from typing import Any
 
 from agent_shell.condition_router_packages import resolve_condition_router_package
 from agent_shell.middleware_packages.packages import resolve_middleware_package
-from agent_shell.python_packages.config import validate_python_package_config
 from agent_shell.registries.errors import ResourceScanError
 from agent_shell.validation.models import ValidationIssue
 
@@ -111,32 +110,6 @@ class PythonPackageValidationService:
                 )
             ]
         metadata, _folder = resolved
-        config_issue = validate_python_package_config(
-            metadata["config_schema"],
-            reference.get("config", {}),
-        )
-        if config_issue is not None:
-            config_path = f"{path_prefix}.config"
-            if config_issue.path:
-                config_path += "." + ".".join(config_issue.path)
-            return [
-                ValidationIssue(
-                    code="python_package.config_invalid",
-                    scope=scope,
-                    owner_id=owner_id,
-                    owner_name=owner_name,
-                    path=config_path,
-                    message=(
-                        "The Python package configuration does not satisfy "
-                        "its declared schema."
-                    ),
-                    message_key="validation.issue.pythonPackage.configInvalid",
-                    message_args={
-                        "package_id": str(metadata["id"]),
-                        "keyword": config_issue.keyword,
-                    },
-                )
-            ]
         if not check_dependencies:
             return []
         dependency_status = str(metadata["dependency_status"])

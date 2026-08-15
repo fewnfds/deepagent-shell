@@ -123,24 +123,14 @@ def test_condition_router_package_loads_local_modules_and_materializes_async_rou
                 "id": package_id,
                 "family": "workflow-node",
                 "adapter": "condition-router",
-                "name": "Threshold router",
-                "description": "Routes by a configured threshold.",
-                "config_schema": {
-                    "type": "object",
-                    "properties": {
-                        "threshold": {"type": "integer", "title": "Threshold"}
-                    },
-                    "required": ["threshold"],
-                    "additionalProperties": False,
-                },
             }
         ),
         encoding="utf-8",
     )
     (package_dir / "main.py").write_text(
         "from .routing import build_route\n"
-        "def create_router(config):\n"
-        "    return build_route(config['threshold'])\n",
+            "def create_router():\n"
+            "    return build_route(80)\n",
         encoding="utf-8",
     )
     (package_dir / "routing.py").write_text(
@@ -159,7 +149,7 @@ def test_condition_router_package_loads_local_modules_and_materializes_async_rou
     route = runtime.router_for(
         "router-node",
         ROUTER_ID,
-        {"folder": folder_name, "config": {"threshold": 80}},
+        {"folder": folder_name, "editable_files": ["main.py"]},
     )
 
     result = asyncio.run(

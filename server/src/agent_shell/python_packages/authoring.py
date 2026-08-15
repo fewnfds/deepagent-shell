@@ -10,6 +10,7 @@ import tempfile
 from typing import Any
 from uuid import uuid4
 
+from agent_shell.python_packages.contracts import validate_package_relative_path
 from agent_shell.python_packages.packages import (
     PythonPackageManifest,
     inspect_python_package_draft,
@@ -40,14 +41,14 @@ PACKAGE_COMPONENT_SPECS: dict[str, PackageAdapterSpec] = {
         family="workflow-node",
         adapter="condition-router",
         factory_name="create_router",
-        factory_parameters=("config",),
+        factory_parameters=(),
     ),
     "custom-middleware": PackageAdapterSpec(
         template_parts=("agent", "custom_middleware"),
         family="middleware",
         adapter="agent-middleware",
         factory_name="create_middleware",
-        factory_parameters=("config", "agent"),
+        factory_parameters=("agent",),
     ),
 }
 
@@ -96,18 +97,130 @@ def _restore_file(path: Path, existed: bool, content: bytes) -> None:
         path.unlink(missing_ok=True)
 
 
-def _write_requirements(path: Path, content: str) -> None:
-    if content.strip():
-        _write_bytes_atomic(path, content.encode("utf-8"))
-    else:
-        path.unlink(missing_ok=True)
-
-
 def _template_slug(key: str) -> str:
     slug = key.lower().replace("_", "-")
     while "--" in slug:
         slug = slug.replace("--", "-")
     return slug.strip("-")[:64]
+
+
+def _file_entries(value: object) -> list[dict[str, str]]:
+    if not isinstance(value, list) or not value or len(value) > 50:
+        raise PythonPackageAuthoringError(
+            "python_package_files_invalid",
+            "At least one editable Python package file is required.",
+        )
+    result: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for item in value:
+        if (
+            not isinstance(item, dict)
+            or not {"path", "content"}.issubset(item)
+            or set(item) - {"path", "content", "exists", "readable"}
+        ):
+            raise PythonPackageAuthoringError(
+                "python_package_files_invalid",
+                "Each editable Python package file must contain path and content.",
+            )
+        path = item.get("path")
+        content = item.get("content")
+        if not isinstance(path, str) or not isinstance(content, str):
+            raise PythonPackageAuthoringError(
+                "python_package_files_invalid",
+                "Editable Python package paths and contents must be strings.",
+            )
+        try:
+            validate_package_relative_path(path)
+        except ValueError as exc:
+            raise PythonPackageAuthoringError(
+                "python_package_file_path_invalid",
+                str(exc),
+            ) from exc
+        if path in seen:
+            raise PythonPackageAuthoringError(
+                "python_package_files_invalid",
+                "Editable Python package file paths must be unique.",
+            )
+        seen.add(path)
+        result.append({"path": path, "content": content})
+    return result
+
+
+def _editable_paths(value: object) -> list[str]:
+    if (
+        not isinstance(value, list)
+        or not value
+        or len(value) > 50
+        or not all(isinstance(path, str) for path in value)
+    ):
+        raise PythonPackageAuthoringError(
+            "python_package_files_invalid",
+            "Provide between 1 and 50 editable Python package file paths.",
+        )
+    paths = list(value)
+    if len(paths) != len(set(paths)):
+        raise PythonPackageAuthoringError(
+            "python_package_files_invalid",
+            "Editable Python package file paths must be unique.",
+        )
+    for path in paths:
+        try:
+            validate_package_relative_path(path)
+        except ValueError as exc:
+            raise PythonPackageAuthoringError(
+                "python_package_file_path_invalid",
+                str(exc),
+            ) from exc
+    return paths
+
+
+def _read_editable_files(folder: Path, paths: list[str]) -> list[dict[str, object]]:
+    files: list[dict[str, object]] = []
+    for path_value in paths:
+        try:
+            path = validate_package_relative_path(path_value)
+        except ValueError:
+            files.append({"path": path_value, "content": "", "exists": False, "readable": True})
+            continue
+        target = folder / Path(*path.split("/"))
+        if not target.is_file():
+            files.append({"path": path, "content": "", "exists": False, "readable": True})
+            continue
+        try:
+            content = target.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            files.append({"path": path, "content": "", "exists": True, "readable": False})
+            continue
+        files.append(
+            {
+                "path": path,
+                "content": content.replace("\r\n", "\n").replace("\r", "\n"),
+                "exists": True,
+                "readable": True,
+            }
+        )
+    return files
+
+
+def _write_editable_files(folder: Path, entries: list[dict[str, str]]) -> None:
+    for item in entries:
+        target = folder / Path(*item["path"].split("/"))
+        if target.is_dir():
+            raise ResourceScanError(
+                "resource.error.pythonPackage.readFailed",
+                f"{item['path']} is a directory, not a text file.",
+            )
+        if not target.exists() and item["content"] == "":
+            continue
+        if target.is_file() and item["content"] == "":
+            try:
+                target.read_text(encoding="utf-8")
+            except UnicodeError:
+                continue
+        _write_bytes_atomic(
+            target,
+            item["content"].replace("\r\n", "\n").encode("utf-8"),
+        )
 
 
 class PythonPackageAuthoringService:
@@ -226,7 +339,7 @@ class PythonPackageAuthoringService:
         owner_id: str,
         reference: dict[str, Any],
     ) -> dict[str, object]:
-        inspection, _folder = self._inspect_instance(
+        inspection, folder = self._inspect_instance(
             block_type, owner_id, str(reference.get("folder", ""))
         )
         metadata = inspection["metadata"]
@@ -237,11 +350,15 @@ class PythonPackageAuthoringService:
             if isinstance(package_error, dict)
             else ""
         )
+        paths = reference.get("editable_files", ["main.py"])
+        if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
+            paths = ["main.py"]
+        editable_files = _read_editable_files(folder, paths)
         return {
             "python_package_manifest": inspection["manifest"],
             "python_package_files": {
-                "main_source": inspection["main_source"],
-                "requirements_source": inspection["requirements_source"],
+                "template_key": "",
+                "files": editable_files,
                 "revision": inspection["revision"],
             },
             "python_package_error": package_error,
@@ -256,6 +373,23 @@ class PythonPackageAuthoringService:
             ),
         }
 
+    def read_files(
+        self,
+        block_type: str,
+        owner_id: str,
+        reference: dict[str, Any],
+        paths: object,
+    ) -> dict[str, object]:
+        requested_paths = _editable_paths(paths)
+        inspection, folder = self._inspect_instance(
+            block_type, owner_id, str(reference.get("folder", ""))
+        )
+        return {
+            "template_key": "",
+            "files": _read_editable_files(folder, requested_paths),
+            "revision": inspection["revision"],
+        }
+
     def create(
         self,
         block_type: str,
@@ -263,11 +397,10 @@ class PythonPackageAuthoringService:
         *,
         template_key: str,
         template_revision: str,
-        main_source: str,
-        requirements_source: str,
-        config: dict[str, Any],
+        files: list[dict[str, str]],
     ) -> tuple[dict[str, Any], PackageChange]:
         spec = self._spec(block_type)
+        entries = _file_entries(files)
         template_root = self._template_root(spec)
         template = template_root / template_key
         if template.parent != template_root:
@@ -303,24 +436,19 @@ class PythonPackageAuthoringService:
         final = adapter_root / folder_name
         try:
             shutil.copytree(template, staged)
-            (staged / "template.json").unlink()
             manifest = PythonPackageManifest.model_validate(
                 {
-                    "format_version": metadata["format_version"],
+                    "format_version": 1,
                     "id": instance_id,
-                    "family": metadata["family"],
-                    "adapter": metadata["adapter"],
-                    "name": metadata["name"],
-                    "description": metadata["description"],
-                    "config_schema": metadata["config_schema"],
+                    "family": spec.family,
+                    "adapter": spec.adapter,
                 }
             )
             _write_bytes_atomic(
                 staged / "package.json",
                 (json.dumps(manifest.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
             )
-            _write_bytes_atomic(staged / "main.py", main_source.encode("utf-8"))
-            _write_requirements(staged / "requirements.txt", requirements_source)
+            _write_editable_files(staged, entries)
             scan_python_package(
                 staged,
                 owner_id=owner_id,
@@ -342,7 +470,7 @@ class PythonPackageAuthoringService:
             raise
         shutil.rmtree(staging_root, ignore_errors=True)
         return (
-            {"folder": folder_name, "config": dict(config)},
+            {"folder": folder_name, "editable_files": [item["path"] for item in entries]},
             PackageChange(lambda: shutil.rmtree(final, ignore_errors=True)),
         )
 
@@ -353,9 +481,9 @@ class PythonPackageAuthoringService:
         reference: dict[str, Any],
         *,
         revision: str,
-        main_source: str,
-        requirements_source: str,
+        files: list[dict[str, str]],
     ) -> PackageChange:
+        entries = _file_entries(files)
         inspection, folder = self._inspect_instance(
             block_type, owner_id, str(reference.get("folder", ""))
         )
@@ -370,8 +498,7 @@ class PythonPackageAuthoringService:
         staged = staging_root / folder.name
         try:
             shutil.copytree(folder, staged)
-            _write_bytes_atomic(staged / "main.py", main_source.encode("utf-8"))
-            _write_requirements(staged / "requirements.txt", requirements_source)
+            _write_editable_files(staged, entries)
             scan_python_package(
                 staged,
                 owner_id=owner_id,
@@ -391,12 +518,11 @@ class PythonPackageAuthoringService:
             shutil.rmtree(staging_root, ignore_errors=True)
             raise
 
-        main_path = folder / "main.py"
-        requirements_path = folder / "requirements.txt"
-        main_existed = main_path.is_file()
-        old_main = main_path.read_bytes() if main_existed else b""
-        requirements_existed = requirements_path.is_file()
-        old_requirements = requirements_path.read_bytes() if requirements_existed else b""
+        snapshots: list[tuple[Path, bool, bytes]] = []
+        for item in entries:
+            target = folder / Path(*item["path"].split("/"))
+            existed = target.is_file()
+            snapshots.append((target, existed, target.read_bytes() if existed else b""))
         current, _ = self._inspect_instance(block_type, owner_id, folder.name)
         if current["revision"] != revision:
             shutil.rmtree(staging_root, ignore_errors=True)
@@ -406,18 +532,17 @@ class PythonPackageAuthoringService:
                 status_code=409,
             )
         try:
-            _write_bytes_atomic(main_path, main_source.encode("utf-8"))
-            _write_requirements(requirements_path, requirements_source)
+            _write_editable_files(folder, entries)
         except BaseException:
-            _restore_file(main_path, main_existed, old_main)
-            _restore_file(requirements_path, requirements_existed, old_requirements)
+            for target, existed, content in snapshots:
+                _restore_file(target, existed, content)
             shutil.rmtree(staging_root, ignore_errors=True)
             raise
         shutil.rmtree(staging_root, ignore_errors=True)
 
         def rollback() -> None:
-            _restore_file(main_path, main_existed, old_main)
-            _restore_file(requirements_path, requirements_existed, old_requirements)
+            for target, existed, content in snapshots:
+                _restore_file(target, existed, content)
 
         return PackageChange(rollback)
 
@@ -467,8 +592,11 @@ class PythonPackageAuthoringService:
             shutil.rmtree(staging_root, ignore_errors=True)
             raise
         shutil.rmtree(staging_root, ignore_errors=True)
+        paths = reference.get("editable_files", ["main.py"])
+        if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
+            paths = ["main.py"]
         return (
-            {"folder": folder_name, "config": dict(reference.get("config", {}))},
+            {"folder": folder_name, "editable_files": list(paths)},
             PackageChange(lambda: shutil.rmtree(final, ignore_errors=True)),
         )
 

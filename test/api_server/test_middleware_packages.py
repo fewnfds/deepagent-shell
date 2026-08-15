@@ -11,7 +11,7 @@ from langchain.agents.middleware import ModelCallLimitMiddleware
 from agent_shell.middleware_packages.runtime import MiddlewareOwner, MiddlewarePackageRuntime
 from agent_shell.runtime.errors import AgentRuntimeError
 
-from .support import make_client, middleware_config_schema
+from .support import make_client
 
 
 OWNER_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -21,30 +21,10 @@ def write_middleware_template(
     tmp_path: Path,
     *,
     source: str,
-    config_schema: dict[str, object] | None = None,
     key: str = "request-label",
 ) -> Path:
     folder = tmp_path / "data" / "templates" / "agent" / "custom_middleware" / key
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / "template.json").write_text(
-        json.dumps(
-            {
-                "format_version": 1,
-                "family": "middleware",
-                "adapter": "agent-middleware",
-                "name": "Request label",
-                "description": "Test middleware template.",
-                "config_schema": config_schema
-                or {
-                    "type": "object",
-                    "properties": {},
-                    "required": [],
-                    "additionalProperties": False,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
     (folder / "main.py").write_text(source, encoding="utf-8")
     return folder
 
@@ -55,7 +35,6 @@ def write_private_middleware(
     source: str,
     *,
     owner_id: str = OWNER_ID,
-    config_schema: dict[str, object] | None = None,
 ) -> tuple[str, Path]:
     folder_name = f"{owner_id}--request-label--{package_id}"
     folder = (
@@ -74,15 +53,6 @@ def write_private_middleware(
                 "id": package_id,
                 "family": "middleware",
                 "adapter": "agent-middleware",
-                "name": "Request label",
-                "description": "Test middleware package.",
-                "config_schema": config_schema
-                or {
-                    "type": "object",
-                    "properties": {},
-                    "required": [],
-                    "additionalProperties": False,
-                },
             }
         ),
         encoding="utf-8",
@@ -91,37 +61,33 @@ def write_private_middleware(
     return folder_name, folder
 
 
-def test_middleware_template_catalog_and_private_config_validation(
+def test_middleware_template_catalog_and_private_package_creation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source = (
         "from langchain.agents.middleware import AgentMiddleware\n"
         "class RequestLabel(AgentMiddleware):\n"
         "    pass\n"
-        "def create_middleware(config, agent):\n"
+        "def create_middleware(agent):\n"
         "    return RequestLabel()\n"
     )
-    write_middleware_template(
-        tmp_path,
-        source=source,
-        config_schema=middleware_config_schema(
-            {"label": "string"}, required=("label",)
-        ),
-    )
+    write_middleware_template(tmp_path, source=source)
 
     with make_client(tmp_path, monkeypatch) as client:
         catalog = client.get("/api/python-package-templates/middleware")
         selected = catalog.json()["catalog"][0]
-        invalid = client.post(
+        created = client.post(
             "/api/blocks/custom-middleware",
             json={
-                "name": "Invalid package config",
-                "python_package": {"folder": "", "config": {}},
+                "name": "Request label",
+                "python_package": {"folder": "", "editable_files": ["main.py"]},
                 "python_package_files": {
                     "template_key": selected["key"],
                     "revision": selected["revision"],
-                    "main_source": selected["main_source"],
-                    "requirements_source": selected["requirements_source"],
+                    "files": [
+                        {"path": file["path"], "content": file["content"]}
+                        for file in selected["files"] if file["path"] == "main.py"
+                    ],
                 },
             },
         )
@@ -129,11 +95,8 @@ def test_middleware_template_catalog_and_private_config_validation(
     assert catalog.status_code == 200
     assert [item["key"] for item in catalog.json()["catalog"]] == ["request-label"]
     assert "dependency_status" not in catalog.json()["catalog"][0]
-    assert invalid.status_code == 422
-    assert any(
-        issue["code"] == "python_package.config_invalid"
-        for issue in invalid.json()["detail"]["validation"]["issues"]
-    )
+    assert created.status_code == 200, created.text
+    assert created.json()["python_package"]["editable_files"] == ["main.py"]
 
 
 def test_missing_private_middleware_is_rejected_when_projected(
@@ -141,7 +104,7 @@ def test_missing_private_middleware_is_rejected_when_projected(
 ) -> None:
     source = (
         "from langchain.agents.middleware import AgentMiddleware\n"
-        "def create_middleware(config, agent):\n"
+        "def create_middleware(agent):\n"
         "    return AgentMiddleware()\n"
     )
     write_middleware_template(tmp_path, source=source)
@@ -151,12 +114,14 @@ def test_missing_private_middleware_is_rejected_when_projected(
             "/api/blocks/custom-middleware",
             json={
                 "name": "Missing package",
-                "python_package": {"folder": "", "config": {}},
+                "python_package": {"folder": "", "editable_files": ["main.py"]},
                 "python_package_files": {
                     "template_key": selected["key"],
                     "revision": selected["revision"],
-                    "main_source": selected["main_source"],
-                    "requirements_source": "",
+                    "files": [
+                        {"path": file["path"], "content": file["content"]}
+                        for file in selected["files"] if file["path"] == "main.py"
+                    ],
                 },
             },
         )
@@ -181,11 +146,8 @@ def test_package_materializes_official_langchain_middleware(tmp_path: Path) -> N
         tmp_path,
         "33333333-3333-4333-8333-333333333333",
         "from langchain.agents.middleware import ModelCallLimitMiddleware\n"
-        "def create_middleware(config, agent):\n"
-        "    return ModelCallLimitMiddleware(run_limit=config['limit'])\n",
-        config_schema=middleware_config_schema(
-            {"limit": "integer"}, required=("limit",)
-        ),
+        "def create_middleware(agent):\n"
+        "    return ModelCallLimitMiddleware(run_limit=2)\n",
     )
     runtime = MiddlewarePackageRuntime(
         request_id="request-1",
@@ -195,7 +157,7 @@ def test_package_materializes_official_langchain_middleware(tmp_path: Path) -> N
                 type="main_agent",
                 name="Main",
                 package_owner_id=OWNER_ID,
-                package={"folder": folder_name, "config": {"limit": 2}},
+                package={"folder": folder_name, "editable_files": ["main.py"]},
             )
         ],
         packages_dir=tmp_path / "data" / "config" / "python_package_instances",
@@ -217,7 +179,7 @@ def test_async_agent_runtime_rejects_sync_only_middleware_hooks(tmp_path: Path) 
         "class SyncOnly(AgentMiddleware):\n"
         "    def before_agent(self, state, runtime):\n"
         "        return None\n"
-        "def create_middleware(config, agent):\n"
+        "def create_middleware(agent):\n"
         "    return SyncOnly()\n",
     )
     runtime = MiddlewarePackageRuntime(
@@ -228,7 +190,7 @@ def test_async_agent_runtime_rejects_sync_only_middleware_hooks(tmp_path: Path) 
                 type="main_agent",
                 name="Main",
                 package_owner_id=OWNER_ID,
-                package={"folder": folder_name, "config": {}},
+                package={"folder": folder_name, "editable_files": ["main.py"]},
             )
         ],
         packages_dir=tmp_path / "data" / "config" / "python_package_instances",

@@ -94,16 +94,10 @@ const conditionRouterTemplate = {
   family: 'workflow-node' as const,
   adapter: 'condition-router' as const,
   name: 'Basic router',
-  description: '',
-  main_source: 'def create_router(config):\n    return route\n',
-  requirements_source: '',
   revision: 'template-revision',
-  config_schema: {
-    type: 'object' as const,
-    properties: {},
-    required: [],
-    additionalProperties: false as const,
-  },
+  files: [{
+    path: 'main.py', content: 'def create_router():\n    return route\n', exists: true,
+  }],
 }
 
 function modelRecord(id: string): SavedBlock {
@@ -400,7 +394,7 @@ describe('ComponentsPage', () => {
       name: 'Existing router',
       python_package: {
         folder: '00000000-0000-4000-8000-000000000010--basic-router--00000000-0000-4000-8000-000000000011',
-        config: {},
+        editable_files: ['main.py'],
       },
     }])
     api.listConditionRouterTemplates.mockResolvedValueOnce({

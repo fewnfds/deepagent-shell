@@ -42,7 +42,6 @@ const resolutionKeys: Record<string, string> = {
   'python_package.invalid': 'pythonPackageInvalid',
   'python_package.dependencies_failed': 'pythonPackageDependenciesFailed',
   'python_package.dependencies_restart_required': 'pythonPackageDependenciesRestartRequired',
-  'python_package.config_invalid': 'pythonPackageConfigInvalid',
   'storage.credential_metadata_invalid': 'credentialMetadataInvalid',
   'storage.unknown_block_type': 'unknownBlockType',
   'runtime.configuration': 'runtimeConfiguration',

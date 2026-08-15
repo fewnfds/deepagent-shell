@@ -20,6 +20,7 @@ const props = withDefaults(defineProps<{
 })
 const emit = defineEmits<{
   'update:modelValue': [value: CustomMiddlewareDraft]
+  'load-files': [paths: string[]]
   refresh: []
 }>()
 const draft = useEditorModel(() => props.modelValue, (value) => emit('update:modelValue', value))
@@ -29,6 +30,7 @@ function updatePackage(value: PythonPackageDraftState): void {
   draft.python_package_files = value.python_package_files
   draft.python_package_manifest = value.python_package_manifest
   draft.dependency_status = value.dependency_status
+  draft.editable_paths_source = value.editable_paths_source
 }
 </script>
 
@@ -41,6 +43,7 @@ function updatePackage(value: PythonPackageDraftState): void {
       :loading="loading"
       :model-value="draft"
       :saved="Boolean(draft.id)"
+      @load-files="emit('load-files', $event)"
       @refresh="emit('refresh')"
       @update:model-value="updatePackage"
     />

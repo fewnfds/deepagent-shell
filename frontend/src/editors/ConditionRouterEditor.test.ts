@@ -7,8 +7,14 @@ import { en } from '@/locales/en'
 
 import ConditionRouterEditor from './ConditionRouterEditor.vue'
 
+const i18n = () => createI18n({
+  legacy: false,
+  locale: 'en',
+  messages: { en },
+})
+
 describe('ConditionRouterEditor', () => {
-  it('binds one adapter package and emits manifest config defaults', async () => {
+  it('orders editable package files from the relative path list', async () => {
     const templateKey = 'threshold-router'
     const wrapper = mount(ConditionRouterEditor, {
       props: {
@@ -18,53 +24,57 @@ describe('ConditionRouterEditor', () => {
           format_version: 1,
           family: 'workflow-node',
           adapter: 'condition-router',
-          name: 'Threshold router',
-          description: '',
-          main_source: 'def create_router(config):\n    return route\n',
-          requirements_source: '',
+          name: 'threshold-router',
           revision: 'revision',
-          config_schema: {
-            type: 'object',
-            properties: {
-              threshold: {
-                type: 'integer',
-                title: 'Threshold',
-                description: '',
-                default: 80,
-              },
-            },
-            required: ['threshold'],
-            additionalProperties: false,
-          },
+          files: [
+            { path: 'main.py', content: 'def create_router():\n    return route\n', exists: true },
+            { path: 'helpers/rules.py', content: 'THRESHOLD = 80\n', exists: true },
+          ],
         }],
       },
-      global: {
-        plugins: [createI18n({
-          legacy: false,
-          locale: 'en',
-          messages: { en },
-        })],
-      },
+      global: { plugins: [i18n()] },
     })
 
     await wrapper.get('select').setValue(templateKey)
+    const pathList = wrapper.get('textarea[rows="2"]')
+    await pathList.setValue('main.py\nhelpers/rules.py\nmissing.py')
+    await pathList.trigger('change')
 
-    expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({
-      python_package: { folder: '', config: { threshold: 80 } },
-      python_package_files: { template_key: templateKey, revision: 'revision' },
+    const emitted = wrapper.emitted('update:modelValue')?.at(-1)?.[0]
+    expect(emitted).toMatchObject({
+      python_package: {
+        folder: '',
+        editable_files: ['main.py', 'helpers/rules.py', 'missing.py'],
+      },
+      python_package_files: {
+        template_key: templateKey,
+        revision: 'revision',
+        files: [
+          { path: 'main.py', exists: true },
+          { path: 'helpers/rules.py', content: 'THRESHOLD = 80\n', exists: true },
+          { path: 'missing.py', content: '', exists: false },
+        ],
+      },
     })
-    expect(wrapper.get('input[type="number"]').element.value).toBe('80')
+    expect(wrapper.text()).toContain('missing.py')
+    expect(wrapper.text()).toContain('This file does not exist yet.')
   })
 
-  it('keeps prescribed files visible when the saved package is invalid', () => {
+  it('keeps selected files visible when the saved package is invalid', () => {
     const draft = conditionRouterAdapter.fromApi({
       id: 'router-id',
       name: 'Broken router',
-      python_package: { folder: 'owner--template--instance', config: {} },
+      python_package: {
+        folder: 'owner--template--instance',
+        editable_files: ['main.py'],
+      },
       python_package_manifest: null,
       python_package_files: {
-        main_source: 'def create_router(config):\n    return (\n',
-        requirements_source: '',
+        files: [{
+          path: 'main.py',
+          content: 'def create_router():\n    return (\n',
+          exists: true,
+        }],
         revision: 'broken-revision',
       },
       python_package_error: {
@@ -75,16 +85,41 @@ describe('ConditionRouterEditor', () => {
     })
     const wrapper = mount(ConditionRouterEditor, {
       props: { modelValue: draft },
-      global: {
-        plugins: [createI18n({
-          legacy: false,
-          locale: 'en',
-          messages: { en },
-        })],
-      },
+      global: { plugins: [i18n()] },
     })
 
-    expect(wrapper.get('textarea').element.value).toContain('return (')
+    expect(wrapper.findAll('textarea').some((item) => item.element.value.includes('return ('))).toBe(true)
     expect(wrapper.text()).toContain('main.py contains a Python syntax error on line 2.')
+  })
+
+  it('requests newly selected files from a saved package', async () => {
+    const draft = conditionRouterAdapter.fromApi({
+      id: 'router-id',
+      name: 'Router',
+      python_package: {
+        folder: 'owner--template--instance',
+        editable_files: ['main.py'],
+      },
+      python_package_files: {
+        files: [{ path: 'main.py', content: 'SOURCE\n', exists: true }],
+        revision: 'revision',
+      },
+    })
+    const wrapper = mount(ConditionRouterEditor, {
+      props: { modelValue: draft },
+      global: { plugins: [i18n()] },
+    })
+
+    const pathList = wrapper.get('textarea[rows="2"]')
+    await pathList.setValue('main.py\nhelpers/rules.py')
+    await pathList.trigger('change')
+
+    expect(wrapper.emitted('load-files')?.at(-1)?.[0]).toEqual(['helpers/rules.py'])
+    const emitted = wrapper.emitted('update:modelValue')?.at(-1)?.[0] as ReturnType<typeof conditionRouterAdapter.blank>
+    expect(emitted.python_package_files.files[1]).toEqual({
+      path: 'helpers/rules.py',
+      content: '',
+      readable: true,
+    })
   })
 })

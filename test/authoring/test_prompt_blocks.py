@@ -80,27 +80,9 @@ def test_prompt_templates_accept_escaped_literal_braces(
         / "syntax-check"
     )
     template.mkdir(parents=True, exist_ok=True)
-    (template / "template.json").write_text(
-        json.dumps(
-            {
-                "format_version": 1,
-                "family": "middleware",
-                "adapter": "agent-middleware",
-                "name": "Syntax check",
-                "description": "Test template.",
-                "config_schema": {
-                    "type": "object",
-                    "properties": {},
-                    "required": [],
-                    "additionalProperties": False,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
     valid_source = (
         "from langchain.agents.middleware import AgentMiddleware\n"
-        "def create_middleware(config, agent):\n"
+        "def create_middleware(agent):\n"
         "    return AgentMiddleware()\n"
     )
     (template / "main.py").write_text(valid_source, encoding="utf-8")
@@ -119,12 +101,11 @@ def test_prompt_templates_accept_escaped_literal_braces(
             "/api/blocks/custom-middleware",
             json={
                 "name": "bad syntax",
-                "python_package": {"folder": "", "config": {}},
+                "python_package": {"folder": "", "editable_files": ["main.py"]},
                 "python_package_files": {
                     "template_key": selected["key"],
                     "revision": selected["revision"],
-                    "main_source": "middleware = (",
-                    "requirements_source": "",
+                    "files": [{"path": "main.py", "content": "middleware = ("}],
                 },
             },
         ).status_code
@@ -135,12 +116,11 @@ def test_prompt_templates_accept_escaped_literal_braces(
             "/api/blocks/custom-middleware",
             json={
                 "name": "missing output",
-                "python_package": {"folder": "", "config": {}},
+                "python_package": {"folder": "", "editable_files": ["main.py"]},
                 "python_package_files": {
                     "template_key": selected["key"],
                     "revision": selected["revision"],
-                    "main_source": "value = object()\n",
-                    "requirements_source": "",
+                    "files": [{"path": "main.py", "content": "value = object()\n"}],
                 },
             },
         ).status_code

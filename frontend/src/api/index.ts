@@ -34,6 +34,7 @@ import type {
   FileManagerScope,
   ModelProviderCatalog,
   PaginationResponse,
+  PythonPackageFiles,
   MainAgent,
   MainAgentPayload,
   ReadinessResponse,
@@ -263,6 +264,17 @@ export const managementApi = {
     id: string,
   ): Promise<SavedBlock<TPayload>> {
     return managementRequest(recordPath(`/api/blocks/${type}`, id))
+  },
+
+  readPythonPackageFiles(
+    type: ManagedComponentType,
+    id: string,
+    paths: string[],
+  ): Promise<PythonPackageFiles> {
+    return managementRequest(
+      `${recordPath(`/api/blocks/${type}`, id)}/python-package-files`,
+      jsonBody({ paths }),
+    )
   },
 
   saveBlock<TPayload extends BlockPayload>(

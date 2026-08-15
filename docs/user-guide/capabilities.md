@@ -52,7 +52,7 @@ dict，返回值必须是字符串。它只控制 Workflow-owned 非 Agent 事�
 最终 State 或 Agent 自己的输出模式。字段和 Python 对象类型见[事件输出](../wizard-pages/workflow-event-output-config.md)。
 
 条件路由组件保存一个 `workflow-node/condition-router` Python 扩展引用和普通 config。扩展通过同步
-`create_router(config)` 工厂物化 `async route(state, context)`；用户在画布 Branch Edge 上直接填写分支 key，route 通过
+`create_router()` 工厂物化 `async route(state, context)`；用户在画布 Branch Edge 上直接填写分支 key，route 通过
 `activate` 返回一个或多个完全匹配的 key，并可通过 `update` 返回 State 局部更新，空列表使用必须显式连接的 `otherwise`。
 完整 package 和返回契约见[条件路由](../wizard-pages/condition-router-config.md)。
 

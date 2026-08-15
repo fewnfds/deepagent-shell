@@ -16,24 +16,6 @@ def _write_package_template(
 ) -> None:
     folder = tmp_path / "data" / "templates" / category[0] / category[1] / key
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / "template.json").write_text(
-        json.dumps(
-            {
-                "format_version": 1,
-                "family": family,
-                "adapter": adapter,
-                "name": key,
-                "description": "Test template.",
-                "config_schema": {
-                    "type": "object",
-                    "properties": {},
-                    "required": [],
-                    "additionalProperties": False,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
     (folder / "main.py").write_text(source, encoding="utf-8")
 
 
@@ -121,7 +103,7 @@ def test_condition_router_uses_component_crud_storage_and_repository_validation(
     tmp_path: Path, monkeypatch
 ) -> None:
     source = (
-        "def create_router(config):\n"
+        "def create_router():\n"
         "    async def route(state, context):\n"
         "        return {'activate': ['review'], 'update': {}}\n"
         "    return route\n"
@@ -140,12 +122,14 @@ def test_condition_router_uses_component_crud_storage_and_repository_validation(
     ).json()["catalog"][0]
     payload = {
         "name": "Risk routing",
-        "python_package": {"folder": "", "config": {}},
+        "python_package": {"folder": "", "editable_files": ["main.py"]},
         "python_package_files": {
             "template_key": selected["key"],
             "revision": selected["revision"],
-            "main_source": selected["main_source"],
-            "requirements_source": selected["requirements_source"],
+            "files": [
+                {"path": file["path"], "content": file["content"]}
+                for file in selected["files"] if file["path"] == "main.py"
+            ],
         },
     }
 
@@ -169,7 +153,7 @@ def test_condition_router_uses_component_crud_storage_and_repository_validation(
         "name": payload["name"],
         "python_package": {
             "folder": created["python_package"]["folder"],
-            "config": {"unexpected": True},
+            "editable_files": ["../outside.py"],
         },
         "python_package_files": created["python_package_files"],
     }
@@ -193,7 +177,7 @@ def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) 
         adapter="agent-middleware",
         source=(
             "from langchain.agents.middleware import AgentMiddleware\n"
-            "def create_middleware(config, agent):\n"
+            "def create_middleware(agent):\n"
             "    return AgentMiddleware()\n"
         ),
     )
@@ -206,12 +190,14 @@ def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) 
         if block_type == "custom-middleware":
             payload = {
                 "name": payload["name"],
-                "python_package": {"folder": "", "config": {}},
+                "python_package": {"folder": "", "editable_files": ["main.py"]},
                 "python_package_files": {
                     "template_key": middleware_template["key"],
                     "revision": middleware_template["revision"],
-                    "main_source": middleware_template["main_source"],
-                    "requirements_source": middleware_template["requirements_source"],
+                    "files": [
+                        {"path": file["path"], "content": file["content"]}
+                        for file in middleware_template["files"] if file["path"] == "main.py"
+                    ],
                 },
             }
         created_response = client.post(f"/api/blocks/{block_type}", json=payload)

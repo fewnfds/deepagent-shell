@@ -10,7 +10,6 @@ from uuid import uuid4
 from langchain.agents.middleware import AgentMiddleware
 
 from agent_shell.python_packages.loader import PythonPackageLoader
-from agent_shell.python_packages.config import validate_python_package_config
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.validation.assembly import StaticAssembly
 
@@ -51,7 +50,7 @@ class MiddlewarePackageRuntime:
             family="middleware",
             adapter="agent-middleware",
             factory_name="create_middleware",
-            factory_parameters=("config", "agent"),
+            factory_parameters=("agent",),
         )
         self._middleware: dict[str, tuple[AgentMiddleware, ...]] = {}
         self._closed = False
@@ -124,16 +123,8 @@ class MiddlewarePackageRuntime:
             folder,
             package_owner_id=owner.package_owner_id,
         )
-        config = deepcopy(dict(owner.package.get("config", {})))
-        if validate_python_package_config(metadata["config_schema"], config):
-            raise AgentRuntimeError(
-                "python_package.config_invalid",
-                f"Python package {folder!r} configuration is invalid.",
-                status_code=422,
-            )
         try:
             produced = factory(
-                config,
                 {
                     "id": owner.id,
                     "type": owner.type,

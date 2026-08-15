@@ -13,6 +13,7 @@ import {
   type CapabilityManifest,
   type LocalizedMessagePayload,
   type ModelProviderCatalog,
+  type PythonPackageFile,
   type SavedBlock,
   type ValidationReport,
 } from '@/api'
@@ -505,6 +506,13 @@ async function save(): Promise<void> {
     pageError.value = t('errors.pythonPackageTemplateRequired')
     return
   }
+  if (
+    packageDraft
+    && packageDraft.python_package_files.files.some((file) => file.exists === undefined)
+  ) {
+    pageError.value = t('errors.pythonPackageFilesLoadRequired')
+    return
+  }
   const payload = payloadFromDraft(activeType.value, draft.value)
   const existing = records.value.find((record) => (
     record.name === payload.name && record.id !== draft.value?.id
@@ -554,6 +562,27 @@ async function save(): Promise<void> {
 
 function updateDraft(value: BlockDraftBase): void {
   draft.value = value
+}
+
+async function loadPackageFiles(paths: string[]): Promise<void> {
+  const type = activeType.value
+  const current = draft.value as (BlockDraftBase & PythonPackageDraftState) | null
+  if (!type || !usesPythonExtension(type) || !current?.id || paths.length === 0) return
+  const blockId = current.id
+  try {
+    const result = await managementApi.readPythonPackageFiles(type, blockId, paths)
+    const latest = draft.value as (BlockDraftBase & PythonPackageDraftState) | null
+    if (!latest || latest.id !== blockId || activeType.value !== type) return
+    const loaded = new Map(result.files.map((file) => [file.path, file]))
+    const requested = new Set(paths)
+    latest.python_package_files.files = latest.python_package_files.files.map((file) => {
+      if (!requested.has(file.path) || file.exists !== undefined || file.content !== '') return file
+      return loaded.get(file.path) ?? file
+    })
+    latest.python_package_files.revision = result.revision
+  } catch (error) {
+    notifyFailure('components.feedback.resourceFailed', error)
+  }
 }
 
 async function refreshResource(): Promise<void> {
@@ -728,6 +757,7 @@ onMounted(() => {
           v-bind="editorProps"
           :model-value="draft"
           @fetch-models="fetchModels"
+          @load-files="loadPackageFiles"
           @refresh="refreshResource"
           @update:model-value="updateDraft"
         />

@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import inspect
 from pathlib import Path
 from typing import Any, Callable
 
 from agent_shell.python_packages.loader import PythonPackageLoader
-from agent_shell.python_packages.config import validate_python_package_config
 from agent_shell.python_packages.packages import (
     resolve_python_package,
     scan_python_package,
@@ -17,7 +15,7 @@ from agent_shell.runtime.errors import AgentRuntimeError
 _FAMILY = "workflow-node"
 _ADAPTER = "condition-router"
 _FACTORY = "create_router"
-_PARAMETERS = ("config",)
+_PARAMETERS: tuple[str, ...] = ()
 
 
 def scan_condition_router_package(
@@ -92,15 +90,8 @@ class ConditionRouterPackageRuntime:
             folder,
             package_owner_id=package_owner_id,
         )
-        config = deepcopy(dict(reference.get("config", {})))
-        if validate_python_package_config(metadata["config_schema"], config):
-            raise AgentRuntimeError(
-                "python_package.config_invalid",
-                f"Python package {folder!r} configuration is invalid.",
-                status_code=422,
-            )
         try:
-            route = factory(config)
+            route = factory()
         except Exception as exc:
             raise AgentRuntimeError(
                 "condition_router_package.materialization_failed",

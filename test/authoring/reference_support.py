@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from contextlib import closing
-import json
 from pathlib import Path
 import sqlite3
 
@@ -66,27 +65,9 @@ def make_client(tmp_path: Path, monkeypatch) -> TestClient:
         / "reference-middleware"
     )
     template.mkdir(parents=True, exist_ok=True)
-    (template / "template.json").write_text(
-        json.dumps(
-            {
-                "format_version": 1,
-                "family": "middleware",
-                "adapter": "agent-middleware",
-                "name": "Reference middleware",
-                "description": "Reference test template.",
-                "config_schema": {
-                    "type": "object",
-                    "properties": {},
-                    "required": [],
-                    "additionalProperties": False,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
     (template / "main.py").write_text(
         "from langchain.agents.middleware import AgentMiddleware\n"
-        "def create_middleware(config, agent):\n"
+        "def create_middleware(agent):\n"
         "    return AgentMiddleware()\n",
         encoding="utf-8",
     )
@@ -163,12 +144,15 @@ def create_blocks(client: TestClient, suffix: str, types=PUBLIC_TYPES) -> dict[s
             ).json()["catalog"][0]
             payload = {
                 **payload,
-                "python_package": {"folder": "", "config": {}},
+                "python_package": {"folder": "", "editable_files": ["main.py"]},
                 "python_package_files": {
                     "template_key": selected["key"],
                     "revision": selected["revision"],
-                    "main_source": selected["main_source"],
-                    "requirements_source": selected["requirements_source"],
+                    "files": [
+                        {"path": "main.py", "content": next(
+                            file["content"] for file in selected["files"] if file["path"] == "main.py"
+                        )}
+                    ],
                 },
             }
         response = client.post(

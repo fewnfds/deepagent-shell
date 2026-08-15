@@ -92,11 +92,8 @@ def build_router(
                 message_key="errors.pythonPackageFilesRequired",
                 message="Python package component saves require package file content.",
             )
-        allowed = {"main_source", "requirements_source", "revision", "template_key"}
-        if set(files) - allowed or any(
-            not isinstance(files.get(key), str)
-            for key in ("main_source", "requirements_source", "revision")
-        ):
+        allowed = {"files", "revision", "template_key"}
+        if set(files) - allowed or not isinstance(files.get("files"), list) or not isinstance(files.get("revision"), str):
             raise management_error(
                 422,
                 code="python_package_files_invalid",
@@ -112,6 +109,26 @@ def build_router(
                 code="python_package_template_required",
                 message_key="errors.pythonPackageTemplateRequired",
                 message="Select a Python package template before saving.",
+            )
+        package = candidate.get("python_package")
+        if not isinstance(package, dict) or set(package) != {"folder", "editable_files"}:
+            raise management_error(
+                422,
+                code="python_package_files_invalid",
+                message_key="errors.pythonPackageFilesInvalid",
+                message="The Python package reference is invalid.",
+            )
+        entry_paths = [
+            item.get("path")
+            for item in files["files"]
+            if isinstance(item, dict)
+        ]
+        if package.get("editable_files") != entry_paths:
+            raise management_error(
+                422,
+                code="python_package_files_invalid",
+                message_key="errors.pythonPackageFilesInvalid",
+                message="The editable file list must match the ordered file contents.",
             )
         return candidate, files
 
@@ -483,6 +500,38 @@ def build_router(
             )
         return project_block(block_type, block, include_package_files=True)
 
+    @router.post("/api/blocks/{block_type}/{block_id}/python-package-files")
+    async def read_python_package_files(
+        block_type: str,
+        block_id: str,
+        payload: dict,
+    ) -> dict:
+        check_type(block_type)
+        block = block_store.get_block_internal(block_type, block_id)
+        if block is None:
+            raise management_error(
+                404,
+                code="block_not_found",
+                message_key="errors.blockNotFound",
+                message="The component configuration does not exist.",
+            )
+        if not python_package_authoring.supports(block_type) or set(payload) != {"paths"}:
+            raise management_error(
+                422,
+                code="python_package_files_invalid",
+                message_key="errors.pythonPackageFilesInvalid",
+                message="The Python package file request is invalid.",
+            )
+        try:
+            return python_package_authoring.read_files(
+                block_type,
+                block_id,
+                package_reference(block),
+                payload["paths"],
+            )
+        except PythonPackageAuthoringError as exc:
+            raise authoring_error(exc) from exc
+
     @router.post("/api/blocks/{block_type}")
     async def create_block(block_type: str, payload: dict) -> dict:
         check_type(block_type)
@@ -492,16 +541,13 @@ def build_router(
         if python_package_authoring.supports(block_type):
             candidate, files = package_files(payload, creating=True)
             package = candidate.get("python_package")
-            config = package.get("config", {}) if isinstance(package, dict) else {}
             try:
                 reference, change = python_package_authoring.create(
                     block_type,
                     block_id,
                     template_key=str(files["template_key"]),
                     template_revision=str(files["revision"]),
-                    main_source=str(files["main_source"]),
-                    requirements_source=str(files["requirements_source"]),
-                    config=dict(config) if isinstance(config, dict) else {},
+                    files=list(files["files"]),
                 )
             except PythonPackageAuthoringError as exc:
                 raise authoring_error(exc) from exc
@@ -639,8 +685,7 @@ def build_router(
                     block_id,
                     reference,
                     revision=str(files["revision"]),
-                    main_source=str(files["main_source"]),
-                    requirements_source=str(files["requirements_source"]),
+                    files=list(files["files"]),
                 )
             except PythonPackageAuthoringError as exc:
                 raise authoring_error(exc) from exc

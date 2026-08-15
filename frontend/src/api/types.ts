@@ -192,29 +192,7 @@ export interface CapabilityReference {
 
 export interface PythonPackageReference {
   folder: string
-  config: Record<string, unknown>
-}
-
-export type PythonPackageConfigScalar = boolean | number | string
-
-export interface PythonPackageConfigField {
-  type: 'string' | 'integer' | 'number' | 'boolean'
-  title: string
-  description: string
-  default?: PythonPackageConfigScalar
-  enum?: PythonPackageConfigScalar[]
-  minLength?: number
-  maxLength?: number
-  pattern?: string
-  minimum?: number
-  maximum?: number
-}
-
-export interface PythonPackageConfigSchema {
-  type: 'object'
-  properties: Record<string, PythonPackageConfigField>
-  required: string[]
-  additionalProperties: false
+  editable_files: string[]
 }
 
 export interface PythonPackageManifest {
@@ -222,16 +200,19 @@ export interface PythonPackageManifest {
   id: string
   family: 'workflow-node' | 'middleware'
   adapter: 'condition-router' | 'agent-middleware'
-  name: string
-  description: string
-  config_schema: PythonPackageConfigSchema
   folder: string
+}
+
+export interface PythonPackageFile {
+  path: string
+  content: string
+  exists?: boolean
+  readable?: boolean
 }
 
 export interface PythonPackageFiles {
   template_key: string
-  main_source: string
-  requirements_source: string
+  files: PythonPackageFile[]
   revision: string
 }
 
@@ -241,10 +222,7 @@ export interface PythonPackageTemplate {
   family: 'workflow-node' | 'middleware'
   adapter: 'condition-router' | 'agent-middleware'
   name: string
-  description: string
-  config_schema: PythonPackageConfigSchema
-  main_source: string
-  requirements_source: string
+  files: PythonPackageFile[]
   revision: string
 }
 

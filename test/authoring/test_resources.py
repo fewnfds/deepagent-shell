@@ -147,32 +147,14 @@ def test_custom_middleware_catalog_scans_recipes_without_executing_them(
         '"""Safe middleware package."""\n'
         "from pathlib import Path\n"
         f"Path({str(marker)!r}).write_text('executed')\n"
-        "def create_middleware(config, agent):\n"
+        "def create_middleware(agent):\n"
         "    return object()\n"
     )
     package_dir = templates_dir / "safe-recipe"
     package_dir.mkdir(parents=True, exist_ok=True)
-    (package_dir / "template.json").write_text(
-        json.dumps(
-            {
-                "format_version": 1,
-                "family": "middleware",
-                "adapter": "agent-middleware",
-                "name": "Safe recipe",
-                "description": "Safe middleware package.",
-                "config_schema": {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": False,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
     (package_dir / "main.py").write_text(source, encoding="utf-8")
     broken_dir = templates_dir / "broken-package"
     broken_dir.mkdir()
-    (broken_dir / "template.json").write_text("{}", encoding="utf-8")
 
     client = make_client(tmp_path, monkeypatch)
     response = client.get("/api/python-package-templates/middleware")
@@ -185,15 +167,10 @@ def test_custom_middleware_catalog_scans_recipes_without_executing_them(
     assert item["key"] == "safe-recipe"
     assert item["family"] == "middleware"
     assert item["adapter"] == "agent-middleware"
-    assert item["name"] == "Safe recipe"
-    assert item["description"] == "Safe middleware package."
-    assert item["config_schema"] == {
-        "type": "object",
-        "properties": {},
-        "required": [],
-        "additionalProperties": False,
-    }
-    assert item["requirements_source"] == ""
+    assert item["name"] == "safe-recipe"
+    assert item["files"] == [
+        {"path": "main.py", "content": source, "exists": True}
+    ]
     assert "requirements_fingerprint" not in item
     assert "dependency_status" not in item
     assert set(result["errors"]) == {"broken-package"}
@@ -237,7 +214,7 @@ def test_saving_custom_middleware_source_does_not_execute_it(
     source = (
         "from pathlib import Path\n"
         f"Path({str(marker)!r}).write_text('executed')\n"
-        "def create_middleware(config, agent):\n"
+        "def create_middleware(agent):\n"
         "    return object()\n"
     )
     package_dir = (
@@ -249,23 +226,6 @@ def test_saving_custom_middleware_source_does_not_execute_it(
         / "side-effect"
     )
     package_dir.mkdir(parents=True, exist_ok=True)
-    (package_dir / "template.json").write_text(
-        json.dumps(
-            {
-                "format_version": 1,
-                "family": "middleware",
-                "adapter": "agent-middleware",
-                "name": "Side effect",
-                "description": "Static package.",
-                "config_schema": {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": False,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
     (package_dir / "main.py").write_text(source, encoding="utf-8")
     client = make_client(tmp_path, monkeypatch)
     selected = client.get(
@@ -276,12 +236,14 @@ def test_saving_custom_middleware_source_does_not_execute_it(
         "/api/blocks/custom-middleware",
         json={
             "name": "Static only",
-            "python_package": {"folder": "", "config": {}},
+            "python_package": {"folder": "", "editable_files": ["main.py"]},
             "python_package_files": {
                 "template_key": selected["key"],
                 "revision": selected["revision"],
-                "main_source": selected["main_source"],
-                "requirements_source": selected["requirements_source"],
+                "files": [
+                    {"path": file["path"], "content": file["content"]}
+                    for file in selected["files"] if file["path"] == "main.py"
+                ],
             },
         },
     )

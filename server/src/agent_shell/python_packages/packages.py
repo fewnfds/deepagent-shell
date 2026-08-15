@@ -9,8 +9,6 @@ import stat
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
-
-from agent_shell.python_packages.config import PythonPackageConfigSchema
 from agent_shell.python_packages.contracts import (
     PACKAGE_ID_PATTERN,
     parse_package_folder,
@@ -33,10 +31,6 @@ class _ManifestBase(BaseModel):
     format_version: Literal[1]
     family: PythonPackageFamily
     adapter: PythonPackageAdapter
-    name: str = Field(min_length=1, max_length=120)
-    description: str = Field(default="", max_length=1024)
-    config_schema: PythonPackageConfigSchema
-
     @model_validator(mode="after")
     def validate_adapter_family(self) -> "_ManifestBase":
         expected = {
@@ -46,10 +40,6 @@ class _ManifestBase(BaseModel):
         if self.family != expected:
             raise ValueError("adapter does not belong to the declared family")
         return self
-
-
-class PythonPackageTemplateManifest(_ManifestBase):
-    pass
 
 
 class PythonPackageManifest(_ManifestBase):
@@ -126,8 +116,8 @@ def _read_manifest(
     path: Path,
     *,
     label: str,
-    model: type[PythonPackageManifest] | type[PythonPackageTemplateManifest],
-) -> PythonPackageManifest | PythonPackageTemplateManifest:
+    model: type[PythonPackageManifest],
+) -> PythonPackageManifest:
     try:
         raw_manifest = json.loads(_read_text(path, label=label))
     except json.JSONDecodeError as exc:
@@ -157,11 +147,11 @@ def _parse_main(folder: Path) -> tuple[str, ast.Module]:
         ) from exc
 
 
-def _required_files(folder: Path, manifest_name: str) -> None:
-    if not (folder / manifest_name).is_file() or not (folder / "main.py").is_file():
+def _required_files(folder: Path) -> None:
+    if not (folder / "package.json").is_file() or not (folder / "main.py").is_file():
         raise ResourceScanError(
             "resource.error.pythonPackage.filesRequired",
-            f"The folder must contain {manifest_name} and main.py.",
+            "The folder must contain package.json and main.py.",
         )
 
 
@@ -212,32 +202,40 @@ def scan_python_package_template(
             "Python package template folder names must use lowercase letters, digits, underscores, or hyphens.",
         )
     entries = _inspect_folder(folder)
-    _required_files(folder, "template.json")
-    manifest = _read_manifest(
-        folder / "template.json",
-        label="template.json",
-        model=PythonPackageTemplateManifest,
-    )
-    if manifest.family != family or manifest.adapter != adapter:
+    if not (folder / "main.py").is_file():
         raise ResourceScanError(
-            "resource.error.pythonPackage.typeMismatch",
-            "The Python package template does not implement the expected adapter.",
-            {"expected_family": family, "expected_adapter": adapter},
+            "resource.error.pythonPackage.filesRequired",
+            "The template folder must contain main.py.",
         )
-    source, tree = _parse_main(folder)
+    _source, tree = _parse_main(folder)
     _validate_factory(tree, name=factory_name, parameters=factory_parameters)
     requirements = read_package_requirements(folder)
-    requirements_path = folder / "requirements.txt"
+    text_files: list[dict[str, object]] = []
+    for path in sorted(
+        (entry for entry in entries if entry.is_file()),
+        key=lambda value: value.relative_to(folder).as_posix(),
+    ):
+        try:
+            content = _read_text(path, label=path.name)
+        except ResourceScanError as exc:
+            if exc.message_key == "resource.error.pythonPackage.invalidEncoding":
+                continue
+            raise
+        text_files.append(
+            {
+                "path": path.relative_to(folder).as_posix(),
+                "content": content.replace("\r\n", "\n").replace("\r", "\n"),
+                "exists": True,
+            }
+        )
     return {
-        **manifest.model_dump(mode="json", by_alias=True, exclude_none=True),
+        "format_version": 1,
         "key": folder.name,
         "folder": folder.name,
-        "main_source": source,
-        "requirements_source": (
-            _read_text(requirements_path, label="requirements.txt")
-            if requirements_path.is_file()
-            else ""
-        ),
+        "family": family,
+        "adapter": adapter,
+        "name": folder.name,
+        "files": text_files,
         "python_requirements": list(requirements.values),
         "revision": _directory_revision(folder, entries),
     }
@@ -290,7 +288,7 @@ def scan_python_package(
             "The Python package folder does not belong to the component configuration.",
         )
     entries = _inspect_folder(folder)
-    _required_files(folder, "package.json")
+    _required_files(folder)
     manifest = _read_manifest(
         folder / "package.json",
         label="package.json",
@@ -404,36 +402,9 @@ def inspect_python_package_draft(
         if error is None:
             error = exc
 
-    main_source = ""
-    main_path = folder / "main.py"
-    if main_path.is_file():
-        try:
-            main_source = _read_text(main_path, label="main.py").replace(
-                "\r\n", "\n"
-            ).replace("\r", "\n")
-        except ResourceScanError as exc:
-            error = exc
-    elif error is None:
-        error = ResourceScanError(
-            "resource.error.pythonPackage.filesRequired",
-            "The folder must contain package.json and main.py.",
-        )
-
-    requirements_source = ""
-    requirements_path = folder / "requirements.txt"
-    if requirements_path.is_file():
-        try:
-            requirements_source = _read_text(
-                requirements_path, label="requirements.txt"
-            ).replace("\r\n", "\n").replace("\r", "\n")
-        except ResourceScanError as exc:
-            error = exc
-
     return {
         "manifest": manifest,
         "metadata": metadata,
-        "main_source": main_source,
-        "requirements_source": requirements_source,
         "revision": revision,
         "error": error.as_dict() if error is not None else None,
     }
@@ -476,7 +447,6 @@ __all__ = [
     "PythonPackageAdapter",
     "PythonPackageFamily",
     "PythonPackageManifest",
-    "PythonPackageTemplateManifest",
     "inspect_python_package_draft",
     "resolve_python_package",
     "resolve_owned_python_package_folder",

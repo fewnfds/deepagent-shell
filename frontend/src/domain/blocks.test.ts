@@ -113,10 +113,12 @@ describe('block adapters', () => {
     const middlewareDraft = customMiddlewareAdapter.fromApi({
       id: 'middleware-id',
       name: 'Middleware',
-      python_package: { folder: 'owner--template--instance', config: { mode: 'strict' } },
+      python_package: { folder: 'owner--template--instance', editable_files: ['main.py', 'requirements.txt'] },
       python_package_files: {
-        main_source: 'def create_middleware(config, agent):\n    return middleware\n',
-        requirements_source: 'httpx==1\n',
+        files: [
+          { path: 'main.py', content: 'def create_middleware(agent):\n    return middleware\n', exists: true },
+          { path: 'requirements.txt', content: 'httpx==1\n', exists: true },
+        ],
         revision: 'revision',
       },
       python_package_error: {
@@ -126,11 +128,13 @@ describe('block adapters', () => {
     })
     const payload = customMiddlewareAdapter.toPayload(middlewareDraft)
     expect(payload.python_package).toEqual({
-      folder: 'owner--template--instance', config: { mode: 'strict' },
+      folder: 'owner--template--instance', editable_files: ['main.py', 'requirements.txt'],
     })
     expect(payload.python_package_files).toMatchObject({
-      main_source: expect.any(String),
-      requirements_source: 'httpx==1\n',
+      files: [
+        { path: 'main.py', content: expect.any(String) },
+        { path: 'requirements.txt', content: 'httpx==1\n' },
+      ],
       revision: 'revision',
     })
     expect(middlewareDraft.python_package_error).toEqual({
@@ -196,19 +200,18 @@ describe('block adapters', () => {
       id: 'middleware', name: 'Middleware',
       python_package: {
         folder: 'owner--template--instance',
-        config: ['invalid'],
+        editable_files: ['main.py', 42],
       },
       python_package_files: {
-        main_source: 42,
-        requirements_source: ['invalid'],
+        files: ['invalid'],
         revision: 7,
       },
     } as never)
     expect(middleware.python_package).toEqual({
-      folder: 'owner--template--instance', config: {},
+      folder: 'owner--template--instance', editable_files: ['main.py'],
     })
     expect(middleware.python_package_files).toMatchObject({
-      main_source: '', requirements_source: '', revision: '',
+      files: [{ path: 'main.py', content: '', exists: false }], revision: '',
     })
 
     const output = outputModeAdapter.fromApi({

@@ -11,7 +11,7 @@ from agent_shell.python_packages.packages import (
 _FAMILY = "middleware"
 _ADAPTER = "agent-middleware"
 _FACTORY = "create_middleware"
-_PARAMETERS = ("config", "agent")
+_PARAMETERS = ("agent",)
 
 
 def scan_middleware_package(

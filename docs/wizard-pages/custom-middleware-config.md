@@ -6,18 +6,18 @@
 name: Request Middleware
 python_package:
   folder: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa--request-middleware--bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb
-  config: {}
+  editable_files:
+    - main.py
 ```
 
 新建配置时，编辑器从 `data/templates/agent/custom_middleware/<template-key>/` 加载静态模板。首次保存会把模板完整复制到
 `data/config/python_package_instances/agent-middleware/`，生成属于该配置的 `package.json` 和文件夹引用。此后配置只读取、
 编辑自己的扩展代码目录，模板修改不会传播。
 
-编辑器提供完整 `main.py`、`requirements.txt` 和 `config_schema` 生成的普通输入框。普通输入只更新
-`python_package.config`；代码框保存对应文件。额外 Python 模块、vendor 目录和其他文件由用户直接在扩展代码目录维护，
-编辑器不会解析或改写。
+编辑器默认显示 `main.py`。用户可以逐行增加包内相对文件路径；编辑器按清单顺序显示并保存这些文本文件。
+不存在的文件只显示警告，填写内容并保存后创建；未列出的额外文件保持原样。
 
-`main.py` 必须提供 `create_middleware(config, agent)`，并返回官方 LangChain `AgentMiddleware` 或非空列表/元组。这里的
+`main.py` 必须提供 `create_middleware(agent)`，并返回官方 LangChain `AgentMiddleware` 或非空列表/元组。这里的
 `agent` 是只含 `id`、`type`、`name`、`package_id` 的 Agent Shell 身份字典，不是 LangChain Agent 对象。
 目录结构、扩展模板/配置扩展生命周期、依赖与安全边界见[文件化 Python 扩展](../user-guide/middleware-packages.md)。
 

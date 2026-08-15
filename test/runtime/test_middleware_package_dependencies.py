@@ -26,20 +26,13 @@ def write_package(root: Path, owner_id: str, package_id: str) -> tuple[str, Path
                 "id": package_id,
                 "family": "middleware",
                 "adapter": "agent-middleware",
-                "name": package_id,
-                "description": "Dependency test package.",
-                "config_schema": {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": False,
-                },
             }
         ),
         encoding="utf-8",
     )
     (folder / "main.py").write_text(
         "from langchain.agents.middleware import AgentMiddleware\n"
-        "def create_middleware(config, agent):\n"
+        "def create_middleware(agent):\n"
         "    return AgentMiddleware()\n",
         encoding="utf-8",
     )
@@ -126,7 +119,7 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
         owner_id,
         {
             "name": "middleware",
-            "python_package": {"folder": folder_name, "config": {}},
+            "python_package": {"folder": folder_name, "editable_files": ["main.py"]},
         },
     )
     block_store.save_block(
@@ -134,7 +127,7 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
         invalid_owner_id,
         {
             "name": "invalid middleware",
-            "python_package": {"folder": invalid_folder_name, "config": {}},
+            "python_package": {"folder": invalid_folder_name, "editable_files": ["main.py"]},
         },
     )
     main_agent_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"

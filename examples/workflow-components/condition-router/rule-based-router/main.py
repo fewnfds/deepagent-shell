@@ -1,9 +1,9 @@
-def create_router(config):
-    # 这些值来自 template.json 的 config_schema，用户可以在组件页面修改。
-    state_key = config["state_key"]
-    threshold = config["threshold"]
-    matched_branch = config["matched_branch"]
-    fallback_branch = config["fallback_branch"]
+def create_router():
+    # 直接在扩展代码中声明规则；组件页面可以编辑这个文件。
+    state_key = "score"
+    threshold = 60
+    matched_branch = "matched"
+    fallback_branch = "otherwise"
 
     async def route(state, context):
         # 在这里读取上游节点写入的 Workflow State。

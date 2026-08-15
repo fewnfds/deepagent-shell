@@ -1,14 +1,17 @@
 <script setup lang="ts">
 import { LteAlert, LteButton, LteTextarea } from '@adminlte/vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type { LocalizedMessagePayload, PythonPackageTemplate } from '@/api'
-import PythonPackageConfigForm from '@/components/PythonPackageConfigForm.vue'
+import type {
+  LocalizedMessagePayload,
+  PythonPackageFile,
+  PythonPackageTemplate,
+} from '@/api'
 import {
   applyPythonPackageTemplate,
   type PythonPackageDraftState,
 } from '@/domain/blocks/pythonPackage'
-import { pythonPackageConfigDefaults } from '@/domain/pythonPackageConfigSchema'
 import { useEditorModel } from '@/editors/shared/useEditorModel'
 
 const props = withDefaults(defineProps<{
@@ -26,6 +29,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: PythonPackageDraftState]
+  'load-files': [paths: string[]]
   refresh: []
 }>()
 
@@ -35,12 +39,62 @@ const draft = useEditorModel(
   (value) => emit('update:modelValue', value),
 )
 
+const selectedTemplate = computed(() => props.catalog.find(
+  (item) => item.key === draft.python_package_files.template_key,
+))
+
 function selectTemplate(key: string): void {
-  const selected = props.catalog.find((item) => item.key === key)
-  applyPythonPackageTemplate(draft, selected)
-  if (selected) {
-    draft.python_package.config = pythonPackageConfigDefaults(selected.config_schema)
-  }
+  applyPythonPackageTemplate(draft, props.catalog.find((item) => item.key === key))
+}
+
+function templateFile(path: string): PythonPackageFile | undefined {
+  return selectedTemplate.value?.files.find((file) => file.path === path)
+}
+
+function isRelativePath(path: string): boolean {
+  return Boolean(path)
+    && !path.startsWith('/')
+    && !path.startsWith('\\')
+    && !path.includes('\\')
+    && !path.includes(':')
+    && !path.split('/').some((part) => !part || part === '.' || part === '..')
+    && path.split('/')[0]?.toLowerCase() !== 'package.json'
+}
+
+function updateEditablePaths(): void {
+  const paths = draft.editable_paths_source
+    .split(/\r?\n/)
+    .map((value) => value.trim())
+    .filter((value, index, values) => value !== '' && values.indexOf(value) === index)
+  const current = new Map(draft.python_package_files.files.map((file) => [file.path, file]))
+  const newPaths = paths.filter((path) => isRelativePath(path) && !current.has(path))
+  draft.python_package.editable_files = paths
+  draft.python_package_files.files = paths.map((path) => {
+    const existing = current.get(path)
+    if (existing) return existing
+    const fromTemplate = templateFile(path)
+    return fromTemplate
+      ? {
+        path,
+        content: fromTemplate.content,
+        exists: fromTemplate.exists !== false,
+        readable: fromTemplate.readable !== false,
+      }
+      : {
+        path,
+        content: '',
+        ...(props.saved ? {} : { exists: false }),
+        readable: true,
+      }
+  })
+  if (props.saved && newPaths.length) emit('load-files', newPaths)
+}
+
+function pathWarning(file: PythonPackageFile): string {
+  if (!isRelativePath(file.path)) return t('editors.pythonPackage.pathInvalid')
+  if (file.exists === false) return t('editors.pythonPackage.fileMissing')
+  if (file.readable === false) return t('editors.pythonPackage.fileUnreadable')
+  return ''
 }
 
 function resourceError(error: LocalizedMessagePayload): string {
@@ -102,43 +156,49 @@ function resourceError(error: LocalizedMessagePayload): string {
         :title="resourceError(draft.python_package_error)"
       />
 
-      <template v-if="draft.python_package_manifest || saved">
+      <template v-if="draft.python_package_files.files.length || draft.python_package_files.template_key">
         <div class="mt-3">
-          <label class="form-label" :for="`${idPrefix}-main-source`">
-            {{ t('editors.pythonPackage.mainSource') }}
+          <label class="form-label" :for="`${idPrefix}-paths`">
+            {{ t('editors.pythonPackage.files') }}
           </label>
+          <textarea
+            :id="`${idPrefix}-paths`"
+            v-model="draft.editable_paths_source"
+            class="form-control font-monospace"
+            rows="2"
+            spellcheck="false"
+            @change="updateEditablePaths"
+          />
+          <div class="form-text">{{ t('editors.pythonPackage.filesHint') }}</div>
+        </div>
+
+        <div
+          v-for="(file, index) in draft.python_package_files.files"
+          :key="`${file.path}-${index}`"
+          class="mt-3"
+        >
+          <label class="form-label" :for="`${idPrefix}-file-${index}`">{{ file.path }}</label>
           <LteTextarea
-            :id="`${idPrefix}-main-source`"
-            v-model="draft.python_package_files.main_source"
+            :id="`${idPrefix}-file-${index}`"
+            v-model="file.content"
             class="font-monospace"
             :rows="18"
+            spellcheck="false"
+          />
+          <LteAlert
+            v-if="pathWarning(file)"
+            class="mt-2 mb-0"
+            theme="warning"
+            :title="pathWarning(file)"
           />
         </div>
-        <div class="mt-3">
-          <label class="form-label" :for="`${idPrefix}-requirements`">
-            {{ t('editors.pythonPackage.requirements') }}
-          </label>
-          <LteTextarea
-            :id="`${idPrefix}-requirements`"
-            v-model="draft.python_package_files.requirements_source"
-            class="font-monospace"
-            :rows="5"
-          />
-        </div>
+
         <LteAlert
           v-if="saved && draft.dependency_status && draft.dependency_status !== 'ready'"
           class="mt-3 mb-0"
           theme="info"
           :title="t(`editors.pythonPackage.status.${draft.dependency_status}`)"
         />
-        <div v-if="draft.python_package_manifest" class="mt-3">
-          <h4 class="h5">{{ t('editors.pythonPackage.config') }}</h4>
-          <PythonPackageConfigForm
-            :id-prefix="`${idPrefix}-config`"
-            v-model="draft.python_package.config"
-            :schema="draft.python_package_manifest.config_schema"
-          />
-        </div>
       </template>
     </div>
     <div v-if="Object.keys(errors).length" class="card-body">
