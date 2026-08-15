@@ -15,7 +15,6 @@ export type BlockType =
   | 'subagent'
   | 'summarization'
   | 'prompt-caching'
-  | 'workflow-input-context'
 
 export type WorkflowComponentType = 'workflow-prepare' | 'workflow-event-output' | 'condition-router'
 export type ManagedComponentType = BlockType | WorkflowComponentType

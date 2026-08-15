@@ -199,6 +199,49 @@ def test_package_materializes_official_langchain_middleware(tmp_path: Path) -> N
     asyncio.run(runtime.close())
 
 
+def test_package_factory_can_request_runtime_context_by_name(tmp_path: Path) -> None:
+    folder_name, _folder = write_private_middleware(
+        tmp_path,
+        "66666666-6666-4666-8666-666666666666",
+        "from langchain.agents.middleware import AgentMiddleware\n"
+        "class Configured(AgentMiddleware):\n"
+        "    def __init__(self, config, backend, marker):\n"
+        "        super().__init__()\n"
+        "        self.config = config\n"
+        "        self.backend = backend\n"
+        "        self.marker = marker\n"
+        "def create_middleware(config, backend, marker, **kwargs):\n"
+        "    return Configured(config, backend, marker)\n",
+    )
+    backend = object()
+    runtime = MiddlewarePackageRuntime(
+        request_id="request-context",
+        owners=[
+            MiddlewareOwner(
+                id="main",
+                type="main_agent",
+                name="Main",
+                packages=((
+                    OWNER_ID,
+                    {"folder": folder_name, "editable_files": ["main.py"]},
+                ),),
+            )
+        ],
+        packages_dir=tmp_path / "data" / "config" / "python_package_instances",
+        runtime_root=tmp_path / "runtime",
+    )
+
+    materialized = runtime.middleware_for(
+        "main",
+        context={"config": {"enabled": True}, "backend": backend, "marker": "ok"},
+    )
+
+    assert materialized[0].config == {"enabled": True}
+    assert materialized[0].backend is backend
+    assert materialized[0].marker == "ok"
+    asyncio.run(runtime.close())
+
+
 def test_package_runtime_preserves_ordered_middleware_references(tmp_path: Path) -> None:
     first_id = "11111111-1111-4111-8111-111111111111"
     second_id = "22222222-2222-4222-8222-222222222222"

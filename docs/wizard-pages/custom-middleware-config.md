@@ -10,17 +10,20 @@ python_package:
     - main.py
 ```
 
-新建配置时，可以从 `data/templates/agent/custom_middleware/<template-key>/` 加载静态模板，也可以【套用空模板】从空的
-`main.py` 开始编辑。首次保存会把当前草稿写入
+新建配置时，可以从 `data/templates/agent/custom_middleware/<template-key>/` 加载用户模板，也可以选择
+`examples/agent-components/custom-middleware/<example-key>/` 提供的 `内置示例-<example-key>`，或【套用空模板】从空的
+`main.py` 开始编辑。用户模板与内置示例可以同名。首次保存会把当前草稿写入
 `data/config/python_package_instances/agent-middleware/`，生成属于该配置的 `package.json` 和文件夹引用。此后配置只读取、
 编辑自己的扩展代码目录，模板修改不会传播。
 
 编辑器默认显示 `main.py`。用户可以逐行增加包内相对文件路径；编辑器按清单顺序显示并保存这些文本文件。
 不存在的文件只显示警告，填写内容并保存后创建；未列出的额外文件保持原样。
 
-`main.py` 必须提供 `create_middleware(agent)`，并且只返回一个官方 LangChain `AgentMiddleware`。一个 Middleware 类可以实现
-多个官方 hook；这些 hook 属于同一个实例，不单独排序。这里的
-`agent` 是只含 `id`、`type`、`name`、`package_id` 的 Agent Shell 身份字典，不是 LangChain Agent 对象。
+`main.py` 必须提供同步的 `create_middleware` 工厂，并且只返回一个官方 LangChain `AgentMiddleware`。工厂参数不由
+Agent Shell 固定；运行时会按参数名提供当前可用的 `agent`、`package`、`block`、`assembly`、`backend`、`config`、`references`、
+`scope`、`workflow_node_id` 和 `request_id` 等值，也可以使用 `**kwargs` 接收全部值。一个 Middleware 类可以实现多个官方
+hook；这些 hook 属于同一个实例，不单独排序。这里的 `agent` 是包含 `id`、`type`、`name`、`package_id` 的 Agent Shell 身份字典，
+不是 LangChain Agent 对象。
 目录结构、扩展模板/配置扩展生命周期、依赖与安全边界见[文件化 Python 扩展](../user-guide/middleware-packages.md)。
 
 每份 Custom Middleware 配置只定义一个 Middleware。Main Agent 和 Subagent 分别保存自己的有序 `middleware_refs`，按列表
@@ -28,3 +31,7 @@ python_package:
 
 排序遵循 LangChain 官方 middleware 列表语义：`before_*` 按列表从前到后执行，`after_*` 按列表从后到前执行，
 `wrap_*` 按列表形成嵌套调用。管理台调整的是 Middleware 实例顺序，不对同一实例内部的多个 hook 分别排序。
+
+Workflow Input Context 现在只是内置 Custom Middleware 示例。它没有单独的配置页面或装配顺序；从
+`内置示例-workflow-input-context` 创建配置后，直接编辑 `main.py` 中的集中配置和变换函数。概念与运行边界见
+[Workflow Input Context](../user-guide/workflow-input-context.md)。

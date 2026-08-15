@@ -64,18 +64,10 @@ Main Agent 的 middleware 实例。
 
 ### Workflow 输入上下文 Middleware
 
-在 Components 中创建“Workflow 输入上下文”组件，再由 Main Agent 或 Subagent 的 capability refs 选择它。
-它是独立源码目录中的内置实现，后端只负责固定物化；前端沿用本页的组件仓库和 Agent 覆写流程，不创建第二套
-插件页面。
-
-运行顺序是：选择 Main Agent 请求快照或 Subagent delegated messages -> 可选
-`transform(read_file, config, workflow_state, agent_state, context)` -> 按字符阈值上提非顶部 system ->
-把剩余非顶部 system 转为 user -> 顺序追加槽位。内部规划消息是本次调用的可变副本，`read_file` 只能读 Workflow backend
-中的虚拟路径，`config` 是组件配置副本，`workflow_state` 是当前父图快照，`agent_state` 是当前私有 Agent State，
-`context` 保存固定请求和当前 invocation 身份。transform 返回 partial Agent State update；其中 `messages` 用于本次
-Agent 的私有对话。槽位按主文件、fallback 文件、literal 选择内容，再按 `max_chars` 截断；`truncate_if_missing` 会在全部来源
-缺失时停止后续槽位。关闭组件或从该 Agent capability 装配中移除即可跳过，不影响
-原始 `WorkflowRuntimeContext.messages`。
+Workflow Input Context 通过普通 Custom Middleware 的 `abefore_agent` 构造当前 Agent 私有消息。它没有专用 capability 或
+装配槽位；从 `内置示例-workflow-input-context` 创建配置后，由 Main Agent 或 Subagent 的有序 `middleware_refs` 选择并排序。
+Main Agent 可以读取不可变的请求快照，Subagent 默认使用 delegated messages；前序 Agent 输出和 Workflow 文件都必须由当前
+WIC 代码显式选择。完整约定见[Workflow Input Context](workflow-input-context.md)。
 
 ### 准备
 

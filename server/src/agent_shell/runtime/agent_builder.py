@@ -19,9 +19,6 @@ from agent_shell.contracts import (
 )
 from agent_shell.provider_http import PROVIDER_HTTP_TIMEOUT, ProviderHttpClients
 from agent_shell.provider_secrets import ProviderCredentialError, ProviderSecretResolver
-from agent_shell.plugins.workflow_input_context.factory import (
-    materialize_workflow_input_context_middleware,
-)
 from agent_shell.runtime.capabilities import (
     DeepAgentsCapabilityError,
     DeepAgentsWorkspace,
@@ -216,21 +213,6 @@ class AgentBuilder:
         workspace: DeepAgentsWorkspace | None = None,
         disabled_capabilities: frozenset[str] = frozenset(),
     ) -> MaterializedAgentProfile:
-        for component_type in ("workflow-input-context",):
-            component = selected_blocks.get(component_type)
-            if component is None:
-                continue
-            metadata = self.script_dependency_metadata(component_type, component)
-            if metadata["dependency_status"] != "ready":
-                raise configuration_error(
-                    "script_dependencies_not_ready",
-                    "Restart Agent Shell to prepare the selected script component dependencies.",
-                    status_code=409,
-                    scope=scope,
-                    owner_id=owner_id,
-                    owner_name=owner_name,
-                    path=f"capability_refs.{component_type}",
-                )
         model_id = references["model"]
         model_block = selected_blocks["model"]
         exception_retry = selected_blocks.get("exception-retry")
@@ -392,31 +374,6 @@ class AgentBuilder:
         skill_sources = deepagents.skill_sources
 
         extra_middleware: list[Any] = []
-        workflow_input_context = selected_blocks.get("workflow-input-context")
-        if workflow_input_context is not None:
-            try:
-                extra_middleware.append(
-                    materialize_workflow_input_context_middleware(
-                        {
-                            key: value
-                            for key, value in workflow_input_context.items()
-                            if key != "id"
-                        },
-                        backend=backend,
-                        agent_scope=scope,
-                    )
-                )
-            except Exception as exc:
-                raise configuration_error(
-                    "middleware_materialization_failed",
-                    "The selected Workflow input context configuration could not be constructed.",
-                    status_code=422,
-                    scope=scope,
-                    owner_id=owner_id,
-                    owner_name=owner_name,
-                    path="capability_refs.workflow-input-context",
-                ) from exc
-
         summarization = selected_blocks.get("summarization")
         if summarization is not None:
             try:
@@ -462,7 +419,23 @@ class AgentBuilder:
         package_middleware: tuple[Any, ...] = ()
         if self._middleware_runtime is not None:
             try:
-                package_middleware = self._middleware_runtime.middleware_for(owner_id)
+                package_middleware = self._middleware_runtime.middleware_for(
+                    owner_id,
+                    context={
+                        "config": dict(selected_blocks),
+                        "blocks": dict(selected_blocks),
+                        "references": dict(references),
+                        "backend": backend,
+                        "deepagents": deepagents,
+                        "filesystem_mode": filesystem_mode,
+                        "scope": scope,
+                        "owner_id": owner_id,
+                        "owner_name": owner_name,
+                        "workflow_node_id": workflow_node_id,
+                        "model": model,
+                        "tools": tuple(tools),
+                    },
+                )
             except AgentRuntimeError as exc:
                 raise reported_error(
                     exc,

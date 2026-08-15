@@ -159,7 +159,7 @@ def _validate_factory(
     tree: ast.Module,
     *,
     name: str,
-    parameters: tuple[str, ...],
+    parameters: tuple[str, ...] | None,
 ) -> None:
     functions = [
         node
@@ -167,13 +167,15 @@ def _validate_factory(
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         and node.name == name
     ]
-    signature = ", ".join(parameters)
+    signature = ", ".join(parameters or ())
     if len(functions) != 1 or isinstance(functions[0], ast.AsyncFunctionDef):
         raise ResourceScanError(
             "resource.error.pythonPackage.entrypointRequired",
             f"main.py must define exactly one module-level def {name}({signature}).",
         )
     function = functions[0]
+    if parameters is None:
+        return
     positional = [*function.args.posonlyargs, *function.args.args]
     if (
         [argument.arg for argument in positional] != list(parameters)
@@ -194,7 +196,7 @@ def scan_python_package_template(
     family: PythonPackageFamily,
     adapter: PythonPackageAdapter,
     factory_name: str,
-    factory_parameters: tuple[str, ...],
+    factory_parameters: tuple[str, ...] | None,
 ) -> dict[str, object]:
     if not _TEMPLATE_KEY.fullmatch(folder.name):
         raise ResourceScanError(
@@ -247,7 +249,7 @@ def scan_python_package_templates(
     family: PythonPackageFamily,
     adapter: PythonPackageAdapter,
     factory_name: str,
-    factory_parameters: tuple[str, ...],
+    factory_parameters: tuple[str, ...] | None,
 ) -> dict[str, object]:
     catalog: list[dict[str, object]] = []
     errors: dict[str, dict[str, object]] = {}
@@ -278,7 +280,7 @@ def scan_python_package(
     family: PythonPackageFamily,
     adapter: PythonPackageAdapter,
     factory_name: str,
-    factory_parameters: tuple[str, ...],
+    factory_parameters: tuple[str, ...] | None,
     runtime_root: Path | None = None,
 ) -> dict[str, object]:
     parsed = parse_package_folder(folder.name)
@@ -343,7 +345,7 @@ def inspect_python_package_draft(
     family: PythonPackageFamily,
     adapter: PythonPackageAdapter,
     factory_name: str,
-    factory_parameters: tuple[str, ...],
+    factory_parameters: tuple[str, ...] | None,
     runtime_root: Path | None = None,
 ) -> dict[str, object]:
     parsed = parse_package_folder(folder.name)
@@ -418,7 +420,7 @@ def resolve_python_package(
     family: PythonPackageFamily,
     adapter: PythonPackageAdapter,
     factory_name: str,
-    factory_parameters: tuple[str, ...],
+    factory_parameters: tuple[str, ...] | None,
     runtime_root: Path | None = None,
 ) -> tuple[dict[str, object], Path] | None:
     folder = resolve_owned_python_package_folder(

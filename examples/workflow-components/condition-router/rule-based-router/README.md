@@ -8,21 +8,16 @@
 - `main.py`：提供同步工厂 `create_router()`，返回异步路由函数；规则参数直接在这里声明。
 - `requirements.txt`：默认内容为空，因此不会引入额外依赖；需要第三方库时再逐行填写。
 
-## 安装模板
+## 使用示例
 
-把整个 `rule-based-router` 文件夹复制到当前实例 data root：
-
-```text
-data/templates/workflow/condition_router/rule-based-router/
-```
-
-也可以在【系统 / 文件管理】的 Python templates scope 中建立同样的目录和文件。
-模板是静态资源；只有从模板保存组件配置后生成的 Python 扩展才会参与运行和依赖准备。
+源码启动时，管理台会自动把本目录发现为 `内置示例-rule-based-router`。不需要复制到 data root；只有从示例保存
+组件配置后生成的独立 Python 扩展才会参与运行和依赖准备。如需维护自己的同名模板，仍可在
+`data/templates/workflow/condition_router/rule-based-router/` 创建它，两个 catalog 项不会冲突。
 
 ## 创建配置
 
 1. 打开 Workflow 组件中的 Condition Router 页面，新建配置并刷新模板目录。
-2. 选择“分数阈值条件路由”。
+2. 选择 `内置示例-rule-based-router`。
 3. 填写配置名称；保存后在组件页面编辑 `main.py` 来修改规则。
 4. 保存配置。首次保存会为该配置复制一份独立的 Python 扩展，后续修改不会影响本模板。
 

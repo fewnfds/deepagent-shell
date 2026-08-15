@@ -15,7 +15,6 @@
 | 11 | [委派能力](subagent-config.md) | `subagent` |
 | 12 | [上下文摘要](summarization-config.md) | `summarization` |
 | 13 | [Prompt 缓存](prompt-caching-config.md) | `prompt-caching` |
-| 14 | [Workflow 输入上下文](workflow-input-context-config.md) | `workflow-input-context` |
 | Workflow | [准备](workflow-prepare-config.md) | `workflow-prepare` |
 | Workflow | [事件输出](workflow-event-output-config.md) | `workflow-event-output` |
 | Workflow | [条件路由](condition-router-config.md) | `condition-router` |

@@ -1,9 +1,6 @@
 from types import SimpleNamespace
 
 from agent_shell.capability_manifest import DEFAULT_MIDDLEWARE_CAPABILITY_TYPES
-from agent_shell.plugins.workflow_input_context.middleware import (
-    WorkflowInputContextMiddleware,
-)
 from agent_shell.runtime import agent_builder, deepagents_harness
 from agent_shell.runtime.agent_builder import AgentBuilder
 
@@ -118,51 +115,3 @@ def test_agent_builder_disabled_capabilities_override_deep_agents_default_stack(
     assert {
         name: type(final_by_name[name]) for name in replacement_types
     } == replacement_types
-
-
-def test_agent_builder_materializes_workflow_input_context_as_extra_middleware(
-    tmp_path,
-    monkeypatch,
-) -> None:
-    workspace = SimpleNamespace(initial_files={})
-    monkeypatch.setattr(
-        agent_builder,
-        "_build_chat_model",
-        lambda _block, _credential, _http_clients: object(),
-    )
-    monkeypatch.setattr(
-        agent_builder,
-        "build_deepagents_capabilities",
-        lambda *_args, **_kwargs: SimpleNamespace(
-            backend=object(),
-            middleware=(),
-            initial_files={},
-            skill_sources=(),
-            permissions=(),
-            workspace=workspace,
-        ),
-    )
-    builder = AgentBuilder(
-        SimpleNamespace(resolve_model=lambda _model_id: None),
-        custom_tools_dir=tmp_path / "tools",
-        python_packages_dir=tmp_path / "python-packages",
-        runtime_dir=tmp_path / "runtime",
-        skills_dir=tmp_path / "skills",
-        validation=object(),
-        provider_http_clients=object(),
-    )
-
-    profile = builder._materialize_profile(
-        {"model": "model-id", "workflow-input-context": "input-id"},
-        {
-            "model": {"provider": "openai", "model": "gpt-5.3-codex"},
-            "workflow-input-context": {"name": "Input context"},
-        },
-        filesystem_mode="default-shared",
-        scope="subagent",
-        owner_id="subagent-id",
-        owner_name="Worker",
-    )
-
-    assert len(profile.extra_middleware) == 1
-    assert isinstance(profile.extra_middleware[0], WorkflowInputContextMiddleware)

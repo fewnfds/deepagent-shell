@@ -26,7 +26,7 @@ class PythonPackageLoader:
         family: PythonPackageFamily,
         adapter: PythonPackageAdapter,
         factory_name: str,
-        factory_parameters: tuple[str, ...],
+        factory_parameters: tuple[str, ...] | None,
     ) -> None:
         self._request_id = request_id
         self._packages_dir = packages_dir

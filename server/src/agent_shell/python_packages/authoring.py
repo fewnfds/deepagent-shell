@@ -32,15 +32,17 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True, slots=True)
 class PackageAdapterSpec:
     template_parts: tuple[str, str]
+    example_parts: tuple[str, str]
     family: str
     adapter: str
     factory_name: str
-    factory_parameters: tuple[str, ...]
+    factory_parameters: tuple[str, ...] | None
 
 
 PACKAGE_COMPONENT_SPECS: dict[str, PackageAdapterSpec] = {
     "condition-router": PackageAdapterSpec(
         template_parts=("workflow", "condition_router"),
+        example_parts=("workflow-components", "condition-router"),
         family="workflow-node",
         adapter="condition-router",
         factory_name="create_router",
@@ -48,12 +50,16 @@ PACKAGE_COMPONENT_SPECS: dict[str, PackageAdapterSpec] = {
     ),
     "custom-middleware": PackageAdapterSpec(
         template_parts=("agent", "custom_middleware"),
+        example_parts=("agent-components", "custom-middleware"),
         family="middleware",
         adapter="agent-middleware",
         factory_name="create_middleware",
-        factory_parameters=("agent",),
+        factory_parameters=None,
     ),
 }
+
+
+BUILTIN_EXAMPLE_TEMPLATE_PREFIX = "内置示例-"
 
 
 class PythonPackageAuthoringError(RuntimeError):
@@ -224,10 +230,12 @@ class PythonPackageAuthoringService:
         self,
         *,
         templates_root: Path,
+        examples_root: Path,
         instances_root: Path,
         runtime_root: Path,
     ) -> None:
         self._templates_root = templates_root
+        self._examples_root = examples_root
         self._instances_root = instances_root
         self._runtime_root = runtime_root
 
@@ -247,18 +255,47 @@ class PythonPackageAuthoringService:
     def _template_root(self, spec: PackageAdapterSpec) -> Path:
         return self._templates_root.joinpath(*spec.template_parts)
 
+    def _example_root(self, spec: PackageAdapterSpec) -> Path:
+        return self._examples_root.joinpath(*spec.example_parts)
+
     def _adapter_root(self, spec: PackageAdapterSpec) -> Path:
         return self._instances_root / spec.adapter
 
     def template_catalog(self, block_type: str) -> dict[str, object]:
         spec = self._spec(block_type)
-        return scan_python_package_templates(
+        templates = scan_python_package_templates(
             self._template_root(spec),
             family=spec.family,  # type: ignore[arg-type]
             adapter=spec.adapter,  # type: ignore[arg-type]
             factory_name=spec.factory_name,
             factory_parameters=spec.factory_parameters,
         )
+        examples = scan_python_package_templates(
+            self._example_root(spec),
+            family=spec.family,  # type: ignore[arg-type]
+            adapter=spec.adapter,  # type: ignore[arg-type]
+            factory_name=spec.factory_name,
+            factory_parameters=spec.factory_parameters,
+        )
+        example_catalog = []
+        for item in examples["catalog"]:
+            assert isinstance(item, dict)
+            key = str(item["key"])
+            example_catalog.append(
+                {
+                    **item,
+                    "key": f"{BUILTIN_EXAMPLE_TEMPLATE_PREFIX}{key}",
+                    "name": f"{BUILTIN_EXAMPLE_TEMPLATE_PREFIX}{item['name']}",
+                }
+            )
+        example_errors = {
+            f"{BUILTIN_EXAMPLE_TEMPLATE_PREFIX}{key}": value
+            for key, value in examples["errors"].items()
+        }
+        return {
+            "catalog": [*templates["catalog"], *example_catalog],
+            "errors": {**templates["errors"], **example_errors},
+        }
 
     def _scan_instance(
         self,
@@ -399,8 +436,15 @@ class PythonPackageAuthoringService:
         entries = _file_entries(files)
         template: Path | None = None
         if template_key != EMPTY_TEMPLATE_KEY:
-            template_root = self._template_root(spec)
-            template = template_root / template_key
+            if template_key.startswith(BUILTIN_EXAMPLE_TEMPLATE_PREFIX):
+                template_root = self._example_root(spec)
+                folder_key = template_key.removeprefix(
+                    BUILTIN_EXAMPLE_TEMPLATE_PREFIX
+                )
+            else:
+                template_root = self._template_root(spec)
+                folder_key = template_key
+            template = template_root / folder_key
             if template.parent != template_root:
                 raise PythonPackageAuthoringError(
                     "python_package_template_invalid",
@@ -660,6 +704,7 @@ class PythonPackageAuthoringService:
 
 
 __all__ = [
+    "BUILTIN_EXAMPLE_TEMPLATE_PREFIX",
     "PACKAGE_COMPONENT_SPECS",
     "PackageChange",
     "PythonPackageAuthoringError",

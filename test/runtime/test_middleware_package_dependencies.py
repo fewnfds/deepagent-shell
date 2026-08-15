@@ -169,7 +169,6 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
         )
     )
     for component_type, component_id, requirement in (
-        ("workflow-input-context", "input-context", "PyYAML==6.0.3"),
         ("workflow-prepare", "prepare", "rich==14.3.3"),
     ):
         block_store.save_block(
@@ -203,7 +202,6 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
     assert state["status"] == "ready"
     assert set(state["records"]) == {
         f"python-package:{owner_id}",
-        "workflow-input-context:input-context",
         "workflow-prepare:prepare",
     }
     assert f"python-package:{unused_owner_id}" not in state["records"]

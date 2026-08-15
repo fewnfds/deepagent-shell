@@ -168,7 +168,7 @@ def build_router(
                 }
             except PythonPackageAuthoringError as exc:
                 raise authoring_error(exc) from exc
-        if block_type not in {"workflow-input-context", "workflow-prepare"}:
+        if block_type != "workflow-prepare":
             return block
         requirements = parse_python_requirements(block.get("python_requirements", []))
         return {

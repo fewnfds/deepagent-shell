@@ -57,6 +57,12 @@ function applyEmptyTemplate(): void {
   applyEmptyPythonPackageTemplate(draft)
 }
 
+function templateLabel(template: PythonPackageTemplate): string {
+  return template.name === template.key
+    ? template.name
+    : `${template.name} (${template.key})`
+}
+
 function templateFile(path: string): PythonPackageFile | undefined {
   return selectedTemplate.value?.files.find((file) => file.path === path)
 }
@@ -144,7 +150,7 @@ function resourceError(error: LocalizedMessagePayload): string {
             <option value="">{{ t('editors.pythonPackage.selectTemplate') }}</option>
             <option :value="EMPTY_PYTHON_PACKAGE_TEMPLATE_KEY">{{ t('editors.pythonPackage.emptyTemplate') }}</option>
             <option v-for="item in catalog" :key="item.key" :value="item.key">
-              {{ item.name }} ({{ item.key }})
+              {{ templateLabel(item) }}
             </option>
           </select>
           <LteButton theme="secondary" type="button" @click="applyEmptyTemplate">

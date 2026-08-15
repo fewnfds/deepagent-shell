@@ -17,7 +17,6 @@
 | 委派能力 | 同步 Subagent 的提示与 `task` 说明 | 可选 | 只用于顶层 Main Agent |
 | 上下文摘要 | `SummarizationMiddleware` 阈值、保留和工具参数截断 | 可选 | 继承、替换或关闭 |
 | Prompt 缓存 | Anthropic prompt caching TTL 与最少消息数 | 可选 | 继承、替换或关闭 |
-| Workflow 输入上下文 | 从请求 `messages[]` 整理初始消息，并按规则追加文件槽位 | 可选 | 继承、替换或关闭 |
 | 准备 | 在 LangChain 构造前准备本次 Workflow 的静态 runtime context | Workflow 可选绑定 | 不属于 Agent capability |
 | 事件输出 | 用 Python 把 Workflow-owned v3 事件投影为响应字符串 | Workflow 可选绑定 | 不属于 Agent capability |
 | 条件路由 | 读取完整 Workflow State/Context，更新 State 并激活具名 Branch Edge | 画布 Node 引用 | 不属于 Agent capability |
@@ -32,12 +31,9 @@
 Subagent 分别通过有序 `middleware_refs` 装配多个配置。格式、安全边界和依赖管理见
 [自定义 Middleware 扩展](middleware-packages.md)。
 
-Workflow 输入上下文是一个内置但可替换的 first-party Middleware。它在 Agent invocation 的
-`before_agent`/`abefore_agent` 中规划当前私有 Agent 的初始消息，不会修改请求快照；Main Agent 默认使用
-`runtime.context.messages`，同步 Subagent 默认使用官方 task tool 传入的 delegated messages。两者是否执行只由现有
-capability 引用及继承/替换/关闭规则决定。它支持受信任 Python 变换、system
-消息上提/降级，以及从 Workflow 共享 filesystem 读取的 user/assistant/system 追加槽位。槽位只接受虚拟绝对路径，
-依次使用主文件、fallback 文件和固定文本；启用截断屏障时，来源全部缺失会停止后续槽位。
+Workflow Input Context 是重要的 Agent 上下文约定，但不是 catalog 组件。当前通过普通 Custom Middleware 实现：从
+`内置示例-workflow-input-context` 创建独立配置，再由 Main Agent 或 Subagent 的 `middleware_refs` 选择。完整原理和修改位置见
+[Workflow Input Context](workflow-input-context.md)。
 
 每个画布 Agent wrapper 在 Main Agent graph 成功完成后，把公开返回的完整 reduced messages 写入父 Workflow State 的
 `agent_invocations`。记录包含 invocation、Workflow、画布节点和 Agent 身份以及首次调用时间；同一节点再次调度时使用
@@ -57,7 +53,7 @@ dict，返回值必须是字符串。它只控制 Workflow-owned 非 Agent 事�
 `activate` 返回一个或多个完全匹配的 key，并可通过 `update` 返回 State 局部更新，空列表使用必须显式连接的 `otherwise`。
 完整 package 和返回契约见[条件路由](../wizard-pages/condition-router-config.md)。
 
-这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。自定义 Middleware 和 Condition Router 从分类静态模板
-创建配置独占的 Python 扩展，并在扩展目录可选的 `requirements.txt` 声明外部包；模板本身不运行也不参与依赖。Workflow Prepare 和
-Workflow 输入上下文变换目前仍在组件配置中保存源码与 `python_requirements`。生效配置共享启动期扩展依赖层。
-requirements 修改后重启生效；文件化扩展源码在下一次请求重新加载，仍为内联形式的组件源码按各自组件说明生效。
+这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。自定义 Middleware 和 Condition Router 从用户模板或内置示例
+创建配置独占的 Python 扩展，并在扩展目录可选的 `requirements.txt` 声明外部包；模板和示例本身不运行也不参与依赖。
+Workflow Prepare 仍在组件配置中保存源码与 `python_requirements`。requirements 修改后重启生效；文件化扩展源码在下一次请求重新加载，
+仍为内联形式的组件源码按各自组件说明生效。

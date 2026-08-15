@@ -137,6 +137,7 @@ def create_app(
     )
     python_package_authoring = PythonPackageAuthoringService(
         templates_root=python_templates_dir,
+        examples_root=application_home / "examples",
         instances_root=python_package_instances_dir,
         runtime_root=runtime_dir,
     )

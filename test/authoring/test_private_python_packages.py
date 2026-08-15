@@ -6,6 +6,8 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 import yaml
 
+from agent_shell.python_packages.authoring import PythonPackageAuthoringService
+
 from .app_support import make_client
 
 
@@ -61,6 +63,30 @@ def _create_router(
     )
     assert response.status_code == 200, response.text
     return response.json()
+
+
+def test_repository_workflow_input_context_example_is_in_middleware_catalog(
+    tmp_path: Path,
+) -> None:
+    repository = Path(__file__).parents[2]
+    service = PythonPackageAuthoringService(
+        templates_root=tmp_path / "templates",
+        examples_root=repository / "examples",
+        instances_root=tmp_path / "instances",
+        runtime_root=tmp_path / "runtime",
+    )
+
+    response = service.template_catalog("custom-middleware")
+    assert response["errors"] == {}
+    template = response["catalog"][0]
+
+    assert template["key"] == "内置示例-workflow-input-context"
+    assert template["name"] == "内置示例-workflow-input-context"
+    assert {file["path"] for file in template["files"]} == {
+        "README.md",
+        "main.py",
+        "requirements.txt",
+    }
 
 
 def test_manifest_free_template_creates_owned_package_and_keeps_missing_file_warning(
@@ -133,6 +159,51 @@ def test_manifest_free_template_creates_owned_package_and_keeps_missing_file_war
             "editable_files": ["main.py", "helpers/rules.py", "missing.py"],
         }
     }
+
+
+def test_builtin_example_coexists_with_same_named_user_template_and_is_copied(
+    tmp_path: Path, monkeypatch
+) -> None:
+    data_root = tmp_path / "data"
+    _write_router_template(data_root, key="shared-name")
+    example = (
+        tmp_path
+        / "examples"
+        / "workflow-components"
+        / "condition-router"
+        / "shared-name"
+    )
+    example.mkdir(parents=True)
+    example_source = (
+        "def create_router():\n"
+        "    async def route(state, context):\n"
+        "        return {'activate': ['builtin'], 'update': {}}\n"
+        "    return route\n"
+    )
+    (example / "main.py").write_text(example_source, encoding="utf-8")
+
+    client = make_client(tmp_path, monkeypatch)
+    catalog = client.get(
+        "/api/python-package-templates/condition-router"
+    ).json()["catalog"]
+
+    assert [item["key"] for item in catalog] == [
+        "shared-name",
+        "内置示例-shared-name",
+    ]
+    builtin = next(item for item in catalog if item["key"].startswith("内置示例-"))
+    assert builtin["name"] == "内置示例-shared-name"
+
+    created = _create_router(client, builtin, name="Built-in router")
+    copied = (
+        data_root
+        / "config"
+        / "python_package_instances"
+        / "condition-router"
+        / created["id"]
+        / "main.py"
+    )
+    assert copied.read_text(encoding="utf-8") == example_source
 
 
 def test_condition_router_can_be_created_from_empty_template_selection(

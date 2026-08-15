@@ -2,14 +2,16 @@
 
 Agent Shell 的文件化 Python 扩展分为扩展模板、配置扩展和组件配置三层：
 
-- 静态模板是 `data/templates/` 下的公共代码资源，只用于创建配置；
+- 用户模板是 `data/templates/` 下的公共代码资源，只用于创建配置；
+- 源码附带的只读示例位于 `examples/`，在模板选择器中使用 `内置示例-<key>` 名称；
 - 保存新配置时，系统把所选模板复制成由该配置独占的 Python 扩展；
 - 配置扩展位于 `data/config/python_package_instances/`，复制完成后与原模板彻底解耦；
 - 组件 YAML 只保存扩展代码目录引用和管理台显示的有序相对文件路径。
 
-模板不会被导入、执行或收集依赖。修改或删除模板不会影响已经保存的配置，也没有模板继承、同步或升级关系。
-源码不附带实例模板，也不会在启动时自动播种。管理员通过【系统 / 文件管理】的 Python templates scope，或直接在
-`data/templates/` 对应类别下创建第一个模板；模板目录为空是合法状态。
+模板和内置示例都不会被直接导入、执行或收集依赖。修改或删除来源不会影响已经保存的配置，也没有模板继承、
+同步或升级关系。内置示例不会写入 `data/`；管理员仍可通过【系统 / 文件管理】的 Python templates scope，或直接在
+`data/templates/` 对应类别下维护用户模板，目录为空也是合法状态。用户模板可以与内置示例同名，catalog key 分别为
+`<key>` 和 `内置示例-<key>`。
 
 ## 目录类别
 
@@ -25,6 +27,10 @@ data/
         <configuration-uuid>/
       agent-middleware/
         <configuration-uuid>/
+
+examples/
+  workflow-components/condition-router/<example-key>/
+  agent-components/custom-middleware/<example-key>/
 ```
 
 模板至少包含 `main.py`，可以包含 `requirements.txt`、本地模块、实体第三方包和测试。模板目录名是小写
@@ -63,7 +69,7 @@ python_package:
 YAML 不保存源码、requirements、manifest 投影、模板引用、revision 或绝对路径。复制组件配置时会复制一份新的配置扩展；删除组件
 配置时会删除其扩展代码目录。
 
-新配置编辑器读取对应类别的模板目录。用户可以选择模板，或【套用空模板】得到空的 `main.py` 草稿；最终保存时仍必须补全
+新配置编辑器同时读取对应类别的用户模板和内置示例。用户可以选择任一来源，或【套用空模板】得到空的 `main.py` 草稿；最终保存时仍必须补全
 对应 adapter 要求的有效工厂。用户可以在两行高的文件清单中逐行增加
 包内相对路径，编辑器按该顺序显示文本文件内容；
 首次保存才创建配置扩展。已有配置每次打开都从自己的扩展代码目录读取文件，保存时只能更新原目录，不能改指向另一模板或配置扩展。
@@ -97,15 +103,23 @@ Middleware 使用 `family: middleware`、`adapter: agent-middleware`。每个配
 from langchain.agents.middleware import ModelCallLimitMiddleware
 
 
-def create_middleware(agent):
+def create_middleware(agent, config, backend):
     return ModelCallLimitMiddleware(run_limit=20)
 ```
 
-`agent` 是 Agent Shell 提供的身份字典，只包含 `id`、`type`、`name` 和 `package_id`，不是 LangChain Agent 对象。
+`create_middleware` 必须是同步工厂，但 Agent Shell 不限制它的参数签名。运行时按参数名提供当前可用的构造数据，包括
+`agent`（包含 `id`、`type`、`name` 和 `package_id` 的身份字典）、`package`、`block`、`assembly`、`backend`、`config`、
+`references`、`scope`、`workflow_node_id` 和 `request_id`；工厂也可以使用 `**kwargs` 接收全部可用值。它们不是 LangChain
+Agent 对象。工厂返回后，Middleware 仍通过 LangChain 官方 hook 的 `state` 和 `runtime` 读取每次运行的动态数据。
 Main Agent/Subagent 的有序 `middleware_refs` 决定多个实例进入列表的顺序。一个实例可以实现多个官方 hook，但 hook 不作为独立
 排序项。LangChain 对 `before_*` 正序执行、对 `after_*` 逆序执行，并把 `wrap_*` 按列表嵌套。Agent Shell 不代理官方
 hook、state schema、tools 或 stream transformer。运行链使用
 异步执行；自定义类覆盖同步 hook 时也必须提供对应 async hook。
+
+内置 `workflow-input-context` 示例把 Workflow 原始输入选择、文件附加和非顶部 system 转 user 都实现为普通
+`AgentMiddleware.abefore_agent`。它没有专用 capability、继承规则或装配槽位；复制示例后直接修改其中集中的
+`WIC_CONFIG` 与 `build_workflow_input_context()`，并通过 Agent 的有序 `middleware_refs` 决定位置。完整说明见
+[Workflow Input Context](workflow-input-context.md)。
 
 ## Imports 与依赖
 

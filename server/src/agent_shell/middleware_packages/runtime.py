@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+import inspect
 from pathlib import Path
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, Callable
 from uuid import uuid4
 
 from langchain.agents.middleware import AgentMiddleware
@@ -24,10 +26,10 @@ class MiddlewareOwner:
 class MiddlewarePackageRuntime:
     """Request-local package loading and official Middleware materialization.
 
-    The package boundary deliberately stays smaller than LangChain's runtime:
-    package configuration and the owning Agent identity are constructor data.
-    During execution, a returned ``AgentMiddleware`` reads graph state and
-    ``Runtime.context`` through LangChain's official hooks.
+    Middleware package factories may request any named construction values
+    supplied by the runtime. During execution, a returned ``AgentMiddleware``
+    reads graph state and ``Runtime.context`` through LangChain's official
+    hooks.
     """
 
     def __init__(
@@ -37,10 +39,23 @@ class MiddlewarePackageRuntime:
         owners: list[MiddlewareOwner],
         packages_dir: Path,
         runtime_root: Path,
+        assembly: StaticAssembly | None = None,
     ) -> None:
         self.request_id = request_id or str(uuid4())
         self._owners = owners
         self._owner_by_id = {owner.id: owner for owner in owners}
+        self._assembly = assembly
+        self._blocks_by_id: dict[str, dict[str, Any]] = {}
+        if assembly is not None:
+            for block in assembly.middleware_blocks:
+                block_id = block.get("id")
+                if block_id is not None:
+                    self._blocks_by_id[str(block_id)] = block
+            for node in assembly.subagent_nodes.values():
+                for block in node.middleware_blocks:
+                    block_id = block.get("id")
+                    if block_id is not None:
+                        self._blocks_by_id[str(block_id)] = block
         self._loader = PythonPackageLoader(
             request_id=self.request_id,
             packages_dir=packages_dir,
@@ -48,7 +63,7 @@ class MiddlewarePackageRuntime:
             family="middleware",
             adapter="agent-middleware",
             factory_name="create_middleware",
-            factory_parameters=("agent",),
+            factory_parameters=None,
         )
         self._middleware: dict[str, tuple[AgentMiddleware, ...]] = {}
         self._closed = False
@@ -99,9 +114,52 @@ class MiddlewarePackageRuntime:
             owners=owners,
             packages_dir=packages_dir,
             runtime_root=runtime_root,
+            assembly=assembly,
         )
 
-    def middleware_for(self, owner_id: str) -> tuple[AgentMiddleware, ...]:
+    @staticmethod
+    def _call_factory(
+        factory: Callable[..., Any],
+        available: Mapping[str, Any],
+    ) -> Any:
+        """Call a package factory with any named values it requests.
+
+        Middleware package factories are intentionally not constrained to a
+        fixed signature. A package may request a subset of the available
+        values by name or accept the complete mapping with ``**kwargs``.
+        """
+
+        signature = inspect.signature(factory)
+        positional: list[Any] = []
+        keyword: dict[str, Any] = {}
+        accepts_var_keyword = False
+        for parameter in signature.parameters.values():
+            if parameter.kind is parameter.VAR_KEYWORD:
+                accepts_var_keyword = True
+                continue
+            if parameter.kind is parameter.VAR_POSITIONAL:
+                continue
+            if parameter.name in available:
+                if parameter.kind is parameter.POSITIONAL_ONLY:
+                    positional.append(available[parameter.name])
+                else:
+                    keyword[parameter.name] = available[parameter.name]
+                continue
+            if parameter.default is parameter.empty:
+                raise TypeError(
+                    f"Middleware factory requires unavailable argument {parameter.name!r}."
+                )
+        if accepts_var_keyword:
+            for name, value in available.items():
+                keyword.setdefault(name, value)
+        return factory(*positional, **keyword)
+
+    def middleware_for(
+        self,
+        owner_id: str,
+        *,
+        context: Mapping[str, Any] | None = None,
+    ) -> tuple[AgentMiddleware, ...]:
         cached = self._middleware.get(owner_id)
         if cached is not None:
             return cached
@@ -121,13 +179,29 @@ class MiddlewarePackageRuntime:
                 package_owner_id=package_owner_id,
             )
             try:
-                produced = factory(
-                    {
-                        "id": owner.id,
-                        "type": owner.type,
-                        "name": owner.name,
-                        "package_id": metadata["id"],
-                    },
+                agent = {
+                    "id": owner.id,
+                    "type": owner.type,
+                    "name": owner.name,
+                    "package_id": metadata["id"],
+                }
+                factory_context: dict[str, Any] = {
+                    "agent": agent,
+                    "owner": agent,
+                    "package": deepcopy(package),
+                    "package_id": metadata["id"],
+                    "request_id": self.request_id,
+                }
+                block = self._blocks_by_id.get(package_owner_id)
+                if block is not None:
+                    factory_context["block"] = deepcopy(block)
+                if self._assembly is not None:
+                    factory_context["assembly"] = self._assembly
+                if context is not None:
+                    factory_context.update(context)
+                produced = self._call_factory(
+                    factory,
+                    factory_context,
                 )
             except Exception as exc:
                 raise AgentRuntimeError(

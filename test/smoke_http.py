@@ -36,7 +36,6 @@ CAPABILITY_TYPES = (
     "subagent",
     "summarization",
     "prompt-caching",
-    "workflow-input-context",
 )
 CRUD_CAPABILITY_TYPES = tuple(
     capability_type
@@ -137,7 +136,6 @@ def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> d
         "subagent": {"name": name},
         "summarization": {"name": name},
         "prompt-caching": {"name": name},
-        "workflow-input-context": {"name": name},
         "todo-list": {"name": name},
         "exception-retry": {
             "name": name,

@@ -15,4 +15,4 @@ Contract:
 - 控件保持组件默认宽高。禁止为统一外观增加固定高度、最小行高、等高 grid、slot flex wrapper 或页面私有尺寸补丁。
 - `btn-sm` 只用于现有表格/列表行的紧凑操作；普通搜索、提交和表单动作沿用参考源码中的尺寸。
 
-Reference: `src/components/data-table/DataTableWorkbench.vue`、`src/pages/EventFeedPage.vue`、`src/editors/WorkflowInputContextEditor.vue`。
+Reference: `src/components/data-table/DataTableWorkbench.vue`、`src/pages/EventFeedPage.vue`。

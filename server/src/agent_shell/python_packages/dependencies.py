@@ -476,10 +476,7 @@ def prepare_windows_dependencies(
                 continue
             item, _folder = resolved
             records.append({**dict(item), "id": f"python-package:{item['id']}"})
-    for component_type in (
-        "workflow-input-context",
-        "workflow-prepare",
-    ):
+    for component_type in ("workflow-prepare",):
         for component in repository.config().get("components", {}).get(component_type, []):
             component_id = str(component.get("id", ""))
             requirements = parse_python_requirements(component.get("python_requirements", []))

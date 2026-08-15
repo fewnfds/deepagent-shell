@@ -39,7 +39,6 @@ def test_manifest_matches_current_blocks_and_form_order() -> None:
         "subagent",
         "summarization",
         "prompt-caching",
-        "workflow-input-context",
     ]
     assert {manifest.type for manifest in CAPABILITY_MANIFESTS} == set(BLOCK_MODELS)
     assert CAPABILITY_MANIFESTS[0].required is True
@@ -65,8 +64,6 @@ def test_manifest_matches_current_blocks_and_form_order() -> None:
     assert manifests["summarization"].subagent_policy == "inherit"
     assert manifests["prompt-caching"].subagent_overrideable is True
     assert manifests["prompt-caching"].subagent_policy == "inherit"
-    assert manifests["workflow-input-context"].subagent_overrideable is True
-    assert manifests["workflow-input-context"].subagent_policy == "inherit"
     assert manifests["todo-list"].subagent_overrideable is True
     assert manifests["todo-list"].tool_names == ("write_todos",)
 
@@ -117,7 +114,6 @@ def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
         for capability in (
             "summarization",
             "prompt_caching",
-            "workflow_input_context",
         )
     )
     from deepagents.middleware.summarization import DEEPAGENTS_DEFAULT_SUMMARY_PROMPT

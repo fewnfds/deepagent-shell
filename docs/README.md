@@ -7,12 +7,13 @@
 1. [启动并认识管理台](user-guide/getting-started.md)
 2. [创建组件](user-guide/capabilities.md)
 3. [装配 Main Agent 与 Subagent](user-guide/configuration-workflow.md)
-4. [使用自定义 Middleware 包](user-guide/middleware-packages.md)
-5. [管理配置仓库](user-guide/configuration-library.md)
-6. [调用 API Server](user-guide/api-server.md)
-7. [查看日志中心与 Workflow 观测边界](user-guide/runtime-observability.md)
-8. [管理数据、文件与系统设置](user-guide/system-management.md)
-9. [安全与部署](security-and-deployment.md)
+4. [理解 Workflow Input Context](user-guide/workflow-input-context.md)
+5. [使用自定义 Middleware 包](user-guide/middleware-packages.md)
+6. [管理配置仓库](user-guide/configuration-library.md)
+7. [调用 API Server](user-guide/api-server.md)
+8. [查看日志中心与 Workflow 观测边界](user-guide/runtime-observability.md)
+9. [管理数据、文件与系统设置](user-guide/system-management.md)
+10. [安全与部署](security-and-deployment.md)
 
 页面字段索引见[组件说明](wizard-pages/README.md)与 [Agent 说明](agent-pages/README.md)。
 
