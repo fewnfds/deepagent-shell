@@ -82,7 +82,7 @@ export interface CustomToolResource {
   filename: string
 }
 
-export type FileManagerScope = 'files' | 'skills' | 'custom_tools' | 'custom_middlewares'
+export type FileManagerScope = 'files' | 'skills' | 'custom_tools' | 'python_packages'
 type ManagedFileKind = 'directory' | 'file' | 'unsupported'
 
 export interface ManagedFileScopeCatalog {
@@ -190,42 +190,42 @@ export interface CapabilityReference {
   block_id: string
 }
 
-export interface MiddlewarePackageBinding {
+export interface PythonPackageBinding {
   package_id: string
   enabled: boolean
   config: Record<string, unknown>
 }
 
-export type MiddlewareConfigScalar = boolean | number | string
+export type PythonPackageConfigScalar = boolean | number | string
 
-export interface MiddlewareConfigField {
+export interface PythonPackageConfigField {
   type: 'string' | 'integer' | 'number' | 'boolean'
   title: string
   description: string
-  default?: MiddlewareConfigScalar
-  enum?: MiddlewareConfigScalar[]
+  default?: PythonPackageConfigScalar
+  enum?: PythonPackageConfigScalar[]
   minLength?: number
   maxLength?: number
   pattern?: string
   minimum?: number
   maximum?: number
-  contentMediaType?: 'text/plain' | 'text/x-python'
-  format?: 'python'
 }
 
-export interface MiddlewareConfigSchema {
+export interface PythonPackageConfigSchema {
   type: 'object'
-  properties: Record<string, MiddlewareConfigField>
+  properties: Record<string, PythonPackageConfigField>
   required: string[]
   additionalProperties: false
 }
 
-export interface MiddlewarePackageResource {
-  api_version: 1
+export interface PythonPackageResource {
+  format_version: 1
   id: string
+  family: 'workflow-node' | 'middleware'
+  adapter: 'condition-router' | 'agent-middleware'
   name: string
   description: string
-  config_schema: MiddlewareConfigSchema
+  config_schema: PythonPackageConfigSchema
   folder: string
   python_requirements: string[]
   requirements_fingerprint: string

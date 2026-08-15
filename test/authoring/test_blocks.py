@@ -88,20 +88,45 @@ def test_health_catalog_and_readiness_are_small_and_current(
 def test_condition_router_uses_component_crud_storage_and_repository_validation(
     tmp_path: Path, monkeypatch
 ) -> None:
+    package_id = "11111111-1111-4111-8111-111111111111"
+    package_dir = tmp_path / "data" / "resources" / "python_packages" / package_id
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text(
+        json.dumps(
+            {
+                "format_version": 1,
+                "id": package_id,
+                "family": "workflow-node",
+                "adapter": "condition-router",
+                "name": "Risk router",
+                "description": "Test router.",
+                "config_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (package_dir / "main.py").write_text(
+        "def create_router(config):\n"
+        "    async def route(state, context):\n"
+        "        return {'activate': ['review'], 'update': {}}\n"
+        "    return route\n",
+        encoding="utf-8",
+    )
     client = make_client(tmp_path, monkeypatch)
     payload = {
         "name": "Risk routing",
-        "route_source": (
-            "async def route(state, context):\n"
-            "    return {'activate': ['review'], 'update': {}}\n"
-        ),
-        "python_requirements": [],
+        "python_package_bindings": [
+            {"package_id": package_id, "enabled": True, "config": {}}
+        ],
     }
 
     created_response = client.post("/api/blocks/condition-router", json=payload)
     assert created_response.status_code == 200
     created = created_response.json()
-    assert created["dependency_status"] == "ready"
     assert client.get(
         f"/api/blocks/condition-router/{created['id']}"
     ).json() == created
@@ -115,7 +140,7 @@ def test_condition_router_uses_component_crud_storage_and_repository_validation(
     ).is_file()
     assert client.get("/api/validation/repository").json()["valid"] is True
 
-    invalid = {**payload, "route_source": "async def route(state):\n    return {}\n"}
+    invalid = {**payload, "python_package_bindings": []}
     rejected = client.put(
         f"/api/blocks/condition-router/{created['id']}",
         json=invalid,
@@ -155,7 +180,7 @@ def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) 
             assert created["instruction_override"] is None
             assert created["task_description_override"] is None
         if block_type == "custom-middleware":
-            assert created["middlewares"] == payload["middlewares"]
+            assert created["python_package_bindings"] == payload["python_package_bindings"]
         if block_type == "todo-list":
             assert created["system_prompt_override"] == payload[
                 "system_prompt_override"

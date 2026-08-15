@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from agent_shell.api.routes import build_router
 from agent_shell.api.agent_configs import build_agent_config_router
-from agent_shell.api.middleware_packages import build_middleware_package_router
+from agent_shell.api.python_packages import build_python_package_router
 from agent_shell.api.errors import localized_error_detail
 from agent_shell.api.system import build_system_router
 from agent_shell.api.api_server import ApiServerEventHub, build_api_server_router
@@ -59,7 +59,7 @@ from agent_shell.storage.validation_settings import ConfigurationValidationSetti
 from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.storage.workflow_runs import WorkflowRunStore
 from agent_shell.validation.service import ConfigurationValidationService
-from agent_shell.middleware_packages.validation import MiddlewarePackageValidationService
+from agent_shell.python_packages.validation import PythonPackageValidationService
 from agent_shell.file_manager import FileManagerService
 from agent_shell.system_settings import SystemSettingsService
 from agent_shell.storage.permissions import secure_directory, secure_file
@@ -89,7 +89,7 @@ def create_app(
             )
         environment_permissions = (environment_permission,)
     custom_tools_dir = settings.resolved_custom_tools_dir()
-    custom_middlewares_dir = settings.resolved_custom_middlewares_dir()
+    python_packages_dir = settings.resolved_python_packages_dir()
     skills_dir = settings.resolved_skills_dir()
 
     runtime_dir = settings.resolved_runtime_dir()
@@ -129,14 +129,14 @@ def create_app(
     block_store = BlockStore(configuration, event_logger)
     config_store = AgentConfigStore(configuration, event_logger)
     workflow_store = WorkflowStore(configuration, event_logger)
-    middleware_package_validation = MiddlewarePackageValidationService(
-        packages_dir=custom_middlewares_dir,
+    python_package_validation = PythonPackageValidationService(
+        packages_dir=python_packages_dir,
         runtime_root=runtime_dir,
     )
     configuration_validation = ConfigurationValidationService(
         block_store,
         config_store,
-        middleware_package_validation,
+        python_package_validation,
         custom_tools_dir=custom_tools_dir,
     )
     api_server_store = ApiServerStore(database, configuration, event_logger)
@@ -174,7 +174,7 @@ def create_app(
             "files": settings.resolved_files_dir(),
             "skills": skills_dir,
             "custom_tools": custom_tools_dir,
-            "custom_middlewares": custom_middlewares_dir,
+            "python_packages": python_packages_dir,
         },
         settings.resolved_runtime_dir() / "tmp",
     )
@@ -182,7 +182,7 @@ def create_app(
     agent_runtime = RequestSnapshotRuntime(
         configuration,
         custom_tools_dir=custom_tools_dir,
-        middleware_packages_dir=custom_middlewares_dir,
+        python_packages_dir=python_packages_dir,
         runtime_dir=runtime_dir,
         skills_dir=skills_dir,
         provider_http_clients=provider_http_clients,
@@ -467,8 +467,8 @@ def create_app(
         )
     )
     app.include_router(
-        build_middleware_package_router(
-            custom_middlewares_dir,
+        build_python_package_router(
+            python_packages_dir,
             runtime_dir,
         )
     )

@@ -29,7 +29,7 @@ from agent_shell.registries.errors import ResourceScanError
 DEPENDENCY_STATE_SCHEMA = 1
 PYPI_INDEX = "https://pypi.org/simple"
 REQUIREMENTS_FILE = "requirements.txt"
-RUNTIME_FOLDER = "middleware_packages"
+RUNTIME_FOLDER = "python_packages"
 SITE_PACKAGES_FOLDER = "site-packages"
 STATE_FILE = "dependency-state.json"
 
@@ -52,21 +52,21 @@ def read_package_requirements(folder: Path) -> PackageRequirements:
         return parse_python_requirements(())
     if not path.is_file() or _is_link(path):
         raise ResourceScanError(
-            "resource.error.middlewarePackage.requirementsLinkUnsupported",
+            "resource.error.pythonPackage.requirementsLinkUnsupported",
             "requirements.txt must be an ordinary file.",
         )
     try:
         content = path.read_bytes()
     except OSError as exc:
         raise ResourceScanError(
-            "resource.error.middlewarePackage.requirementsReadFailed",
+            "resource.error.pythonPackage.requirementsReadFailed",
             "requirements.txt could not be read.",
         ) from exc
     try:
         text = content.decode("utf-8")
     except UnicodeError as exc:
         raise ResourceScanError(
-            "resource.error.middlewarePackage.requirementsInvalidEncoding",
+            "resource.error.pythonPackage.requirementsInvalidEncoding",
             "requirements.txt must use UTF-8 encoding.",
         ) from exc
 
@@ -82,7 +82,7 @@ def read_package_requirements(folder: Path) -> PackageRequirements:
         if exc.package:
             details["package"] = exc.package
         raise ResourceScanError(
-            f"resource.error.middlewarePackage.{key}",
+            f"resource.error.pythonPackage.{key}",
             str(exc),
             details,
         ) from exc
@@ -275,7 +275,7 @@ def _ensure_uv(runtime_root: Path, manifest: dict[str, Any]) -> Path:
     if not expected_version or not url.startswith("https://") or len(expected_hash) != 64:
         raise ValueError("The Windows runtime manifest lacks the pinned uv download.")
 
-    temporary_root = runtime_root / "tmp" / f"uv-middleware-{uuid4().hex}"
+    temporary_root = runtime_root / "tmp" / f"uv-python-package-{uuid4().hex}"
     archive = temporary_root / "uv.zip"
     extracted = temporary_root / "extract"
     temporary_root.mkdir(parents=True)
@@ -342,25 +342,35 @@ def prepare_windows_dependencies(
     data_root: Path,
     runtime_root: Path,
 ) -> None:
+    from agent_shell.condition_router_packages import scan_condition_router_packages
     from agent_shell.middleware_packages.packages import scan_middleware_packages
+    from agent_shell.storage.file_config import FileConfigRepository
 
     manifest = _runtime_manifest(runtime_root)
     core_fingerprint = str(manifest.get("build_fingerprint", ""))
     if not core_fingerprint:
         raise ValueError("The Windows runtime manifest lacks its build fingerprint.")
-    catalog = scan_middleware_packages(
-        data_root / "resources" / "custom_middlewares",
-        runtime_root=None,
-    )["catalog"]
-    records = [
-        {**dict(item), "id": f"middleware-package:{item['id']}"}
-        for item in catalog
-    ]
-    from agent_shell.storage.file_config import FileConfigRepository
-
+    packages_dir = data_root / "resources" / "python_packages"
     repository = FileConfigRepository(data_root)
+    components = repository.config().get("components", {})
+    referenced_package_ids = {
+        str(binding.get("package_id", ""))
+        for component_type in ("custom-middleware", "condition-router")
+        for component in components.get(component_type, [])
+        for binding in component.get("python_package_bindings", [])
+        if binding.get("enabled", True)
+    }
+    catalogs = (
+        scan_middleware_packages(packages_dir, runtime_root=None)["catalog"],
+        scan_condition_router_packages(packages_dir, runtime_root=None)["catalog"],
+    )
+    records = [
+        {**dict(item), "id": f"python-package:{item['id']}"}
+        for catalog in catalogs
+        for item in catalog
+        if item["id"] in referenced_package_ids
+    ]
     for component_type in (
-        "condition-router",
         "workflow-input-context",
         "workflow-prepare",
     ):
@@ -383,7 +393,7 @@ def prepare_windows_dependencies(
         and current.get("input_fingerprint") == input_fingerprint
         and target.is_dir()
     ):
-        print("Middleware package dependencies are already current.")
+        print("Python package dependencies are already current.")
         return
 
     requirements = [
@@ -391,7 +401,7 @@ def prepare_windows_dependencies(
         for record in records
         for requirement in record["python_requirements"]
     ]
-    build_root = runtime_root / "tmp" / f"middleware-packages-{uuid4().hex}"
+    build_root = runtime_root / "tmp" / f"python-packages-{uuid4().hex}"
     prepared = build_root / SITE_PACKAGES_FOLDER
     prepared.mkdir(parents=True)
     try:
@@ -446,7 +456,7 @@ def prepare_windows_dependencies(
                     error_code="dependency_resolution_failed",
                 )
                 print(
-                    "WARNING: Middleware package dependencies could not be resolved. "
+                    "WARNING: Python package dependencies could not be resolved. "
                     "Agent Shell will start without the package dependency layer.",
                     file=sys.stderr,
                 )
@@ -460,7 +470,7 @@ def prepare_windows_dependencies(
                     error_code="dependency_layout_unsupported",
                 )
                 print(
-                    "WARNING: Middleware package dependencies contain unsupported "
+                    "WARNING: Python package dependencies contain unsupported "
                     "links or Python path files. Agent Shell will start without the "
                     "package dependency layer.",
                     file=sys.stderr,
@@ -479,14 +489,14 @@ def prepare_windows_dependencies(
                 "records": _record_states(records, status="ready"),
             },
         )
-        print("Middleware package dependencies are ready.")
+        print("Python package dependencies are ready.")
     finally:
         shutil.rmtree(build_root, ignore_errors=True)
 
 
 def main(arguments: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="python -m agent_shell.middleware_packages.dependencies"
+        prog="python -m agent_shell.python_packages.dependencies"
     )
     parser.add_argument("--home", required=True, type=Path)
     parser.add_argument("--data-dir", type=Path)
@@ -504,7 +514,7 @@ def main(arguments: list[str] | None = None) -> int:
             runtime_root=(home / "runtime").resolve(),
         )
     except Exception as exc:
-        print(f"Middleware package dependency preparation failed: {exc}", file=sys.stderr)
+        print(f"Python package dependency preparation failed: {exc}", file=sys.stderr)
         return 1
     return 0
 

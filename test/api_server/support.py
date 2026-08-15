@@ -71,14 +71,16 @@ def write_middleware_package(
     requirements: tuple[str, ...] = (),
 ) -> None:
     package_dir = (
-        tmp_path / "data" / "resources" / "custom_middlewares" / package_id
+        tmp_path / "data" / "resources" / "python_packages" / package_id
     )
     package_dir.mkdir(parents=True, exist_ok=True)
-    (package_dir / "middleware.json").write_text(
+    (package_dir / "package.json").write_text(
         json.dumps(
             {
-                "api_version": 1,
+                "format_version": 1,
                 "id": package_id,
+                "family": "middleware",
+                "adapter": "agent-middleware",
                 "name": package_id,
                 "description": "Test custom Middleware package.",
                 "config_schema": {

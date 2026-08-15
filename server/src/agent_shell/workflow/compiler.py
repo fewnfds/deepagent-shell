@@ -9,7 +9,7 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command
 
 from agent_shell.condition_router import (
-    ConditionRouterBlock,
+    ConditionRouterCallable,
     ConditionRouterError,
     run_condition_router,
 )
@@ -123,7 +123,7 @@ def _make_agent_node(*, node_id: str, built_agent: Any):
 
 def _make_condition_router_node(
     *,
-    configuration: ConditionRouterBlock,
+    route: ConditionRouterCallable,
     route_targets: Mapping[str, str],
 ):
     async def call_router(
@@ -132,7 +132,7 @@ def _make_condition_router_node(
     ) -> Command:
         try:
             result = await run_condition_router(
-                configuration.model_dump(mode="python"),
+                route,
                 state=state,
                 context=runtime.context,
                 allowed_branches=route_targets,
@@ -155,7 +155,7 @@ def compile_workflow(
     document: WorkflowGraphDocumentV1,
     *,
     node_agents: Mapping[str, Any],
-    condition_routers: Mapping[str, ConditionRouterBlock] | None = None,
+    condition_routers: Mapping[str, ConditionRouterCallable] | None = None,
     checkpointer: Any | None = None,
 ) -> Any:
     """Compile catalog-declared canvas nodes into an official StateGraph."""
@@ -212,8 +212,8 @@ def compile_workflow(
         spec = node_type_spec(node.type, node.type_version)
         assert spec is not None
         if spec.runtime_kind == "command_router":
-            configuration = router_configs.get(node.id)
-            if configuration is None:
+            route = router_configs.get(node.id)
+            if route is None:
                 raise _compile_error(
                     "workflow.condition_router_not_found",
                     "The selected Condition Router configuration does not exist.",
@@ -222,7 +222,7 @@ def compile_workflow(
             builder.add_node(
                 node.id,
                 _make_condition_router_node(
-                    configuration=configuration,
+                    route=route,
                     route_targets=targets,
                 ),
                 destinations=tuple(dict.fromkeys(targets.values())),

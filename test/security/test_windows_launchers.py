@@ -39,7 +39,7 @@ def test_source_launcher_refreshes_runtime_and_prepares_production_frontend() ->
 def test_windows_launcher_prepares_middleware_dependencies_before_server() -> None:
     launcher = (REPOSITORY_ROOT / "start_server.bat").read_text(encoding="utf-8")
 
-    dependency_command = "-m agent_shell.middleware_packages.dependencies --home"
+    dependency_command = "-m agent_shell.python_packages.dependencies --home"
     server_command = "-m agent_shell --home"
 
     assert dependency_command in launcher

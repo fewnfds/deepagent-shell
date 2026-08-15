@@ -415,7 +415,7 @@ describe('ValidationChecklist', () => {
   })
 
   it('shows backend validation paths and codes in debug locale', () => {
-    const path = 'capability_refs.custom-middleware.middlewares[0].package_id'
+    const path = 'capability_refs.custom-middleware.python_package_bindings[0].package_id'
     const wrapper = mount(ValidationChecklist, {
       props: {
         title: 'validation.title',
@@ -426,13 +426,13 @@ describe('ValidationChecklist', () => {
             valid: false,
             stage: 'draft_validation',
             issues: [{
-              code: 'middleware_package.not_found',
+              code: 'python_package.not_found',
               scope: 'main_agent',
               owner_id: 'main-agent-id',
               owner_name: 'coordinator',
               path,
               message: 'safe backend detail',
-              message_key: 'validation.issue.middlewarePackage.notFound',
+              message_key: 'validation.issue.pythonPackage.notFound',
               message_args: { package_id: 'missing-package' },
             }],
           },
@@ -443,8 +443,8 @@ describe('ValidationChecklist', () => {
 
     expect(wrapper.get('[data-testid="validation-location"]').text()).toBe(path)
     expect(wrapper.get('[data-testid="validation-reason"]').text())
-      .toBe('middleware_package.not_found')
+      .toBe('python_package.not_found')
     expect(wrapper.get('[data-testid="validation-resolution"]').text())
-      .toBe('validation.resolution.middlewarePackageNotFound')
+      .toBe('validation.resolution.pythonPackageNotFound')
   })
 })

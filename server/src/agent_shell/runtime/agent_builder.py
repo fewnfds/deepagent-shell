@@ -9,7 +9,7 @@ from pydantic import SecretStr
 
 from agent_shell import __version__
 from agent_shell.middleware_packages.runtime import MiddlewarePackageRuntime
-from agent_shell.middleware_packages.dependencies import dependency_metadata
+from agent_shell.python_packages.dependencies import dependency_metadata
 from agent_shell.capability_manifest import FILESYSTEM_TOOL_NAMES
 from agent_shell.contracts import (
     FilesystemBlock,
@@ -142,7 +142,7 @@ class AgentBuilder:
         secrets: ProviderSecretResolver,
         *,
         custom_tools_dir: Path,
-        middleware_packages_dir: Path,
+        python_packages_dir: Path,
         runtime_dir: Path,
         skills_dir: Path,
         validation: ConfigurationValidationService,
@@ -150,7 +150,7 @@ class AgentBuilder:
     ) -> None:
         self._secrets = secrets
         self._custom_tools_dir = custom_tools_dir
-        self._middleware_packages_dir = middleware_packages_dir
+        self._python_packages_dir = python_packages_dir
         self._runtime_dir = runtime_dir
         self._skills_dir = skills_dir
         self._validation = validation
@@ -557,7 +557,7 @@ class AgentBuilder:
             assembly,
             main_agent_id=main_agent_id,
             request_id=request_id,
-            packages_dir=self._middleware_packages_dir,
+            packages_dir=self._python_packages_dir,
             runtime_root=self._runtime_dir,
         )
         self._middleware_runtime = middleware_runtime

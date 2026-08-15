@@ -1,19 +1,17 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
-import type { MiddlewareConfigSchema } from '@/api'
-import MiddlewareConfigForm from './MiddlewareConfigForm.vue'
+import type { PythonPackageConfigSchema } from '@/api'
+import PythonPackageConfigForm from './PythonPackageConfigForm.vue'
 
-const schema: MiddlewareConfigSchema = {
+const schema: PythonPackageConfigSchema = {
   type: 'object',
   properties: {
-    transform_source: {
+    label: {
       type: 'string',
       title: 'Transform',
       description: 'Edit messages.',
       default: '',
-      format: 'python',
-      contentMediaType: 'text/x-python',
     },
     mode: {
       type: 'string',
@@ -36,27 +34,27 @@ const schema: MiddlewareConfigSchema = {
       default: false,
     },
   },
-  required: ['transform_source'],
+  required: ['label'],
   additionalProperties: false,
 }
 
-describe('MiddlewareConfigForm', () => {
+describe('PythonPackageConfigForm', () => {
   it('renders controlled field types and emits structured values', async () => {
-    const wrapper = mount(MiddlewareConfigForm, {
+    const wrapper = mount(PythonPackageConfigForm, {
       props: {
         idPrefix: 'middleware-config',
-        modelValue: { transform_source: '', mode: 'all', enabled: false },
+        modelValue: { label: '', mode: 'all', enabled: false },
         schema,
       },
     })
 
-    expect(wrapper.get('textarea').classes()).toContain('font-monospace')
+    expect(wrapper.get('textarea').classes()).toContain('form-control')
     expect(wrapper.get('input[type="number"]').attributes('step')).toBe('1')
     expect(wrapper.get('input[type="checkbox"]').attributes('role')).toBe('switch')
 
     await wrapper.get('select').setValue('1')
     expect(wrapper.emitted('update:modelValue')?.at(-1)?.[0]).toEqual({
-      transform_source: '',
+      label: '',
       mode: 'latest',
       enabled: false,
     })

@@ -409,7 +409,6 @@
         "callers": [
           "src/components/RecordPicker.vue",
           "src/editors/ExceptionRetryEditor.vue",
-          "src/editors/ConditionRouterEditor.vue",
           "src/editors/FilesystemEditor.vue",
           "src/editors/FilesystemPermissionsEditor.vue",
           "src/editors/ModelEditor.vue",
@@ -448,11 +447,14 @@
         "callers": ["src/pages/WorkflowEditorPage.vue"]
       },
       {
-        "name": "MiddlewareConfigForm",
-        "path": "src/components/MiddlewareConfigForm.vue",
+        "name": "PythonPackageConfigForm",
+        "path": "src/components/PythonPackageConfigForm.vue",
         "kind": "domain-composition",
-        "reason": "Renders the backend-approved flat Middleware package config schema as structured binding fields",
-        "callers": ["src/editors/CustomMiddlewareEditor.vue"]
+        "reason": "Renders the backend-approved flat Python package config schema as structured binding fields",
+        "callers": [
+          "src/editors/ConditionRouterEditor.vue",
+          "src/editors/CustomMiddlewareEditor.vue"
+        ]
       },
       {
         "name": "SubagentReferencesEditor",

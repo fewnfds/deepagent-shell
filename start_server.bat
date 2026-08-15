@@ -99,7 +99,7 @@ if defined PORT_FOUND (
 :after_port_prompt
 echo Preparing custom Middleware dependencies...
 pushd "%SCRIPT_DIR%"
-"!PYTHON_EXE!" !PYTHON_FLAGS! -m agent_shell.middleware_packages.dependencies --home "%SCRIPT_DIR%."
+"!PYTHON_EXE!" !PYTHON_FLAGS! -m agent_shell.python_packages.dependencies --home "%SCRIPT_DIR%."
 set "MIDDLEWARE_DEPENDENCY_EXIT=%ERRORLEVEL%"
 popd
 if not "!MIDDLEWARE_DEPENDENCY_EXIT!"=="0" goto middleware_dependencies_failed

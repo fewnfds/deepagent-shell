@@ -3,13 +3,13 @@ import { LteButton } from '@adminlte/vue'
 import { useI18n } from 'vue-i18n'
 
 import type { LocalizedMessagePayload } from '@/api'
-import MiddlewareConfigForm from '@/components/MiddlewareConfigForm.vue'
+import PythonPackageConfigForm from '@/components/PythonPackageConfigForm.vue'
 import {
   createMiddlewareEntry,
   type CustomMiddlewareCatalogItem,
   type CustomMiddlewareDraft,
 } from '@/domain/blocks'
-import { middlewareConfigDefaults } from '@/domain/middlewareConfigSchema'
+import { pythonPackageConfigDefaults } from '@/domain/pythonPackageConfigSchema'
 
 import { useEditorModel } from './shared/useEditorModel'
 
@@ -33,14 +33,14 @@ const { t } = useI18n()
 const draft = useEditorModel(() => props.modelValue, (value) => emit('update:modelValue', value))
 
 function addPackage(): void {
-  draft.middlewares.push(createMiddlewareEntry())
+  draft.python_package_bindings.push(createMiddlewareEntry())
 }
 
 function move(index: number, delta: number): void {
   const target = index + delta
-  if (target < 0 || target >= draft.middlewares.length) return
-  const moved = draft.middlewares.splice(index, 1)[0]
-  if (moved) draft.middlewares.splice(target, 0, moved)
+  if (target < 0 || target >= draft.python_package_bindings.length) return
+  const moved = draft.python_package_bindings.splice(index, 1)[0]
+  if (moved) draft.python_package_bindings.splice(target, 0, moved)
 }
 
 function selectedPackage(packageId: string): CustomMiddlewareCatalogItem | undefined {
@@ -49,17 +49,21 @@ function selectedPackage(packageId: string): CustomMiddlewareCatalogItem | undef
 
 function selectPackage(index: number, packageId: string): void {
   const selected = selectedPackage(packageId)
-  const entry = draft.middlewares[index]
+  const entry = draft.python_package_bindings[index]
   if (!entry) return
   entry.package_id = packageId
-  entry.config = selected ? middlewareConfigDefaults(selected.config_schema) : {}
+  entry.config = selected ? pythonPackageConfigDefaults(selected.config_schema) : {}
 }
 
 function packageLabel(item: CustomMiddlewareCatalogItem): string {
   const status = item.dependency_status === 'ready'
     ? ''
-    : ` - ${t(`editors.customMiddleware.status.${item.dependency_status}`)}`
+    : ` - ${t(`editors.pythonPackage.status.${item.dependency_status}`)}`
   return `${item.name} (${item.id})${status}`
+}
+
+function resourceError(error: LocalizedMessagePayload): string {
+  return t(error.message_key, error.message_args)
 }
 </script>
 
@@ -90,8 +94,8 @@ function packageLabel(item: CustomMiddlewareCatalogItem): string {
       </div>
     </div>
 
-    <div v-if="draft.middlewares.length" class="list-group list-group-flush">
-      <div v-for="(entry, index) in draft.middlewares" :key="entry._key" class="list-group-item">
+    <div v-if="draft.python_package_bindings.length" class="list-group list-group-flush">
+      <div v-for="(entry, index) in draft.python_package_bindings" :key="entry._key" class="list-group-item">
         <div class="row g-3 align-items-end">
           <div class="col-12 col-lg-8">
             <label class="form-label" :for="`middleware-package-${entry._key}`">
@@ -132,7 +136,7 @@ function packageLabel(item: CustomMiddlewareCatalogItem): string {
               ><i class="bi bi-arrow-up" aria-hidden="true" /></LteButton>
               <LteButton
                 :aria-label="t('editors.common.moveDown')"
-                :disabled="index === draft.middlewares.length - 1"
+                :disabled="index === draft.python_package_bindings.length - 1"
                 size="sm"
                 theme="secondary"
                 type="button"
@@ -143,12 +147,12 @@ function packageLabel(item: CustomMiddlewareCatalogItem): string {
                 size="sm"
                 theme="danger"
                 type="button"
-                @click="draft.middlewares.splice(index, 1)"
+                @click="draft.python_package_bindings.splice(index, 1)"
               ><i class="bi bi-trash" aria-hidden="true" /></LteButton>
             </div>
           </div>
           <div v-if="selectedPackage(entry.package_id)" class="col-12">
-            <MiddlewareConfigForm
+            <PythonPackageConfigForm
               :id-prefix="`middleware-config-${entry._key}`"
               v-model="entry.config"
               :schema="selectedPackage(entry.package_id)!.config_schema"
@@ -158,5 +162,10 @@ function packageLabel(item: CustomMiddlewareCatalogItem): string {
       </div>
     </div>
     <p v-else class="text-body-secondary mb-0">{{ t('editors.customMiddleware.empty') }}</p>
+    <div v-if="Object.keys(errors).length" class="alert alert-danger mt-3 mb-0" role="alert">
+      <p v-for="(error, folder) in errors" :key="folder" class="mb-1">
+        <strong>{{ folder }}</strong> {{ resourceError(error) }}
+      </p>
+    </div>
   </div>
 </template>

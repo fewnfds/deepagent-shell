@@ -22,7 +22,8 @@ const api = vi.hoisted(() => ({
   validateDraft: vi.fn(),
   validateRepository: vi.fn(),
   listCustomTools: vi.fn(),
-  listCustomMiddlewares: vi.fn(),
+  listMiddlewarePackages: vi.fn(),
+  listConditionRouterPackages: vi.fn(),
   listSkills: vi.fn(),
   fetchModels: vi.fn(),
   listModelProviders: vi.fn(),
@@ -162,7 +163,8 @@ beforeEach(() => {
   api.validateDraft.mockResolvedValue({ valid: true, stage: 'draft_validation', issues: [] })
   api.validateRepository.mockResolvedValue({ valid: true, stage: 'repository_load', issues: [] })
   api.listCustomTools.mockResolvedValue({ catalog: [], errors: {} })
-  api.listCustomMiddlewares.mockResolvedValue({ catalog: [], errors: {} })
+  api.listMiddlewarePackages.mockResolvedValue({ catalog: [], errors: {} })
+  api.listConditionRouterPackages.mockResolvedValue({ catalog: [], errors: {} })
   api.listSkills.mockResolvedValue({
     catalog: [{ name: 'research', folder: 'research', description: 'Research skill' }],
     errors: {},
@@ -335,7 +337,7 @@ describe('ComponentsPage', () => {
 
     expect(api.listSkills).toHaveBeenCalledOnce()
     expect(api.listCustomTools).not.toHaveBeenCalled()
-    expect(api.listCustomMiddlewares).not.toHaveBeenCalled()
+    expect(api.listMiddlewarePackages).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

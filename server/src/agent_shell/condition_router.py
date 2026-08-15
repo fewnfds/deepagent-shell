@@ -1,23 +1,13 @@
 from __future__ import annotations
 
-import ast
-import builtins
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Awaitable, Collection, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import fields
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Callable
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    StringConstraints,
-    field_validator,
-    model_validator,
-)
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
-from agent_shell.python_requirements import parse_python_requirements
-from agent_shell.script_source import validate_module_function
+from agent_shell.python_packages.contracts import PythonPackageBinding
 
 if TYPE_CHECKING:
     from agent_shell.runtime.context import WorkflowRuntimeContext
@@ -28,50 +18,17 @@ BranchKey = Annotated[
     StringConstraints(strip_whitespace=True),
     Field(min_length=1, max_length=64),
 ]
-ScriptSource = Annotated[str, StringConstraints(strip_whitespace=False)]
-DEFAULT_CONDITION_ROUTER_SOURCE = (
-    "async def route(state, context):\n"
-    "    return {\"activate\": [\"otherwise\"], \"update\": {}}\n"
-)
+ConditionRouterCallable = Callable[[dict[str, Any], dict[str, Any]], Awaitable[Any]]
 
 
 class ConditionRouterBlock(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: Annotated[str, Field(min_length=1, max_length=120)]
-    route_source: ScriptSource = Field(
-        default=DEFAULT_CONDITION_ROUTER_SOURCE,
-        max_length=100_000,
+    python_package_bindings: list[PythonPackageBinding] = Field(
+        default_factory=list,
+        max_length=1,
     )
-    python_requirements: list[str] = Field(default_factory=list, max_length=100)
-
-    @field_validator("python_requirements")
-    @classmethod
-    def validate_python_requirements(cls, values: list[str]) -> list[str]:
-        return list(parse_python_requirements(values).values)
-
-    @model_validator(mode="after")
-    def validate_router(self) -> "ConditionRouterBlock":
-        validate_module_function(self.route_source, "route", asynchronous=True)
-        tree = ast.parse(self.route_source, filename="route.py")
-        function = next(
-            node
-            for node in tree.body
-            if isinstance(node, ast.AsyncFunctionDef) and node.name == "route"
-        )
-        arguments = function.args
-        positional = [*arguments.posonlyargs, *arguments.args]
-        if (
-            [argument.arg for argument in positional] != ["state", "context"]
-            or arguments.vararg is not None
-            or arguments.kwarg is not None
-            or arguments.kwonlyargs
-            or arguments.defaults
-        ):
-            raise ValueError(
-                "route must have exactly the async signature route(state, context)"
-            )
-        return self
 
 
 class ConditionRouterResult(BaseModel):
@@ -140,7 +97,7 @@ def _state_delta(
 
 
 async def run_condition_router(
-    block: Mapping[str, Any],
+    route: ConditionRouterCallable,
     *,
     state: Mapping[str, Any],
     context: WorkflowRuntimeContext,
@@ -148,17 +105,10 @@ async def run_condition_router(
 ) -> ConditionRouterResult:
     from agent_shell.runtime.state import WorkflowState
 
-    configuration = ConditionRouterBlock.model_validate(block)
-    namespace: dict[str, Any] = {"__builtins__": builtins.__dict__}
     original_state = _detached(state)
     script_state = _detached(state)
     try:
-        exec(
-            compile(configuration.route_source, "<condition-router>", "exec"),
-            namespace,
-            namespace,
-        )
-        value = await namespace["route"](
+        value = await route(
             state=script_state,
             context=workflow_context_value(context),
         )
@@ -190,9 +140,9 @@ async def run_condition_router(
 __all__ = [
     "BranchKey",
     "ConditionRouterBlock",
+    "ConditionRouterCallable",
     "ConditionRouterError",
     "ConditionRouterResult",
-    "DEFAULT_CONDITION_ROUTER_SOURCE",
     "run_condition_router",
     "workflow_context_value",
 ]

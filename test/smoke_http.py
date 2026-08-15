@@ -108,7 +108,7 @@ def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> d
             "model_settings": {},
         },
         "custom-tool": {"name": name, "tools": []},
-        "custom-middleware": {"name": name, "middlewares": []},
+        "custom-middleware": {"name": name, "python_package_bindings": []},
         "output-mode": {
             "name": name,
             "filter_mode": "blocklist",
@@ -277,7 +277,7 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
         catalog = _request(client, "GET", "/api/catalog", headers=management).json()
         assert tuple(item["type"] for item in catalog["block_types"]) == CAPABILITY_TYPES
         _request(client, "GET", "/api/tools/custom", headers=management)
-        _request(client, "GET", "/api/middlewares/custom", headers=management)
+        _request(client, "GET", "/api/python-packages/middleware/agent-middleware", headers=management)
         _request(client, "GET", "/api/skills", headers=management)
         readiness = _request(
             client, "GET", "/api/readiness", headers=management

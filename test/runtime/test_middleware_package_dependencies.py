@@ -6,8 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_shell.middleware_packages import dependencies
-from agent_shell.middleware_packages.dependencies import prepare_windows_dependencies
+from agent_shell.python_packages import dependencies
+from agent_shell.python_packages.dependencies import prepare_windows_dependencies
 from agent_shell.middleware_packages.packages import scan_middleware_packages
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.file_config import FileConfigRepository
@@ -16,11 +16,13 @@ from agent_shell.storage.file_config import FileConfigRepository
 def write_package(root: Path, package_id: str) -> Path:
     folder = root / package_id
     folder.mkdir(parents=True)
-    (folder / "middleware.json").write_text(
+    (folder / "package.json").write_text(
         json.dumps(
             {
-                "api_version": 1,
+                "format_version": 1,
                 "id": package_id,
+                "family": "middleware",
+                "adapter": "agent-middleware",
                 "name": package_id,
                 "description": "Dependency test package.",
                 "config_schema": {
@@ -62,7 +64,8 @@ def write_runtime_manifest(runtime_root: Path) -> None:
 
 def test_requirements_are_normalized_and_need_runtime_state(tmp_path: Path) -> None:
     packages = tmp_path / "packages"
-    folder = write_package(packages, "image-reader")
+    package_id = "11111111-1111-4111-8111-111111111111"
+    folder = write_package(packages, package_id)
     (folder / "requirements.txt").write_text(
         "# package dependencies\nPillow>=11,<13\nhttpx; python_version >= '3.12'\n",
         encoding="utf-8",
@@ -82,8 +85,8 @@ def test_requirements_are_normalized_and_need_runtime_state(tmp_path: Path) -> N
     )
     invalid = scan_middleware_packages(packages)
     assert invalid["catalog"] == []
-    assert invalid["errors"]["image-reader"]["message_key"] == (
-        "resource.error.middlewarePackage.requirementsInvalid"
+    assert invalid["errors"][package_id]["message_key"] == (
+        "resource.error.pythonPackage.requirementsInvalid"
     )
 
 
@@ -93,11 +96,22 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
 ) -> None:
     data_root = tmp_path / "data"
     runtime_root = tmp_path / "runtime"
-    packages = data_root / "resources" / "custom_middlewares"
-    folder = write_package(packages, "image-reader")
+    packages = data_root / "resources" / "python_packages"
+    package_id = "11111111-1111-4111-8111-111111111111"
+    folder = write_package(packages, package_id)
     (folder / "requirements.txt").write_text("Pillow==12.0.0\n", encoding="utf-8")
     write_runtime_manifest(runtime_root)
     block_store = BlockStore(FileConfigRepository(data_root))
+    block_store.save_block(
+        "custom-middleware",
+        "middleware",
+        {
+            "name": "middleware",
+            "python_package_bindings": [
+                {"package_id": package_id, "enabled": True, "config": {}}
+            ],
+        },
+    )
     for component_type, component_id, requirement in (
         ("workflow-input-context", "input-context", "PyYAML==6.0.3"),
         ("workflow-prepare", "prepare", "rich==14.3.3"),
@@ -129,7 +143,7 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
     assert state is not None
     assert state["status"] == "ready"
     assert set(state["records"]) == {
-        "middleware-package:image-reader",
+        f"python-package:{package_id}",
         "workflow-input-context:input-context",
         "workflow-prepare:prepare",
     }
@@ -150,7 +164,7 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
     failed_state = dependencies.load_dependency_state(runtime_root)
     assert failed_state is not None
     assert failed_state["status"] == "failed"
-    assert failed_state["records"]["middleware-package:image-reader"]["status"] == "failed"
+    assert failed_state["records"][f"python-package:{package_id}"]["status"] == "failed"
     assert (dependencies.package_site_packages(runtime_root) / "PIL").is_dir()
     failed = scan_middleware_packages(packages, runtime_root=runtime_root)["catalog"]
     assert failed[0]["dependency_status"] == "failed"

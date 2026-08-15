@@ -68,7 +68,7 @@ def test_agent_builder_disabled_capabilities_override_deep_agents_default_stack(
     builder = AgentBuilder(
         SimpleNamespace(resolve_model=lambda _model_id: None),
         custom_tools_dir=tmp_path / "tools",
-        middleware_packages_dir=tmp_path / "middleware",
+        python_packages_dir=tmp_path / "python-packages",
         runtime_dir=tmp_path / "runtime",
         skills_dir=tmp_path / "skills",
         validation=object(),
@@ -145,7 +145,7 @@ def test_agent_builder_materializes_workflow_input_context_as_extra_middleware(
     builder = AgentBuilder(
         SimpleNamespace(resolve_model=lambda _model_id: None),
         custom_tools_dir=tmp_path / "tools",
-        middleware_packages_dir=tmp_path / "middleware",
+        python_packages_dir=tmp_path / "python-packages",
         runtime_dir=tmp_path / "runtime",
         skills_dir=tmp_path / "skills",
         validation=object(),

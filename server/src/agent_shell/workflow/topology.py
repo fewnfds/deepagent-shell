@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from agent_shell.condition_router import ConditionRouterBlock
+from agent_shell.condition_router import ConditionRouterCallable
 from agent_shell.validation import ValidationIssue
 from agent_shell.workflow.catalog import NodeHandleSpec, NodeTypeSpec, node_type_spec
 from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
@@ -68,7 +68,7 @@ def _handle(
 def validate_workflow_topology(
     document: WorkflowGraphDocumentV1,
     *,
-    condition_routers: Mapping[str, ConditionRouterBlock] | None = None,
+    condition_routers: Mapping[str, ConditionRouterCallable] | None = None,
 ) -> tuple[ValidationIssue, ...]:
     nodes = document.definition.nodes
     edges = document.definition.edges

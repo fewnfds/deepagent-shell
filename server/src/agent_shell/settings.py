@@ -298,8 +298,8 @@ class Settings(BaseSettings):
     def resolved_custom_tools_dir(self) -> Path:
         return self.data_root / "resources" / "custom_tools"
 
-    def resolved_custom_middlewares_dir(self) -> Path:
-        return self.data_root / "resources" / "custom_middlewares"
+    def resolved_python_packages_dir(self) -> Path:
+        return self.data_root / "resources" / "python_packages"
 
     def resolved_skills_dir(self) -> Path:
         return self.data_root / "resources" / "skills"
@@ -311,7 +311,7 @@ class Settings(BaseSettings):
             self.resolved_files_dir(),
             self.resolved_media_outputs_dir(),
             self.resolved_custom_tools_dir(),
-            self.resolved_custom_middlewares_dir(),
+            self.resolved_python_packages_dir(),
             self.resolved_skills_dir(),
             self.resolved_logs_dir(),
             self.resolved_runtime_dir() / "cache",

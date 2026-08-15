@@ -6,12 +6,14 @@ from copy import deepcopy
 from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from agent_shell.runtime.agent_builder import AgentBuilder, BuiltAgent
 from agent_shell.runtime.capabilities import DeepAgentsWorkspace
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.middleware_packages.runtime import MiddlewarePackageRuntime
+from agent_shell.condition_router_packages import ConditionRouterPackageRuntime
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.model_response import ModelResponse
@@ -73,6 +75,7 @@ class AgentExecution:
     middleware_runtime: MiddlewarePackageRuntime
     media_response: MainAgentMediaResponse
     middleware_runtimes: tuple[MiddlewarePackageRuntime, ...] = ()
+    condition_router_runtime: ConditionRouterPackageRuntime | None = None
     event_observers: tuple[Callable[[OutputEvent], None], ...] = ()
     context: WorkflowRuntimeContext | None = None
     run_config: dict[str, Any] | None = None
@@ -118,6 +121,8 @@ class AgentExecution:
             runtimes = (self.middleware_runtime, *self.middleware_runtimes)
             for runtime in runtimes:
                 await runtime.close()
+            if self.condition_router_runtime is not None:
+                await self.condition_router_runtime.close()
 
     async def _stream_text_inner(self) -> AsyncIterator[str]:
 
@@ -346,12 +351,16 @@ class AgentRuntime:
         media_outputs: MediaOutputStore,
         *,
         blocks: BlockStore | None = None,
+        python_packages_dir: Path | None = None,
+        runtime_dir: Path | None = None,
         workflow_debug: WorkflowDebugService | None = None,
         runtime_diagnostics: RuntimeDiagnostics | None = None,
     ) -> None:
         self._builder = builder
         self._media_outputs = media_outputs
         self._blocks = blocks
+        self._python_packages_dir = python_packages_dir
+        self._runtime_dir = runtime_dir
         self._workflow_debug = workflow_debug
         self._runtime_diagnostics = runtime_diagnostics
 
@@ -407,6 +416,7 @@ class AgentRuntime:
         public_model: str = "",
         workflow_built: tuple[tuple[str, BuiltAgent], ...] = (),
         workflow_output_config: dict[str, object] | None = None,
+        condition_router_runtime: ConditionRouterPackageRuntime | None = None,
         context: WorkflowRuntimeContext | None = None,
         run_config: dict[str, Any] | None = None,
         durability: str | None = None,
@@ -462,6 +472,7 @@ class AgentRuntime:
                 agent.middleware_runtime
                 for _, agent in workflow_agents[1:]
             ),
+            condition_router_runtime=condition_router_runtime,
             context=context,
             run_config=run_config,
             durability=durability,
@@ -521,7 +532,6 @@ class AgentRuntime:
         request_id: str = "",
         public_model: str = "",
     ) -> AgentExecution:
-        from agent_shell.condition_router import ConditionRouterBlock
         from agent_shell.workflow.catalog import (
             AgentNodeConfig,
             ConditionRouterNodeConfig,
@@ -553,7 +563,9 @@ class AgentRuntime:
                 raise
             return ValidationReport(stage="workflow_publish")
 
-        condition_routers: dict[str, ConditionRouterBlock] = {}
+        from agent_shell.condition_router import ConditionRouterBlock
+
+        condition_router_blocks: dict[str, ConditionRouterBlock] = {}
         for router_node in condition_router_nodes:
             router_id = str(
                 ConditionRouterNodeConfig.model_validate(
@@ -568,7 +580,7 @@ class AgentRuntime:
             if stored_router is None:
                 continue
             try:
-                condition_routers[router_node.id] = ConditionRouterBlock.model_validate(
+                condition_router_blocks[router_node.id] = ConditionRouterBlock.model_validate(
                     {key: value for key, value in stored_router.items() if key != "id"}
                 )
             except Exception as exc:
@@ -578,13 +590,41 @@ class AgentRuntime:
                     status_code=422,
                 ) from exc
 
-        executable = validate_workflow_executable(
-            document,
-            validate_main_agent=validate_main_agent,
-            condition_routers=condition_routers,
+        if self._python_packages_dir is None or self._runtime_dir is None:
+            raise AgentRuntimeError(
+                "workflow.python_package_runtime_unavailable",
+                "The Python package runtime is not configured.",
+                status_code=500,
+            )
+        condition_router_runtime = ConditionRouterPackageRuntime(
+            request_id=request_id,
+            packages_dir=self._python_packages_dir,
+            runtime_root=self._runtime_dir,
         )
+        try:
+            condition_routers = {
+                node_id: condition_router_runtime.router_for(
+                    node_id,
+                    block.model_dump(mode="python")["python_package_bindings"],
+                )
+                for node_id, block in condition_router_blocks.items()
+            }
+        except Exception:
+            await condition_router_runtime.close()
+            raise
+
+        try:
+            executable = validate_workflow_executable(
+                document,
+                validate_main_agent=validate_main_agent,
+                condition_routers=condition_routers,
+            )
+        except Exception:
+            await condition_router_runtime.close()
+            raise
         if not executable.valid:
             issue = executable.issues[0]
+            await condition_router_runtime.close()
             raise AgentRuntimeError(
                 issue.code,
                 issue.message,
@@ -662,25 +702,6 @@ class AgentRuntime:
                     )
                 )
             prepare_context: Mapping[str, Any] = {}
-            for router_node in condition_router_nodes:
-                router = condition_routers.get(router_node.id)
-                if router is None:
-                    continue
-                router_id = str(
-                    ConditionRouterNodeConfig.model_validate(
-                        router_node.config
-                    ).condition_router_id
-                )
-                router_metadata = self._builder.script_dependency_metadata(
-                    "condition-router",
-                    {"id": router_id, **router.model_dump(mode="json")},
-                )
-                if router_metadata["dependency_status"] != "ready":
-                    raise AgentRuntimeError(
-                        "condition_router_dependencies_not_ready",
-                        "Restart Agent Shell to prepare the selected Condition Router dependencies.",
-                        status_code=409,
-                    )
             prepare_id = (workflow_snapshot or {}).get("workflow_prepare_id")
             if prepare_id is not None:
                 prepare_block = (
@@ -772,12 +793,14 @@ class AgentRuntime:
         except asyncio.CancelledError:
             for _, agent in built_agents:
                 await agent.middleware_runtime.close()
+            await condition_router_runtime.close()
             if debug_run is not None:
                 await debug_run.finish("cancelled", error_code="request_cancelled")
             raise
         except Exception as exc:
             for _, agent in built_agents:
                 await agent.middleware_runtime.close()
+            await condition_router_runtime.close()
             error_code = (
                 exc.code
                 if isinstance(exc, AgentRuntimeError)
@@ -828,4 +851,5 @@ class AgentRuntime:
             run_config=debug_run.config() if debug_run is not None else None,
             durability="sync" if debug_run is not None else None,
             debug_run=debug_run,
+            condition_router_runtime=condition_router_runtime,
         )

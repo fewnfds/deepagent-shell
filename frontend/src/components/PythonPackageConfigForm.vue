@@ -2,15 +2,15 @@
 import { computed } from 'vue'
 
 import type {
-  MiddlewareConfigField,
-  MiddlewareConfigScalar,
-  MiddlewareConfigSchema,
+  PythonPackageConfigField,
+  PythonPackageConfigScalar,
+  PythonPackageConfigSchema,
 } from '@/api'
 
 const props = defineProps<{
   idPrefix: string
   modelValue: Record<string, unknown>
-  schema: MiddlewareConfigSchema
+  schema: PythonPackageConfigSchema
 }>()
 
 const emit = defineEmits<{
@@ -42,17 +42,17 @@ function updateNumber(name: string, event: Event): void {
   updateField(name, input.value === '' ? undefined : input.valueAsNumber)
 }
 
-function enumIndex(name: string, field: MiddlewareConfigField): string {
+function enumIndex(name: string, field: PythonPackageConfigField): string {
   const index = field.enum?.findIndex((value) => Object.is(value, props.modelValue[name])) ?? -1
   return index < 0 ? '' : String(index)
 }
 
-function updateEnum(name: string, field: MiddlewareConfigField, event: Event): void {
+function updateEnum(name: string, field: PythonPackageConfigField, event: Event): void {
   const selected = (event.target as HTMLSelectElement).value
   updateField(name, selected === '' ? undefined : field.enum?.[Number(selected)])
 }
 
-function optionLabel(value: MiddlewareConfigScalar): string {
+function optionLabel(value: PythonPackageConfigScalar): string {
   return String(value)
 }
 </script>
@@ -105,22 +105,6 @@ function optionLabel(value: MiddlewareConfigScalar): string {
           :value="numberValue(name)"
           @input="updateNumber(name, $event)"
         >
-      </template>
-
-      <template v-else-if="field.format === 'python'">
-        <label class="form-label" :for="`${idPrefix}-${name}`">{{ field.title }}</label>
-        <textarea
-          :id="`${idPrefix}-${name}`"
-          class="form-control font-monospace"
-          :maxlength="field.maxLength"
-          :minlength="field.minLength"
-          :pattern="field.pattern"
-          :required="required.has(name)"
-          rows="1"
-          spellcheck="false"
-          :value="textValue(name)"
-          @input="updateField(name, ($event.target as HTMLTextAreaElement).value)"
-        />
       </template>
 
       <template v-else>

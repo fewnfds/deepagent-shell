@@ -31,6 +31,7 @@ import { useToasts } from '@/composables/useToasts'
 import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
 import {
   blockAdapters,
+  type ConditionRouterCatalogItem,
   type BlockDraftBase,
   type CustomMiddlewareCatalogItem,
   type CustomToolCatalogItem,
@@ -133,6 +134,8 @@ const customTools = ref<CustomToolCatalogItem[]>([])
 const customToolErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const customMiddlewares = ref<CustomMiddlewareCatalogItem[]>([])
 const customMiddlewareErrors = ref<Record<string, LocalizedMessagePayload>>({})
+const conditionRouterPackages = ref<ConditionRouterCatalogItem[]>([])
+const conditionRouterPackageErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const skills = ref<SkillCatalogItem[]>([])
 const filesystems = ref<FilesystemImportSource[]>([])
 const skillErrors = ref<Record<string, LocalizedMessagePayload>>({})
@@ -181,6 +184,13 @@ const editorProps = computed<Record<string, unknown>>(() => {
         errors: customMiddlewareErrors.value,
         loading: loadingResource.value,
       }
+    case 'condition-router':
+      return {
+        defaults: activeDefaults.value,
+        catalog: conditionRouterPackages.value,
+        errors: conditionRouterPackageErrors.value,
+        loading: loadingResource.value,
+      }
     case 'skill':
       return {
         defaults: activeDefaults.value,
@@ -199,7 +209,6 @@ const editorProps = computed<Record<string, unknown>>(() => {
     case 'workflow-input-context':
     case 'workflow-prepare':
     case 'workflow-event-output':
-    case 'condition-router':
       return {
         defaults: activeDefaults.value,
         ...(activeType.value === 'filesystem-permissions'
@@ -501,9 +510,13 @@ async function refreshResource(): Promise<void> {
       customTools.value = result.catalog
       customToolErrors.value = result.errors
     } else if (activeType.value === 'custom-middleware') {
-      const result = await managementApi.listCustomMiddlewares()
+      const result = await managementApi.listMiddlewarePackages()
       customMiddlewares.value = result.catalog
       customMiddlewareErrors.value = result.errors
+    } else if (activeType.value === 'condition-router') {
+      const result = await managementApi.listConditionRouterPackages()
+      conditionRouterPackages.value = result.catalog
+      conditionRouterPackageErrors.value = result.errors
     } else if (activeType.value === 'skill') {
       const result = await managementApi.listSkills()
       skills.value = result.catalog

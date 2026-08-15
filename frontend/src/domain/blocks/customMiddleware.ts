@@ -1,4 +1,4 @@
-import type { MiddlewareConfigSchema } from '@/api'
+import type { PythonPackageConfigSchema } from '@/api'
 
 import {
   cleanName,
@@ -23,22 +23,22 @@ interface MiddlewareApiEntry {
 }
 
 export interface CustomMiddlewareDraft extends BlockDraftBase {
-  middlewares: MiddlewareDraftEntry[]
+  python_package_bindings: MiddlewareDraftEntry[]
 }
 
 interface CustomMiddlewareApiRecord extends BlockDraftBase {
-  middlewares: MiddlewareApiEntry[]
+  python_package_bindings: MiddlewareApiEntry[]
 }
 
 interface CustomMiddlewarePayload extends BlockPayloadBase {
-  middlewares: MiddlewareApiEntry[]
+  python_package_bindings: MiddlewareApiEntry[]
 }
 
 export interface CustomMiddlewareCatalogItem {
   id: string
   name: string
   description: string
-  config_schema: MiddlewareConfigSchema
+  config_schema: PythonPackageConfigSchema
   dependency_status: 'ready' | 'restart_required' | 'failed'
 }
 
@@ -60,13 +60,13 @@ export function createMiddlewareEntry(value: Partial<MiddlewareApiEntry> = {}): 
 
 export const customMiddlewareAdapter = {
   blank(): CustomMiddlewareDraft {
-    return { id: '', name: '', middlewares: [] }
+    return { id: '', name: '', python_package_bindings: [] }
   },
   fromApi(value: CustomMiddlewareApiRecord): CustomMiddlewareDraft {
     return {
       ...identity(value),
-      middlewares: Array.isArray(value.middlewares)
-        ? value.middlewares.flatMap((entry) => isRecord(entry)
+      python_package_bindings: Array.isArray(value.python_package_bindings)
+        ? value.python_package_bindings.flatMap((entry) => isRecord(entry)
           ? [createMiddlewareEntry({
               package_id: stringValue(entry.package_id),
               enabled: typeof entry.enabled === 'boolean' ? entry.enabled : true,
@@ -79,7 +79,7 @@ export const customMiddlewareAdapter = {
   toPayload(value: CustomMiddlewareDraft): CustomMiddlewarePayload {
     return {
       name: cleanName(value.name),
-      middlewares: value.middlewares.map((entry) => ({
+      python_package_bindings: value.python_package_bindings.map((entry) => ({
         package_id: entry.package_id.trim(),
         enabled: entry.enabled,
         config: { ...entry.config },

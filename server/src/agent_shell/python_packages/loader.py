@@ -7,22 +7,34 @@ import sys
 from types import ModuleType
 from typing import Any, Callable
 
-from agent_shell.middleware_packages.packages import resolve_middleware_package
+from agent_shell.python_packages.packages import (
+    PythonPackageAdapter,
+    PythonPackageFamily,
+    resolve_python_package,
+)
 from agent_shell.registries.errors import ResourceScanError
 from agent_shell.runtime.errors import AgentRuntimeError
 
 
-class MiddlewarePackageLoader:
+class PythonPackageLoader:
     def __init__(
         self,
         *,
         request_id: str,
         packages_dir: Path,
         runtime_root: Path,
+        family: PythonPackageFamily,
+        adapter: PythonPackageAdapter,
+        factory_name: str,
+        factory_parameters: tuple[str, ...],
     ) -> None:
         self._request_id = request_id
         self._packages_dir = packages_dir
         self._runtime_root = runtime_root
+        self._family = family
+        self._adapter = adapter
+        self._factory_name = factory_name
+        self._factory_parameters = factory_parameters
         self._modules: dict[
             tuple[str, str, int], tuple[ModuleType, dict[str, object], Path]
         ] = {}
@@ -40,32 +52,36 @@ class MiddlewarePackageLoader:
         if cached is not None:
             return cached
         try:
-            resolved = resolve_middleware_package(
+            resolved = resolve_python_package(
                 package_id,
                 self._packages_dir,
+                family=self._family,
+                adapter=self._adapter,
+                factory_name=self._factory_name,
+                factory_parameters=self._factory_parameters,
                 runtime_root=self._runtime_root,
             )
         except ResourceScanError as exc:
             raise AgentRuntimeError(
-                "middleware_package_invalid",
-                f"Middleware package {package_id!r} is invalid.",
+                "python_package.invalid",
+                f"Python package {package_id!r} is invalid.",
                 status_code=422,
             ) from exc
         if resolved is None:
             raise AgentRuntimeError(
-                "middleware_package_not_found",
-                f"Middleware package {package_id!r} does not exist.",
+                "python_package.not_found",
+                f"Python package {package_id!r} does not exist.",
                 status_code=422,
             )
         metadata, package_dir = resolved
         if metadata["dependency_status"] != "ready":
             raise AgentRuntimeError(
-                "middleware_package_dependencies_not_ready",
-                f"Middleware package {package_id!r} dependencies are not ready.",
+                "python_package.dependencies_not_ready",
+                f"Python package {package_id!r} dependencies are not ready.",
                 status_code=409,
             )
         module_name = (
-            "_agent_shell_middleware_package_"
+            "_agent_shell_python_package_"
             f"{self._request_id.replace('-', '_')}_{len(self._modules)}"
         )
         spec = importlib.util.spec_from_file_location(
@@ -75,8 +91,8 @@ class MiddlewarePackageLoader:
         )
         if spec is None or spec.loader is None:
             raise AgentRuntimeError(
-                "middleware_package_load_failed",
-                f"Middleware package {package_id!r} could not be loaded.",
+                "python_package.load_failed",
+                f"Python package {package_id!r} could not be loaded.",
                 status_code=422,
             )
         module = importlib.util.module_from_spec(spec)
@@ -86,8 +102,8 @@ class MiddlewarePackageLoader:
         except Exception as exc:
             self._remove_module(module_name)
             raise AgentRuntimeError(
-                "middleware_package_load_failed",
-                f"Middleware package {package_id!r} could not be loaded.",
+                "python_package.load_failed",
+                f"Python package {package_id!r} could not be loaded.",
                 status_code=422,
             ) from exc
         value = (module, metadata, package_dir)
@@ -101,18 +117,18 @@ class MiddlewarePackageLoader:
         binding_kind: str,
         binding_index: int,
         package_id: str,
-    ) -> tuple[Callable[..., Any] | None, Path]:
-        module, _metadata, package_dir = self.load(
+    ) -> tuple[Callable[..., Any], dict[str, object], Path]:
+        module, metadata, package_dir = self.load(
             owner_id, binding_kind, binding_index, package_id
         )
-        function = getattr(module, "create_middleware", None)
+        function = getattr(module, self._factory_name, None)
         if not callable(function) or inspect.iscoroutinefunction(function):
             raise AgentRuntimeError(
-                "middleware_package_entrypoint_invalid",
-                f"Middleware package {package_id!r} has an invalid create_middleware entrypoint.",
+                "python_package.entrypoint_invalid",
+                f"Python package {package_id!r} has an invalid {self._factory_name} entrypoint.",
                 status_code=422,
             )
-        return function, package_dir
+        return function, metadata, package_dir
 
     @staticmethod
     def _remove_module(module_name: str) -> None:
@@ -125,3 +141,6 @@ class MiddlewarePackageLoader:
             self._remove_module(module_name)
         self._modules.clear()
         self._module_names.clear()
+
+
+__all__ = ["PythonPackageLoader"]

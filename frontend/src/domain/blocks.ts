@@ -75,7 +75,11 @@ export type {
 } from './blocks/workflowInputContext'
 export type { WorkflowPrepareDefaults, WorkflowPrepareDraft } from './blocks/workflowPrepare'
 export type { WorkflowEventOutputDefaults, WorkflowEventOutputDraft } from './blocks/workflowEventOutput'
-export type { ConditionRouterDefaults, ConditionRouterDraft } from './blocks/conditionRouter'
+export type {
+  ConditionRouterCatalogItem,
+  ConditionRouterDefaults,
+  ConditionRouterDraft,
+} from './blocks/conditionRouter'
 
 export {
   createMiddlewareEntry,

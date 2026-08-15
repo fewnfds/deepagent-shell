@@ -1,102 +1,125 @@
-# 自定义 Middleware 包
+# 文件化 Python 扩展包
 
-自定义 Middleware 包让实例维护者把普通 LangChain `AgentMiddleware` 安装到 Agent 装配中。Agent Shell 不定义
-第二套 Hook：模型、工具和 Agent 生命周期、state update、reducer、`Command`、短路及错误传播全部遵循
-LangChain 官方语义。
+Agent Shell 把用户代码保存为真实 Python package，组件 YAML 只保存稳定 UUID 和普通配置。目前支持两个窄 adapter：
 
-## 包结构
+- `middleware/agent-middleware`：物化 LangChain 官方 `AgentMiddleware`；
+- `workflow-node/condition-router`：为画布 Condition Router 物化 async route callable。
 
-每个包位于 `data/resources/custom_middlewares/<package-id>/`：
+两者共享文件格式、依赖准备和模块加载，但运行 contract 互不通用。系统不提供万能 Python Node。
+
+## 目录与 Manifest
+
+每个包位于 `data/resources/python_packages/<package-uuid>/`：
 
 ```text
-request-context/
-  middleware.json
+11111111-1111-4111-8111-111111111111/
+  package.json
   main.py
   requirements.txt  # 可选
+  helpers.py         # 可选
+  tests/             # 可选
 ```
 
-`middleware.json` 使用固定格式：
+目录名必须与 `package.json.id` 完全相同，ID 必须是小写规范 UUID。`package.json` 的固定外壳如下：
 
 ```json
 {
-  "api_version": 1,
-  "id": "request-context",
-  "name": "Request context",
-  "description": "Read the immutable request context from an official Middleware hook.",
+  "format_version": 1,
+  "id": "11111111-1111-4111-8111-111111111111",
+  "family": "workflow-node",
+  "adapter": "condition-router",
+  "name": "Risk router",
+  "description": "Route high-risk work for review.",
   "config_schema": {
     "type": "object",
-    "properties": {},
+    "properties": {
+      "threshold": {
+        "type": "integer",
+        "title": "Threshold",
+        "default": 80,
+        "minimum": 0,
+        "maximum": 100
+      }
+    },
+    "required": ["threshold"],
     "additionalProperties": false
   }
 }
 ```
 
-目录名必须与 `id` 相同。配置 Schema 只允许管理台能够机械渲染的扁平 object 子集。
+`config_schema` 只支持管理台能机械渲染的扁平字符串、整数、数字、布尔和枚举。Python 对象、callable 和嵌套运行参数由
+`main.py` 根据普通配置构造，不写入 YAML。
 
-`main.py` 只导出一个同步工厂：
+## Condition Router 模板
+
+Router manifest 使用 `family: workflow-node` 和 `adapter: condition-router`。`main.py` 必须提供同步工厂，工厂返回 async callable：
 
 ```python
-from langchain.agents.middleware import AgentMiddleware
+def create_router(config):
+    threshold = config["threshold"]
 
+    async def route(state, context):
+        risk = state.get("shared_vars", {}).get("risk", 0)
+        branch = "review" if risk >= threshold else "otherwise"
+        return {"activate": [branch], "update": {}}
 
-class RequestContextMiddleware(AgentMiddleware):
-    async def abefore_agent(self, state, runtime):
-        request_messages = runtime.context.messages
-        # Select and normalize messages for this Agent here, then return a
-        # normal LangGraph state update when the Agent needs them.
-        return None
+    return route
+```
+
+`route(state, context)` 必须正好接收这两个参数，并返回 `{activate, update}`。`activate` 只能包含当前 Router 画布 Branch Edge
+已有的 branch key；空列表使用 `otherwise`。`update` 只能更新 Agent Shell Workflow State 的现有 channel。目标 Node ID 与
+branch key 到 Node 的映射始终由 compiler/画布拥有，package 不能返回目标 Node ID 或 `Command`。
+
+Router 可能因 Graph 重试或恢复被重复调用，业务代码应保持幂等，不在模块全局变量中保存可恢复状态。
+
+## AgentMiddleware 模板
+
+Middleware manifest 使用 `family: middleware` 和 `adapter: agent-middleware`。工厂返回一个官方 `AgentMiddleware`，或返回非空
+`list`/`tuple`：
+
+```python
+from langchain.agents.middleware import ModelCallLimitMiddleware
 
 
 def create_middleware(config, agent):
-    return RequestContextMiddleware()
+    return ModelCallLimitMiddleware(run_limit=config["limit"])
 ```
 
-工厂可以返回一个 `AgentMiddleware`，也可以返回非空的 `list` 或 `tuple`。返回对象直接交给
-`create_deep_agent(middleware=[...])`，Agent Shell 不代理官方 Hook。
+也可以从 `requirements.txt` 安装的库导入用户 Middleware。返回对象直接进入 Main Agent 或 Subagent 的
+`create_deep_agent(middleware=[...])`；Agent Shell 不代理官方 hook、state schema、tools 或 stream transformer。
 
-## 装配与配置
+Agent Shell 使用 `astream` 异步 Agent 执行链。自定义 Middleware 实现 hook 时必须提供对应 async 版本，例如
+`abefore_agent`、`abefore_model`、`aafter_model`、`aafter_agent`、`awrap_model_call` 或 `awrap_tool_call`；只覆盖同步 hook
+而没有对应 async hook 的 package 会在物化时被拒绝。官方预置 Middleware 若同时提供同步和异步实现可以直接使用。
 
-Custom Middleware 组件保存有序包引用：
+## 配置绑定
 
-```json
-{
-  "name": "Request Middleware",
-  "middlewares": [
-    {
-      "package_id": "request-context",
-      "enabled": true,
-      "config": {}
-    }
-  ]
-}
+Condition Router 与 Custom Middleware 组件统一保存：
+
+```yaml
+python_package_bindings:
+  - package_id: 11111111-1111-4111-8111-111111111111
+    enabled: true
+    config:
+      threshold: 80
 ```
 
-Main Agent 选择该组件后使用这些包。直接 Subagent 按普通 capability 继承/替换/关闭规则决定自己的最终
-Middleware 包列表。禁用项不导入、不执行；包不存在、格式无效、依赖未准备或配置不满足 Schema 时，保存或
-请求装配会被拒绝。
+Condition Router 要求恰好一个 enabled binding；Custom Middleware 支持有序多个 binding。YAML 不保存源码、requirements、
+绝对路径、入口符号或环境 fingerprint。修改 package display name 不影响引用。
 
-## Runtime context 与 Graph State
+## Imports、依赖与生效
 
-`create_middleware` 的 `config` 和 `agent` 是构造期的普通配置值，不是 LangChain 的运行时对象。
-执行时，Middleware 使用 LangChain 官方 hook 参数读取数据：
+Python 仍要求显式 `import`。包可以使用 Agent Shell 核心环境已经安装的库，但源文件没有导入名称时不能直接使用它。非核心直接
+依赖必须逐行写入可选 `requirements.txt`。本地模块使用正常 package 相对导入，例如 `from .helpers import build_route`。
 
-- `runtime.context.messages`：本次请求冻结的规范化 OpenAI `messages[]`；它不会自动进入提示词；
-- `runtime.context.workflow`：当前 Workflow 的冻结元数据和 Graph 文档；
-- `runtime.context.workflow_state`：wrapper 为当前画布 Agent invocation 提供的父 Workflow State 顶层只读快照；
-- `runtime.context.workflow_node_id`、`agent_id`、`invocation_id`：当前画布节点、Agent Profile 和本次执行身份；
-- `state` / `request.state`：当前 Agent graph 的可变 state，按官方 reducer 和 state update 语义读写。
+Windows 启动器只为当前配置中已启用 binding 引用的包收集 requirements，并生成可重建的
+`runtime/python_packages/site-packages/`。核心锁定依赖优先；只接受普通 PyPI requirement、与核心约束兼容且提供 Windows wheel
+的版本，不接受 URL、本地路径、`.pth` 或只有源码发行包的依赖。
 
-用户消息应由 Middleware 按 Main Agent/Subagent 身份切分、整理，再从 `before_agent`/`abefore_agent` 返回
-`{"messages": [...]}` 等官方 state update。不要把可恢复业务数据保存在 Middleware 实例属性或模块全局变量。
+Python 源码修改在下一次请求重新加载；requirements 修改需要重启 Agent Shell。package 作者可以直接用 IDE、pytest、类型检查和
+版本控制维护完整目录。真实异常链和路径只应在 management-only Debug 中查看。
 
-## Python 依赖与安全
+## 安全
 
-可选 `requirements.txt` 每行声明一个普通 PyPI requirement。Windows 启动器根据全部有效包的依赖生成共享
-`runtime/middleware_packages/site-packages/`；核心锁定依赖优先，包不能修改核心 runtime。
-
-用户 Middleware 的依赖只属于实例扩展层。不得把这些依赖加入 Agent Shell 的 `pyproject.toml`、锁文件或
-核心 `.venv`；否则用户包会污染项目运行环境，并把实例配置错误地变成项目源码依赖。删除旧插件 Hook 不影响
-此边界：包加载和独立依赖准备继续保留，包的执行对象则统一使用官方 `AgentMiddleware`。
-
-Middleware 包是受信任的任意 Python 代码，以 Agent Shell 服务进程权限运行，没有 sandbox。只允许实例维护者
-写入该目录。
+Python package 是受信任的任意代码，以 Agent Shell 服务进程权限运行，不是 sandbox。只允许实例维护者写入
+`data/resources/python_packages/`，不要在 package 或 manifest 中保存 secret。

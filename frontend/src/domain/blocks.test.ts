@@ -113,15 +113,15 @@ describe('block adapters', () => {
     const middlewareDraft = customMiddlewareAdapter.fromApi({
       id: 'middleware-id',
       name: 'Middleware',
-      middlewares: [
+      python_package_bindings: [
         { package_id: 'first', enabled: true, config: { mode: 'strict' } },
         { package_id: 'second', enabled: false, config: {} },
       ],
     })
     const payload = customMiddlewareAdapter.toPayload(middlewareDraft)
-    expect(payload.middlewares.map((entry) => entry.package_id)).toEqual(['first', 'second'])
-    expect(payload.middlewares[0]).not.toHaveProperty('_key')
-    expect(payload.middlewares[0]?.config).toEqual({ mode: 'strict' })
+    expect(payload.python_package_bindings.map((entry) => entry.package_id)).toEqual(['first', 'second'])
+    expect(payload.python_package_bindings[0]).not.toHaveProperty('_key')
+    expect(payload.python_package_bindings[0]?.config).toEqual({ mode: 'strict' })
   })
 
   it('creates output drafts from an independent copy of the catalog default', () => {
@@ -179,12 +179,12 @@ describe('block adapters', () => {
 
     const middleware = customMiddlewareAdapter.fromApi({
       id: 'middleware', name: 'Middleware',
-      middlewares: [
+      python_package_bindings: [
         { package_id: 'kept', enabled: 'invalid', config: ['invalid'] },
         'discarded',
       ],
     } as never)
-    expect(middleware.middlewares).toMatchObject([
+    expect(middleware.python_package_bindings).toMatchObject([
       { package_id: 'kept', enabled: true, config: {} },
     ])
 

@@ -1,7 +1,7 @@
-import type { MiddlewareConfigSchema } from '@/api'
+import type { PythonPackageConfigSchema } from '@/api'
 
-export function middlewareConfigDefaults(
-  schema: MiddlewareConfigSchema,
+export function pythonPackageConfigDefaults(
+  schema: PythonPackageConfigSchema,
 ): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(schema.properties).flatMap(([name, field]) => (

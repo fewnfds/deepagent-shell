@@ -27,7 +27,7 @@ from agent_shell.registries.custom_tools import (
 )
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.blocks import BlockStore
-from agent_shell.middleware_packages.validation import MiddlewarePackageValidationService
+from agent_shell.python_packages.validation import PythonPackageValidationService
 from agent_shell.validation.assembly import (
     ResolvedSubagent,
     ResolvedSubagentEdge,
@@ -62,13 +62,13 @@ class ConfigurationValidationService:
         self,
         blocks: BlockStore,
         agent_configs: AgentConfigStore,
-        middleware_package_validation: MiddlewarePackageValidationService,
+        python_package_validation: PythonPackageValidationService,
         *,
         custom_tools_dir: Path,
     ) -> None:
         self._blocks = blocks
         self._agent_configs = agent_configs
-        self._middleware_package_validation = middleware_package_validation
+        self._python_package_validation = python_package_validation
         self._custom_tools_dir = custom_tools_dir
 
     def validate_main_agent(
@@ -239,15 +239,24 @@ class ConfigurationValidationService:
         *,
         owner_id: str,
     ) -> list[ValidationIssue]:
-        if block_type != "custom-middleware":
-            return []
-        return self._middleware_package_validation.configuration_issues(
-            payload.get("middlewares", []),
-            scope="block",
-            owner_id=owner_id,
-            owner_name=str(payload.get("name", "")),
-            path_prefix="middlewares",
-        )
+        arguments = {
+            "scope": "block",
+            "owner_id": owner_id,
+            "owner_name": str(payload.get("name", "")),
+            "path_prefix": "python_package_bindings",
+        }
+        bindings = payload.get("python_package_bindings", [])
+        if block_type == "custom-middleware":
+            return self._python_package_validation.middleware_issues(
+                bindings,
+                **arguments,
+            )
+        if block_type == "condition-router":
+            return self._python_package_validation.condition_router_issues(
+                bindings,
+                **arguments,
+            )
+        return []
 
     def validate_subagent(
         self,
@@ -293,12 +302,12 @@ class ConfigurationValidationService:
         custom_middleware = selected.get("custom-middleware")
         if custom_middleware is not None:
             issues.extend(
-                self._middleware_package_validation.configuration_issues(
-                    custom_middleware.get("middlewares", []),
+                self._python_package_validation.middleware_issues(
+                    custom_middleware.get("python_package_bindings", []),
                     scope="subagent",
                     owner_id=owner_id,
                     owner_name=validated["component_name"],
-                    path_prefix="settings.capability_overrides.custom-middleware.middlewares",
+                    path_prefix="settings.capability_overrides.custom-middleware.python_package_bindings",
                 )
             )
         if owner_id and not issues:
@@ -802,12 +811,12 @@ class ConfigurationValidationService:
         custom_middleware = selected.get("custom-middleware")
         if custom_middleware is not None:
             issues.extend(
-                self._middleware_package_validation.configuration_issues(
-                    custom_middleware.get("middlewares", []),
+                self._python_package_validation.middleware_issues(
+                    custom_middleware.get("python_package_bindings", []),
                     scope="main_agent",
                     owner_id=owner_id,
                     owner_name=owner_name,
-                    path_prefix="capability_refs.custom-middleware.middlewares",
+                    path_prefix="capability_refs.custom-middleware.python_package_bindings",
                 )
             )
 
@@ -909,12 +918,12 @@ class ConfigurationValidationService:
             child_custom_middleware = child_blocks.get("custom-middleware")
             if child_custom_middleware is not None:
                 child_issues.extend(
-                    self._middleware_package_validation.configuration_issues(
-                        child_custom_middleware.get("middlewares", []),
+                    self._python_package_validation.middleware_issues(
+                        child_custom_middleware.get("python_package_bindings", []),
                         scope="subagent",
                         owner_id=profile_id,
                         owner_name=subagent_name,
-                        path_prefix="settings.capability_overrides.custom-middleware.middlewares",
+                        path_prefix="settings.capability_overrides.custom-middleware.python_package_bindings",
                     )
                 )
             issues.extend(child_issues)

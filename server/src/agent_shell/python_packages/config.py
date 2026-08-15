@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-import ast
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from jsonschema import Draft202012Validator, FormatChecker
+from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 JsonScalar = str | int | float | bool
 
 
-class MiddlewareConfigField(BaseModel):
+class PythonPackageConfigField(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
         populate_by_name=True,
@@ -28,20 +27,12 @@ class MiddlewareConfigField(BaseModel):
     pattern: str | None = None
     minimum: float | None = None
     maximum: float | None = None
-    content_media_type: Literal["text/plain", "text/x-python"] | None = Field(
-        default=None,
-        alias="contentMediaType",
-    )
-    format: Literal["python"] | None = None
-
     @model_validator(mode="after")
-    def validate_keywords(self) -> "MiddlewareConfigField":
+    def validate_keywords(self) -> "PythonPackageConfigField":
         string_options = (
             self.min_length,
             self.max_length,
             self.pattern,
-            self.content_media_type,
-            self.format,
         )
         number_options = (self.minimum, self.maximum)
         if self.type != "string" and any(value is not None for value in string_options):
@@ -69,12 +60,12 @@ class MiddlewareConfigField(BaseModel):
         return self
 
 
-class MiddlewareConfigSchema(BaseModel):
+class PythonPackageConfigSchema(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     type: Literal["object"]
     properties: dict[
-        str, MiddlewareConfigField
+        str, PythonPackageConfigField
     ] = Field(default_factory=dict, max_length=100)
     required: list[str] = Field(default_factory=list, max_length=100)
     additional_properties: Literal[False] = Field(
@@ -83,7 +74,7 @@ class MiddlewareConfigSchema(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_object_schema(self) -> "MiddlewareConfigSchema":
+    def validate_object_schema(self) -> "PythonPackageConfigSchema":
         if len(self.required) != len(set(self.required)):
             raise ValueError("required property names must be unique")
         unknown = sorted(set(self.required) - set(self.properties))
@@ -114,31 +105,17 @@ class MiddlewareConfigSchema(BaseModel):
         )
 
 
-_FORMAT_CHECKER = FormatChecker()
-
-
-@_FORMAT_CHECKER.checks("python")
-def _valid_python_source(value: object) -> bool:
-    if not isinstance(value, str) or not value.strip():
-        return True
-    try:
-        ast.parse(value)
-    except SyntaxError:
-        return False
-    return True
-
-
 @dataclass(frozen=True, slots=True)
-class MiddlewareConfigIssue:
+class PythonPackageConfigIssue:
     path: tuple[str, ...]
     keyword: str
 
 
-def validate_middleware_config(
+def validate_python_package_config(
     schema: dict[str, Any],
     config: object,
-) -> MiddlewareConfigIssue | None:
-    validator = Draft202012Validator(schema, format_checker=_FORMAT_CHECKER)
+) -> PythonPackageConfigIssue | None:
+    validator = Draft202012Validator(schema)
     errors = sorted(
         validator.iter_errors(config),
         key=lambda error: tuple(str(part) for part in error.absolute_path),
@@ -146,7 +123,16 @@ def validate_middleware_config(
     if not errors:
         return None
     error = errors[0]
-    return MiddlewareConfigIssue(
+    return PythonPackageConfigIssue(
         path=tuple(str(part) for part in error.absolute_path),
         keyword=str(error.validator or "schema"),
     )
+
+
+__all__ = [
+    "JsonScalar",
+    "PythonPackageConfigField",
+    "PythonPackageConfigIssue",
+    "PythonPackageConfigSchema",
+    "validate_python_package_config",
+]

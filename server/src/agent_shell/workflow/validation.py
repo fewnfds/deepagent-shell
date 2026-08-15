@@ -4,7 +4,7 @@ from collections.abc import Callable, Mapping
 
 from pydantic import ValidationError
 
-from agent_shell.condition_router import ConditionRouterBlock
+from agent_shell.condition_router import ConditionRouterCallable
 from agent_shell.validation import (
     ValidationIssue,
     ValidationReport,
@@ -260,7 +260,7 @@ def validate_workflow_executable(
     document: WorkflowGraphDocumentV1,
     *,
     validate_main_agent: MainAgentValidator,
-    condition_routers: Mapping[str, ConditionRouterBlock] | None = None,
+    condition_routers: Mapping[str, ConditionRouterCallable] | None = None,
 ) -> ValidationReport:
     admission, normalized = admit_workflow_document(document)
     if normalized is None:

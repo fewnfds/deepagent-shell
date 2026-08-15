@@ -15,7 +15,7 @@ data/
     agent-shell.env
   state/agent-shell.sqlite3*
   files/
-  resources/{skills,custom_tools,custom_middlewares}/
+  resources/{skills,custom_tools,python_packages}/
   logs/security-events.jsonl
   logs/debug/*.log
 ```
@@ -25,12 +25,12 @@ data/
 请求级 runtime 诊断和媒体元数据。迁移时先完全停止服务，
 再复制完整 `data/`，包括 SQLite WAL/SHM。外部 filesystem 映射需要单独迁移并更新路径。
 
-自定义 Middleware 包的可选 `requirements.txt` 保存在 `data/resources/custom_middlewares/`；Windows 生成的共享
-依赖位于 `runtime/middleware_packages/`，属于可重建运行态，不进入备份。
+文件化 Python 扩展包及其可选 `requirements.txt` 保存在 `data/resources/python_packages/`；Windows 生成的共享
+依赖位于 `runtime/python_packages/`，属于可重建运行态，不进入备份。
 
 ## 文件管理
 
-【系统 / 文件管理】只开放四个 scope：普通文件、Skill、自定义工具和自定义 Middleware。支持浏览、新建、
+【系统 / 文件管理】只开放四个 scope：普通文件、Skill、自定义工具和 Python packages。支持浏览、新建、
 上传、下载、ZIP、重命名、文本编辑和递归删除。
 
 - 文本编辑上限 2 MiB，并使用 revision 防止静默覆盖；

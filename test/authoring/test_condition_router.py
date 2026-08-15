@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 
 import pytest
 from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
 
-from agent_shell.condition_router import (
-    ConditionRouterBlock,
-    ConditionRouterError,
-    run_condition_router,
-)
+from agent_shell.condition_router import ConditionRouterError, run_condition_router
+from agent_shell.condition_router_packages import ConditionRouterPackageRuntime
 from agent_shell.runtime.agent_builder import BuiltAgent
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.runtime.state import AgentShellState
@@ -50,23 +49,14 @@ def _built_agent(agent_id: str, content: str) -> BuiltAgent:
     )
 
 
-def _configuration(source: str) -> ConditionRouterBlock:
-    return ConditionRouterBlock(
-        name="Risk routing",
-        route_source=source,
-    )
-
-
 def test_condition_router_receives_complete_values_and_converts_state_mutation() -> None:
-    router = _configuration(
-        "async def route(state, context):\n"
-        "    state.setdefault('shared_vars', {})['approved'] = context['prepare']['approved']\n"
-        "    return {'activate': ['review', 'audit'], 'update': {}}\n"
-    )
+    async def router(state, context):
+        state.setdefault("shared_vars", {})["approved"] = context["prepare"]["approved"]
+        return {"activate": ["review", "audit"], "update": {}}
 
     result = asyncio.run(
         run_condition_router(
-            router.model_dump(mode="python"),
+            router,
             state={"shared_vars": {"risk": 90}, "agent_invocations": {}, "files": {}},
             context=WorkflowRuntimeContext(
                 request_id="request-1",
@@ -82,13 +72,11 @@ def test_condition_router_receives_complete_values_and_converts_state_mutation()
 
 
 def test_condition_router_uses_otherwise_for_empty_result_and_rejects_unmapped_keys() -> None:
-    router = _configuration(
-        "async def route(state, context):\n"
-        "    return {'activate': [], 'update': {}}\n"
-    )
+    async def router(state, context):
+        return {"activate": [], "update": {}}
     result = asyncio.run(
         run_condition_router(
-            router.model_dump(mode="python"),
+            router,
             state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
             context=WorkflowRuntimeContext(),
             allowed_branches={"review", "audit", "otherwise"},
@@ -96,33 +84,93 @@ def test_condition_router_uses_otherwise_for_empty_result_and_rejects_unmapped_k
     )
     assert result.activate == ["otherwise"]
 
-    invalid = _configuration(
-        "async def route(state, context):\n"
-        "    return {'activate': ['otherwise', 'review'], 'update': {}}\n"
-    )
+    async def invalid(state, context):
+        return {"activate": ["otherwise", "review"], "update": {}}
     with pytest.raises(ConditionRouterError):
         asyncio.run(
             run_condition_router(
-                invalid.model_dump(mode="python"),
+                invalid,
                 state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
                 context=WorkflowRuntimeContext(),
                 allowed_branches={"review", "audit", "otherwise"},
             )
         )
 
-    unmapped = _configuration(
-        "async def route(state, context):\n"
-        "    return {'activate': ['missing edge'], 'update': {}}\n"
-    )
+    async def unmapped(state, context):
+        return {"activate": ["missing edge"], "update": {}}
     with pytest.raises(ConditionRouterError):
         asyncio.run(
             run_condition_router(
-                unmapped.model_dump(mode="python"),
+                unmapped,
                 state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
                 context=WorkflowRuntimeContext(),
                 allowed_branches={"review", "audit", "otherwise"},
             )
         )
+
+
+def test_condition_router_package_loads_local_modules_and_materializes_async_route(
+    tmp_path: Path,
+) -> None:
+    package_id = "44444444-4444-4444-8444-444444444444"
+    package_dir = tmp_path / "packages" / package_id
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text(
+        json.dumps(
+            {
+                "format_version": 1,
+                "id": package_id,
+                "family": "workflow-node",
+                "adapter": "condition-router",
+                "name": "Threshold router",
+                "description": "Routes by a configured threshold.",
+                "config_schema": {
+                    "type": "object",
+                    "properties": {
+                        "threshold": {"type": "integer", "title": "Threshold"}
+                    },
+                    "required": ["threshold"],
+                    "additionalProperties": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (package_dir / "main.py").write_text(
+        "from .routing import build_route\n"
+        "def create_router(config):\n"
+        "    return build_route(config['threshold'])\n",
+        encoding="utf-8",
+    )
+    (package_dir / "routing.py").write_text(
+        "def build_route(threshold):\n"
+        "    async def route(state, context):\n"
+        "        branch = 'review' if state['shared_vars']['risk'] >= threshold else 'otherwise'\n"
+        "        return {'activate': [branch], 'update': {}}\n"
+        "    return route\n",
+        encoding="utf-8",
+    )
+    runtime = ConditionRouterPackageRuntime(
+        request_id="request-1",
+        packages_dir=tmp_path / "packages",
+        runtime_root=tmp_path / "runtime",
+    )
+    route = runtime.router_for(
+        "router-node",
+        [{"package_id": package_id, "enabled": True, "config": {"threshold": 80}}],
+    )
+
+    result = asyncio.run(
+        run_condition_router(
+            route,
+            state={"shared_vars": {"risk": 90}, "agent_invocations": {}, "files": {}},
+            context=WorkflowRuntimeContext(),
+            allowed_branches={"review", "otherwise"},
+        )
+    )
+
+    assert result.activate == ["review"]
+    asyncio.run(runtime.close())
 
 
 def test_compiler_uses_command_for_named_multi_branch_routing() -> None:
@@ -156,10 +204,11 @@ def test_compiler_uses_command_for_named_multi_branch_routing() -> None:
     admission, document = admit_workflow_document(payload)
     assert admission.valid is True
     assert document is not None
-    router = _configuration(
-        "async def route(state, context):\n"
-        "    return {'activate': ['review', 'audit'], 'update': {'shared_vars': {'routed': True}}}\n"
-    )
+    async def router(state, context):
+        return {
+            "activate": ["review", "audit"],
+            "update": {"shared_vars": {"routed": True}},
+        }
     missing_otherwise = document.model_copy(deep=True)
     missing_otherwise.definition.edges = [
         edge

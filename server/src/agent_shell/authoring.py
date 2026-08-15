@@ -512,9 +512,10 @@ _EDITOR_DEFAULTS = {
         mode="json", exclude={"name"}
     ),
     "workflow_event_output": _workflow_event_output_default(),
-    "condition_router": ConditionRouterBlock(name="Condition router").model_dump(
-        mode="json", exclude={"name"}
-    ),
+    "condition_router": ConditionRouterBlock(
+        name="Condition router",
+        python_package_bindings=[],
+    ).model_dump(mode="json", exclude={"name"}),
 }
 
 

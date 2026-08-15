@@ -9,7 +9,8 @@ from uuid import uuid4
 
 from langchain.agents.middleware import AgentMiddleware
 
-from agent_shell.middleware_packages.loader import MiddlewarePackageLoader
+from agent_shell.python_packages.loader import PythonPackageLoader
+from agent_shell.python_packages.config import validate_python_package_config
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.validation.assembly import StaticAssembly
 
@@ -42,10 +43,14 @@ class MiddlewarePackageRuntime:
         self.request_id = request_id or str(uuid4())
         self._owners = owners
         self._owner_by_id = {owner.id: owner for owner in owners}
-        self._loader = MiddlewarePackageLoader(
+        self._loader = PythonPackageLoader(
             request_id=self.request_id,
             packages_dir=packages_dir,
             runtime_root=runtime_root,
+            family="middleware",
+            adapter="agent-middleware",
+            factory_name="create_middleware",
+            factory_parameters=("config", "agent"),
         )
         self._middleware: dict[str, tuple[AgentMiddleware, ...]] = {}
         self._closed = False
@@ -66,7 +71,7 @@ class MiddlewarePackageRuntime:
             blocks: dict[str, dict[str, Any]],
         ) -> tuple[dict[str, Any], ...]:
             selected = blocks.get("custom-middleware", {})
-            return tuple(deepcopy(selected.get("middlewares", [])))
+            return tuple(deepcopy(selected.get("python_package_bindings", [])))
 
         owners.append(
             MiddlewareOwner(
@@ -104,17 +109,22 @@ class MiddlewarePackageRuntime:
             if not binding.get("enabled", True):
                 continue
             package_id = str(binding["package_id"])
-            factory, _package_dir = self._loader.entrypoint(
+            factory, metadata, _package_dir = self._loader.entrypoint(
                 owner.id,
                 "middleware",
                 binding_index,
                 package_id,
             )
-            if factory is None:
-                continue
+            config = deepcopy(dict(binding.get("config", {})))
+            if validate_python_package_config(metadata["config_schema"], config):
+                raise AgentRuntimeError(
+                    "python_package.config_invalid",
+                    f"Python package {package_id!r} configuration is invalid.",
+                    status_code=422,
+                )
             try:
                 produced = factory(
-                    deepcopy(dict(binding.get("config", {}))),
+                    config,
                     {
                         "id": owner.id,
                         "type": owner.type,
@@ -142,6 +152,30 @@ class MiddlewarePackageRuntime:
                     f"Middleware package {package_id!r} must return AgentMiddleware instances.",
                     status_code=422,
                 )
+            for item in values:
+                middleware_type = type(item)
+                for sync_name, async_name in (
+                    ("before_agent", "abefore_agent"),
+                    ("before_model", "abefore_model"),
+                    ("after_model", "aafter_model"),
+                    ("after_agent", "aafter_agent"),
+                    ("wrap_model_call", "awrap_model_call"),
+                    ("wrap_tool_call", "awrap_tool_call"),
+                ):
+                    if (
+                        getattr(middleware_type, sync_name)
+                        is not getattr(AgentMiddleware, sync_name)
+                        and getattr(middleware_type, async_name)
+                        is getattr(AgentMiddleware, async_name)
+                    ):
+                        raise AgentRuntimeError(
+                            "middleware_package_async_hook_required",
+                            (
+                                f"Middleware package {package_id!r} implements "
+                                f"{sync_name} without {async_name}."
+                            ),
+                            status_code=422,
+                        )
             middleware.extend(values)
         result = tuple(middleware)
         self._middleware[owner_id] = result

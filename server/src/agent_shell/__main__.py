@@ -12,7 +12,7 @@ from pathlib import Path
 
 import uvicorn
 
-from agent_shell.middleware_packages.dependencies import activate_package_site
+from agent_shell.python_packages.dependencies import activate_package_site
 from agent_shell.app import create_app
 from agent_shell.settings import (
     SettingsError,

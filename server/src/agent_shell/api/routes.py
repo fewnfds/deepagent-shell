@@ -32,7 +32,7 @@ from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.validation.models import validation_failure_detail
 from agent_shell.validation.service import ConfigurationValidationService
 from agent_shell.workflow_prepare import WORKFLOW_COMPONENT_CATALOG
-from agent_shell.middleware_packages.dependencies import dependency_metadata
+from agent_shell.python_packages.dependencies import dependency_metadata
 from agent_shell.python_requirements import parse_python_requirements
 
 
@@ -79,11 +79,7 @@ def build_router(
     def project_block(block_type: str, block: dict | None) -> dict | None:
         if block is None:
             return None
-        if block_type not in {
-            "condition-router",
-            "workflow-input-context",
-            "workflow-prepare",
-        }:
+        if block_type not in {"workflow-input-context", "workflow-prepare"}:
             return block
         requirements = parse_python_requirements(block.get("python_requirements", []))
         return {

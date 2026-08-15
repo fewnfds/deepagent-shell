@@ -83,7 +83,7 @@ def test_prompt_templates_accept_escaped_literal_braces(
             "/api/blocks/custom-middleware",
             json={
                 "name": "bad syntax",
-                "middlewares": [
+                "python_package_bindings": [
                     {"name": "broken", "source": "middleware = ("}
                 ],
             },
@@ -95,7 +95,7 @@ def test_prompt_templates_accept_escaped_literal_braces(
             "/api/blocks/custom-middleware",
             json={
                 "name": "missing output",
-                "middlewares": [
+                "python_package_bindings": [
                     {"name": "not bound", "source": "value = object()"}
                 ],
             },

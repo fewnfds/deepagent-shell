@@ -133,8 +133,8 @@ def _specific_contract_identity(
         )
     if error_type == "string_pattern_mismatch" and path.endswith(".package_id"):
         return (
-            "contract.middleware_package_id_format_invalid",
-            "validation.issue.contract.middlewarePackageIdFormatInvalid",
+            "contract.python_package_id_format_invalid",
+            "validation.issue.contract.pythonPackageIdFormatInvalid",
         )
     if (
         error_type == "string_pattern_mismatch"

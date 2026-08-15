@@ -114,6 +114,95 @@ def test_chat_rejects_an_incomplete_saved_workflow_draft(
     assert response.json()["error"]["code"] == "workflow.node_cannot_reach_end"
 
 
+def test_chat_materializes_condition_router_package_before_compiling_workflow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package_id = "44444444-4444-4444-8444-444444444444"
+    package_dir = tmp_path / "data" / "resources" / "python_packages" / package_id
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text(
+        json.dumps(
+            {
+                "format_version": 1,
+                "id": package_id,
+                "family": "workflow-node",
+                "adapter": "condition-router",
+                "name": "Always run",
+                "description": "Routes to the Agent branch.",
+                "config_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (package_dir / "main.py").write_text(
+        "def create_router(config):\n"
+        "    async def route(state, context):\n"
+        "        return {'activate': ['run'], 'update': {}}\n"
+        "    return route\n",
+        encoding="utf-8",
+    )
+    with make_client(tmp_path, monkeypatch) as client:
+        main_agent = create_main_agent(client)
+        router = client.post(
+            "/api/blocks/condition-router",
+            json={
+                "name": "Always run",
+                "python_package_bindings": [
+                    {"package_id": package_id, "enabled": True, "config": {}}
+                ],
+            },
+        )
+        assert router.status_code == 200, router.text
+        workflow = create_workflow(client, name="Routed Workflow")
+        graph = client.put(
+            f"/api/workflows/{workflow['id']}/graph",
+            json={
+                "definition": {
+                    "schema_version": 1,
+                    "state_contract": "agent-shell.workflow.agent-invocations.v1",
+                    "nodes": [
+                        {"id": "start", "type": "start", "type_version": 1, "config": {}},
+                        {
+                            "id": "router",
+                            "type": "condition-router",
+                            "type_version": 1,
+                            "config": {"condition_router_id": router.json()["id"]},
+                        },
+                        {
+                            "id": "agent",
+                            "type": "agent",
+                            "type_version": 1,
+                            "config": {"main_agent_id": main_agent["id"]},
+                        },
+                        {"id": "end", "type": "end", "type_version": 1, "config": {}},
+                    ],
+                    "edges": [
+                        {"id": "start-router", "source": "start", "source_handle": "next", "target": "router", "target_handle": "in"},
+                        {"id": "run", "source": "router", "source_handle": "branch", "target": "agent", "target_handle": "in", "branch_key": "run"},
+                        {"id": "otherwise", "source": "router", "source_handle": "branch", "target": "end", "target_handle": "in", "branch_key": "otherwise"},
+                        {"id": "agent-end", "source": "agent", "source_handle": "next", "target": "end", "target_handle": "in"},
+                    ],
+                },
+                "layout": {"nodes": {}, "viewport": {"x": 0, "y": 0, "zoom": 1}},
+            },
+        )
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": workflow["name"],
+                "messages": [{"role": "user", "content": "run"}],
+            },
+        )
+
+    assert graph.status_code == 200, graph.text
+    assert response.status_code == 200, response.text
+    assert response.json()["choices"][0]["message"]["content"] == "runtime reply"
+
+
 def test_chat_completion_stream_runs_current_graph(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -147,11 +236,12 @@ def test_chat_completion_stream_runs_current_graph(
 def test_workflow_agent_middleware_injects_frozen_client_messages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    package_id = "11111111-1111-4111-8111-111111111111"
     InspectingFakeChatModel.seen_messages = []
     model = InspectingFakeChatModel(responses=["middleware reply"])
     write_middleware_package(
         tmp_path,
-        "inject-request",
+        package_id,
         "from langchain.agents.middleware import AgentMiddleware\n"
         "from langchain_core.messages import HumanMessage\n"
         "class InjectRequest(AgentMiddleware):\n"
@@ -172,9 +262,9 @@ def test_workflow_agent_middleware_injects_frozen_client_messages(
             "/api/blocks/custom-middleware",
             json={
                 "name": "Request message injection",
-                "middlewares": [
+                "python_package_bindings": [
                     {
-                        "package_id": "inject-request",
+                        "package_id": package_id,
                         "enabled": True,
                         "config": {},
                     }

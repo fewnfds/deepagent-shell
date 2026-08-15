@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import type { MiddlewareConfigSchema } from '@/api'
-import { middlewareConfigDefaults } from './middlewareConfigSchema'
+import type { PythonPackageConfigSchema } from '@/api'
+import { pythonPackageConfigDefaults } from './pythonPackageConfigSchema'
 
-describe('Middleware config schema defaults', () => {
+describe('Python package config schema defaults', () => {
   it('materializes only declared defaults without losing false or zero', () => {
-    const schema: MiddlewareConfigSchema = {
+    const schema: PythonPackageConfigSchema = {
       type: 'object',
       properties: {
         source: { type: 'string', title: 'Source', description: '', default: '' },
@@ -17,7 +17,7 @@ describe('Middleware config schema defaults', () => {
       additionalProperties: false,
     }
 
-    expect(middlewareConfigDefaults(schema)).toEqual({
+    expect(pythonPackageConfigDefaults(schema)).toEqual({
       source: '',
       enabled: false,
       attempts: 0,

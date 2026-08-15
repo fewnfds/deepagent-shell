@@ -1,62 +1,70 @@
-import {
-  cleanName,
-  isRecord,
-  stringList,
-  stringValue,
-  uniqueStrings,
-  type BlockDraftBase,
-  type BlockPayloadBase,
-} from './shared'
+import type { PythonPackageConfigSchema } from '@/api'
+
+import { cleanName, isRecord, stringValue, type BlockDraftBase, type BlockPayloadBase } from './shared'
 
 export interface ConditionRouterDraft extends BlockDraftBase {
-  route_source: string
-  python_requirements: string[]
+  python_package_bindings: ConditionRouterPackageBindingDraft[]
+}
+
+export interface ConditionRouterPackageBindingDraft {
+  package_id: string
+  enabled: boolean
+  config: Record<string, unknown>
+}
+
+export type ConditionRouterDefaults = Omit<ConditionRouterDraft, 'id' | 'name'>
+
+interface ConditionRouterPayload extends BlockPayloadBase {
+  python_package_bindings: ConditionRouterPackageBindingDraft[]
+}
+
+export interface ConditionRouterCatalogItem {
+  id: string
+  name: string
+  description: string
+  config_schema: PythonPackageConfigSchema
   dependency_status: 'ready' | 'restart_required' | 'failed'
 }
 
-export type ConditionRouterDefaults = Omit<ConditionRouterDraft, 'id' | 'name' | 'dependency_status'>
-
-interface ConditionRouterPayload extends BlockPayloadBase {
-  route_source: string
-  python_requirements: string[]
+function bindingValue(value: unknown): ConditionRouterPackageBindingDraft[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((entry) => isRecord(entry) ? [{
+    package_id: stringValue(entry.package_id),
+    enabled: typeof entry.enabled === 'boolean' ? entry.enabled : true,
+    config: isRecord(entry.config) ? { ...entry.config } : {},
+  }] : [])
 }
 
-function defaultsValue(defaults: ConditionRouterDefaults | undefined): ConditionRouterDefaults {
-  return defaults ?? {
-    route_source: 'async def route(state, context):\n    return {"activate": ["otherwise"], "update": {}}\n',
-    python_requirements: [],
-  }
+function bindingsFrom(defaults: ConditionRouterDefaults | undefined): ConditionRouterPackageBindingDraft[] {
+  return bindingValue(defaults?.python_package_bindings)
 }
 
 export const conditionRouterAdapter = {
   blank(defaults?: ConditionRouterDefaults): ConditionRouterDraft {
-    const value = defaultsValue(defaults)
     return {
       id: '',
       name: '',
-      route_source: value.route_source,
-      python_requirements: [...value.python_requirements],
-      dependency_status: 'ready',
+      python_package_bindings: bindingsFrom(defaults),
     }
   },
   fromApi(value: unknown, defaults?: ConditionRouterDefaults): ConditionRouterDraft {
     const source = isRecord(value) ? value : {}
-    const fallback = defaultsValue(defaults)
     return {
       id: stringValue(source.id),
       name: stringValue(source.name),
-      route_source: stringValue(source.route_source, fallback.route_source),
-      python_requirements: stringList(source.python_requirements),
-      dependency_status: source.dependency_status === 'failed' || source.dependency_status === 'restart_required'
-        ? source.dependency_status
-        : 'ready',
+      python_package_bindings: bindingValue(
+        source.python_package_bindings ?? defaults?.python_package_bindings,
+      ),
     }
   },
   toPayload(value: ConditionRouterDraft): ConditionRouterPayload {
     return {
       name: cleanName(value.name),
-      route_source: value.route_source,
-      python_requirements: uniqueStrings(value.python_requirements),
+      python_package_bindings: value.python_package_bindings.map((binding) => ({
+        package_id: binding.package_id.trim(),
+        enabled: binding.enabled,
+        config: { ...binding.config },
+      })),
     }
-  },
+  }
 }

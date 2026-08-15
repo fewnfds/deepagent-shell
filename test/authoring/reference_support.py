@@ -77,7 +77,7 @@ def block_payload(capability_type: str, name: str) -> dict:
             "model_settings": {},
         },
         "custom-tool": {"name": name, "tools": []},
-        "custom-middleware": {"name": name, "middlewares": []},
+        "custom-middleware": {"name": name, "python_package_bindings": []},
         "output-mode": {
             "name": name,
             "filter_mode": "blocklist",

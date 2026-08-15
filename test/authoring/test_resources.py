@@ -142,7 +142,8 @@ def test_custom_middleware_catalog_scans_recipes_without_executing_them(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
-    middlewares_dir = tmp_path / "data" / "resources" / "custom_middlewares"
+    packages_dir = tmp_path / "data" / "resources" / "python_packages"
+    package_id = "11111111-1111-4111-8111-111111111111"
     marker = tmp_path / "middleware-must-not-exist.txt"
     source = (
         '"""Safe middleware package."""\n'
@@ -151,13 +152,15 @@ def test_custom_middleware_catalog_scans_recipes_without_executing_them(
         "def create_middleware(config, agent):\n"
         "    return object()\n"
     )
-    package_dir = middlewares_dir / "safe-recipe"
+    package_dir = packages_dir / package_id
     package_dir.mkdir(parents=True, exist_ok=True)
-    (package_dir / "middleware.json").write_text(
+    (package_dir / "package.json").write_text(
         json.dumps(
             {
-                "api_version": 1,
-                "id": "safe-recipe",
+                "format_version": 1,
+                "id": package_id,
+                "family": "middleware",
+                "adapter": "agent-middleware",
                 "name": "Safe recipe",
                 "description": "Safe middleware package.",
                 "config_schema": {
@@ -170,18 +173,20 @@ def test_custom_middleware_catalog_scans_recipes_without_executing_them(
         encoding="utf-8",
     )
     (package_dir / "main.py").write_text(source, encoding="utf-8")
-    broken_dir = middlewares_dir / "broken-package"
+    broken_dir = packages_dir / "broken-package"
     broken_dir.mkdir()
-    (broken_dir / "middleware.json").write_text("{}", encoding="utf-8")
+    (broken_dir / "package.json").write_text("{}", encoding="utf-8")
 
-    response = client.get("/api/middlewares/custom")
+    response = client.get("/api/python-packages/middleware/agent-middleware")
 
     assert response.status_code == 200
     result = response.json()
     assert len(result["catalog"]) == 1
     item = result["catalog"][0]
-    assert item["api_version"] == 1
-    assert item["id"] == "safe-recipe"
+    assert item["format_version"] == 1
+    assert item["id"] == package_id
+    assert item["family"] == "middleware"
+    assert item["adapter"] == "agent-middleware"
     assert item["name"] == "Safe recipe"
     assert item["description"] == "Safe middleware package."
     assert item["config_schema"] == {
@@ -190,14 +195,14 @@ def test_custom_middleware_catalog_scans_recipes_without_executing_them(
         "required": [],
         "additionalProperties": False,
     }
-    assert item["folder"] == "safe-recipe"
+    assert item["folder"] == package_id
     assert item["python_requirements"] == []
     assert len(item["requirements_fingerprint"]) == 64
     assert item["dependency_status"] == "ready"
     assert item["dependency_error_code"] == ""
     assert set(result["errors"]) == {"broken-package"}
     assert result["errors"]["broken-package"]["message_key"] == (
-        "resource.error.middlewarePackage.filesRequired"
+        "resource.error.pythonPackage.filesRequired"
     )
     assert not marker.exists()
 
@@ -205,9 +210,9 @@ def test_resource_catalogs_only_scan_the_data_root(
     tmp_path: Path, monkeypatch
 ) -> None:
     root_tools = tmp_path / "resources" / "custom_tools"
-    root_middlewares = tmp_path / "resources" / "custom_middlewares"
+    root_packages = tmp_path / "resources" / "python_packages"
     root_tools.mkdir(parents=True)
-    root_middlewares.mkdir(parents=True)
+    root_packages.mkdir(parents=True)
     (root_tools / "ignored.py").write_text(
         "from langchain_core.tools import tool\n"
         "@tool\n"
@@ -216,7 +221,7 @@ def test_resource_catalogs_only_scan_the_data_root(
         "    return value\n",
         encoding="utf-8",
     )
-    (root_middlewares / "ignored.py").write_text(
+    (root_packages / "ignored.py").write_text(
         "middleware = object()\n",
         encoding="utf-8",
     )
@@ -224,7 +229,7 @@ def test_resource_catalogs_only_scan_the_data_root(
     client = make_client(tmp_path, monkeypatch)
 
     assert client.get("/api/tools/custom").json() == {"catalog": [], "errors": {}}
-    assert client.get("/api/middlewares/custom").json() == {
+    assert client.get("/api/python-packages/middleware/agent-middleware").json() == {
         "catalog": [],
         "errors": {},
     }
@@ -240,13 +245,16 @@ def test_saving_custom_middleware_source_does_not_execute_it(
         "def create_middleware(config, agent):\n"
         "    return object()\n"
     )
-    package_dir = tmp_path / "data" / "resources" / "custom_middlewares" / "side-effect"
+    package_id = "22222222-2222-4222-8222-222222222222"
+    package_dir = tmp_path / "data" / "resources" / "python_packages" / package_id
     package_dir.mkdir(parents=True, exist_ok=True)
-    (package_dir / "middleware.json").write_text(
+    (package_dir / "package.json").write_text(
         json.dumps(
             {
-                "api_version": 1,
-                "id": "side-effect",
+                "format_version": 1,
+                "id": package_id,
+                "family": "middleware",
+                "adapter": "agent-middleware",
                 "name": "Side effect",
                 "description": "Static package.",
                 "config_schema": {
@@ -264,15 +272,15 @@ def test_saving_custom_middleware_source_does_not_execute_it(
         "/api/blocks/custom-middleware",
         json={
             "name": "Static only",
-            "middlewares": [
-                {"package_id": "side-effect", "enabled": True, "config": {}}
+            "python_package_bindings": [
+                {"package_id": package_id, "enabled": True, "config": {}}
             ],
         },
     )
 
     assert response.status_code == 200, response.text
-    assert response.json()["middlewares"][0] == {
-        "package_id": "side-effect",
+    assert response.json()["python_package_bindings"][0] == {
+        "package_id": package_id,
         "enabled": True,
         "config": {},
     }

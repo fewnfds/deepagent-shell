@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from agent_shell.middleware_packages.validation import MiddlewarePackageValidationService
+from agent_shell.python_packages.validation import PythonPackageValidationService
 from agent_shell.provider_http import ProviderHttpClients
 from agent_shell.provider_secrets import ProviderSecretResolver
 from agent_shell.runtime.agent_builder import AgentBuilder
@@ -72,7 +72,7 @@ class RequestSnapshotRuntime:
         configuration: FileConfigRepository,
         *,
         custom_tools_dir: Path,
-        middleware_packages_dir: Path,
+        python_packages_dir: Path,
         runtime_dir: Path,
         skills_dir: Path,
         provider_http_clients: ProviderHttpClients,
@@ -82,7 +82,7 @@ class RequestSnapshotRuntime:
     ) -> None:
         self._configuration = configuration
         self._custom_tools_dir = custom_tools_dir
-        self._middleware_packages_dir = middleware_packages_dir
+        self._python_packages_dir = python_packages_dir
         self._runtime_dir = runtime_dir
         self._skills_dir = skills_dir
         self._provider_http_clients = provider_http_clients
@@ -96,27 +96,29 @@ class RequestSnapshotRuntime:
         configs = AgentConfigStore(repository)
         workflows = WorkflowStore(repository)
         secrets = ProviderSecretResolver(repository)
-        middleware_package_validation = MiddlewarePackageValidationService(
-            packages_dir=self._middleware_packages_dir,
+        python_package_validation = PythonPackageValidationService(
+            packages_dir=self._python_packages_dir,
             runtime_root=self._runtime_dir,
         )
         validation = ConfigurationValidationService(
             blocks,
             configs,
-            middleware_package_validation,
+            python_package_validation,
             custom_tools_dir=self._custom_tools_dir,
         )
         runtime = AgentRuntime(
             AgentBuilder(
                 secrets,
                 custom_tools_dir=self._custom_tools_dir,
-                middleware_packages_dir=self._middleware_packages_dir,
+                python_packages_dir=self._python_packages_dir,
                 runtime_dir=self._runtime_dir,
                 skills_dir=self._skills_dir,
                 validation=validation,
                 provider_http_clients=self._provider_http_clients,
             ),
             self._media_outputs,
+            python_packages_dir=self._python_packages_dir,
+            runtime_dir=self._runtime_dir,
             blocks=blocks,
             workflow_debug=self._workflow_debug,
             runtime_diagnostics=self._runtime_diagnostics,

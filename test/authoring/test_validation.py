@@ -187,16 +187,20 @@ def test_validation_issue_rejects_non_primitive_message_arguments() -> None:
             CustomMiddlewareBlock,
             {
                 "name": "Invalid package",
-                "middlewares": [
-                    {"package_id": "Bad Package", "enabled": True, "config": {}}
+                "python_package_bindings": [
+                    {
+                        "package_id": "11111111-1111-4111-8111-11111111111Z",
+                        "enabled": True,
+                        "config": {},
+                    }
                 ],
             },
             "block",
             "custom-middleware",
             (
-                "contract.middleware_package_id_format_invalid",
-                "validation.issue.contract.middlewarePackageIdFormatInvalid",
-                "middlewares[0].package_id",
+                "contract.python_package_id_format_invalid",
+                "validation.issue.contract.pythonPackageIdFormatInvalid",
+                "python_package_bindings[0].package_id",
                 {},
             ),
         ),

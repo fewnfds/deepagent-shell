@@ -14,7 +14,7 @@ import type {
   ManagedComponentType,
   CatalogResponse,
   ConfigurationValidationSettings,
-  MiddlewarePackageResource,
+  PythonPackageResource,
   CustomToolResource,
   DraftValidationRequest,
   EventFeedFilters,
@@ -105,8 +105,12 @@ export const managementApi = {
     return managementRequest('/api/tools/custom')
   },
 
-  listCustomMiddlewares(): Promise<ResourceCatalog<MiddlewarePackageResource>> {
-    return managementRequest('/api/middlewares/custom')
+  listMiddlewarePackages(): Promise<ResourceCatalog<PythonPackageResource>> {
+    return managementRequest('/api/python-packages/middleware/agent-middleware')
+  },
+
+  listConditionRouterPackages(): Promise<ResourceCatalog<PythonPackageResource>> {
+    return managementRequest('/api/python-packages/workflow-node/condition-router')
   },
 
   listSkills(): Promise<ResourceCatalog<SkillResource>> {
