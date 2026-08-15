@@ -131,10 +131,14 @@ def _specific_contract_identity(
             "contract.custom_tool_name_format_invalid",
             "validation.issue.contract.customToolNameFormatInvalid",
         )
-    if error_type == "string_pattern_mismatch" and path.endswith(".package_id"):
+    if (
+        error_type == "string_pattern_mismatch"
+        and owner_type in {"custom-middleware", "condition-router"}
+        and path == "python_package.folder"
+    ):
         return (
-            "contract.python_package_id_format_invalid",
-            "validation.issue.contract.pythonPackageIdFormatInvalid",
+            "contract.python_package_folder_format_invalid",
+            "validation.issue.contract.pythonPackageFolderFormatInvalid",
         )
     if (
         error_type == "string_pattern_mismatch"

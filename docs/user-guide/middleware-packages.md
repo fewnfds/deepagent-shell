@@ -1,31 +1,45 @@
-# 文件化 Python 扩展包
+# 文件化 Python 扩展
 
-Agent Shell 把用户代码保存为真实 Python package，组件 YAML 只保存稳定 UUID 和普通配置。目前支持两个窄 adapter：
+Agent Shell 的文件化 Python 扩展分为模板、私有包和组件配置三层：
 
-- `middleware/agent-middleware`：物化 LangChain 官方 `AgentMiddleware`；
-- `workflow-node/condition-router`：为画布 Condition Router 物化 async route callable。
+- 静态模板是 `data/templates/` 下的公共代码资源，只用于创建配置；
+- 保存新配置时，系统把所选模板复制成该配置独占的私有包；
+- 私有包位于 `data/config/python_package_instances/`，复制完成后与原模板彻底解耦；
+- 组件 YAML 只保存私有包文件夹引用和满足 Schema 的普通 `config`。
 
-两者共享文件格式、依赖准备和模块加载，但运行 contract 互不通用。系统不提供万能 Python Node。
+模板不会被导入、执行或收集依赖。修改或删除模板不会影响已经保存的配置，也没有模板继承、同步或升级关系。
+源码不附带实例模板，也不会在启动时自动播种。管理员通过【系统 / 文件管理】的 Python templates scope，或直接在
+`data/templates/` 对应类别下创建第一个模板；模板目录为空是合法状态。
 
-## 目录与 Manifest
-
-每个包位于 `data/resources/python_packages/<package-uuid>/`：
+## 目录类别
 
 ```text
-11111111-1111-4111-8111-111111111111/
-  package.json
-  main.py
-  requirements.txt  # 可选
-  helpers.py         # 可选
-  tests/             # 可选
+data/
+  templates/
+    workflow/condition_router/<template-key>/
+    agent/custom_middleware/<template-key>/
+  config/
+    components/<type>/<configuration-uuid>.yaml
+    python_package_instances/
+      condition-router/
+        <configuration-uuid>--<template-slug>--<instance-uuid>/
+      agent-middleware/
+        <configuration-uuid>--<template-slug>--<instance-uuid>/
 ```
 
-目录名必须与 `package.json.id` 完全相同，ID 必须是小写规范 UUID。`package.json` 的固定外壳如下：
+模板至少包含 `template.json` 和 `main.py`，可以包含 `requirements.txt`、本地模块、实体第三方包和测试。模板目录名是小写
+`template-key`；模板没有 package UUID，也不属于任何配置。
+
+私有包至少包含 `package.json` 和 `main.py`。文件夹首段必须是拥有它的组件配置 UUID，末段是该私有包的 UUID；
+`package.json.id` 必须等于末段 UUID。系统据此拒绝配置引用其他配置的私有包。
+
+## Manifest
+
+模板使用没有 `id` 的 `template.json`：
 
 ```json
 {
   "format_version": 1,
-  "id": "11111111-1111-4111-8111-111111111111",
   "family": "workflow-node",
   "adapter": "condition-router",
   "name": "Risk router",
@@ -47,12 +61,33 @@ Agent Shell 把用户代码保存为真实 Python package，组件 YAML 只保�
 }
 ```
 
-`config_schema` 只支持管理台能机械渲染的扁平字符串、整数、数字、布尔和枚举。Python 对象、callable 和嵌套运行参数由
-`main.py` 根据普通配置构造，不写入 YAML。
+保存新配置时，系统从该文件生成带新 `id` 的 `package.json`，删除副本中的 `template.json`，并保留模板的其他文件。
+`config_schema` 只支持管理台能机械渲染的扁平字符串、整数、数字、布尔和枚举。
 
-## Condition Router 模板
+## 配置引用
 
-Router manifest 使用 `family: workflow-node` 和 `adapter: condition-router`。`main.py` 必须提供同步工厂，工厂返回 async callable：
+Condition Router 和 Custom Middleware 使用同一 YAML 外壳：
+
+```yaml
+python_package:
+  folder: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa--risk-router--bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb
+  config:
+    threshold: 80
+```
+
+YAML 不保存源码、requirements、manifest 投影、模板引用、revision 或绝对路径。复制组件配置时会复制一份新的私有包；删除组件
+配置时会删除其私有包。
+
+新配置编辑器自动读取对应类别的模板目录。选择模板后可编辑完整 `main.py`、`requirements.txt` 和 Schema 生成的输入框；
+首次保存才创建私有包。已有配置每次打开都从自己的私有包读取文件，保存时只能更新原文件夹，不能改指向另一模板或私有包。
+Schema 输入只修改 YAML 的 `python_package.config`，不会改写包文件。
+
+当前编辑器只直接维护 `main.py` 和 `requirements.txt`。私有包中的额外模块、vendor 目录和其他文件保持原样，用户可在文件夹中
+直接维护；前端不解析或管理这些额外文件。文件保存使用 revision，若目录已被外部修改，必须重新载入后再保存。
+
+## Condition Router
+
+Router 使用 `family: workflow-node`、`adapter: condition-router`。同步工厂返回固定签名的 async callable：
 
 ```python
 def create_router(config):
@@ -66,15 +101,12 @@ def create_router(config):
     return route
 ```
 
-`route(state, context)` 必须正好接收这两个参数，并返回 `{activate, update}`。`activate` 只能包含当前 Router 画布 Branch Edge
-已有的 branch key；空列表使用 `otherwise`。`update` 只能更新 Agent Shell Workflow State 的现有 channel。目标 Node ID 与
-branch key 到 Node 的映射始终由 compiler/画布拥有，package 不能返回目标 Node ID 或 `Command`。
+`route(state, context)` 返回 `activate` 和 `update`。画布 compiler 将结果映射为 LangGraph `Command`；包不接触 Node ID，
+也不直接返回 `Command`。
 
-Router 可能因 Graph 重试或恢复被重复调用，业务代码应保持幂等，不在模块全局变量中保存可恢复状态。
+## Custom Middleware
 
-## AgentMiddleware 模板
-
-Middleware manifest 使用 `family: middleware` 和 `adapter: agent-middleware`。工厂返回一个官方 `AgentMiddleware`，或返回非空
+Middleware 使用 `family: middleware`、`adapter: agent-middleware`。工厂返回官方 `AgentMiddleware` 或非空
 `list`/`tuple`：
 
 ```python
@@ -85,41 +117,23 @@ def create_middleware(config, agent):
     return ModelCallLimitMiddleware(run_limit=config["limit"])
 ```
 
-也可以从 `requirements.txt` 安装的库导入用户 Middleware。返回对象直接进入 Main Agent 或 Subagent 的
-`create_deep_agent(middleware=[...])`；Agent Shell 不代理官方 hook、state schema、tools 或 stream transformer。
+`agent` 是 Agent Shell 提供的身份字典，只包含 `id`、`type`、`name` 和 `package_id`，不是 LangChain Agent 对象。
+返回值直接进入 Agent 的 middleware 列表。Agent Shell 不代理官方 hook、state schema、tools 或 stream transformer。运行链使用
+异步执行；自定义类覆盖同步 hook 时也必须提供对应 async hook。
 
-Agent Shell 使用 `astream` 异步 Agent 执行链。自定义 Middleware 实现 hook 时必须提供对应 async 版本，例如
-`abefore_agent`、`abefore_model`、`aafter_model`、`aafter_agent`、`awrap_model_call` 或 `awrap_tool_call`；只覆盖同步 hook
-而没有对应 async hook 的 package 会在物化时被拒绝。官方预置 Middleware 若同时提供同步和异步实现可以直接使用。
+## Imports 与依赖
 
-## 配置绑定
+Python 名称仍需显式 `import`。本地模块使用正常相对导入，例如 `from .helpers import build_route`。非核心直接依赖逐行写入私有包
+的可选 `requirements.txt`。
 
-Condition Router 与 Custom Middleware 组件统一保存：
+启动器只从启用 Workflow 可达的 Condition Router、Main Agent 和其 Subagent 引用中收集私有包 requirements。静态模板和
+未被运行配置触达的私有包不进入依赖指纹，也不影响全局依赖。依赖层生成在
+`runtime/python_packages/site-packages/`；requirements 修改后重启生效，Python 源码在下一次请求重新加载。
 
-```yaml
-python_package_bindings:
-  - package_id: 11111111-1111-4111-8111-111111111111
-    enabled: true
-    config:
-      threshold: 80
-```
-
-Condition Router 要求恰好一个 enabled binding；Custom Middleware 支持有序多个 binding。YAML 不保存源码、requirements、
-绝对路径、入口符号或环境 fingerprint。修改 package display name 不影响引用。
-
-## Imports、依赖与生效
-
-Python 仍要求显式 `import`。包可以使用 Agent Shell 核心环境已经安装的库，但源文件没有导入名称时不能直接使用它。非核心直接
-依赖必须逐行写入可选 `requirements.txt`。本地模块使用正常 package 相对导入，例如 `from .helpers import build_route`。
-
-Windows 启动器只为当前配置中已启用 binding 引用的包收集 requirements，并生成可重建的
-`runtime/python_packages/site-packages/`。核心锁定依赖优先；只接受普通 PyPI requirement、与核心约束兼容且提供 Windows wheel
-的版本，不接受 URL、本地路径、`.pth` 或只有源码发行包的依赖。
-
-Python 源码修改在下一次请求重新加载；requirements 修改需要重启 Agent Shell。package 作者可以直接用 IDE、pytest、类型检查和
-版本控制维护完整目录。真实异常链和路径只应在 management-only Debug 中查看。
+依赖只接受普通 PyPI requirement、与核心约束兼容且提供 Windows wheel 的版本，不接受 URL、本地路径、`.pth` 或只有源码
+发行包的依赖。
 
 ## 安全
 
-Python package 是受信任的任意代码，以 Agent Shell 服务进程权限运行，不是 sandbox。只允许实例维护者写入
-`data/resources/python_packages/`，不要在 package 或 manifest 中保存 secret。
+私有包是受信任的任意代码，以 Agent Shell 服务进程权限运行，不是 sandbox。不要在模板、私有包、manifest 或普通 config 中
+保存 secret。请求级模块使用独立命名空间加载，并在请求结束时从模块缓存清理。

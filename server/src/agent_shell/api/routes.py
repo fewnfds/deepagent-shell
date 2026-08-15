@@ -33,6 +33,11 @@ from agent_shell.validation.models import validation_failure_detail
 from agent_shell.validation.service import ConfigurationValidationService
 from agent_shell.workflow_prepare import WORKFLOW_COMPONENT_CATALOG
 from agent_shell.python_packages.dependencies import dependency_metadata
+from agent_shell.python_packages.authoring import (
+    PackageChange,
+    PythonPackageAuthoringError,
+    PythonPackageAuthoringService,
+)
 from agent_shell.python_requirements import parse_python_requirements
 
 
@@ -46,6 +51,7 @@ def build_router(
     provider_http_clients: ProviderHttpClients,
     workflow_store: WorkflowStore,
     runtime_root: Path,
+    python_package_authoring: PythonPackageAuthoringService,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -76,9 +82,75 @@ def build_router(
         assert validated is not None
         return validated
 
-    def project_block(block_type: str, block: dict | None) -> dict | None:
+    def package_files(payload: dict, *, creating: bool) -> tuple[dict, dict]:
+        candidate = dict(payload)
+        files = candidate.pop("python_package_files", None)
+        if not isinstance(files, dict):
+            raise management_error(
+                422,
+                code="python_package_files_required",
+                message_key="errors.pythonPackageFilesRequired",
+                message="Python package component saves require package file content.",
+            )
+        allowed = {"main_source", "requirements_source", "revision", "template_key"}
+        if set(files) - allowed or any(
+            not isinstance(files.get(key), str)
+            for key in ("main_source", "requirements_source", "revision")
+        ):
+            raise management_error(
+                422,
+                code="python_package_files_invalid",
+                message_key="errors.pythonPackageFilesInvalid",
+                message="The Python package file payload is invalid.",
+            )
+        if creating and (
+            not isinstance(files.get("template_key"), str)
+            or not files["template_key"].strip()
+        ):
+            raise management_error(
+                422,
+                code="python_package_template_required",
+                message_key="errors.pythonPackageTemplateRequired",
+                message="Select a Python package template before saving.",
+            )
+        return candidate, files
+
+    def package_reference(payload: dict) -> dict:
+        value = payload.get("python_package")
+        return dict(value) if isinstance(value, dict) else {}
+
+    def authoring_error(exc: PythonPackageAuthoringError) -> HTTPException:
+        parts = exc.code.split("_")
+        message_key = parts[0] + "".join(part.capitalize() for part in parts[1:])
+        return management_error(
+            exc.status_code,
+            code=exc.code,
+            message_key=f"errors.{message_key}",
+            message=str(exc),
+        )
+
+    def project_block(
+        block_type: str,
+        block: dict | None,
+        *,
+        include_package_files: bool = False,
+    ) -> dict | None:
         if block is None:
             return None
+        if python_package_authoring.supports(block_type):
+            if not include_package_files:
+                return block
+            try:
+                return {
+                    **block,
+                    **python_package_authoring.project(
+                        block_type,
+                        str(block.get("id", "")),
+                        package_reference(block),
+                    ),
+                }
+            except PythonPackageAuthoringError as exc:
+                raise authoring_error(exc) from exc
         if block_type not in {"workflow-input-context", "workflow-prepare"}:
             return block
         requirements = parse_python_requirements(block.get("python_requirements", []))
@@ -366,13 +438,37 @@ def build_router(
                     message="The configuration is still referenced.",
                     message_args={"owner": owner_name},
                 )
-        return {
-            "deleted": block_store.delete_blocks(
+        changes: list[PackageChange] = []
+        if python_package_authoring.supports(block_type):
+            try:
+                for block_id in ids:
+                    source = block_store.get_block_internal(block_type, block_id)
+                    if source is None:
+                        continue
+                    changes.append(
+                        python_package_authoring.stage_delete(
+                            block_type,
+                            block_id,
+                            package_reference(source),
+                        )
+                    )
+            except PythonPackageAuthoringError as exc:
+                for change in reversed(changes):
+                    change.rollback()
+                raise authoring_error(exc) from exc
+        try:
+            deleted = block_store.delete_blocks(
                 block_type,
                 ids,
                 detach_references=True,
             )
-        }
+        except BaseException:
+            for change in reversed(changes):
+                change.rollback()
+            raise
+        for change in changes:
+            change.finalize()
+        return {"deleted": deleted}
 
     @router.get("/api/blocks/{block_type}/{block_id}")
     async def get_block(block_type: str, block_id: str) -> dict:
@@ -385,23 +481,56 @@ def build_router(
                 message_key="errors.blockNotFound",
                 message="The component configuration does not exist.",
             )
-        return project_block(block_type, block)
+        return project_block(block_type, block, include_package_files=True)
 
     @router.post("/api/blocks/{block_type}")
     async def create_block(block_type: str, payload: dict) -> dict:
         check_type(block_type)
-        validated = parse_payload(block_type, payload)
         block_id = str(uuid4())
+        change: PackageChange | None = None
+        candidate = payload
+        if python_package_authoring.supports(block_type):
+            candidate, files = package_files(payload, creating=True)
+            package = candidate.get("python_package")
+            config = package.get("config", {}) if isinstance(package, dict) else {}
+            try:
+                reference, change = python_package_authoring.create(
+                    block_type,
+                    block_id,
+                    template_key=str(files["template_key"]),
+                    template_revision=str(files["revision"]),
+                    main_source=str(files["main_source"]),
+                    requirements_source=str(files["requirements_source"]),
+                    config=dict(config) if isinstance(config, dict) else {},
+                )
+            except PythonPackageAuthoringError as exc:
+                raise authoring_error(exc) from exc
+            candidate["python_package"] = reference
         try:
+            validated = parse_payload(block_type, candidate, block_id=block_id)
             block_store.save_block(block_type, block_id, validated)
+        except HTTPException:
+            if change is not None:
+                change.rollback()
+            raise
         except ValueError as exc:
+            if change is not None:
+                change.rollback()
             raise management_error(
                 409,
                 code="configuration_name_conflict",
                 message_key="errors.configurationNameConflict",
                 message="A configuration with this name already exists.",
             ) from exc
-        return project_block(block_type, block_store.get_block(block_type, block_id))
+        except BaseException:
+            if change is not None:
+                change.rollback()
+            raise
+        return project_block(
+            block_type,
+            block_store.get_block(block_type, block_id),
+            include_package_files=True,
+        )
 
     @router.post("/api/blocks/{block_type}/{block_id}/copy")
     async def copy_block(block_type: str, block_id: str, payload: dict) -> dict:
@@ -436,47 +565,110 @@ def build_router(
                 status_code=422,
                 detail=validation_failure_detail(report),
             )
+        new_id = str(uuid4())
+        change: PackageChange | None = None
+        if python_package_authoring.supports(block_type):
+            try:
+                reference, change = python_package_authoring.copy(
+                    block_type,
+                    block_id,
+                    new_id,
+                    package_reference(source),
+                )
+            except PythonPackageAuthoringError as exc:
+                raise authoring_error(exc) from exc
+            source = {**source, "python_package": reference}
         try:
             copied = block_store.copy_block(
-                block_type, block_id, str(uuid4()), name
+                block_type, block_id, new_id, name, source=source
             )
         except ValueError as exc:
+            if change is not None:
+                change.rollback()
             raise management_error(
                 409,
                 code="configuration_name_conflict",
                 message_key="errors.configurationNameConflict",
                 message="A configuration with this name already exists.",
             ) from exc
+        except BaseException:
+            if change is not None:
+                change.rollback()
+            raise
         if copied is None:
+            if change is not None:
+                change.rollback()
             raise management_error(
                 404,
                 code="block_not_found",
                 message_key="errors.blockNotFound",
                 message="The component configuration does not exist.",
             )
-        return project_block(block_type, copied)
+        return project_block(block_type, copied, include_package_files=True)
 
     @router.put("/api/blocks/{block_type}/{block_id}")
     async def update_block(block_type: str, block_id: str, payload: dict) -> dict:
         check_type(block_type)
-        if block_store.get_block(block_type, block_id) is None:
+        existing_block = block_store.get_block_internal(block_type, block_id)
+        if existing_block is None:
             raise management_error(
                 404,
                 code="block_not_found",
                 message_key="errors.blockNotFound",
                 message="The component configuration does not exist.",
             )
-        validated = parse_payload(block_type, payload, block_id=block_id)
+        change: PackageChange | None = None
+        candidate = payload
+        if python_package_authoring.supports(block_type):
+            candidate, files = package_files(payload, creating=False)
+            reference = candidate.get("python_package")
+            if (
+                not isinstance(reference, dict)
+                or reference.get("folder")
+                != package_reference(existing_block).get("folder")
+            ):
+                raise management_error(
+                    409,
+                    code="python_package_folder_immutable",
+                    message_key="errors.pythonPackageFolderImmutable",
+                    message="An existing component cannot change its private package folder reference.",
+                )
+            try:
+                change = python_package_authoring.update(
+                    block_type,
+                    block_id,
+                    reference,
+                    revision=str(files["revision"]),
+                    main_source=str(files["main_source"]),
+                    requirements_source=str(files["requirements_source"]),
+                )
+            except PythonPackageAuthoringError as exc:
+                raise authoring_error(exc) from exc
         try:
+            validated = parse_payload(block_type, candidate, block_id=block_id)
             block_store.save_block(block_type, block_id, validated)
+        except HTTPException:
+            if change is not None:
+                change.rollback()
+            raise
         except ValueError as exc:
+            if change is not None:
+                change.rollback()
             raise management_error(
                 409,
                 code="configuration_name_conflict",
                 message_key="errors.configurationNameConflict",
                 message="A configuration with this name already exists.",
             ) from exc
-        return project_block(block_type, block_store.get_block(block_type, block_id))
+        except BaseException:
+            if change is not None:
+                change.rollback()
+            raise
+        return project_block(
+            block_type,
+            block_store.get_block(block_type, block_id),
+            include_package_files=True,
+        )
 
     @router.delete("/api/blocks/{block_type}/{block_id}")
     async def delete_block(block_type: str, block_id: str) -> dict[str, bool]:
@@ -497,17 +689,39 @@ def build_router(
                     message="The configuration is still referenced.",
                     message_args={"owner": owner_name},
                 )
-        if not block_store.delete_block(
-            block_type,
-            block_id,
-            detach_references=True,
-        ):
+        change: PackageChange | None = None
+        if python_package_authoring.supports(block_type):
+            source = block_store.get_block_internal(block_type, block_id)
+            if source is not None:
+                try:
+                    change = python_package_authoring.stage_delete(
+                        block_type,
+                        block_id,
+                        package_reference(source),
+                    )
+                except PythonPackageAuthoringError as exc:
+                    raise authoring_error(exc) from exc
+        try:
+            deleted = block_store.delete_block(
+                block_type,
+                block_id,
+                detach_references=True,
+            )
+        except BaseException:
+            if change is not None:
+                change.rollback()
+            raise
+        if not deleted:
+            if change is not None:
+                change.rollback()
             raise management_error(
                 404,
                 code="block_not_found",
                 message_key="errors.blockNotFound",
                 message="The component configuration does not exist.",
             )
+        if change is not None:
+            change.finalize()
         return {"ok": True}
 
     return router

@@ -82,7 +82,7 @@ export interface CustomToolResource {
   filename: string
 }
 
-export type FileManagerScope = 'files' | 'skills' | 'custom_tools' | 'python_packages'
+export type FileManagerScope = 'files' | 'skills' | 'custom_tools' | 'python_templates'
 type ManagedFileKind = 'directory' | 'file' | 'unsupported'
 
 export interface ManagedFileScopeCatalog {
@@ -190,9 +190,8 @@ export interface CapabilityReference {
   block_id: string
 }
 
-export interface PythonPackageBinding {
-  package_id: string
-  enabled: boolean
+export interface PythonPackageReference {
+  folder: string
   config: Record<string, unknown>
 }
 
@@ -218,7 +217,7 @@ export interface PythonPackageConfigSchema {
   additionalProperties: false
 }
 
-export interface PythonPackageResource {
+export interface PythonPackageManifest {
   format_version: 1
   id: string
   family: 'workflow-node' | 'middleware'
@@ -227,7 +226,33 @@ export interface PythonPackageResource {
   description: string
   config_schema: PythonPackageConfigSchema
   folder: string
-  python_requirements: string[]
+}
+
+export interface PythonPackageFiles {
+  template_key: string
+  main_source: string
+  requirements_source: string
+  revision: string
+}
+
+export interface PythonPackageTemplate {
+  format_version: 1
+  key: string
+  family: 'workflow-node' | 'middleware'
+  adapter: 'condition-router' | 'agent-middleware'
+  name: string
+  description: string
+  config_schema: PythonPackageConfigSchema
+  main_source: string
+  requirements_source: string
+  revision: string
+}
+
+export interface PythonPackageProjection {
+  python_package: PythonPackageReference
+  python_package_manifest: PythonPackageManifest | null
+  python_package_files: Omit<PythonPackageFiles, 'template_key'>
+  python_package_error: LocalizedMessagePayload | null
   requirements_fingerprint: string
   dependency_status: 'ready' | 'restart_required' | 'failed'
   dependency_error_code: string

@@ -298,8 +298,11 @@ class Settings(BaseSettings):
     def resolved_custom_tools_dir(self) -> Path:
         return self.data_root / "resources" / "custom_tools"
 
-    def resolved_python_packages_dir(self) -> Path:
-        return self.data_root / "resources" / "python_packages"
+    def resolved_python_templates_dir(self) -> Path:
+        return self.data_root / "templates"
+
+    def resolved_python_package_instances_dir(self) -> Path:
+        return self.data_root / "config" / "python_package_instances"
 
     def resolved_skills_dir(self) -> Path:
         return self.data_root / "resources" / "skills"
@@ -311,7 +314,10 @@ class Settings(BaseSettings):
             self.resolved_files_dir(),
             self.resolved_media_outputs_dir(),
             self.resolved_custom_tools_dir(),
-            self.resolved_python_packages_dir(),
+            self.resolved_python_templates_dir() / "workflow" / "condition_router",
+            self.resolved_python_templates_dir() / "agent" / "custom_middleware",
+            self.resolved_python_package_instances_dir() / "condition-router",
+            self.resolved_python_package_instances_dir() / "agent-middleware",
             self.resolved_skills_dir(),
             self.resolved_logs_dir(),
             self.resolved_runtime_dir() / "cache",

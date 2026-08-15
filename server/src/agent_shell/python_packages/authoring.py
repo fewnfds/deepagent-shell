@@ -1,0 +1,536 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+import json
+import logging
+import os
+from pathlib import Path
+import shutil
+import tempfile
+from typing import Any
+from uuid import uuid4
+
+from agent_shell.python_packages.packages import (
+    PythonPackageManifest,
+    inspect_python_package_draft,
+    resolve_python_package,
+    resolve_owned_python_package_folder,
+    scan_python_package,
+    scan_python_package_template,
+    scan_python_package_templates,
+)
+from agent_shell.registries.errors import ResourceScanError
+
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class PackageAdapterSpec:
+    template_parts: tuple[str, str]
+    family: str
+    adapter: str
+    factory_name: str
+    factory_parameters: tuple[str, ...]
+
+
+PACKAGE_COMPONENT_SPECS: dict[str, PackageAdapterSpec] = {
+    "condition-router": PackageAdapterSpec(
+        template_parts=("workflow", "condition_router"),
+        family="workflow-node",
+        adapter="condition-router",
+        factory_name="create_router",
+        factory_parameters=("config",),
+    ),
+    "custom-middleware": PackageAdapterSpec(
+        template_parts=("agent", "custom_middleware"),
+        family="middleware",
+        adapter="agent-middleware",
+        factory_name="create_middleware",
+        factory_parameters=("config", "agent"),
+    ),
+}
+
+
+class PythonPackageAuthoringError(RuntimeError):
+    def __init__(self, code: str, message: str, *, status_code: int = 422) -> None:
+        super().__init__(message)
+        self.code = code
+        self.status_code = status_code
+
+
+@dataclass(slots=True)
+class PackageChange:
+    rollback_callback: Any
+    finalize_callback: Any = None
+
+    def rollback(self) -> None:
+        self.rollback_callback()
+
+    def finalize(self) -> None:
+        if self.finalize_callback is not None:
+            self.finalize_callback()
+
+
+def _write_bytes_atomic(path: Path, content: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+    )
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def _restore_file(path: Path, existed: bool, content: bytes) -> None:
+    if existed:
+        _write_bytes_atomic(path, content)
+    else:
+        path.unlink(missing_ok=True)
+
+
+def _write_requirements(path: Path, content: str) -> None:
+    if content.strip():
+        _write_bytes_atomic(path, content.encode("utf-8"))
+    else:
+        path.unlink(missing_ok=True)
+
+
+def _template_slug(key: str) -> str:
+    slug = key.lower().replace("_", "-")
+    while "--" in slug:
+        slug = slug.replace("--", "-")
+    return slug.strip("-")[:64]
+
+
+class PythonPackageAuthoringService:
+    def __init__(
+        self,
+        *,
+        templates_root: Path,
+        instances_root: Path,
+        runtime_root: Path,
+    ) -> None:
+        self._templates_root = templates_root
+        self._instances_root = instances_root
+        self._runtime_root = runtime_root
+
+    @staticmethod
+    def supports(block_type: str) -> bool:
+        return block_type in PACKAGE_COMPONENT_SPECS
+
+    def _spec(self, block_type: str) -> PackageAdapterSpec:
+        try:
+            return PACKAGE_COMPONENT_SPECS[block_type]
+        except KeyError as exc:
+            raise PythonPackageAuthoringError(
+                "python_package_component_unsupported",
+                "The component type does not support a private Python package.",
+            ) from exc
+
+    def _template_root(self, spec: PackageAdapterSpec) -> Path:
+        return self._templates_root.joinpath(*spec.template_parts)
+
+    def _adapter_root(self, spec: PackageAdapterSpec) -> Path:
+        return self._instances_root / spec.adapter
+
+    def template_catalog(self, block_type: str) -> dict[str, object]:
+        spec = self._spec(block_type)
+        return scan_python_package_templates(
+            self._template_root(spec),
+            family=spec.family,  # type: ignore[arg-type]
+            adapter=spec.adapter,  # type: ignore[arg-type]
+            factory_name=spec.factory_name,
+            factory_parameters=spec.factory_parameters,
+        )
+
+    def _scan_instance(
+        self,
+        block_type: str,
+        owner_id: str,
+        folder: str,
+    ) -> tuple[dict[str, object], Path]:
+        spec = self._spec(block_type)
+        try:
+            resolved = resolve_python_package(
+                folder,
+                self._instances_root,
+                owner_id=owner_id,
+                family=spec.family,  # type: ignore[arg-type]
+                adapter=spec.adapter,  # type: ignore[arg-type]
+                factory_name=spec.factory_name,
+                factory_parameters=spec.factory_parameters,
+                runtime_root=self._runtime_root,
+            )
+        except ResourceScanError as exc:
+            raise PythonPackageAuthoringError(
+                "python_package_invalid",
+                "The private Python package is invalid.",
+            ) from exc
+        if resolved is None:
+            raise PythonPackageAuthoringError(
+                "python_package_not_found",
+                "The private Python package does not exist or is not owned by this configuration.",
+                status_code=404,
+            )
+        return resolved
+
+    def _inspect_instance(
+        self,
+        block_type: str,
+        owner_id: str,
+        folder_name: str,
+    ) -> tuple[dict[str, object], Path]:
+        spec = self._spec(block_type)
+        folder = resolve_owned_python_package_folder(
+            folder_name,
+            self._instances_root,
+            owner_id=owner_id,
+            adapter=spec.adapter,  # type: ignore[arg-type]
+        )
+        if folder is None:
+            raise PythonPackageAuthoringError(
+                "python_package_not_found",
+                "The private Python package does not exist or is not owned by this configuration.",
+                status_code=404,
+            )
+        try:
+            return (
+                inspect_python_package_draft(
+                    folder,
+                    owner_id=owner_id,
+                    family=spec.family,  # type: ignore[arg-type]
+                    adapter=spec.adapter,  # type: ignore[arg-type]
+                    factory_name=spec.factory_name,
+                    factory_parameters=spec.factory_parameters,
+                    runtime_root=self._runtime_root,
+                ),
+                folder,
+            )
+        except ResourceScanError as exc:
+            raise PythonPackageAuthoringError(
+                "python_package_read_failed",
+                f"The private Python package could not be inspected ({exc.message_key}).",
+            ) from exc
+
+    def project(
+        self,
+        block_type: str,
+        owner_id: str,
+        reference: dict[str, Any],
+    ) -> dict[str, object]:
+        inspection, _folder = self._inspect_instance(
+            block_type, owner_id, str(reference.get("folder", ""))
+        )
+        metadata = inspection["metadata"]
+        assert metadata is None or isinstance(metadata, dict)
+        package_error = inspection["error"]
+        error_code = (
+            str(package_error.get("message_key", "python_package_invalid"))
+            if isinstance(package_error, dict)
+            else ""
+        )
+        return {
+            "python_package_manifest": inspection["manifest"],
+            "python_package_files": {
+                "main_source": inspection["main_source"],
+                "requirements_source": inspection["requirements_source"],
+                "revision": inspection["revision"],
+            },
+            "python_package_error": package_error,
+            "requirements_fingerprint": (
+                metadata["requirements_fingerprint"] if metadata is not None else ""
+            ),
+            "dependency_status": (
+                metadata["dependency_status"] if metadata is not None else "failed"
+            ),
+            "dependency_error_code": (
+                metadata["dependency_error_code"] if metadata is not None else error_code
+            ),
+        }
+
+    def create(
+        self,
+        block_type: str,
+        owner_id: str,
+        *,
+        template_key: str,
+        template_revision: str,
+        main_source: str,
+        requirements_source: str,
+        config: dict[str, Any],
+    ) -> tuple[dict[str, Any], PackageChange]:
+        spec = self._spec(block_type)
+        template_root = self._template_root(spec)
+        template = template_root / template_key
+        if template.parent != template_root:
+            raise PythonPackageAuthoringError(
+                "python_package_template_invalid",
+                "The selected Python package template key must name one template folder.",
+            )
+        try:
+            metadata = scan_python_package_template(
+                template,
+                family=spec.family,  # type: ignore[arg-type]
+                adapter=spec.adapter,  # type: ignore[arg-type]
+                factory_name=spec.factory_name,
+                factory_parameters=spec.factory_parameters,
+            )
+        except ResourceScanError as exc:
+            raise PythonPackageAuthoringError(
+                "python_package_template_invalid",
+                "The selected Python package template is invalid.",
+            ) from exc
+        if metadata["revision"] != template_revision:
+            raise PythonPackageAuthoringError(
+                "python_package_template_revision_conflict",
+                "The Python package template changed after it was loaded.",
+                status_code=409,
+            )
+        instance_id = str(uuid4())
+        folder_name = f"{owner_id}--{_template_slug(template_key)}--{instance_id}"
+        adapter_root = self._adapter_root(spec)
+        adapter_root.mkdir(parents=True, exist_ok=True)
+        staging_root = Path(tempfile.mkdtemp(prefix=".authoring-", dir=adapter_root))
+        staged = staging_root / folder_name
+        final = adapter_root / folder_name
+        try:
+            shutil.copytree(template, staged)
+            (staged / "template.json").unlink()
+            manifest = PythonPackageManifest.model_validate(
+                {
+                    "format_version": metadata["format_version"],
+                    "id": instance_id,
+                    "family": metadata["family"],
+                    "adapter": metadata["adapter"],
+                    "name": metadata["name"],
+                    "description": metadata["description"],
+                    "config_schema": metadata["config_schema"],
+                }
+            )
+            _write_bytes_atomic(
+                staged / "package.json",
+                (json.dumps(manifest.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
+            )
+            _write_bytes_atomic(staged / "main.py", main_source.encode("utf-8"))
+            _write_requirements(staged / "requirements.txt", requirements_source)
+            scan_python_package(
+                staged,
+                owner_id=owner_id,
+                family=spec.family,  # type: ignore[arg-type]
+                adapter=spec.adapter,  # type: ignore[arg-type]
+                factory_name=spec.factory_name,
+                factory_parameters=spec.factory_parameters,
+                runtime_root=self._runtime_root,
+            )
+            os.replace(staged, final)
+        except ResourceScanError as exc:
+            shutil.rmtree(staging_root, ignore_errors=True)
+            raise PythonPackageAuthoringError(
+                "python_package_invalid",
+                "The private Python package does not satisfy its adapter contract.",
+            ) from exc
+        except BaseException:
+            shutil.rmtree(staging_root, ignore_errors=True)
+            raise
+        shutil.rmtree(staging_root, ignore_errors=True)
+        return (
+            {"folder": folder_name, "config": dict(config)},
+            PackageChange(lambda: shutil.rmtree(final, ignore_errors=True)),
+        )
+
+    def update(
+        self,
+        block_type: str,
+        owner_id: str,
+        reference: dict[str, Any],
+        *,
+        revision: str,
+        main_source: str,
+        requirements_source: str,
+    ) -> PackageChange:
+        inspection, folder = self._inspect_instance(
+            block_type, owner_id, str(reference.get("folder", ""))
+        )
+        if inspection["revision"] != revision:
+            raise PythonPackageAuthoringError(
+                "python_package_revision_conflict",
+                "The private Python package changed after it was loaded.",
+                status_code=409,
+            )
+        spec = self._spec(block_type)
+        staging_root = Path(tempfile.mkdtemp(prefix=".authoring-", dir=self._adapter_root(spec)))
+        staged = staging_root / folder.name
+        try:
+            shutil.copytree(folder, staged)
+            _write_bytes_atomic(staged / "main.py", main_source.encode("utf-8"))
+            _write_requirements(staged / "requirements.txt", requirements_source)
+            scan_python_package(
+                staged,
+                owner_id=owner_id,
+                family=spec.family,  # type: ignore[arg-type]
+                adapter=spec.adapter,  # type: ignore[arg-type]
+                factory_name=spec.factory_name,
+                factory_parameters=spec.factory_parameters,
+                runtime_root=self._runtime_root,
+            )
+        except ResourceScanError as exc:
+            shutil.rmtree(staging_root, ignore_errors=True)
+            raise PythonPackageAuthoringError(
+                "python_package_invalid",
+                "The private Python package does not satisfy its adapter contract.",
+            ) from exc
+        except BaseException:
+            shutil.rmtree(staging_root, ignore_errors=True)
+            raise
+
+        main_path = folder / "main.py"
+        requirements_path = folder / "requirements.txt"
+        main_existed = main_path.is_file()
+        old_main = main_path.read_bytes() if main_existed else b""
+        requirements_existed = requirements_path.is_file()
+        old_requirements = requirements_path.read_bytes() if requirements_existed else b""
+        current, _ = self._inspect_instance(block_type, owner_id, folder.name)
+        if current["revision"] != revision:
+            shutil.rmtree(staging_root, ignore_errors=True)
+            raise PythonPackageAuthoringError(
+                "python_package_revision_conflict",
+                "The private Python package changed after it was loaded.",
+                status_code=409,
+            )
+        try:
+            _write_bytes_atomic(main_path, main_source.encode("utf-8"))
+            _write_requirements(requirements_path, requirements_source)
+        except BaseException:
+            _restore_file(main_path, main_existed, old_main)
+            _restore_file(requirements_path, requirements_existed, old_requirements)
+            shutil.rmtree(staging_root, ignore_errors=True)
+            raise
+        shutil.rmtree(staging_root, ignore_errors=True)
+
+        def rollback() -> None:
+            _restore_file(main_path, main_existed, old_main)
+            _restore_file(requirements_path, requirements_existed, old_requirements)
+
+        return PackageChange(rollback)
+
+    def copy(
+        self,
+        block_type: str,
+        source_owner_id: str,
+        target_owner_id: str,
+        reference: dict[str, Any],
+    ) -> tuple[dict[str, Any], PackageChange]:
+        _metadata, source = self._scan_instance(
+            block_type, source_owner_id, str(reference.get("folder", ""))
+        )
+        spec = self._spec(block_type)
+        instance_id = str(uuid4())
+        template_slug = source.name.split("--", 2)[1]
+        folder_name = f"{target_owner_id}--{template_slug}--{instance_id}"
+        final = self._adapter_root(spec) / folder_name
+        staging_root = Path(tempfile.mkdtemp(prefix=".authoring-", dir=self._adapter_root(spec)))
+        staged = staging_root / folder_name
+        try:
+            shutil.copytree(source, staged)
+            manifest_path = staged / "package.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["id"] = instance_id
+            _write_bytes_atomic(
+                manifest_path,
+                (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
+            )
+            scan_python_package(
+                staged,
+                owner_id=target_owner_id,
+                family=spec.family,  # type: ignore[arg-type]
+                adapter=spec.adapter,  # type: ignore[arg-type]
+                factory_name=spec.factory_name,
+                factory_parameters=spec.factory_parameters,
+                runtime_root=self._runtime_root,
+            )
+            os.replace(staged, final)
+        except ResourceScanError as exc:
+            shutil.rmtree(staging_root, ignore_errors=True)
+            raise PythonPackageAuthoringError(
+                "python_package_invalid",
+                "The copied Python package does not satisfy its adapter contract.",
+            ) from exc
+        except BaseException:
+            shutil.rmtree(staging_root, ignore_errors=True)
+            raise
+        shutil.rmtree(staging_root, ignore_errors=True)
+        return (
+            {"folder": folder_name, "config": dict(reference.get("config", {}))},
+            PackageChange(lambda: shutil.rmtree(final, ignore_errors=True)),
+        )
+
+    def stage_delete(
+        self,
+        block_type: str,
+        owner_id: str,
+        reference: dict[str, Any],
+    ) -> PackageChange:
+        spec = self._spec(block_type)
+        folder_name = str(reference.get("folder", ""))
+        folder = resolve_owned_python_package_folder(
+            folder_name,
+            self._instances_root,
+            owner_id=owner_id,
+            adapter=spec.adapter,  # type: ignore[arg-type]
+        )
+        if folder is None:
+            logger.warning(
+                "Skipping private Python package cleanup: code=python_package_not_found owner_id=%s folder=%s",
+                owner_id,
+                folder_name,
+            )
+            return PackageChange(lambda: None)
+        try:
+            inspect_python_package_draft(
+                folder,
+                owner_id=owner_id,
+                family=spec.family,  # type: ignore[arg-type]
+                adapter=spec.adapter,  # type: ignore[arg-type]
+                factory_name=spec.factory_name,
+                factory_parameters=spec.factory_parameters,
+                runtime_root=self._runtime_root,
+            )
+        except ResourceScanError as exc:
+            logger.warning(
+                "Skipping unsafe private Python package cleanup: code=%s owner_id=%s folder=%s",
+                exc.message_key,
+                owner_id,
+                folder_name,
+            )
+            return PackageChange(lambda: None)
+        tombstone_root = folder.parent / f".deleted-{uuid4()}"
+        tombstone_root.mkdir(parents=True)
+        tombstone = tombstone_root / folder.name
+        os.replace(folder, tombstone)
+
+        def rollback() -> None:
+            folder.parent.mkdir(parents=True, exist_ok=True)
+            if tombstone.exists():
+                os.replace(tombstone, folder)
+            shutil.rmtree(tombstone_root, ignore_errors=True)
+
+        def finalize() -> None:
+            shutil.rmtree(tombstone_root, ignore_errors=True)
+
+        return PackageChange(rollback, finalize)
+
+
+__all__ = [
+    "PACKAGE_COMPONENT_SPECS",
+    "PackageChange",
+    "PythonPackageAuthoringError",
+    "PythonPackageAuthoringService",
+]

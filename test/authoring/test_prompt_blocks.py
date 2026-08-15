@@ -71,6 +71,42 @@ def test_prompt_templates_accept_escaped_literal_braces(
     )
     assert skill.status_code == 200, skill.text
     assert subagent.status_code == 200, subagent.text
+    template = (
+        tmp_path
+        / "data"
+        / "templates"
+        / "agent"
+        / "custom_middleware"
+        / "syntax-check"
+    )
+    template.mkdir(parents=True, exist_ok=True)
+    (template / "template.json").write_text(
+        json.dumps(
+            {
+                "format_version": 1,
+                "family": "middleware",
+                "adapter": "agent-middleware",
+                "name": "Syntax check",
+                "description": "Test template.",
+                "config_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    valid_source = (
+        "from langchain.agents.middleware import AgentMiddleware\n"
+        "def create_middleware(config, agent):\n"
+        "    return AgentMiddleware()\n"
+    )
+    (template / "main.py").write_text(valid_source, encoding="utf-8")
+    selected = client.get(
+        "/api/python-package-templates/middleware"
+    ).json()["catalog"][0]
     assert (
         client.post(
             "/api/blocks/custom-tool",
@@ -83,9 +119,13 @@ def test_prompt_templates_accept_escaped_literal_braces(
             "/api/blocks/custom-middleware",
             json={
                 "name": "bad syntax",
-                "python_package_bindings": [
-                    {"name": "broken", "source": "middleware = ("}
-                ],
+                "python_package": {"folder": "", "config": {}},
+                "python_package_files": {
+                    "template_key": selected["key"],
+                    "revision": selected["revision"],
+                    "main_source": "middleware = (",
+                    "requirements_source": "",
+                },
             },
         ).status_code
         == 422
@@ -95,9 +135,13 @@ def test_prompt_templates_accept_escaped_literal_braces(
             "/api/blocks/custom-middleware",
             json={
                 "name": "missing output",
-                "python_package_bindings": [
-                    {"name": "not bound", "source": "value = object()"}
-                ],
+                "python_package": {"folder": "", "config": {}},
+                "python_package_files": {
+                    "template_key": selected["key"],
+                    "revision": selected["revision"],
+                    "main_source": "value = object()\n",
+                    "requirements_source": "",
+                },
             },
         ).status_code
         == 422

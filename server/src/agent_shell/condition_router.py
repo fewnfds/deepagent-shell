@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Callable
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
-from agent_shell.python_packages.contracts import PythonPackageBinding
+from agent_shell.python_packages.contracts import PythonPackageReference
 
 if TYPE_CHECKING:
     from agent_shell.runtime.context import WorkflowRuntimeContext
@@ -25,10 +25,7 @@ class ConditionRouterBlock(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: Annotated[str, Field(min_length=1, max_length=120)]
-    python_package_bindings: list[PythonPackageBinding] = Field(
-        default_factory=list,
-        max_length=1,
-    )
+    python_package: PythonPackageReference
 
 
 class ConditionRouterResult(BaseModel):

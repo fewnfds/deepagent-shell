@@ -104,7 +104,7 @@ describe('block adapters', () => {
     })
   })
 
-  it('keeps resource selections and middleware order as mechanical form data', () => {
+  it('keeps the private package reference and file payload mechanical', () => {
     const toolDraft = customToolAdapter.blank()
     toolDraft.name = ' Tools '
     toolDraft.tools = ['one', ' one ', '', 'two']
@@ -113,15 +113,30 @@ describe('block adapters', () => {
     const middlewareDraft = customMiddlewareAdapter.fromApi({
       id: 'middleware-id',
       name: 'Middleware',
-      python_package_bindings: [
-        { package_id: 'first', enabled: true, config: { mode: 'strict' } },
-        { package_id: 'second', enabled: false, config: {} },
-      ],
+      python_package: { folder: 'owner--template--instance', config: { mode: 'strict' } },
+      python_package_files: {
+        main_source: 'def create_middleware(config, agent):\n    return middleware\n',
+        requirements_source: 'httpx==1\n',
+        revision: 'revision',
+      },
+      python_package_error: {
+        message_key: 'resource.error.pythonPackage.syntax',
+        message_args: { line: 2 },
+      },
     })
     const payload = customMiddlewareAdapter.toPayload(middlewareDraft)
-    expect(payload.python_package_bindings.map((entry) => entry.package_id)).toEqual(['first', 'second'])
-    expect(payload.python_package_bindings[0]).not.toHaveProperty('_key')
-    expect(payload.python_package_bindings[0]?.config).toEqual({ mode: 'strict' })
+    expect(payload.python_package).toEqual({
+      folder: 'owner--template--instance', config: { mode: 'strict' },
+    })
+    expect(payload.python_package_files).toMatchObject({
+      main_source: expect.any(String),
+      requirements_source: 'httpx==1\n',
+      revision: 'revision',
+    })
+    expect(middlewareDraft.python_package_error).toEqual({
+      message_key: 'resource.error.pythonPackage.syntax',
+      message_args: { line: 2 },
+    })
   })
 
   it('creates output drafts from an independent copy of the catalog default', () => {
@@ -179,14 +194,22 @@ describe('block adapters', () => {
 
     const middleware = customMiddlewareAdapter.fromApi({
       id: 'middleware', name: 'Middleware',
-      python_package_bindings: [
-        { package_id: 'kept', enabled: 'invalid', config: ['invalid'] },
-        'discarded',
-      ],
+      python_package: {
+        folder: 'owner--template--instance',
+        config: ['invalid'],
+      },
+      python_package_files: {
+        main_source: 42,
+        requirements_source: ['invalid'],
+        revision: 7,
+      },
     } as never)
-    expect(middleware.python_package_bindings).toMatchObject([
-      { package_id: 'kept', enabled: true, config: {} },
-    ])
+    expect(middleware.python_package).toEqual({
+      folder: 'owner--template--instance', config: {},
+    })
+    expect(middleware.python_package_files).toMatchObject({
+      main_source: '', requirements_source: '', revision: '',
+    })
 
     const output = outputModeAdapter.fromApi({
       id: 'output', name: 'Output', filter_mode: 'legacy',

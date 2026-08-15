@@ -113,7 +113,8 @@ def test_condition_router_package_loads_local_modules_and_materializes_async_rou
     tmp_path: Path,
 ) -> None:
     package_id = "44444444-4444-4444-8444-444444444444"
-    package_dir = tmp_path / "packages" / package_id
+    folder_name = f"{ROUTER_ID}--threshold-router--{package_id}"
+    package_dir = tmp_path / "packages" / "condition-router" / folder_name
     package_dir.mkdir(parents=True)
     (package_dir / "package.json").write_text(
         json.dumps(
@@ -157,7 +158,8 @@ def test_condition_router_package_loads_local_modules_and_materializes_async_rou
     )
     route = runtime.router_for(
         "router-node",
-        [{"package_id": package_id, "enabled": True, "config": {"threshold": 80}}],
+        ROUTER_ID,
+        {"folder": folder_name, "config": {"threshold": 80}},
     )
 
     result = asyncio.run(

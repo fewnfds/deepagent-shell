@@ -8,13 +8,16 @@ import pytest
 
 from agent_shell.python_packages import dependencies
 from agent_shell.python_packages.dependencies import prepare_windows_dependencies
-from agent_shell.middleware_packages.packages import scan_middleware_packages
+from agent_shell.middleware_packages.packages import scan_middleware_package
+from agent_shell.registries.errors import ResourceScanError
+from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.file_config import FileConfigRepository
 
 
-def write_package(root: Path, package_id: str) -> Path:
-    folder = root / package_id
+def write_package(root: Path, owner_id: str, package_id: str) -> tuple[str, Path]:
+    folder_name = f"{owner_id}--dependency-test--{package_id}"
+    folder = root / "agent-middleware" / folder_name
     folder.mkdir(parents=True)
     (folder / "package.json").write_text(
         json.dumps(
@@ -40,7 +43,7 @@ def write_package(root: Path, package_id: str) -> Path:
         "    return AgentMiddleware()\n",
         encoding="utf-8",
     )
-    return folder
+    return folder_name, folder
 
 
 def write_runtime_manifest(runtime_root: Path) -> None:
@@ -64,53 +67,112 @@ def write_runtime_manifest(runtime_root: Path) -> None:
 
 def test_requirements_are_normalized_and_need_runtime_state(tmp_path: Path) -> None:
     packages = tmp_path / "packages"
+    owner_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
     package_id = "11111111-1111-4111-8111-111111111111"
-    folder = write_package(packages, package_id)
+    _folder_name, folder = write_package(packages, owner_id, package_id)
     (folder / "requirements.txt").write_text(
         "# package dependencies\nPillow>=11,<13\nhttpx; python_version >= '3.12'\n",
         encoding="utf-8",
     )
 
-    catalog = scan_middleware_packages(packages)["catalog"]
+    package = scan_middleware_package(folder, owner_id=owner_id)
 
-    assert catalog[0]["python_requirements"] == [
+    assert package["python_requirements"] == [
         'httpx; python_version >= "3.12"',
         "Pillow<13,>=11",
     ]
-    assert catalog[0]["dependency_status"] == "restart_required"
+    assert package["dependency_status"] == "restart_required"
 
     (folder / "requirements.txt").write_text(
         "--extra-index-url https://packages.example/simple\n",
         encoding="utf-8",
     )
-    invalid = scan_middleware_packages(packages)
-    assert invalid["catalog"] == []
-    assert invalid["errors"][package_id]["message_key"] == (
-        "resource.error.pythonPackage.requirementsInvalid"
-    )
+    with pytest.raises(ResourceScanError) as caught:
+        scan_middleware_package(folder, owner_id=owner_id)
+    assert caught.value.message_key == "resource.error.pythonPackage.requirementsInvalid"
 
 
 def test_dependency_preparation_replaces_only_successful_package_layer(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     data_root = tmp_path / "data"
     runtime_root = tmp_path / "runtime"
-    packages = data_root / "resources" / "python_packages"
+    packages = data_root / "config" / "python_package_instances"
+    owner_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
     package_id = "11111111-1111-4111-8111-111111111111"
-    folder = write_package(packages, package_id)
+    folder_name, folder = write_package(packages, owner_id, package_id)
+    unused_owner_id = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+    unused_package_id = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
+    _unused_name, unused_folder = write_package(
+        packages, unused_owner_id, unused_package_id
+    )
+    (unused_folder / "requirements.txt").write_text(
+        "idna==3.10\n", encoding="utf-8"
+    )
     (folder / "requirements.txt").write_text("Pillow==12.0.0\n", encoding="utf-8")
+    invalid_owner_id = "12121212-1212-4212-8212-121212121212"
+    invalid_package_id = "34343434-3434-4434-8434-343434343434"
+    invalid_folder_name, invalid_folder = write_package(
+        packages, invalid_owner_id, invalid_package_id
+    )
+    (invalid_folder / "main.py").write_text("not valid Python (\n", encoding="utf-8")
     write_runtime_manifest(runtime_root)
-    block_store = BlockStore(FileConfigRepository(data_root))
+    repository = FileConfigRepository(data_root)
+    block_store = BlockStore(repository)
     block_store.save_block(
         "custom-middleware",
-        "middleware",
+        owner_id,
         {
             "name": "middleware",
-            "python_package_bindings": [
-                {"package_id": package_id, "enabled": True, "config": {}}
-            ],
+            "python_package": {"folder": folder_name, "config": {}},
         },
+    )
+    block_store.save_block(
+        "custom-middleware",
+        invalid_owner_id,
+        {
+            "name": "invalid middleware",
+            "python_package": {"folder": invalid_folder_name, "config": {}},
+        },
+    )
+    main_agent_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    AgentConfigStore(repository).save_item(
+        "main_agents",
+        main_agent_id,
+        {
+            "name": "Main",
+            "capability_refs": [
+                {"type": "custom-middleware", "block_id": owner_id},
+                {"type": "custom-middleware", "block_id": invalid_owner_id},
+            ],
+            "subagents": [],
+        },
+    )
+    repository.update_config(
+        lambda config: config.setdefault("workflows", []).append(
+            {
+                "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+                "name": "Enabled workflow",
+                "description": "Dependency reachability test.",
+                "filesystem_id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
+                "workflow_prepare_id": None,
+                "workflow_event_output_id": None,
+                "enabled": True,
+                "definition": {
+                    "nodes": [
+                        {
+                            "id": "agent",
+                            "type": "agent",
+                            "config": {"main_agent_id": main_agent_id},
+                        }
+                    ],
+                    "edges": [],
+                },
+                "layout": {},
+            }
+        )
     )
     for component_type, component_id, requirement in (
         ("workflow-input-context", "input-context", "PyYAML==6.0.3"),
@@ -138,6 +200,9 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
 
     monkeypatch.setattr(dependencies.subprocess, "run", successful_install)
     prepare_windows_dependencies(data_root=data_root, runtime_root=runtime_root)
+    assert (
+        "resource.error.pythonPackage.syntax" in capsys.readouterr().out
+    )
 
     state = dependencies.load_dependency_state(runtime_root)
     assert state is not None
@@ -147,11 +212,15 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
         "workflow-input-context:input-context",
         "workflow-prepare:prepare",
     }
+    assert f"python-package:{unused_package_id}" not in state["records"]
+    assert f"python-package:{invalid_package_id}" not in state["records"]
     assert all(item["status"] == "ready" for item in state["records"].values())
     assert (dependencies.package_site_packages(runtime_root) / "PIL").is_dir()
     assert "--only-binary" in calls[0]
-    ready = scan_middleware_packages(packages, runtime_root=runtime_root)["catalog"]
-    assert ready[0]["dependency_status"] == "ready"
+    ready = scan_middleware_package(
+        folder, owner_id=owner_id, runtime_root=runtime_root
+    )
+    assert ready["dependency_status"] == "ready"
 
     monkeypatch.setattr(
         dependencies.subprocess,
@@ -166,5 +235,7 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
     assert failed_state["status"] == "failed"
     assert failed_state["records"][f"python-package:{package_id}"]["status"] == "failed"
     assert (dependencies.package_site_packages(runtime_root) / "PIL").is_dir()
-    failed = scan_middleware_packages(packages, runtime_root=runtime_root)["catalog"]
-    assert failed[0]["dependency_status"] == "failed"
+    failed = scan_middleware_package(
+        folder, owner_id=owner_id, runtime_root=runtime_root
+    )
+    assert failed["dependency_status"] == "failed"

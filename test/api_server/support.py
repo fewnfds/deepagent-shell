@@ -62,26 +62,30 @@ def make_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     return ScopedAuthTestClient(create_app())
 
 
-def write_middleware_package(
+def write_middleware_template(
     tmp_path: Path,
-    package_id: str,
+    template_key: str,
     source: str,
     *,
     config_schema: dict[str, object] | None = None,
     requirements: tuple[str, ...] = (),
 ) -> None:
     package_dir = (
-        tmp_path / "data" / "resources" / "python_packages" / package_id
+        tmp_path
+        / "data"
+        / "templates"
+        / "agent"
+        / "custom_middleware"
+        / template_key
     )
     package_dir.mkdir(parents=True, exist_ok=True)
-    (package_dir / "package.json").write_text(
+    (package_dir / "template.json").write_text(
         json.dumps(
             {
                 "format_version": 1,
-                "id": package_id,
                 "family": "middleware",
                 "adapter": "agent-middleware",
-                "name": package_id,
+                "name": template_key,
                 "description": "Test custom Middleware package.",
                 "config_schema": {
                     "type": "object",

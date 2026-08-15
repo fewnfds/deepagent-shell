@@ -176,13 +176,21 @@ class BlockStore:
                     {"block_id": block_id, "reason": "replaced" if new_secret else "connection_changed"},
                 )
 
-    def copy_block(self, block_type: str, source_id: str, new_id: str, name: str) -> dict | None:
-        source = self.get_block_internal(block_type, source_id)
-        if source is None:
+    def copy_block(
+        self,
+        block_type: str,
+        source_id: str,
+        new_id: str,
+        name: str,
+        *,
+        source: dict | None = None,
+    ) -> dict | None:
+        source_record = source or self.get_block_internal(block_type, source_id)
+        if source_record is None:
             return None
         if any(item.get("name") == name for item in self.list_blocks_internal(block_type)):
             raise ValueError(f"名称「{name}」已存在")
-        copied = deepcopy(source)
+        copied = deepcopy(source_record)
         copied["id"] = new_id
         copied["name"] = name
 

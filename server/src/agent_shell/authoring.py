@@ -26,7 +26,6 @@ from agent_shell.workflow_event_output import (
     WORKFLOW_EVENT_NAMES,
     WorkflowEventOutputBlock,
 )
-from agent_shell.condition_router import ConditionRouterBlock
 
 
 # These text snapshots are management-editor data. Production catalog reads must not
@@ -512,10 +511,7 @@ _EDITOR_DEFAULTS = {
         mode="json", exclude={"name"}
     ),
     "workflow_event_output": _workflow_event_output_default(),
-    "condition_router": ConditionRouterBlock(
-        name="Condition router",
-        python_package_bindings=[],
-    ).model_dump(mode="json", exclude={"name"}),
+    "condition_router": {},
 }
 
 

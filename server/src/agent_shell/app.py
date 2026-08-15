@@ -60,6 +60,7 @@ from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.storage.workflow_runs import WorkflowRunStore
 from agent_shell.validation.service import ConfigurationValidationService
 from agent_shell.python_packages.validation import PythonPackageValidationService
+from agent_shell.python_packages.authoring import PythonPackageAuthoringService
 from agent_shell.file_manager import FileManagerService
 from agent_shell.system_settings import SystemSettingsService
 from agent_shell.storage.permissions import secure_directory, secure_file
@@ -89,7 +90,8 @@ def create_app(
             )
         environment_permissions = (environment_permission,)
     custom_tools_dir = settings.resolved_custom_tools_dir()
-    python_packages_dir = settings.resolved_python_packages_dir()
+    python_templates_dir = settings.resolved_python_templates_dir()
+    python_package_instances_dir = settings.resolved_python_package_instances_dir()
     skills_dir = settings.resolved_skills_dir()
 
     runtime_dir = settings.resolved_runtime_dir()
@@ -130,7 +132,12 @@ def create_app(
     config_store = AgentConfigStore(configuration, event_logger)
     workflow_store = WorkflowStore(configuration, event_logger)
     python_package_validation = PythonPackageValidationService(
-        packages_dir=python_packages_dir,
+        packages_dir=python_package_instances_dir,
+        runtime_root=runtime_dir,
+    )
+    python_package_authoring = PythonPackageAuthoringService(
+        templates_root=python_templates_dir,
+        instances_root=python_package_instances_dir,
         runtime_root=runtime_dir,
     )
     configuration_validation = ConfigurationValidationService(
@@ -174,7 +181,7 @@ def create_app(
             "files": settings.resolved_files_dir(),
             "skills": skills_dir,
             "custom_tools": custom_tools_dir,
-            "python_packages": python_packages_dir,
+            "python_templates": python_templates_dir,
         },
         settings.resolved_runtime_dir() / "tmp",
     )
@@ -182,7 +189,7 @@ def create_app(
     agent_runtime = RequestSnapshotRuntime(
         configuration,
         custom_tools_dir=custom_tools_dir,
-        python_packages_dir=python_packages_dir,
+        python_packages_dir=python_package_instances_dir,
         runtime_dir=runtime_dir,
         skills_dir=skills_dir,
         provider_http_clients=provider_http_clients,
@@ -445,6 +452,7 @@ def create_app(
             provider_http_clients,
             workflow_store,
             runtime_dir,
+            python_package_authoring,
         )
     )
     app.include_router(
@@ -467,10 +475,7 @@ def create_app(
         )
     )
     app.include_router(
-        build_python_package_router(
-            python_packages_dir,
-            runtime_dir,
-        )
+        build_python_package_router(python_package_authoring)
     )
     app.include_router(build_runtime_diagnostics_router(runtime_diagnostics))
     app.include_router(

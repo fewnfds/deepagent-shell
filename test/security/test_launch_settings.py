@@ -47,7 +47,8 @@ def test_create_app_installs_minimal_cors_and_runtime_directories(
 ) -> None:
     runtime_dir = tmp_path / "runtime"
     data_root = tmp_path / "data"
-    python_packages_dir = data_root / "resources" / "python_packages"
+    python_templates_dir = data_root / "templates"
+    python_package_instances_dir = data_root / "config" / "python_package_instances"
     _write_system_settings(tmp_path, cors_origins=["https://console.example"])
     monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "management-secret")
 
@@ -89,7 +90,10 @@ def test_create_app_installs_minimal_cors_and_runtime_directories(
     assert (data_root / "state").is_dir()
     assert (data_root / "files").is_dir()
     assert (data_root / "logs").is_dir()
-    assert python_packages_dir.is_dir()
+    assert (python_templates_dir / "workflow" / "condition_router").is_dir()
+    assert (python_templates_dir / "agent" / "custom_middleware").is_dir()
+    assert (python_package_instances_dir / "condition-router").is_dir()
+    assert (python_package_instances_dir / "agent-middleware").is_dir()
 
 
 def test_official_launcher_uses_only_validated_settings_and_disables_proxy_headers(

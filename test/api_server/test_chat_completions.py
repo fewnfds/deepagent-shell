@@ -117,14 +117,19 @@ def test_chat_rejects_an_incomplete_saved_workflow_draft(
 def test_chat_materializes_condition_router_package_before_compiling_workflow(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    package_id = "44444444-4444-4444-8444-444444444444"
-    package_dir = tmp_path / "data" / "resources" / "python_packages" / package_id
+    package_dir = (
+        tmp_path
+        / "data"
+        / "templates"
+        / "workflow"
+        / "condition_router"
+        / "always-run"
+    )
     package_dir.mkdir(parents=True)
-    (package_dir / "package.json").write_text(
+    (package_dir / "template.json").write_text(
         json.dumps(
             {
                 "format_version": 1,
-                "id": package_id,
                 "family": "workflow-node",
                 "adapter": "condition-router",
                 "name": "Always run",
@@ -147,13 +152,20 @@ def test_chat_materializes_condition_router_package_before_compiling_workflow(
     )
     with make_client(tmp_path, monkeypatch) as client:
         main_agent = create_main_agent(client)
+        selected = client.get(
+            "/api/python-package-templates/condition-router"
+        ).json()["catalog"][0]
         router = client.post(
             "/api/blocks/condition-router",
             json={
                 "name": "Always run",
-                "python_package_bindings": [
-                    {"package_id": package_id, "enabled": True, "config": {}}
-                ],
+                "python_package": {"folder": "", "config": {}},
+                "python_package_files": {
+                    "template_key": selected["key"],
+                    "revision": selected["revision"],
+                    "main_source": selected["main_source"],
+                    "requirements_source": selected["requirements_source"],
+                },
             },
         )
         assert router.status_code == 200, router.text
@@ -236,12 +248,11 @@ def test_chat_completion_stream_runs_current_graph(
 def test_workflow_agent_middleware_injects_frozen_client_messages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    package_id = "11111111-1111-4111-8111-111111111111"
     InspectingFakeChatModel.seen_messages = []
     model = InspectingFakeChatModel(responses=["middleware reply"])
-    write_middleware_package(
+    write_middleware_template(
         tmp_path,
-        package_id,
+        "request-injection",
         "from langchain.agents.middleware import AgentMiddleware\n"
         "from langchain_core.messages import HumanMessage\n"
         "class InjectRequest(AgentMiddleware):\n"
@@ -258,17 +269,20 @@ def test_workflow_agent_middleware_injects_frozen_client_messages(
             lambda _block, _credential, _http_clients: model,
         )
         main_agent = create_main_agent(client)
+        selected = client.get(
+            "/api/python-package-templates/middleware"
+        ).json()["catalog"][0]
         custom = client.post(
             "/api/blocks/custom-middleware",
             json={
                 "name": "Request message injection",
-                "python_package_bindings": [
-                    {
-                        "package_id": package_id,
-                        "enabled": True,
-                        "config": {},
-                    }
-                ],
+                "python_package": {"folder": "", "config": {}},
+                "python_package_files": {
+                    "template_key": selected["key"],
+                    "revision": selected["revision"],
+                    "main_source": selected["main_source"],
+                    "requirements_source": selected["requirements_source"],
+                },
             },
         )
         assert custom.status_code == 200, custom.text

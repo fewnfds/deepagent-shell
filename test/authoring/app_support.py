@@ -114,7 +114,6 @@ def block_cases(tmp_path: Path) -> list[tuple[str, dict]]:
             "custom-middleware",
             {
                 "name": "Reliability middleware",
-                "python_package_bindings": [],
             },
         ),
         ("output-mode", output_mode_payload()),

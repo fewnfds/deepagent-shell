@@ -70,7 +70,7 @@ def test_file_manager_completes_common_file_and_text_workflows(
             "files",
             "skills",
             "custom_tools",
-            "python_packages",
+            "python_templates",
         ]
     }
     assert empty.status_code == 200

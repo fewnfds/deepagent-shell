@@ -20,7 +20,8 @@ class MiddlewareOwner:
     id: str
     type: str
     name: str
-    bindings: tuple[dict[str, Any], ...]
+    package_owner_id: str
+    package: dict[str, Any] | None
 
 
 class MiddlewarePackageRuntime:
@@ -67,18 +68,22 @@ class MiddlewarePackageRuntime:
     ) -> "MiddlewarePackageRuntime":
         owners: list[MiddlewareOwner] = []
 
-        def middleware_bindings(
+        def middleware_package(
             blocks: dict[str, dict[str, Any]],
-        ) -> tuple[dict[str, Any], ...]:
+        ) -> dict[str, Any] | None:
             selected = blocks.get("custom-middleware", {})
-            return tuple(deepcopy(selected.get("python_package_bindings", [])))
+            package = selected.get("python_package")
+            return deepcopy(package) if isinstance(package, dict) else None
 
         owners.append(
             MiddlewareOwner(
                 id=main_agent_id,
                 type="main_agent",
                 name=str(assembly.main_agent.get("name", "")),
-                bindings=middleware_bindings(assembly.blocks),
+                package_owner_id=str(
+                    assembly.blocks.get("custom-middleware", {}).get("id", "")
+                ),
+                package=middleware_package(assembly.blocks),
             )
         )
         for edge in assembly.subagents:
@@ -89,7 +94,10 @@ class MiddlewarePackageRuntime:
                     id=node.key,
                     type="subagent",
                     name=node.name,
-                    bindings=middleware_bindings(node.blocks),
+                    package_owner_id=str(
+                        node.blocks.get("custom-middleware", {}).get("id", "")
+                    ),
+                    package=middleware_package(node.blocks),
                 )
             )
         return cls(
@@ -104,80 +112,79 @@ class MiddlewarePackageRuntime:
         if cached is not None:
             return cached
         owner = self._owner_by_id[owner_id]
-        middleware: list[AgentMiddleware] = []
-        for binding_index, binding in enumerate(owner.bindings):
-            if not binding.get("enabled", True):
-                continue
-            package_id = str(binding["package_id"])
-            factory, metadata, _package_dir = self._loader.entrypoint(
-                owner.id,
-                "middleware",
-                binding_index,
-                package_id,
+        if owner.package is None:
+            result: tuple[AgentMiddleware, ...] = ()
+            self._middleware[owner_id] = result
+            return result
+        folder = str(owner.package["folder"])
+        factory, metadata, _package_dir = self._loader.entrypoint(
+            owner.id,
+            "middleware",
+            0,
+            folder,
+            package_owner_id=owner.package_owner_id,
+        )
+        config = deepcopy(dict(owner.package.get("config", {})))
+        if validate_python_package_config(metadata["config_schema"], config):
+            raise AgentRuntimeError(
+                "python_package.config_invalid",
+                f"Python package {folder!r} configuration is invalid.",
+                status_code=422,
             )
-            config = deepcopy(dict(binding.get("config", {})))
-            if validate_python_package_config(metadata["config_schema"], config):
-                raise AgentRuntimeError(
-                    "python_package.config_invalid",
-                    f"Python package {package_id!r} configuration is invalid.",
-                    status_code=422,
-                )
-            try:
-                produced = factory(
-                    config,
-                    {
-                        "id": owner.id,
-                        "type": owner.type,
-                        "name": owner.name,
-                        "binding_index": binding_index,
-                        "package_id": package_id,
-                    },
-                )
-            except Exception as exc:
-                raise AgentRuntimeError(
-                    "middleware_package_materialization_failed",
-                    f"Middleware package {package_id!r} could not create Middleware.",
-                    status_code=422,
-                ) from exc
-            values: Sequence[Any]
-            if isinstance(produced, AgentMiddleware):
-                values = (produced,)
-            elif isinstance(produced, (list, tuple)):
-                values = produced
-            else:
-                values = ()
-            if not values or any(not isinstance(item, AgentMiddleware) for item in values):
-                raise AgentRuntimeError(
-                    "middleware_package_result_invalid",
-                    f"Middleware package {package_id!r} must return AgentMiddleware instances.",
-                    status_code=422,
-                )
-            for item in values:
-                middleware_type = type(item)
-                for sync_name, async_name in (
-                    ("before_agent", "abefore_agent"),
-                    ("before_model", "abefore_model"),
-                    ("after_model", "aafter_model"),
-                    ("after_agent", "aafter_agent"),
-                    ("wrap_model_call", "awrap_model_call"),
-                    ("wrap_tool_call", "awrap_tool_call"),
+        try:
+            produced = factory(
+                config,
+                {
+                    "id": owner.id,
+                    "type": owner.type,
+                    "name": owner.name,
+                    "package_id": metadata["id"],
+                },
+            )
+        except Exception as exc:
+            raise AgentRuntimeError(
+                "middleware_package_materialization_failed",
+                f"Middleware package {folder!r} could not create Middleware.",
+                status_code=422,
+            ) from exc
+        values: Sequence[Any]
+        if isinstance(produced, AgentMiddleware):
+            values = (produced,)
+        elif isinstance(produced, (list, tuple)):
+            values = produced
+        else:
+            values = ()
+        if not values or any(not isinstance(item, AgentMiddleware) for item in values):
+            raise AgentRuntimeError(
+                "middleware_package_result_invalid",
+                f"Middleware package {folder!r} must return AgentMiddleware instances.",
+                status_code=422,
+            )
+        for item in values:
+            middleware_type = type(item)
+            for sync_name, async_name in (
+                ("before_agent", "abefore_agent"),
+                ("before_model", "abefore_model"),
+                ("after_model", "aafter_model"),
+                ("after_agent", "aafter_agent"),
+                ("wrap_model_call", "awrap_model_call"),
+                ("wrap_tool_call", "awrap_tool_call"),
+            ):
+                if (
+                    getattr(middleware_type, sync_name)
+                    is not getattr(AgentMiddleware, sync_name)
+                    and getattr(middleware_type, async_name)
+                    is getattr(AgentMiddleware, async_name)
                 ):
-                    if (
-                        getattr(middleware_type, sync_name)
-                        is not getattr(AgentMiddleware, sync_name)
-                        and getattr(middleware_type, async_name)
-                        is getattr(AgentMiddleware, async_name)
-                    ):
-                        raise AgentRuntimeError(
-                            "middleware_package_async_hook_required",
-                            (
-                                f"Middleware package {package_id!r} implements "
-                                f"{sync_name} without {async_name}."
-                            ),
-                            status_code=422,
-                        )
-            middleware.extend(values)
-        result = tuple(middleware)
+                    raise AgentRuntimeError(
+                        "middleware_package_async_hook_required",
+                        (
+                            f"Middleware package {folder!r} implements "
+                            f"{sync_name} without {async_name}."
+                        ),
+                        status_code=422,
+                    )
+        result = tuple(values)
         self._middleware[owner_id] = result
         return result
 

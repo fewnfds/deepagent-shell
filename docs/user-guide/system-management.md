@@ -8,6 +8,7 @@
 data/
   config/
     components/<type>/<uuid>.yaml
+    python_package_instances/{condition-router,agent-middleware}/
     agents/main/<uuid>.yaml
     agents/subagent/<uuid>.yaml
     workflows/<uuid>.yaml
@@ -15,7 +16,8 @@ data/
     agent-shell.env
   state/agent-shell.sqlite3*
   files/
-  resources/{skills,custom_tools,python_packages}/
+  resources/{skills,custom_tools}/
+  templates/{workflow/condition_router,agent/custom_middleware}/
   logs/security-events.jsonl
   logs/debug/*.log
 ```
@@ -25,17 +27,21 @@ data/
 请求级 runtime 诊断和媒体元数据。迁移时先完全停止服务，
 再复制完整 `data/`，包括 SQLite WAL/SHM。外部 filesystem 映射需要单独迁移并更新路径。
 
-文件化 Python 扩展包及其可选 `requirements.txt` 保存在 `data/resources/python_packages/`；Windows 生成的共享
-依赖位于 `runtime/python_packages/`，属于可重建运行态，不进入备份。
+静态 Python 模板保存在 `data/templates/`，配置私有包及其可选 `requirements.txt` 保存在
+`data/config/python_package_instances/`。两者都属于需备份的 data；Windows 生成的共享依赖位于
+`runtime/python_packages/`，属于可重建运行态，不进入备份。模板不运行且不参与依赖。
 
 ## 文件管理
 
-【系统 / 文件管理】只开放四个 scope：普通文件、Skill、自定义工具和 Python packages。支持浏览、新建、
+【系统 / 文件管理】只开放四个 scope：普通文件、Skill、自定义工具和 Python templates。支持浏览、新建、
 上传、下载、ZIP、重命名、文本编辑和递归删除。
+
+Python templates scope 用于在 `workflow/condition_router/` 或 `agent/custom_middleware/` 类别中建档静态代码模板。
+项目源码不携带实例 data，也不会自动生成默认模板；空模板目录不会影响运行中的私有包。
 
 - 文本编辑上限 2 MiB，并使用 revision 防止静默覆盖；
 - 文件操作不跟随符号链接或 Windows reparse point；
-- 页面不能访问 `config/`、`state/`、`logs/`、外部映射或其他宿主路径；
+- 页面不能访问 `config/`（包括私有包）、`state/`、`logs/`、外部映射或其他宿主路径；
 - 递归删除没有回收站。
 
 ## 系统设置

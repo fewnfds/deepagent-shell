@@ -1,3 +1,3 @@
-from agent_shell.python_packages.contracts import PythonPackageBinding
+from agent_shell.python_packages.contracts import PythonPackageReference
 
-__all__ = ["PythonPackageBinding"]
+__all__ = ["PythonPackageReference"]

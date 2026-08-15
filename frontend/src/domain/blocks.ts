@@ -1,7 +1,4 @@
-import {
-  createMiddlewareEntry,
-  customMiddlewareAdapter,
-} from './blocks/customMiddleware'
+import { customMiddlewareAdapter } from './blocks/customMiddleware'
 import { customToolAdapter } from './blocks/customTool'
 import { exceptionRetryAdapter } from './blocks/exceptionRetry'
 import { filesystemAdapter } from './blocks/filesystem'
@@ -82,7 +79,6 @@ export type {
 } from './blocks/conditionRouter'
 
 export {
-  createMiddlewareEntry,
   customMiddlewareAdapter,
   customToolAdapter,
   exceptionRetryAdapter,

@@ -565,7 +565,7 @@ class AgentRuntime:
 
         from agent_shell.condition_router import ConditionRouterBlock
 
-        condition_router_blocks: dict[str, ConditionRouterBlock] = {}
+        condition_router_blocks: dict[str, tuple[str, ConditionRouterBlock]] = {}
         for router_node in condition_router_nodes:
             router_id = str(
                 ConditionRouterNodeConfig.model_validate(
@@ -580,8 +580,11 @@ class AgentRuntime:
             if stored_router is None:
                 continue
             try:
-                condition_router_blocks[router_node.id] = ConditionRouterBlock.model_validate(
-                    {key: value for key, value in stored_router.items() if key != "id"}
+                condition_router_blocks[router_node.id] = (
+                    router_id,
+                    ConditionRouterBlock.model_validate(
+                        {key: value for key, value in stored_router.items() if key != "id"}
+                    ),
                 )
             except Exception as exc:
                 raise AgentRuntimeError(
@@ -590,28 +593,40 @@ class AgentRuntime:
                     status_code=422,
                 ) from exc
 
-        if self._python_packages_dir is None or self._runtime_dir is None:
-            raise AgentRuntimeError(
-                "workflow.python_package_runtime_unavailable",
-                "The Python package runtime is not configured.",
-                status_code=500,
-            )
-        condition_router_runtime = ConditionRouterPackageRuntime(
-            request_id=request_id,
-            packages_dir=self._python_packages_dir,
-            runtime_root=self._runtime_dir,
-        )
-        try:
-            condition_routers = {
-                node_id: condition_router_runtime.router_for(
-                    node_id,
-                    block.model_dump(mode="python")["python_package_bindings"],
+        condition_router_runtime: ConditionRouterPackageRuntime | None = None
+        condition_routers: dict[str, Any] = {}
+        if condition_router_blocks:
+            if self._python_packages_dir is None or self._runtime_dir is None:
+                raise AgentRuntimeError(
+                    "workflow.python_package_runtime_unavailable",
+                    "The Python package runtime is not configured.",
+                    status_code=500,
                 )
-                for node_id, block in condition_router_blocks.items()
-            }
+            condition_router_runtime = ConditionRouterPackageRuntime(
+                request_id=request_id,
+                packages_dir=self._python_packages_dir,
+                runtime_root=self._runtime_dir,
+            )
+        try:
+            if condition_router_runtime is None:
+                condition_routers = {}
+            else:
+                condition_routers = {
+                    node_id: condition_router_runtime.router_for(
+                        node_id,
+                        router_id,
+                        block.model_dump(mode="python")["python_package"],
+                    )
+                    for node_id, (router_id, block) in condition_router_blocks.items()
+                }
         except Exception:
-            await condition_router_runtime.close()
+            if condition_router_runtime is not None:
+                await condition_router_runtime.close()
             raise
+
+        async def close_condition_router_runtime() -> None:
+            if condition_router_runtime is not None:
+                await condition_router_runtime.close()
 
         try:
             executable = validate_workflow_executable(
@@ -620,11 +635,11 @@ class AgentRuntime:
                 condition_routers=condition_routers,
             )
         except Exception:
-            await condition_router_runtime.close()
+            await close_condition_router_runtime()
             raise
         if not executable.valid:
             issue = executable.issues[0]
-            await condition_router_runtime.close()
+            await close_condition_router_runtime()
             raise AgentRuntimeError(
                 issue.code,
                 issue.message,
@@ -793,14 +808,14 @@ class AgentRuntime:
         except asyncio.CancelledError:
             for _, agent in built_agents:
                 await agent.middleware_runtime.close()
-            await condition_router_runtime.close()
+            await close_condition_router_runtime()
             if debug_run is not None:
                 await debug_run.finish("cancelled", error_code="request_cancelled")
             raise
         except Exception as exc:
             for _, agent in built_agents:
                 await agent.middleware_runtime.close()
-            await condition_router_runtime.close()
+            await close_condition_router_runtime()
             error_code = (
                 exc.code
                 if isinstance(exc, AgentRuntimeError)

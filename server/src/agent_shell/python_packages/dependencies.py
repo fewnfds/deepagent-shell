@@ -342,34 +342,132 @@ def prepare_windows_dependencies(
     data_root: Path,
     runtime_root: Path,
 ) -> None:
-    from agent_shell.condition_router_packages import scan_condition_router_packages
-    from agent_shell.middleware_packages.packages import scan_middleware_packages
+    from agent_shell.condition_router_packages import resolve_condition_router_package
+    from agent_shell.middleware_packages.packages import resolve_middleware_package
     from agent_shell.storage.file_config import FileConfigRepository
 
     manifest = _runtime_manifest(runtime_root)
     core_fingerprint = str(manifest.get("build_fingerprint", ""))
     if not core_fingerprint:
         raise ValueError("The Windows runtime manifest lacks its build fingerprint.")
-    packages_dir = data_root / "resources" / "python_packages"
+    packages_dir = data_root / "config" / "python_package_instances"
     repository = FileConfigRepository(data_root)
-    components = repository.config().get("components", {})
-    referenced_package_ids = {
-        str(binding.get("package_id", ""))
-        for component_type in ("custom-middleware", "condition-router")
-        for component in components.get(component_type, [])
-        for binding in component.get("python_package_bindings", [])
-        if binding.get("enabled", True)
+    config = repository.config()
+    components = config.get("components", {})
+
+    active_main_agent_ids: set[str] = set()
+    active_condition_router_ids: set[str] = set()
+    for workflow in config.get("workflows", []):
+        if not isinstance(workflow, dict) or workflow.get("enabled") is not True:
+            continue
+        definition = workflow.get("definition", {})
+        for node in definition.get("nodes", []) if isinstance(definition, dict) else []:
+            if not isinstance(node, dict):
+                continue
+            node_config = node.get("config", {})
+            if not isinstance(node_config, dict):
+                continue
+            if node.get("type") == "agent":
+                active_main_agent_ids.add(str(node_config.get("main_agent_id", "")))
+            elif node.get("type") == "condition-router":
+                active_condition_router_ids.add(
+                    str(node_config.get("condition_router_id", ""))
+                )
+    active_main_agent_ids.discard("")
+    active_condition_router_ids.discard("")
+
+    main_agents = {
+        str(item.get("id", "")): item
+        for item in config.get("main_agents", [])
+        if isinstance(item, dict)
     }
-    catalogs = (
-        scan_middleware_packages(packages_dir, runtime_root=None)["catalog"],
-        scan_condition_router_packages(packages_dir, runtime_root=None)["catalog"],
-    )
-    records = [
-        {**dict(item), "id": f"python-package:{item['id']}"}
-        for catalog in catalogs
-        for item in catalog
-        if item["id"] in referenced_package_ids
-    ]
+    subagents = {
+        str(item.get("id", "")): item
+        for item in config.get("subagents", [])
+        if isinstance(item, dict)
+    }
+
+    def referenced_ids(component_type: str) -> set[str]:
+        if component_type == "condition-router":
+            return set(active_condition_router_ids)
+        found: set[str] = set()
+        active_subagent_ids: set[str] = set()
+        for main_agent_id in active_main_agent_ids:
+            agent = main_agents.get(main_agent_id)
+            if agent is None:
+                continue
+            for reference in agent.get("capability_refs", []):
+                if isinstance(reference, dict) and reference.get("type") == component_type:
+                    found.add(str(reference.get("block_id", "")))
+            for reference in agent.get("subagents", []):
+                if isinstance(reference, dict):
+                    active_subagent_ids.add(str(reference.get("subagent_id", "")))
+        for subagent_id in active_subagent_ids:
+            profile = subagents.get(subagent_id)
+            settings = profile.get("settings") if profile is not None else None
+            overrides = (
+                settings.get("capability_overrides", [])
+                if isinstance(settings, dict)
+                else []
+            )
+            for override in overrides:
+                if (
+                    isinstance(override, dict)
+                    and override.get("type") == component_type
+                    and override.get("mode") == "replace"
+                ):
+                    found.add(str(override.get("block_id", "")))
+        return {item for item in found if item}
+
+    records: list[dict[str, object]] = []
+    resolver_specs = {
+        "custom-middleware": (
+            resolve_middleware_package,
+            "middleware",
+            "agent-middleware",
+        ),
+        "condition-router": (
+            resolve_condition_router_package,
+            "workflow-node",
+            "condition-router",
+        ),
+    }
+    for component_type, (resolver, family, adapter) in resolver_specs.items():
+        by_id = {
+            str(item.get("id", "")): item
+            for item in components.get(component_type, [])
+            if isinstance(item, dict)
+        }
+        for component_id in referenced_ids(component_type):
+            component = by_id.get(component_id)
+            reference = component.get("python_package") if component else None
+            if not isinstance(reference, dict):
+                print(
+                    "WARNING: Skipping invalid private Python package reference "
+                    f"for {component_type}/{component_id}."
+                )
+                continue
+            try:
+                resolved = resolver(
+                    str(reference.get("folder", "")),
+                    packages_dir,
+                    owner_id=component_id,
+                    runtime_root=None,
+                )
+            except ResourceScanError as exc:
+                print(
+                    "WARNING: Skipping invalid private Python package "
+                    f"for {component_type}/{component_id}: {exc.message_key}."
+                )
+                continue
+            if resolved is None:
+                print(
+                    "WARNING: Skipping missing private Python package "
+                    f"for {component_type}/{component_id}."
+                )
+                continue
+            item, _folder = resolved
+            records.append({**dict(item), "id": f"python-package:{item['id']}"})
     for component_type in (
         "workflow-input-context",
         "workflow-prepare",

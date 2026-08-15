@@ -39,6 +39,7 @@ import {
   type SkillCatalogItem,
   type ModelDraft,
 } from '@/domain/blocks'
+import type { PythonPackageDraftState } from '@/domain/blocks/pythonPackage'
 import {
   CustomMiddlewareEditor,
   CustomToolEditor,
@@ -349,6 +350,10 @@ async function loadRoute(): Promise<void> {
     selectedId.value = loadedDraft.id
     markClean()
     if (manifest.type === 'model') await loadProviderCatalog(sequence)
+    if (!id && (
+      manifest.type === 'custom-middleware'
+      || manifest.type === 'condition-router'
+    )) await refreshResource()
   } catch (error) {
     if (sequence !== routeSequence) return
     pageError.value = managementError.describe(error).display
@@ -420,6 +425,10 @@ async function startNew(): Promise<void> {
       draft.value = blankDraft(activeType.value!)
       storedRecordInvalid.value = false
       markClean()
+      if (
+        activeType.value === 'custom-middleware'
+        || activeType.value === 'condition-router'
+      ) await refreshResource()
     }
   })
 }
@@ -457,10 +466,30 @@ function upsertRecord(saved: SavedBlock): void {
 
 async function save(): Promise<void> {
   if (!activeType.value || !draft.value) return
+  pageError.value = ''
+  const packageType = activeType.value === 'custom-middleware'
+    || activeType.value === 'condition-router'
+  const packageDraft = packageType
+    ? draft.value as BlockDraftBase & PythonPackageDraftState
+    : null
+  if (
+    packageDraft
+    && !packageDraft.id
+    && !packageDraft.python_package_files.template_key.trim()
+  ) {
+    pageError.value = t('errors.pythonPackageTemplateRequired')
+    return
+  }
   const payload = payloadFromDraft(activeType.value, draft.value)
-  const existing = records.value.find((record) => record.name === payload.name)
+  const existing = records.value.find((record) => (
+    record.name === payload.name && record.id !== draft.value?.id
+  ))
   let targetId = draft.value.id
   if (existing) {
+    if (packageType) {
+      pageError.value = t('errors.configurationNameConflict')
+      return
+    }
     const accepted = await confirm({
       title: t('components.overwrite.title'),
       description: t('components.overwrite.description', { name: existing.name }),
@@ -510,11 +539,11 @@ async function refreshResource(): Promise<void> {
       customTools.value = result.catalog
       customToolErrors.value = result.errors
     } else if (activeType.value === 'custom-middleware') {
-      const result = await managementApi.listMiddlewarePackages()
+      const result = await managementApi.listMiddlewareTemplates()
       customMiddlewares.value = result.catalog
       customMiddlewareErrors.value = result.errors
     } else if (activeType.value === 'condition-router') {
-      const result = await managementApi.listConditionRouterPackages()
+      const result = await managementApi.listConditionRouterTemplates()
       conditionRouterPackages.value = result.catalog
       conditionRouterPackageErrors.value = result.errors
     } else if (activeType.value === 'skill') {

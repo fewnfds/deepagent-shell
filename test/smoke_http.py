@@ -38,6 +38,11 @@ CAPABILITY_TYPES = (
     "prompt-caching",
     "workflow-input-context",
 )
+CRUD_CAPABILITY_TYPES = tuple(
+    capability_type
+    for capability_type in CAPABILITY_TYPES
+    if capability_type != "custom-middleware"
+)
 OUTPUT_EVENT_TYPES = (
     "assistant_text",
     "reasoning",
@@ -108,7 +113,6 @@ def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> d
             "model_settings": {},
         },
         "custom-tool": {"name": name, "tools": []},
-        "custom-middleware": {"name": name, "python_package_bindings": []},
         "output-mode": {
             "name": name,
             "filter_mode": "blocklist",
@@ -277,7 +281,7 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
         catalog = _request(client, "GET", "/api/catalog", headers=management).json()
         assert tuple(item["type"] for item in catalog["block_types"]) == CAPABILITY_TYPES
         _request(client, "GET", "/api/tools/custom", headers=management)
-        _request(client, "GET", "/api/python-packages/middleware/agent-middleware", headers=management)
+        _request(client, "GET", "/api/python-package-templates/middleware", headers=management)
         _request(client, "GET", "/api/skills", headers=management)
         readiness = _request(
             client, "GET", "/api/readiness", headers=management
@@ -305,7 +309,7 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
         )
 
         blocks: dict[str, dict] = {}
-        for capability_type in CAPABILITY_TYPES:
+        for capability_type in CRUD_CAPABILITY_TYPES:
             created = _request(
                 client,
                 "POST",

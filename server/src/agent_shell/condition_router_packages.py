@@ -10,7 +10,6 @@ from agent_shell.python_packages.config import validate_python_package_config
 from agent_shell.python_packages.packages import (
     resolve_python_package,
     scan_python_package,
-    scan_python_packages,
 )
 from agent_shell.runtime.errors import AgentRuntimeError
 
@@ -24,10 +23,12 @@ _PARAMETERS = ("config",)
 def scan_condition_router_package(
     folder: Path,
     *,
+    owner_id: str,
     runtime_root: Path | None = None,
 ) -> dict[str, object]:
     return scan_python_package(
         folder,
+        owner_id=owner_id,
         family=_FAMILY,
         adapter=_ADAPTER,
         factory_name=_FACTORY,
@@ -37,36 +38,22 @@ def scan_condition_router_package(
 
 
 def resolve_condition_router_package(
-    package_id: str,
+    folder: str,
     directory: Path,
     *,
+    owner_id: str,
     runtime_root: Path | None = None,
 ) -> tuple[dict[str, object], Path] | None:
     return resolve_python_package(
-        package_id,
+        folder,
         directory,
+        owner_id=owner_id,
         family=_FAMILY,
         adapter=_ADAPTER,
         factory_name=_FACTORY,
         factory_parameters=_PARAMETERS,
         runtime_root=runtime_root,
     )
-
-
-def scan_condition_router_packages(
-    directory: Path,
-    *,
-    runtime_root: Path | None = None,
-) -> dict[str, object]:
-    return scan_python_packages(
-        directory,
-        family=_FAMILY,
-        adapter=_ADAPTER,
-        factory_name=_FACTORY,
-        factory_parameters=_PARAMETERS,
-        runtime_root=runtime_root,
-    )
-
 
 class ConditionRouterPackageRuntime:
     def __init__(
@@ -91,31 +78,25 @@ class ConditionRouterPackageRuntime:
     def router_for(
         self,
         owner_id: str,
-        bindings: list[dict[str, Any]],
+        package_owner_id: str,
+        reference: dict[str, Any],
     ) -> Callable[..., Any]:
         cached = self._routers.get(owner_id)
         if cached is not None:
             return cached
-        enabled = [binding for binding in bindings if binding.get("enabled", True)]
-        if len(enabled) != 1:
-            raise AgentRuntimeError(
-                "condition_router_package.binding_required",
-                "Condition Router requires exactly one enabled Python package binding.",
-                status_code=422,
-            )
-        binding = enabled[0]
-        package_id = str(binding["package_id"])
+        folder = str(reference["folder"])
         factory, metadata, _package_dir = self._loader.entrypoint(
             owner_id,
             "condition-router",
             0,
-            package_id,
+            folder,
+            package_owner_id=package_owner_id,
         )
-        config = deepcopy(dict(binding.get("config", {})))
+        config = deepcopy(dict(reference.get("config", {})))
         if validate_python_package_config(metadata["config_schema"], config):
             raise AgentRuntimeError(
                 "python_package.config_invalid",
-                f"Python package {package_id!r} configuration is invalid.",
+                f"Python package {folder!r} configuration is invalid.",
                 status_code=422,
             )
         try:
@@ -123,13 +104,13 @@ class ConditionRouterPackageRuntime:
         except Exception as exc:
             raise AgentRuntimeError(
                 "condition_router_package.materialization_failed",
-                f"Condition Router package {package_id!r} could not create a router.",
+                f"Condition Router package {folder!r} could not create a router.",
                 status_code=422,
             ) from exc
         if not callable(route) or not inspect.iscoroutinefunction(route):
             raise AgentRuntimeError(
                 "condition_router_package.result_invalid",
-                f"Condition Router package {package_id!r} must return an async route callable.",
+                f"Condition Router package {folder!r} must return an async route callable.",
                 status_code=422,
             )
         try:
@@ -137,7 +118,7 @@ class ConditionRouterPackageRuntime:
         except (TypeError, ValueError) as exc:
             raise AgentRuntimeError(
                 "condition_router_package.result_invalid",
-                f"Condition Router package {package_id!r} returned an invalid route callable.",
+                f"Condition Router package {folder!r} returned an invalid route callable.",
                 status_code=422,
             ) from exc
         parameters = list(signature.parameters.values())
@@ -151,7 +132,7 @@ class ConditionRouterPackageRuntime:
         ):
             raise AgentRuntimeError(
                 "condition_router_package.result_invalid",
-                f"Condition Router package {package_id!r} route must accept exactly state and context.",
+                f"Condition Router package {folder!r} route must accept exactly state and context.",
                 status_code=422,
             )
         self._routers[owner_id] = route
@@ -169,5 +150,4 @@ __all__ = [
     "ConditionRouterPackageRuntime",
     "resolve_condition_router_package",
     "scan_condition_router_package",
-    "scan_condition_router_packages",
 ]

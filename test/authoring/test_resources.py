@@ -141,9 +141,7 @@ def test_skill_catalog_enforces_current_deepagents_metadata_contract(
 def test_custom_middleware_catalog_scans_recipes_without_executing_them(
     tmp_path: Path, monkeypatch
 ) -> None:
-    client = make_client(tmp_path, monkeypatch)
-    packages_dir = tmp_path / "data" / "resources" / "python_packages"
-    package_id = "11111111-1111-4111-8111-111111111111"
+    templates_dir = tmp_path / "data" / "templates" / "agent" / "custom_middleware"
     marker = tmp_path / "middleware-must-not-exist.txt"
     source = (
         '"""Safe middleware package."""\n'
@@ -152,13 +150,12 @@ def test_custom_middleware_catalog_scans_recipes_without_executing_them(
         "def create_middleware(config, agent):\n"
         "    return object()\n"
     )
-    package_dir = packages_dir / package_id
+    package_dir = templates_dir / "safe-recipe"
     package_dir.mkdir(parents=True, exist_ok=True)
-    (package_dir / "package.json").write_text(
+    (package_dir / "template.json").write_text(
         json.dumps(
             {
                 "format_version": 1,
-                "id": package_id,
                 "family": "middleware",
                 "adapter": "agent-middleware",
                 "name": "Safe recipe",
@@ -173,18 +170,19 @@ def test_custom_middleware_catalog_scans_recipes_without_executing_them(
         encoding="utf-8",
     )
     (package_dir / "main.py").write_text(source, encoding="utf-8")
-    broken_dir = packages_dir / "broken-package"
+    broken_dir = templates_dir / "broken-package"
     broken_dir.mkdir()
-    (broken_dir / "package.json").write_text("{}", encoding="utf-8")
+    (broken_dir / "template.json").write_text("{}", encoding="utf-8")
 
-    response = client.get("/api/python-packages/middleware/agent-middleware")
+    client = make_client(tmp_path, monkeypatch)
+    response = client.get("/api/python-package-templates/middleware")
 
     assert response.status_code == 200
     result = response.json()
     assert len(result["catalog"]) == 1
     item = result["catalog"][0]
     assert item["format_version"] == 1
-    assert item["id"] == package_id
+    assert item["key"] == "safe-recipe"
     assert item["family"] == "middleware"
     assert item["adapter"] == "agent-middleware"
     assert item["name"] == "Safe recipe"
@@ -195,11 +193,9 @@ def test_custom_middleware_catalog_scans_recipes_without_executing_them(
         "required": [],
         "additionalProperties": False,
     }
-    assert item["folder"] == package_id
-    assert item["python_requirements"] == []
-    assert len(item["requirements_fingerprint"]) == 64
-    assert item["dependency_status"] == "ready"
-    assert item["dependency_error_code"] == ""
+    assert item["requirements_source"] == ""
+    assert "requirements_fingerprint" not in item
+    assert "dependency_status" not in item
     assert set(result["errors"]) == {"broken-package"}
     assert result["errors"]["broken-package"]["message_key"] == (
         "resource.error.pythonPackage.filesRequired"
@@ -210,9 +206,9 @@ def test_resource_catalogs_only_scan_the_data_root(
     tmp_path: Path, monkeypatch
 ) -> None:
     root_tools = tmp_path / "resources" / "custom_tools"
-    root_packages = tmp_path / "resources" / "python_packages"
+    root_templates = tmp_path / "templates" / "agent" / "custom_middleware"
     root_tools.mkdir(parents=True)
-    root_packages.mkdir(parents=True)
+    root_templates.mkdir(parents=True)
     (root_tools / "ignored.py").write_text(
         "from langchain_core.tools import tool\n"
         "@tool\n"
@@ -221,7 +217,7 @@ def test_resource_catalogs_only_scan_the_data_root(
         "    return value\n",
         encoding="utf-8",
     )
-    (root_packages / "ignored.py").write_text(
+    (root_templates / "ignored.py").write_text(
         "middleware = object()\n",
         encoding="utf-8",
     )
@@ -229,7 +225,7 @@ def test_resource_catalogs_only_scan_the_data_root(
     client = make_client(tmp_path, monkeypatch)
 
     assert client.get("/api/tools/custom").json() == {"catalog": [], "errors": {}}
-    assert client.get("/api/python-packages/middleware/agent-middleware").json() == {
+    assert client.get("/api/python-package-templates/middleware").json() == {
         "catalog": [],
         "errors": {},
     }
@@ -237,7 +233,6 @@ def test_resource_catalogs_only_scan_the_data_root(
 def test_saving_custom_middleware_source_does_not_execute_it(
     tmp_path: Path, monkeypatch
 ) -> None:
-    client = make_client(tmp_path, monkeypatch)
     marker = tmp_path / "save-must-not-exist.txt"
     source = (
         "from pathlib import Path\n"
@@ -245,14 +240,19 @@ def test_saving_custom_middleware_source_does_not_execute_it(
         "def create_middleware(config, agent):\n"
         "    return object()\n"
     )
-    package_id = "22222222-2222-4222-8222-222222222222"
-    package_dir = tmp_path / "data" / "resources" / "python_packages" / package_id
+    package_dir = (
+        tmp_path
+        / "data"
+        / "templates"
+        / "agent"
+        / "custom_middleware"
+        / "side-effect"
+    )
     package_dir.mkdir(parents=True, exist_ok=True)
-    (package_dir / "package.json").write_text(
+    (package_dir / "template.json").write_text(
         json.dumps(
             {
                 "format_version": 1,
-                "id": package_id,
                 "family": "middleware",
                 "adapter": "agent-middleware",
                 "name": "Side effect",
@@ -267,21 +267,27 @@ def test_saving_custom_middleware_source_does_not_execute_it(
         encoding="utf-8",
     )
     (package_dir / "main.py").write_text(source, encoding="utf-8")
+    client = make_client(tmp_path, monkeypatch)
+    selected = client.get(
+        "/api/python-package-templates/middleware"
+    ).json()["catalog"][0]
 
     response = client.post(
         "/api/blocks/custom-middleware",
         json={
             "name": "Static only",
-            "python_package_bindings": [
-                {"package_id": package_id, "enabled": True, "config": {}}
-            ],
+            "python_package": {"folder": "", "config": {}},
+            "python_package_files": {
+                "template_key": selected["key"],
+                "revision": selected["revision"],
+                "main_source": selected["main_source"],
+                "requirements_source": selected["requirements_source"],
+            },
         },
     )
 
     assert response.status_code == 200, response.text
-    assert response.json()["python_package_bindings"][0] == {
-        "package_id": package_id,
-        "enabled": True,
-        "config": {},
-    }
+    assert response.json()["python_package"]["folder"].startswith(
+        f"{response.json()['id']}--side-effect--"
+    )
     assert not marker.exists()

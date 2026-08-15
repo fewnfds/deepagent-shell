@@ -5,7 +5,6 @@ from pathlib import Path
 from agent_shell.python_packages.packages import (
     resolve_python_package,
     scan_python_package,
-    scan_python_packages,
 )
 
 
@@ -18,10 +17,12 @@ _PARAMETERS = ("config", "agent")
 def scan_middleware_package(
     folder: Path,
     *,
+    owner_id: str,
     runtime_root: Path | None = None,
 ) -> dict[str, object]:
     return scan_python_package(
         folder,
+        owner_id=owner_id,
         family=_FAMILY,
         adapter=_ADAPTER,
         factory_name=_FACTORY,
@@ -31,39 +32,24 @@ def scan_middleware_package(
 
 
 def resolve_middleware_package(
-    package_id: str,
+    folder: str,
     directory: Path,
     *,
+    owner_id: str,
     runtime_root: Path | None = None,
 ) -> tuple[dict[str, object], Path] | None:
     return resolve_python_package(
-        package_id,
+        folder,
         directory,
+        owner_id=owner_id,
         family=_FAMILY,
         adapter=_ADAPTER,
         factory_name=_FACTORY,
         factory_parameters=_PARAMETERS,
         runtime_root=runtime_root,
     )
-
-
-def scan_middleware_packages(
-    directory: Path,
-    *,
-    runtime_root: Path | None = None,
-) -> dict[str, object]:
-    return scan_python_packages(
-        directory,
-        family=_FAMILY,
-        adapter=_ADAPTER,
-        factory_name=_FACTORY,
-        factory_parameters=_PARAMETERS,
-        runtime_root=runtime_root,
-    )
-
 
 __all__ = [
     "resolve_middleware_package",
     "scan_middleware_package",
-    "scan_middleware_packages",
 ]

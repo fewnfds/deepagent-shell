@@ -242,18 +242,22 @@ class ConfigurationValidationService:
         arguments = {
             "scope": "block",
             "owner_id": owner_id,
+            "package_owner_id": owner_id,
             "owner_name": str(payload.get("name", "")),
-            "path_prefix": "python_package_bindings",
+            "path_prefix": "python_package",
+            "check_dependencies": False,
         }
-        bindings = payload.get("python_package_bindings", [])
+        reference = payload.get("python_package", {})
+        if not isinstance(reference, dict):
+            reference = {}
         if block_type == "custom-middleware":
             return self._python_package_validation.middleware_issues(
-                bindings,
+                reference,
                 **arguments,
             )
         if block_type == "condition-router":
             return self._python_package_validation.condition_router_issues(
-                bindings,
+                reference,
                 **arguments,
             )
         return []
@@ -303,11 +307,12 @@ class ConfigurationValidationService:
         if custom_middleware is not None:
             issues.extend(
                 self._python_package_validation.middleware_issues(
-                    custom_middleware.get("python_package_bindings", []),
+                    custom_middleware.get("python_package", {}),
                     scope="subagent",
                     owner_id=owner_id,
+                    package_owner_id=str(custom_middleware.get("id", "")),
                     owner_name=validated["component_name"],
-                    path_prefix="settings.capability_overrides.custom-middleware.python_package_bindings",
+                    path_prefix="settings.capability_overrides.custom-middleware.python_package",
                 )
             )
         if owner_id and not issues:
@@ -812,11 +817,12 @@ class ConfigurationValidationService:
         if custom_middleware is not None:
             issues.extend(
                 self._python_package_validation.middleware_issues(
-                    custom_middleware.get("python_package_bindings", []),
+                    custom_middleware.get("python_package", {}),
                     scope="main_agent",
                     owner_id=owner_id,
+                    package_owner_id=str(custom_middleware.get("id", "")),
                     owner_name=owner_name,
-                    path_prefix="capability_refs.custom-middleware.python_package_bindings",
+                    path_prefix="capability_refs.custom-middleware.python_package",
                 )
             )
 
@@ -919,11 +925,12 @@ class ConfigurationValidationService:
             if child_custom_middleware is not None:
                 child_issues.extend(
                     self._python_package_validation.middleware_issues(
-                        child_custom_middleware.get("python_package_bindings", []),
+                        child_custom_middleware.get("python_package", {}),
                         scope="subagent",
                         owner_id=profile_id,
+                        package_owner_id=str(child_custom_middleware.get("id", "")),
                         owner_name=subagent_name,
-                        path_prefix="settings.capability_overrides.custom-middleware.python_package_bindings",
+                        path_prefix="settings.capability_overrides.custom-middleware.python_package",
                     )
                 )
             issues.extend(child_issues)

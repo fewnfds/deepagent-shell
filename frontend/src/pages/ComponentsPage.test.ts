@@ -22,8 +22,8 @@ const api = vi.hoisted(() => ({
   validateDraft: vi.fn(),
   validateRepository: vi.fn(),
   listCustomTools: vi.fn(),
-  listMiddlewarePackages: vi.fn(),
-  listConditionRouterPackages: vi.fn(),
+  listMiddlewareTemplates: vi.fn(),
+  listConditionRouterTemplates: vi.fn(),
   listSkills: vi.fn(),
   fetchModels: vi.fn(),
   listModelProviders: vi.fn(),
@@ -86,6 +86,24 @@ const conditionRouterManifest: WorkflowComponentManifest = {
   terminology_key: 'condition_router',
   label: 'Condition router',
   editor_key: 'condition-router',
+}
+
+const conditionRouterTemplate = {
+  key: 'basic-router',
+  format_version: 1 as const,
+  family: 'workflow-node' as const,
+  adapter: 'condition-router' as const,
+  name: 'Basic router',
+  description: '',
+  main_source: 'def create_router(config):\n    return route\n',
+  requirements_source: '',
+  revision: 'template-revision',
+  config_schema: {
+    type: 'object' as const,
+    properties: {},
+    required: [],
+    additionalProperties: false as const,
+  },
 }
 
 function modelRecord(id: string): SavedBlock {
@@ -163,8 +181,8 @@ beforeEach(() => {
   api.validateDraft.mockResolvedValue({ valid: true, stage: 'draft_validation', issues: [] })
   api.validateRepository.mockResolvedValue({ valid: true, stage: 'repository_load', issues: [] })
   api.listCustomTools.mockResolvedValue({ catalog: [], errors: {} })
-  api.listMiddlewarePackages.mockResolvedValue({ catalog: [], errors: {} })
-  api.listConditionRouterPackages.mockResolvedValue({ catalog: [], errors: {} })
+  api.listMiddlewareTemplates.mockResolvedValue({ catalog: [], errors: {} })
+  api.listConditionRouterTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listSkills.mockResolvedValue({
     catalog: [{ name: 'research', folder: 'research', description: 'Research skill' }],
     errors: {},
@@ -337,7 +355,85 @@ describe('ComponentsPage', () => {
 
     expect(api.listSkills).toHaveBeenCalledOnce()
     expect(api.listCustomTools).not.toHaveBeenCalled()
-    expect(api.listMiddlewarePackages).not.toHaveBeenCalled()
+    expect(api.listMiddlewareTemplates).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('loads the template catalog when opening a new private-package component', async () => {
+    api.getCatalog.mockResolvedValueOnce({
+      block_types: [skillManifest, modelManifest],
+      workflow_component_types: [conditionRouterManifest],
+      editor_defaults: { 'condition-router': {} },
+    })
+    api.listBlocks.mockResolvedValueOnce([])
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{
+        path: '/workflow-components/:type',
+        component: ComponentsPage,
+        props: { scope: 'workflow' },
+      }],
+    })
+    await router.push('/workflow-components/condition-router')
+    await router.isReady()
+
+    const wrapper = mount(ComponentsPage, {
+      props: { scope: 'workflow' },
+      global: { plugins: [router] },
+    })
+    await flushPromises()
+
+    expect(api.listConditionRouterTemplates).toHaveBeenCalledOnce()
+    expect(api.listMiddlewareTemplates).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('requires a template and rejects duplicate names for private-package components', async () => {
+    api.getCatalog.mockResolvedValueOnce({
+      block_types: [skillManifest, modelManifest],
+      workflow_component_types: [conditionRouterManifest],
+      editor_defaults: { 'condition-router': {} },
+    })
+    api.listBlocks.mockResolvedValueOnce([{
+      id: '00000000-0000-4000-8000-000000000010',
+      name: 'Existing router',
+      python_package: {
+        folder: '00000000-0000-4000-8000-000000000010--basic-router--00000000-0000-4000-8000-000000000011',
+        config: {},
+      },
+    }])
+    api.listConditionRouterTemplates.mockResolvedValueOnce({
+      catalog: [conditionRouterTemplate],
+      errors: {},
+    })
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{
+        path: '/workflow-components/:type',
+        component: ComponentsPage,
+        props: { scope: 'workflow' },
+      }],
+    })
+    await router.push('/workflow-components/condition-router')
+    await router.isReady()
+    const wrapper = mount(ComponentsPage, {
+      props: { scope: 'workflow' },
+      global: { plugins: [router] },
+    })
+    await flushPromises()
+
+    await buttonByText(wrapper, 'common.save').trigger('click')
+    expect(wrapper.get('[data-testid="page-error"]').text())
+      .toContain('errors.pythonPackageTemplateRequired')
+    expect(api.saveBlock).not.toHaveBeenCalled()
+
+    await wrapper.get('[data-field="record-name"]').setValue('Existing router')
+    await wrapper.get('[data-editor="condition-router"] select').setValue('basic-router')
+    await buttonByText(wrapper, 'common.save').trigger('click')
+    expect(wrapper.get('[data-testid="page-error"]').text())
+      .toContain('errors.configurationNameConflict')
+    expect(useConfirmation().current.value).toBeNull()
+    expect(api.saveBlock).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

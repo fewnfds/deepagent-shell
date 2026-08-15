@@ -41,7 +41,7 @@ SKILL_PROMPT_FIELDS = (
     "skills_load_warnings",
     "skills_list",
 )
-from agent_shell.python_packages.contracts import PythonPackageBinding
+from agent_shell.python_packages.contracts import PythonPackageReference
 TASK_DESCRIPTION_FIELDS = ("available_agents",)
 
 
@@ -317,10 +317,7 @@ class CustomToolBlock(StrictBlock):
 
 
 class CustomMiddlewareBlock(StrictBlock):
-    python_package_bindings: list[PythonPackageBinding] = Field(
-        default_factory=list,
-        max_length=100,
-    )
+    python_package: PythonPackageReference
 
 
 OutputEventName = Literal[

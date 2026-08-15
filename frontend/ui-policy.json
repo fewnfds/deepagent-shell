@@ -447,14 +447,21 @@
         "callers": ["src/pages/WorkflowEditorPage.vue"]
       },
       {
-        "name": "PythonPackageConfigForm",
-        "path": "src/components/PythonPackageConfigForm.vue",
+        "name": "PythonPackageEditor",
+        "path": "src/components/PythonPackageEditor.vue",
         "kind": "domain-composition",
-        "reason": "Renders the backend-approved flat Python package config schema as structured binding fields",
+        "reason": "Owns template selection, private package file editing and manifest-driven configuration without changing package identity",
         "callers": [
           "src/editors/ConditionRouterEditor.vue",
           "src/editors/CustomMiddlewareEditor.vue"
         ]
+      },
+      {
+        "name": "PythonPackageConfigForm",
+        "path": "src/components/PythonPackageConfigForm.vue",
+        "kind": "domain-composition",
+        "reason": "Renders the backend-approved flat Python package config schema as structured binding fields",
+        "callers": ["src/components/PythonPackageEditor.vue"]
       },
       {
         "name": "SubagentReferencesEditor",

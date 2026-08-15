@@ -45,7 +45,9 @@ class PythonPackageLoader:
         owner_id: str,
         binding_kind: str,
         binding_index: int,
-        package_id: str,
+        folder: str,
+        *,
+        package_owner_id: str,
     ) -> tuple[ModuleType, dict[str, object], Path]:
         key = (owner_id, binding_kind, binding_index)
         cached = self._modules.get(key)
@@ -53,8 +55,9 @@ class PythonPackageLoader:
             return cached
         try:
             resolved = resolve_python_package(
-                package_id,
+                folder,
                 self._packages_dir,
+                owner_id=package_owner_id,
                 family=self._family,
                 adapter=self._adapter,
                 factory_name=self._factory_name,
@@ -64,20 +67,20 @@ class PythonPackageLoader:
         except ResourceScanError as exc:
             raise AgentRuntimeError(
                 "python_package.invalid",
-                f"Python package {package_id!r} is invalid.",
+                f"Python package {folder!r} is invalid.",
                 status_code=422,
             ) from exc
         if resolved is None:
             raise AgentRuntimeError(
                 "python_package.not_found",
-                f"Python package {package_id!r} does not exist.",
+                f"Python package {folder!r} does not exist.",
                 status_code=422,
             )
         metadata, package_dir = resolved
         if metadata["dependency_status"] != "ready":
             raise AgentRuntimeError(
                 "python_package.dependencies_not_ready",
-                f"Python package {package_id!r} dependencies are not ready.",
+                f"Python package {folder!r} dependencies are not ready.",
                 status_code=409,
             )
         module_name = (
@@ -92,7 +95,7 @@ class PythonPackageLoader:
         if spec is None or spec.loader is None:
             raise AgentRuntimeError(
                 "python_package.load_failed",
-                f"Python package {package_id!r} could not be loaded.",
+                f"Python package {folder!r} could not be loaded.",
                 status_code=422,
             )
         module = importlib.util.module_from_spec(spec)
@@ -103,7 +106,7 @@ class PythonPackageLoader:
             self._remove_module(module_name)
             raise AgentRuntimeError(
                 "python_package.load_failed",
-                f"Python package {package_id!r} could not be loaded.",
+                f"Python package {folder!r} could not be loaded.",
                 status_code=422,
             ) from exc
         value = (module, metadata, package_dir)
@@ -116,16 +119,22 @@ class PythonPackageLoader:
         owner_id: str,
         binding_kind: str,
         binding_index: int,
-        package_id: str,
+        folder: str,
+        *,
+        package_owner_id: str,
     ) -> tuple[Callable[..., Any], dict[str, object], Path]:
         module, metadata, package_dir = self.load(
-            owner_id, binding_kind, binding_index, package_id
+            owner_id,
+            binding_kind,
+            binding_index,
+            folder,
+            package_owner_id=package_owner_id,
         )
         function = getattr(module, self._factory_name, None)
         if not callable(function) or inspect.iscoroutinefunction(function):
             raise AgentRuntimeError(
                 "python_package.entrypoint_invalid",
-                f"Python package {package_id!r} has an invalid {self._factory_name} entrypoint.",
+                f"Python package {folder!r} has an invalid {self._factory_name} entrypoint.",
                 status_code=422,
             )
         return function, metadata, package_dir

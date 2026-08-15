@@ -415,7 +415,7 @@ describe('ValidationChecklist', () => {
   })
 
   it('shows backend validation paths and codes in debug locale', () => {
-    const path = 'capability_refs.custom-middleware.python_package_bindings[0].package_id'
+    const path = 'capability_refs.custom-middleware.python_package.folder'
     const wrapper = mount(ValidationChecklist, {
       props: {
         title: 'validation.title',

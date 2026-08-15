@@ -5,6 +5,38 @@ import pytest
 from .app_support import *
 
 
+def _write_package_template(
+    tmp_path: Path,
+    *,
+    category: tuple[str, str],
+    key: str,
+    family: str,
+    adapter: str,
+    source: str,
+) -> None:
+    folder = tmp_path / "data" / "templates" / category[0] / category[1] / key
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "template.json").write_text(
+        json.dumps(
+            {
+                "format_version": 1,
+                "family": family,
+                "adapter": adapter,
+                "name": key,
+                "description": "Test template.",
+                "config_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (folder / "main.py").write_text(source, encoding="utf-8")
+
+
 def test_health_catalog_and_readiness_are_small_and_current(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -88,40 +120,33 @@ def test_health_catalog_and_readiness_are_small_and_current(
 def test_condition_router_uses_component_crud_storage_and_repository_validation(
     tmp_path: Path, monkeypatch
 ) -> None:
-    package_id = "11111111-1111-4111-8111-111111111111"
-    package_dir = tmp_path / "data" / "resources" / "python_packages" / package_id
-    package_dir.mkdir(parents=True)
-    (package_dir / "package.json").write_text(
-        json.dumps(
-            {
-                "format_version": 1,
-                "id": package_id,
-                "family": "workflow-node",
-                "adapter": "condition-router",
-                "name": "Risk router",
-                "description": "Test router.",
-                "config_schema": {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": False,
-                },
-            }
-        ),
-        encoding="utf-8",
-    )
-    (package_dir / "main.py").write_text(
+    source = (
         "def create_router(config):\n"
         "    async def route(state, context):\n"
         "        return {'activate': ['review'], 'update': {}}\n"
-        "    return route\n",
-        encoding="utf-8",
+        "    return route\n"
+    )
+    _write_package_template(
+        tmp_path,
+        category=("workflow", "condition_router"),
+        key="risk-router",
+        family="workflow-node",
+        adapter="condition-router",
+        source=source,
     )
     client = make_client(tmp_path, monkeypatch)
+    selected = client.get(
+        "/api/python-package-templates/condition-router"
+    ).json()["catalog"][0]
     payload = {
         "name": "Risk routing",
-        "python_package_bindings": [
-            {"package_id": package_id, "enabled": True, "config": {}}
-        ],
+        "python_package": {"folder": "", "config": {}},
+        "python_package_files": {
+            "template_key": selected["key"],
+            "revision": selected["revision"],
+            "main_source": selected["main_source"],
+            "requirements_source": selected["requirements_source"],
+        },
     }
 
     created_response = client.post("/api/blocks/condition-router", json=payload)
@@ -140,7 +165,14 @@ def test_condition_router_uses_component_crud_storage_and_repository_validation(
     ).is_file()
     assert client.get("/api/validation/repository").json()["valid"] is True
 
-    invalid = {**payload, "python_package_bindings": []}
+    invalid = {
+        "name": payload["name"],
+        "python_package": {
+            "folder": created["python_package"]["folder"],
+            "config": {"unexpected": True},
+        },
+        "python_package_files": created["python_package_files"],
+    }
     rejected = client.put(
         f"/api/blocks/condition-router/{created['id']}",
         json=invalid,
@@ -153,9 +185,35 @@ def test_condition_router_uses_component_crud_storage_and_repository_validation(
 
 
 def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) -> None:
+    _write_package_template(
+        tmp_path,
+        category=("agent", "custom_middleware"),
+        key="basic-middleware",
+        family="middleware",
+        adapter="agent-middleware",
+        source=(
+            "from langchain.agents.middleware import AgentMiddleware\n"
+            "def create_middleware(config, agent):\n"
+            "    return AgentMiddleware()\n"
+        ),
+    )
     client = make_client(tmp_path, monkeypatch)
+    middleware_template = client.get(
+        "/api/python-package-templates/middleware"
+    ).json()["catalog"][0]
 
     for block_type, payload in block_cases(tmp_path):
+        if block_type == "custom-middleware":
+            payload = {
+                "name": payload["name"],
+                "python_package": {"folder": "", "config": {}},
+                "python_package_files": {
+                    "template_key": middleware_template["key"],
+                    "revision": middleware_template["revision"],
+                    "main_source": middleware_template["main_source"],
+                    "requirements_source": middleware_template["requirements_source"],
+                },
+            }
         created_response = client.post(f"/api/blocks/{block_type}", json=payload)
         assert created_response.status_code == 200, created_response.text
         created = created_response.json()
@@ -180,7 +238,7 @@ def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) 
             assert created["instruction_override"] is None
             assert created["task_description_override"] is None
         if block_type == "custom-middleware":
-            assert created["python_package_bindings"] == payload["python_package_bindings"]
+            assert created["python_package"]["folder"].startswith(f"{created['id']}--")
         if block_type == "todo-list":
             assert created["system_prompt_override"] == payload[
                 "system_prompt_override"
@@ -198,6 +256,12 @@ def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) 
         update_payload = {**payload, "name": f"{payload['name']} updated"}
         if block_type == "model":
             update_payload["credential"] = None
+        if block_type == "custom-middleware":
+            update_payload = {
+                "name": f"{payload['name']} updated",
+                "python_package": created["python_package"],
+                "python_package_files": created["python_package_files"],
+            }
         updated = client.put(
             f"/api/blocks/{block_type}/{created['id']}", json=update_payload
         )
