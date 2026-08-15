@@ -156,7 +156,7 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch) -> None:
     assert asyncio.run(scenario()) is True
 
 
-def test_workflow_debug_record_failure_does_not_fail_successful_execution() -> None:
+def test_successful_execution_reports_completion_after_workflow_debug_failure() -> None:
     async def scenario() -> list[str]:
         class EmptyRun:
             async def __aenter__(self):
@@ -196,6 +196,9 @@ def test_workflow_debug_record_failure_does_not_fail_successful_execution() -> N
             def runtime_error(self, _exc, *, code: str, **_kwargs) -> None:
                 self.codes.append(code)
 
+            def runtime_completed(self, **_kwargs) -> None:
+                self.codes.append("request_completed")
+
         diagnostics = RecordingDiagnostics()
         execution = AgentExecution(
             graph=Graph(),
@@ -215,7 +218,10 @@ def test_workflow_debug_record_failure_does_not_fail_successful_execution() -> N
         }
         return diagnostics.codes
 
-    assert asyncio.run(scenario()) == ["workflow_debug_record_failed"]
+    assert asyncio.run(scenario()) == [
+        "workflow_debug_record_failed",
+        "request_completed",
+    ]
 
 def test_graph_recursion_failure_uses_step_limit_error() -> None:
     async def scenario() -> str:

@@ -90,6 +90,55 @@ def test_event_feed_deletes_filtered_runtime_records_across_pages(
     assert remaining["items"] == []
 
 
+def test_successful_runtime_debug_is_recorded_only_while_enabled(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    request_id = "request-success-debug"
+    with make_client(tmp_path, monkeypatch) as client:
+        diagnostics = client.app.state.runtime_diagnostics
+        diagnostics.runtime_completed(
+            request_id=request_id,
+            model="published-model",
+            agent_name="Published Main Agent",
+            finish_reason="stop",
+            usage={"input_tokens": 12, "output_tokens": 4, "total_tokens": 16},
+        )
+        disabled_listing = client.get(
+            "/api/event-feed",
+            params=event_feed_params(source="runtime", query=request_id),
+        ).json()
+
+        client.put(
+            "/api/runtime-diagnostics/debug",
+            json={"enabled": True},
+        )
+        diagnostics.runtime_completed(
+            request_id=request_id,
+            model="published-model",
+            agent_name="Published Main Agent",
+            finish_reason="stop",
+            usage={"input_tokens": 12, "output_tokens": 4, "total_tokens": 16},
+        )
+        enabled_listing = client.get(
+            "/api/event-feed",
+            params=event_feed_params(source="runtime", query=request_id),
+        ).json()
+        item = enabled_listing["items"][0]
+        download = client.get(
+            f"/api/event-feed/runtime/{item['id']}/download"
+        )
+
+    assert disabled_listing["items"] == []
+    assert enabled_listing["total"] == 1
+    assert item["level"] == "info"
+    assert item["summary"] == "Published Main Agent · request completed"
+    assert item["download_available"] is True
+    debug_text = download.content.decode("utf-8")
+    assert "status=completed" in debug_text
+    assert "finish_reason=stop" in debug_text
+    assert "'total_tokens': 16" in debug_text
+
+
 def test_runtime_debug_download_keeps_full_exception_out_of_summary(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

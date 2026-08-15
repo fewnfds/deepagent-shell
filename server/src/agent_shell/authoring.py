@@ -22,7 +22,6 @@ from agent_shell.plugins.workflow_input_context.contracts import (
 )
 from agent_shell.workflow_prepare import WorkflowPrepareBlock
 from agent_shell.workflow_event_output import (
-    DEFAULT_OUTPUT_SOURCE,
     WORKFLOW_EVENT_FIELDS,
     WORKFLOW_EVENT_NAMES,
     WorkflowEventOutputBlock,
@@ -328,6 +327,38 @@ _OUTPUT_EVENT_UI = {
     "lifecycle": ("运行状态", "整次执行的开始、正常结束和错误状态。"),
 }
 
+_OUTPUT_EVENT_DEFAULT_SUMMARIES = {
+    "assistant_text": '{event["agent_name"]} response',
+    "reasoning": '{event["agent_name"]} reasoning',
+    "tool_call": '{event["agent_name"]} Tool {event["tool_name"]} call',
+    "tool_result": '{event["agent_name"]} Tool {event["tool_name"]} result',
+    "tool_error": '{event["agent_name"]} Tool {event["tool_name"]} error',
+    "subagent": 'Subagent {event["subagent_name"]} {event["status"]}',
+    "custom": '{event["agent_name"]} Custom {event["channel"]}',
+    "lifecycle": '{event["agent_name"]} Lifecycle {event["status"]}',
+}
+
+_WORKFLOW_EVENT_DEFAULT_SUMMARIES = {
+    "custom": 'Workflow Custom {event["channel"]}',
+    "lifecycle": 'Workflow Lifecycle {event["status"]}',
+    "values": "Workflow Values",
+    "updates": "Workflow Updates",
+    "tasks": "Workflow Tasks",
+    "checkpoints": "Workflow Checkpoints",
+    "input": "Workflow Input",
+    "input.requested": "Workflow Input requested",
+    "debug": "Workflow Debug",
+    "other": 'Workflow {event["channel"]}',
+}
+
+
+def _details_output_source(output_type: str, summary: str) -> str:
+    return (
+        "def output(event):\n"
+        f"    return f'<details type=\"{output_type}\"><summary>*{summary}*</summary>"
+        "{event[\"message\"]}</details>\\n'\n"
+    )
+
 def _filesystem_tools() -> list[dict[str, object]]:
     defaults = FilesystemToolConfigs().model_dump(mode="json")
     return [
@@ -378,7 +409,9 @@ def _output_mode_default() -> dict[str, object]:
     event_outputs = {
         name: {
             "enabled": True,
-            "output_source": DEFAULT_OUTPUT_SOURCE,
+            "output_source": _details_output_source(
+                "agent", _OUTPUT_EVENT_DEFAULT_SUMMARIES[name]
+            ),
         }
         for name in OUTPUT_EVENT_NAMES
     }
@@ -403,7 +436,9 @@ def _workflow_event_output_default() -> dict[str, object]:
             event_outputs={
                 name: {
                     "enabled": name in {"custom", "lifecycle"},
-                    "output_source": DEFAULT_OUTPUT_SOURCE,
+                    "output_source": _details_output_source(
+                        "workflow", _WORKFLOW_EVENT_DEFAULT_SUMMARIES[name]
+                    ),
                 }
                 for name in WORKFLOW_EVENT_NAMES
             },

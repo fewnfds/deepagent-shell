@@ -414,7 +414,7 @@ watch(
 
       <aside class="col-lg-3 validation-sidebar">
         <ValidationChecklist
-          :title="t('agents.mainAgent.validationTitle')"
+          :title="t('validation.draftTitle')"
           :validation="validation"
         />
       </aside>

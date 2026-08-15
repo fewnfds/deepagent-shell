@@ -20,6 +20,10 @@ const warningCount = computed(() => props.validation.report?.issues.filter(
   (issue) => issue.severity === 'warning',
 ).length ?? 0)
 const hasWarnings = computed(() => warningCount.value > 0)
+const detailSeparator = computed(() => {
+  const separator = t('common.detailSeparator')
+  return separator === 'common.detailSeparator' ? ': ' : separator
+})
 </script>
 
 <template>
@@ -58,51 +62,26 @@ const hasWarnings = computed(() => warningCount.value > 0)
         :title="issuePresentation.message(issue)"
         data-testid="validation-issue"
       >
-        <dl class="row g-3 mb-0">
-          <div class="col-md-6">
-            <dt class="small text-uppercase text-body-secondary mb-1">
-              {{ t('validation.location.owner') }}
-            </dt>
-            <dd class="mb-0 fw-semibold" data-testid="validation-owner">
-              {{ issuePresentation.ownerLabel(issue) }}
-            </dd>
-          </div>
-          <div class="col-md-6">
-            <dt class="small text-uppercase text-body-secondary mb-1">
-              {{ t('validation.location.problemLocation') }}
-            </dt>
-            <dd class="mb-0 fw-semibold" data-testid="validation-location">
-              {{ issuePresentation.location(issue) }}
-            </dd>
-          </div>
-          <div v-if="issue.path" class="col-md-6">
-            <dt class="small text-uppercase text-body-secondary mb-1">
-              {{ t('validation.location.technicalPath') }}
-            </dt>
-            <dd class="mb-0 font-monospace text-break" data-testid="validation-technical-path">
-              {{ issue.path }}
-            </dd>
-          </div>
-          <div class="col-12">
-            <dt class="small text-uppercase text-body-secondary mb-1">
-              {{ t('validation.location.reason') }}
-            </dt>
-            <dd class="mb-0" data-testid="validation-reason">
-              {{ issuePresentation.message(issue) }}
-            </dd>
-          </div>
-          <div class="col-12">
-            <dt class="small text-uppercase text-body-secondary mb-1">
-              {{ t('validation.location.resolution') }}
-            </dt>
-            <dd class="mb-0" data-testid="validation-resolution">
-              {{ issuePresentation.resolution(issue) }}
-            </dd>
-          </div>
-          <div v-if="$slots['issue-actions']" class="col-12 d-flex flex-wrap gap-2">
+        <div class="text-break">
+          <p class="mb-2" data-testid="validation-owner-line">
+            <span class="fw-semibold">{{ t('validation.location.owner') }}{{ detailSeparator }}</span><span data-testid="validation-owner">{{ issuePresentation.ownerLabel(issue) }}</span>
+          </p>
+          <p class="mb-2" data-testid="validation-location-line">
+            <span class="fw-semibold">{{ t('validation.location.problemLocation') }}{{ detailSeparator }}</span><span data-testid="validation-location">{{ issuePresentation.location(issue) }}</span>
+          </p>
+          <p v-if="issue.path" class="mb-2" data-testid="validation-technical-path-line">
+            <span class="fw-semibold">{{ t('validation.location.technicalPath') }}{{ detailSeparator }}</span><span class="font-monospace" data-testid="validation-technical-path">{{ issue.path }}</span>
+          </p>
+          <p class="mb-2" data-testid="validation-reason-line">
+            <span class="fw-semibold">{{ t('validation.location.reason') }}{{ detailSeparator }}</span><span data-testid="validation-reason">{{ issuePresentation.message(issue) }}</span>
+          </p>
+          <p class="mb-0" data-testid="validation-resolution-line">
+            <span class="fw-semibold">{{ t('validation.location.resolution') }}{{ detailSeparator }}</span><span data-testid="validation-resolution">{{ issuePresentation.resolution(issue) }}</span>
+          </p>
+          <div v-if="$slots['issue-actions']" class="d-flex flex-wrap gap-2 mt-3">
             <slot name="issue-actions" :issue="issue" />
           </div>
-        </dl>
+        </div>
       </LteAccordionItem>
     </LteAccordion>
   </section>

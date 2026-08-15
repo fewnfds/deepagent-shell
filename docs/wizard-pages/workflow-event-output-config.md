@@ -6,6 +6,9 @@ OpenAI 响应。画布 Agent Node 产生的事件仍使用各 Main Agent 的[输
 编辑方式与输出模式一致：每类事件提供启用开关、字段按钮和同步 Python `output(event)`。函数必须返回 `str`，脚本在一个
 完整语义事件上执行一次。
 
+新建事件输出组件时，各事件默认返回 `type="workflow"` 的 `details`；`summary` 只保留事件类别及必要的 channel 或短
+状态，不包含配置 UUID、时间戳、事件序号或 namespace。默认脚本在 `</details>` 后追加一个换行。
+
 ```python
 def output(event):
     state = event["data"]

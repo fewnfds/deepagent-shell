@@ -56,5 +56,6 @@ LangSmith 配置项含义如下：
 API Key、消息上限和拦截测试立即生效；host、端口、远程访问、管理密码、LangSmith、CORS 和可信代理重启后生效。
 远程部署要求见[安全与部署](../security-and-deployment.md)。
 
-【系统 / 日志中心】的 DEBUG 开关立即生效。开启后，完整异常 traceback 写入 `data/logs/debug/`，并从对应运行
-日志行下载。
+【系统 / 日志中心】的 DEBUG 开关立即生效。开启后，正常完成的 Agent 请求会生成 `INFO` 运行记录和完成元数据文件，
+异常请求会写入完整 traceback；文件位于 `data/logs/debug/`，并从对应运行日志行下载。关闭后正常请求不再生成运行
+记录或 DEBUG 文件，错误摘要仍会保留。

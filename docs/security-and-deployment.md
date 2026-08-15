@@ -28,7 +28,7 @@ Provider credential、API Key、管理密码和 LangSmith API Key 保存在实�
 Provider 原始错误正文。以下 management-only 功能会按产品用途保存完整内容：
 
 - Provider 前拦截记录；
-- 日志中心显式开启后写入 `data/logs/debug/` 的完整异常日志；
+- 日志中心显式开启后写入 `data/logs/debug/` 的正常完成元数据和完整异常日志；
 - 用户创建的组件、文件和 Python 资源。
 
 运行诊断列表仍只保存固定摘要字段。DEBUG 文件不经过摘要白名单或脱敏，并可从对应运行日志行下载。

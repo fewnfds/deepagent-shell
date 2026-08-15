@@ -10,8 +10,12 @@
 
 ```python
 def output(event):
-    return event["message"]
+    return f'<details type="agent"><summary>*{event["agent_name"]} response*</summary>{event["message"]}</details>\n'
 ```
+
+新建输出模式时，各事件默认使用同一 `details` 结构，并按事件选择 Agent 名称、工具名称、Subagent 名称或短状态组成
+`summary`。缩略标题不包含调用 ID、配置 UUID、时间戳、事件序号或 namespace；这些运行标识仍可由自定义脚本从
+`event` 读取。
 
 例如自行拼接工具结果：
 

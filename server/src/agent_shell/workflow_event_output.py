@@ -52,9 +52,6 @@ WORKFLOW_EVENT_FIELDS = {
     "debug": ("channel", "data_json"),
     "other": ("channel", "data_json"),
 }
-DEFAULT_OUTPUT_SOURCE = "def output(event):\n    return event[\"message\"]\n"
-
-
 def validate_output_source(source: str) -> str:
     validate_module_function(source, "output", asynchronous=False)
     tree = ast.parse(source, filename="output.py")
@@ -136,7 +133,6 @@ def compile_output(source: str) -> Callable[[dict[str, object]], str]:
 
 
 __all__ = [
-    "DEFAULT_OUTPUT_SOURCE",
     "EventOutputScript",
     "WORKFLOW_EVENT_FIELDS",
     "WORKFLOW_EVENT_NAMES",

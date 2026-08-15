@@ -21,6 +21,7 @@ from agent_shell.contracts import (
     OUTPUT_EVENT_FIELDS,
     OutputModeBlock,
 )
+from agent_shell.workflow_event_output import WORKFLOW_EVENT_NAMES
 
 
 def test_manifest_matches_current_blocks_and_form_order() -> None:
@@ -140,12 +141,39 @@ def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
     )
     assert output["default_value"]["event_outputs"]["assistant_text"] == {
         "enabled": True,
-        "output_source": 'def output(event):\n    return event["message"]\n',
+        "output_source": (
+            "def output(event):\n"
+            "    return f'<details type=\"agent\"><summary>"
+            "*{event[\"agent_name\"]} response*</summary>"
+            "{event[\"message\"]}</details>\\n'\n"
+        ),
+    }
+    output_sources = {
+        name: setting["output_source"]
+        for name, setting in output["default_value"]["event_outputs"].items()
     }
     assert all(
-        setting["output_source"].startswith("def output(event):\n")
-        and "return event[\"message\"]" in setting["output_source"]
-        for setting in output["default_value"]["event_outputs"].values()
+        source.startswith("def output(event):\n") for source in output_sources.values()
+    )
+    assert all(
+        '<details type="agent">' in source for source in output_sources.values()
+    )
+    assert all(
+        '{event["message"]}</details>\\n' in source
+        for source in output_sources.values()
+    )
+    assert not any(
+        field in source
+        for source in output_sources.values()
+        for field in (
+            'event["tool_call_id"]',
+            'event["sequence"]',
+            'event["timestamp"]',
+            'event["namespace"]',
+            'event["workflow_node_id"]',
+            'event["agent_profile_id"]',
+            'event["subagent_profile_id"]',
+        )
     )
     assert all(
         set(setting) == {"enabled", "output_source"}
@@ -153,6 +181,30 @@ def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
     )
     OutputModeBlock.model_validate(
         {"name": "Output default", **output["default_value"]}
+    )
+
+    workflow_output = defaults["workflow_event_output"]
+    workflow_sources = {
+        name: setting["output_source"]
+        for name, setting in workflow_output["default_value"]["event_outputs"].items()
+    }
+    assert set(workflow_sources) == set(WORKFLOW_EVENT_NAMES)
+    assert all(
+        '<details type="workflow">' in source
+        and '{event["message"]}</details>\\n' in source
+        for source in workflow_sources.values()
+    )
+    assert not any(
+        field in source
+        for source in workflow_sources.values()
+        for field in (
+            'event["sequence"]',
+            'event["timestamp"]',
+            'event["namespace"]',
+            'event["workflow_node_id"]',
+            'event["agent_profile_id"]',
+            'event["subagent_profile_id"]',
+        )
     )
 
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timezone
 from itertools import chain
 import logging
@@ -135,6 +135,31 @@ class RuntimeDiagnostics:
             debug_exception=exc,
         )
 
+    def runtime_completed(
+        self,
+        *,
+        request_id: str,
+        model: str,
+        agent_name: str,
+        finish_reason: str,
+        usage: Mapping[str, int],
+    ) -> None:
+        if not self._debug_logs.settings()["debug_enabled"]:
+            return
+        self._emit(
+            "info",
+            request_id=request_id,
+            model=model,
+            agent_name=agent_name,
+            code="request_completed",
+            message="request completed",
+            debug_lines=(
+                "status=completed\n",
+                f"finish_reason={finish_reason}\n",
+                f"usage={dict(usage)!r}\n",
+            ),
+        )
+
     def _emit_exception(
         self,
         exc: BaseException,
@@ -168,6 +193,7 @@ class RuntimeDiagnostics:
         code: str = "",
         exception_type: str = "",
         debug_exception: BaseException | None = None,
+        debug_lines: Iterable[str] | None = None,
     ) -> None:
         now = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
         safe_model = _safe_text(model)
@@ -198,8 +224,14 @@ class RuntimeDiagnostics:
             except Exception:
                 self._logger.error(prefix + "\nruntime diagnostic persistence failed")
                 return
-            if debug_exception is not None:
+            if debug_exception is not None or debug_lines is not None:
                 try:
+                    if debug_exception is not None:
+                        details = traceback.TracebackException.from_exception(
+                            debug_exception,
+                        ).format(chain=True)
+                    else:
+                        details = debug_lines or ()
                     self._debug_logs.write(
                         runtime_diagnostic_id(entry),
                         chain(
@@ -209,11 +241,15 @@ class RuntimeDiagnostics:
                                 f"model={model}\n",
                                 f"agent={agent_name}\n",
                                 f"code={code}\n",
-                                f"exception_type={type(debug_exception).__name__}\n\n",
+                                "exception_type="
+                                + (
+                                    type(debug_exception).__name__
+                                    if debug_exception is not None
+                                    else ""
+                                )
+                                + "\n\n",
                             ),
-                            traceback.TracebackException.from_exception(
-                                debug_exception,
-                            ).format(chain=True),
+                            details,
                         ),
                     )
                 except Exception:

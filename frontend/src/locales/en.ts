@@ -231,7 +231,7 @@ export const en: MessageSchema = {
     matchedInContent: 'The query matched full content that is not shown in the list.',
     debug: {
       label: 'Full DEBUG logs',
-      active: 'DEBUG is enabled. Full exception logs are being written to data/logs/debug.',
+      active: 'DEBUG is enabled. Successful runs and full exception logs are being written to data/logs/debug.',
     },
     sources: {
       system: 'System log',
@@ -882,7 +882,6 @@ export const en: MessageSchema = {
   components: {
     title: 'Agent component configuration',
     navigationLabel: 'Agent component types',
-    validationTitle: 'Agent component draft validation',
     storedInvalidWarning: 'The saved content does not match the current structure and cannot be assembled. This form is only a repair draft; the alert clears after a valid save.',
     overwrite: {
       title: 'Replace the matching configuration?',
@@ -1168,7 +1167,6 @@ export const en: MessageSchema = {
       reference: 'Subagent entity',
       unselectedReference: 'Unselected Subagent',
       inheritMainAgent: 'Same as Main Agent',
-      validationTitle: 'Main Agent draft validation',
     },
     workspace: {
       title: 'File workspace',
@@ -1180,7 +1178,6 @@ export const en: MessageSchema = {
     override: {
       title: 'Subagent',
       capabilitiesTitle: 'Capability board',
-      validationTitle: 'Subagent draft validation',
       mode: {
         inherit: 'Inherit',
         replace: 'Use own capabilities',
@@ -1190,6 +1187,7 @@ export const en: MessageSchema = {
     },
   },
   validation: {
+    draftTitle: 'Draft validation',
     validatingDetail: 'Checking the current content.',
     unavailableDetail: 'The current content cannot be checked right now. You can still try to save; saving checks it again.',
     issueSummary: 'Configuration problems: {count}. Expand to view the full details',

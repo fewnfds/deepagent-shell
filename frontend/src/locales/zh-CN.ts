@@ -229,7 +229,7 @@ export const zhCN = {
     matchedInContent: '查询词命中了未在列表中展示的完整内容。',
     debug: {
       label: 'DEBUG 完整日志',
-      active: 'DEBUG 已开启，完整异常日志正在写入 data/logs/debug。',
+      active: 'DEBUG 已开启，成功运行记录和完整异常日志正在写入 data/logs/debug。',
     },
     sources: {
       system: '系统日志',
@@ -880,7 +880,6 @@ export const zhCN = {
   components: {
     title: 'Agent 组件配置',
     navigationLabel: 'Agent 组件类型',
-    validationTitle: 'Agent 组件草稿校验',
     storedInvalidWarning: '已保存内容不符合当前结构，当前无法装配。当前表单仅用于修复，保存有效结构后报警才会消失。',
     overwrite: {
       title: '替换同名配置？',
@@ -1166,7 +1165,6 @@ export const zhCN = {
       reference: 'Subagent 实体',
       unselectedReference: '未选择 Subagent',
       inheritMainAgent: '与 Main Agent 相同',
-      validationTitle: 'Main Agent 草稿校验',
     },
     workspace: {
       title: '文件工作区',
@@ -1178,7 +1176,6 @@ export const zhCN = {
     override: {
       title: 'Subagent',
       capabilitiesTitle: '能力选择板',
-      validationTitle: 'Subagent 草稿校验',
       mode: {
         inherit: '继承',
         replace: '使用自身能力',
@@ -1188,6 +1185,7 @@ export const zhCN = {
     },
   },
   validation: {
+    draftTitle: '草稿校验',
     validatingDetail: '正在检查当前内容。',
     unavailableDetail: '暂时无法检查当前内容。你仍可尝试保存，保存时会再次检查。',
     issueSummary: '{count} 个问题，展开查看完整内容',

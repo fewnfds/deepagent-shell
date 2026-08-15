@@ -133,8 +133,7 @@ pre code {
 }
 
 .configuration-library-nav-group > [data-testid='section-nav'] {
-  flex: 1 1 0;
-  min-width: 0;
+  display: contents !important;
 }
 
 .configuration-loading-surface {
@@ -407,6 +406,14 @@ pre code {
 .collection-table[data-table-id='terminology'] td:nth-child(4) {
   width: 44%;
 }
+
+[data-testid='validation-checklist'] .accordion-button,
+[data-testid='validation-checklist'] [data-testid='validation-issue'] {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .workflow-editor-shell {
   display: grid;
   grid-template-rows: 48px minmax(0, 1fr);

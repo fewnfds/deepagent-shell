@@ -475,7 +475,7 @@ watch(
 
       <aside class="col-lg-3 validation-sidebar">
         <ValidationChecklist
-          :title="t('agents.override.validationTitle')"
+          :title="t('validation.draftTitle')"
           :validation="validation"
         />
       </aside>

@@ -5,7 +5,7 @@
 【系统 / 日志中心】合并三类记录：
 
 - 系统日志：服务、配置和管理请求事件；
-- Agent 运行日志：请求级错误摘要；
+- Agent 运行日志：请求级错误摘要，以及 DEBUG 开启期间正常完成的请求摘要；
 - 拦截记录：拦截测试捕获的 ModelRequest。
 
 页面显示时间、来源、级别和摘要，并提供时间、来源、级别、关键词筛选以及批量删除。较大的条目和 DEBUG
@@ -18,9 +18,9 @@
 
 DEBUG 开关位于日志中心，默认关闭，修改后立即生效。
 
-开启后，Agent Shell 在包装运行异常之前保存完整 Python exception chain 和 traceback。文件写入
-`data/logs/debug/`，不做字段白名单、脱敏或正文截断。对应的 Agent 运行日志行会显示下载按钮；关闭开关只停止
-生成新文件，已有文件仍可下载和删除。
+开启后，每个正常完成的 Agent 请求会新增一条 `INFO` 运行日志，并把完成状态、finish reason 和 token usage 写入
+`data/logs/debug/`。运行异常仍在包装之前保存完整 Python exception chain 和 traceback。对应的 Agent 运行日志行会显示
+下载按钮；关闭开关后正常请求不再生成运行日志或 DEBUG 文件，错误摘要仍会保留。已有文件仍可下载和删除。
 
 DEBUG 文件可能包含请求内容、Provider 返回、凭据、宿主路径和自定义代码信息，大小也没有单文件上限。
 

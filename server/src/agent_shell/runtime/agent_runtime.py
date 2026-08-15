@@ -325,6 +325,14 @@ class AgentExecution:
             await finish_debug("failed", error_code=error.code, error=error)
             raise error from exc
         await finish_debug("completed")
+        if self.runtime_diagnostics is not None:
+            self.runtime_diagnostics.runtime_completed(
+                request_id=self.request_id,
+                model=self.public_model,
+                agent_name=self.agent_name,
+                finish_reason=self.finish_reason,
+                usage=self.usage,
+            )
 
     async def run(self) -> tuple[str, dict[str, int]]:
         parts = [part async for part in self.stream_text()]
