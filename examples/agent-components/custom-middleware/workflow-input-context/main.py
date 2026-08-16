@@ -22,13 +22,29 @@ WIC_CONFIG: dict[str, Any] = {
         #     "path": "/task.md",
         #     "fallback_paths": ["/task-fallback.md"],
         #     "literal": "文件都不存在时使用的文本",
-        #     "max_chars": 20_000,
+        #     "max_chars": 200_000,
         #     "stop_if_missing": False,
         # },
     ],
     # 只保留开头连续的 system 消息；后续 system 消息改为 user。
     "convert_non_leading_system_to_user": False,
 }
+
+
+def customize_context_messages(
+    state: dict[str, Any],
+    context: Any,
+) -> list[dict[str, Any]]:
+    """从不可变的 Workflow 请求快照创建并改造当前 Agent 的输入消息。"""
+
+    user_messages = mutable_request_messages(context.messages)
+
+    # ---- 在这里编写当前 WIC 变种自己的消息选择、裁剪和重排逻辑。 ----
+    # 可读取：state、context、context.workflow_state。
+    # 例如可以从 context.workflow_state["agent_invocations"] 选择前序 Agent 的结果，
+    # 然后修改或替换 user_messages。不要修改 context.messages 本身。
+
+    return user_messages
 
 
 def _initial_messages(
@@ -42,7 +58,7 @@ def _initial_messages(
         return deepcopy(convert_to_openai_messages(convert_to_messages(state.get("messages", []))))
     # Workflow Agent 的原始输入只在 runtime.context 中；不从 Workflow root State 取整包消息。
     context = getattr(runtime, "context", None)
-    return mutable_request_messages(getattr(context, "messages", None) or ())
+    return customize_context_messages(state, context)
 
 
 def _validate_virtual_path(path: str) -> str:
@@ -57,17 +73,10 @@ async def build_workflow_input_context(
     messages: list[dict[str, Any]],
     *,
     read_file: Callable[[str], Awaitable[str | None]],
-    state: dict[str, Any],
-    runtime: Runtime[Any],
 ) -> list[dict[str, Any]]:
     """集中完成当前 WIC 的变化逻辑；不需要的区块可直接从本函数删除。"""
 
     result = deepcopy(messages)
-
-    # ---- 在这里编写当前 WIC 变种自己的消息选择、裁剪和重排逻辑。 ----
-    # 可读取：state、runtime.context、runtime.context.workflow_state。
-    # 例如可以从 workflow_state["agent_invocations"] 选择前序 Agent 的结果，
-    # 然后直接替换 result。不要修改 runtime.context.messages 本身。
 
     # ---- 可选功能 1：把 Workflow 虚拟文件附加到上下文。 ----
     for attachment in WIC_CONFIG["attachments"]:
@@ -139,8 +148,6 @@ class WorkflowInputContextMiddleware(AgentMiddleware):
         messages = await build_workflow_input_context(
             messages,
             read_file=self._read_file,
-            state=state,
-            runtime=runtime,
         )
         return {"messages": Overwrite(convert_to_messages(messages))}
 

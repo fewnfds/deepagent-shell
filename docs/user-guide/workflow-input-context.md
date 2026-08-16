@@ -70,7 +70,9 @@ examples/agent-components/custom-middleware/workflow-input-context/
 示例把通用功能集中在两个位置：
 
 - `WIC_CONFIG`：配置附加文件和非顶部 system 转 user；
-- `build_workflow_input_context()`：集中执行当前 WIC 的消息选择、裁剪、重排与通用功能。
+- `customize_context_messages(state, context)`：把 `context.messages` 复制为可编辑消息，并集中放置当前
+  WIC 的选择、裁剪和重排逻辑；
+- `build_workflow_input_context()`：集中执行附加文件和 system 转 user 等可选通用功能。
 
 `WIC_CONFIG["attachments"]` 的每一项可以声明：
 

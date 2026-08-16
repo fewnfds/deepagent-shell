@@ -14,8 +14,11 @@
    role、字符上限和缺失时停止。
 2. 需要把非顶部 system 消息转为 user 时，启用
    `WIC_CONFIG["convert_non_leading_system_to_user"]`。
-3. 每个 WIC 的选择、裁剪、重排和前序节点结果引用都直接写在
-   `build_workflow_input_context()` 的标记位置。可以删除不需要的两个可选功能区块。
+3. 每个 WIC 对 Workflow 原始输入的选择、裁剪、重排和前序节点结果引用，都直接写在
+   `customize_context_messages(state, context)` 的标记位置。该函数已经把不可变的
+   `context.messages` 复制为可编辑的 `user_messages`，用户只需改造并返回它。
+4. `build_workflow_input_context()` 集中保存附加文件和 system 转 user 两个通用功能区块；不需要时可以
+   直接删除对应区块。
 
 示例只实现异步 `abefore_agent`，因为 Agent Shell 的运行链使用异步调用。它通过工厂收到共享 filesystem
 `backend`、Agent `scope` 和当前包 ID；运行时动态数据仍从 LangChain 官方 `state` 与 `runtime` 参数读取。
