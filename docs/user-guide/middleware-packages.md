@@ -125,7 +125,8 @@ def create_dispatcher():
 `tasks` 必须包含 1–1000 个具有唯一稳定 `task_id` 的 JSON payload；`dispatch_key` 必须匹配画布同源 Dispatch Edge。
 compiler 为每项构造 Shell-owned `WorkflowTaskContext`，再映射为 LangGraph `Send`。包不接触 Node ID，也不直接返回
 `Send`/`Command`。worker 子图通过私有 State 和 `runtime.context.workflow_task` 读取任务。完整规则与内置示例见
-[任务分发](../wizard-pages/task-dispatcher-config.md)。
+[任务分发](../wizard-pages/task-dispatcher-config.md)。payload 拒绝 Python 对象和非有限数；`update` 仍可写任意已声明
+Workflow State channel，但值必须通过该 channel 的现有类型校验。
 
 ## Custom Middleware
 

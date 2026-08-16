@@ -56,7 +56,8 @@ dict，返回值必须是字符串。它只控制 Workflow-owned 非 Agent 事�
 
 任务分发组件保存一个 `workflow-node/task-dispatcher` Python 扩展引用。同步 `create_dispatcher()` 工厂物化
 `async dispatch(state, context)`；返回的每个任务包含稳定 `task_id`、匹配画布 Dispatch Edge 的 `dispatch_key` 和 JSON
-`payload`。Shell 将任务映射为 LangGraph `Send`，目标 Agent 的 State、Runtime Context 和完成 invocation 都带 task identity。
+`payload`；任意 Python 对象和非有限数会在 Node 边界被拒绝。Shell 将任务映射为 LangGraph `Send`，目标 Agent 的 State、
+Runtime Context 和完成 invocation 都带 task identity。
 完整规则和城市/乡镇示例见[任务分发](../wizard-pages/task-dispatcher-config.md)。
 
 这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。自定义 Middleware、Condition Router 和 Task Dispatcher 从用户模板或内置示例

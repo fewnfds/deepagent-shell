@@ -52,8 +52,9 @@ def create_dispatcher():
 - `state` 和 `context` 是 detached 副本/映射；包不能持有运行时内部对象。
 - `tasks` 必须有 1–1000 项；同一次调用中的 `task_id` 唯一，并应来自稳定业务身份。
 - `dispatch_key` 必须与同源 Dispatch Edge 完全一致；同一个 key 只能连接一个目标。
-- `payload` 必须是 JSON 对象；worker 所需的本批数据都应放在这里。
-- `update` 只更新父 Workflow State 的已声明 channel，不隐式改写本批显式 Send State。
+- `payload` 必须是严格 JSON 对象，不能包含 Python 对象或 `NaN`、`Infinity` 等非有限数；worker 所需的本批数据都应放在这里。
+- `update` 可以更新任意已声明 Workflow State channel，但每个值必须符合该 channel 的现有类型；它只更新父 State，
+  不隐式改写本批显式 Send State。
 - 包不 import LangGraph，不返回 Node ID、`Send` 或 `Command`。
 
 没有任务时，第一阶段要求由上游 Condition Router 绕过 Dispatcher；返回空 `tasks` 会使运行失败。
