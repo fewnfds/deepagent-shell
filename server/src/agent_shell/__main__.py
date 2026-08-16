@@ -9,12 +9,10 @@ import sys
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
+from typing import TextIO
 
-import uvicorn
-
-from agent_shell.python_packages.dependencies import activate_package_site
-from agent_shell.app import create_app
 from agent_shell.settings import (
+    Settings,
     SettingsError,
     bearer_token_is_valid,
     get_settings,
@@ -24,6 +22,36 @@ from agent_shell.storage.permissions import secure_file
 
 
 _MISSING_LOCAL_MANAGEMENT_TOKEN_ACTION = "Configure the management Bearer token."
+
+
+def _prepare_windows_dependencies(*, data_root: Path, runtime_root: Path) -> None:
+    from agent_shell.python_packages.dependencies import prepare_windows_dependencies
+
+    prepare_windows_dependencies(data_root=data_root, runtime_root=runtime_root)
+
+
+def _activate_package_site(runtime_root: Path) -> None:
+    from agent_shell.python_packages.dependencies import activate_package_site
+
+    activate_package_site(runtime_root)
+
+
+def _create_application(*, settings: Settings, serve_frontend: bool) -> object:
+    from agent_shell.app import create_app
+
+    return create_app(settings=settings, serve_frontend=serve_frontend)
+
+
+def _run_server(app: object, *, host: str, port: int) -> None:
+    import uvicorn
+
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        proxy_headers=False,
+        ws="websockets-sansio",
+    )
 
 
 def _parse_port(value: str) -> int:
@@ -44,6 +72,7 @@ def _read_confirmed_credential(
     prompt: str,
     confirmation_prompt: str,
     invalid_message: str,
+    output_stream: TextIO | None = None,
 ) -> str | None:
     while True:
         try:
@@ -52,10 +81,10 @@ def _read_confirmed_credential(
         except (EOFError, KeyboardInterrupt):
             return None
         if not bearer_token_is_valid(value):
-            print(invalid_message)
+            print(invalid_message, file=output_stream)
             continue
         if value != confirmation:
-            print("两次输入不一致，请重新输入。")
+            print("两次输入不一致，请重新输入。", file=output_stream)
             continue
         return value
 
@@ -130,11 +159,13 @@ def initialize_local_settings(
     include_process_environment: bool = False,
     env_path: Path | None = None,
     password_reader: Callable[[str], str] | None = None,
+    output_stream: TextIO | None = None,
 ) -> int:
     home = (application_home or Path.cwd()).resolve()
     root = data_root or (home / "data")
     root = root.resolve() if root.is_absolute() else (home / root).resolve()
     env_path = env_path or root / "config" / "agent-shell.env"
+    output_stream = output_stream or sys.stdout
     missing_management_error: SettingsError | None = None
     try:
         get_settings(
@@ -170,14 +201,18 @@ def initialize_local_settings(
         return 2
     read_password = password_reader or getpass.getpass
 
-    print("首次启动：请设置管理网站密码。")
-    print("这个密码只用于打开管理网站，不会改变 /v1 OpenAI API 使用的 Key。")
-    print("请输入不含空格的可打印 ASCII 字符。")
+    print("首次启动：请设置管理网站密码。", file=output_stream)
+    print(
+        "这个密码只用于打开管理网站，不会改变 /v1 OpenAI API 使用的 Key。",
+        file=output_stream,
+    )
+    print("请输入不含空格的可打印 ASCII 字符。", file=output_stream)
     password = _read_confirmed_credential(
         read_password,
         prompt="管理密码（输入时不会显示）：",
         confirmation_prompt="请再输入一次：",
         invalid_message="密码格式不对，请输入不含空格的可打印 ASCII 字符。",
+        output_stream=output_stream,
     )
     if password is None:
         print("\n已取消，没有创建或修改配置文件。", file=sys.stderr)
@@ -192,9 +227,37 @@ def initialize_local_settings(
         print("无法保存配置文件，请检查 data 目录是否可写。", file=sys.stderr)
         return 1
 
-    print("管理密码已保存。以后双击 start_server.bat 会直接启动。")
-    print()
+    print(
+        "管理密码已保存。以后双击 start_server.bat 会直接启动。",
+        file=output_stream,
+    )
+    print(file=output_stream)
     return 0
+
+
+def prepare_launch_settings(
+    *,
+    application_home: Path | None = None,
+    data_root: Path | None = None,
+    include_process_environment: bool = False,
+) -> int:
+    """Prepare local settings and print the effective launch tuple in one process."""
+
+    result = initialize_local_settings(
+        application_home=application_home,
+        data_root=data_root,
+        include_process_environment=include_process_environment,
+        output_stream=sys.stderr,
+    )
+    if result != 0:
+        return result
+    return main(
+        application_home=application_home,
+        data_root=data_root,
+        include_process_environment=include_process_environment,
+        print_launch_settings=True,
+        serve_frontend=False,
+    )
 
 
 def main(
@@ -204,6 +267,7 @@ def main(
     include_process_environment: bool = True,
     print_launch_settings: bool = False,
     probe_listen_settings: bool = False,
+    prepare_dependencies: bool = False,
     port_override: int | None = None,
     serve_frontend: bool = True,
 ) -> int:
@@ -238,6 +302,19 @@ def main(
         )
         return 0
 
+    if prepare_dependencies:
+        try:
+            _prepare_windows_dependencies(
+                data_root=settings.data_root,
+                runtime_root=settings.resolved_runtime_dir(),
+            )
+        except Exception as exc:
+            print(
+                f"Python package dependency preparation failed: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
     if settings.deployment_mode == "authenticated_remote":
         print(
             "WARNING: Remote HTTP backend enabled. Publish it only behind a TLS "
@@ -245,14 +322,12 @@ def main(
             file=sys.stderr,
         )
 
-    activate_package_site(settings.resolved_runtime_dir())
-    app = create_app(settings=settings, serve_frontend=serve_frontend)
-    uvicorn.run(
+    _activate_package_site(settings.resolved_runtime_dir())
+    app = _create_application(settings=settings, serve_frontend=serve_frontend)
+    _run_server(
         app,
         host=settings.host,
         port=settings.port,
-        proxy_headers=False,
-        ws="websockets-sansio",
     )
     return 0
 
@@ -280,8 +355,18 @@ def run_cli(arguments: list[str] | None = None) -> int:
     parser.add_argument("--port", type=_parse_port, metavar="PORT")
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--initialize-local-settings", action="store_true")
+    action.add_argument(
+        "--prepare-launch-settings",
+        action="store_true",
+        help="Prepare local settings and print host, port, and management URL.",
+    )
     action.add_argument("--print-launch-settings", action="store_true")
     action.add_argument("--probe-listen-settings", action="store_true")
+    parser.add_argument(
+        "--prepare-dependencies",
+        action="store_true",
+        help="Prepare configuration-owned Python package dependencies before serving.",
+    )
     parser.add_argument(
         "--no-frontend",
         action="store_true",
@@ -306,12 +391,19 @@ def run_cli(arguments: list[str] | None = None) -> int:
             data_root=data_root,
             include_process_environment=include_process_environment,
         )
+    if parsed.prepare_launch_settings:
+        return prepare_launch_settings(
+            application_home=home,
+            data_root=data_root,
+            include_process_environment=include_process_environment,
+        )
     return main(
         application_home=home,
         data_root=data_root,
         include_process_environment=include_process_environment,
         print_launch_settings=parsed.print_launch_settings,
         probe_listen_settings=parsed.probe_listen_settings,
+        prepare_dependencies=parsed.prepare_dependencies,
         port_override=parsed.port,
         serve_frontend=not parsed.no_frontend,
     )

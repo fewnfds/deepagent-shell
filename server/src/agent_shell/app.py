@@ -199,7 +199,7 @@ def create_app(
         runtime_diagnostics=runtime_diagnostics,
     )
 
-    frontend_dir = Path(__file__).parent / "frontend_dist"
+    frontend_dir = Path(__file__).resolve().parents[3] / "runtime" / "frontend_dist"
     frontend_available = (
         (frontend_dir / "index.html").is_file()
         and (frontend_dir / "assets").is_dir()
@@ -209,7 +209,7 @@ def create_app(
     elif serve_frontend and not frontend_available:
         raise RuntimeError(
             "The production frontend build is missing. Build the frontend before "
-            "starting a packaged Agent Shell instance."
+            "starting the Agent Shell source instance."
         )
     startup_permission_statuses = (
         *environment_permissions,

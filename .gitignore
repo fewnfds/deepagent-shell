@@ -21,7 +21,6 @@ node_modules/
 dist/
 build/
 release/
-server/src/agent_shell/frontend_dist/
 packaging/**/dist/
 
 # ── Logs ────────────────────────────────────────────────

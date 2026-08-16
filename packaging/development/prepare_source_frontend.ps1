@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 
 $project = [System.IO.Path]::GetFullPath($ProjectRoot)
 $frontend = Join-Path $project "frontend"
-$output = Join-Path $project "server\src\agent_shell\frontend_dist"
+$output = Join-Path $project "runtime\frontend_dist"
 $runtime = Join-Path $project "runtime"
 $manifestPath = Join-Path $runtime "source-frontend-manifest.json"
 $projectPrefix = $project.TrimEnd("\") + "\"

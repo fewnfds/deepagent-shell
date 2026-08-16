@@ -3,8 +3,6 @@ from __future__ import annotations
 from html.parser import HTMLParser
 from pathlib import Path
 import re
-import subprocess
-import zipfile
 
 from fastapi.testclient import TestClient
 import pytest
@@ -99,32 +97,6 @@ def test_admin_shell_uses_only_bundled_script_assets(
     assert protected.status_code == 401
     assert authorized.status_code == 200
 
-def test_wheel_contains_only_the_vite_admin_distribution(tmp_path: Path) -> None:
-    project_root = Path(__file__).resolve().parents[2]
-    server_root = project_root / "server"
-    result = subprocess.run(
-        ["uv", "build", "--wheel", "--out-dir", str(tmp_path)],
-        cwd=server_root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
-
-    wheels = list(tmp_path.glob("*.whl"))
-    assert len(wheels) == 1
-    source_dist = server_root / "src" / "agent_shell" / "frontend_dist"
-    expected = {
-        "agent_shell/frontend_dist/" + path.relative_to(source_dist).as_posix()
-        for path in source_dist.rglob("*")
-        if path.is_file()
-    }
-    with zipfile.ZipFile(wheels[0]) as archive:
-        packaged = set(archive.namelist())
-
-    assert expected
-    assert expected <= packaged
-    assert not any(path.startswith("agent_shell/frontend/") for path in packaged)
 
 def test_automatic_fastapi_documentation_is_not_registered(
     monkeypatch: pytest.MonkeyPatch,

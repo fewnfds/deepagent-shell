@@ -36,15 +36,35 @@ def test_source_launcher_refreshes_runtime_and_prepares_production_frontend() ->
     assert "npm run dev" not in launcher
 
 
-def test_windows_launcher_prepares_middleware_dependencies_before_server() -> None:
+def test_windows_launcher_prepares_dependencies_in_server_process() -> None:
     launcher = (REPOSITORY_ROOT / "start_server.bat").read_text(encoding="utf-8")
 
-    dependency_command = "-m agent_shell.python_packages.dependencies --home"
-    server_command = "-m agent_shell --home"
+    assert launcher.count("--prepare-launch-settings") == 1
+    assert "--initialize-local-settings" not in launcher
+    assert "--print-launch-settings" not in launcher
+    assert launcher.count("-m agent_shell --home") == 3
+    assert "--port !EFFECTIVE_PORT! --prepare-dependencies" in launcher
+    assert "-m agent_shell.python_packages.dependencies" not in launcher
 
-    assert dependency_command in launcher
-    assert launcher.index(dependency_command) < launcher.rindex(server_command)
-    assert "goto middleware_dependencies_failed" in launcher
+
+def test_frontend_build_output_stays_outside_python_source() -> None:
+    python_source_output = (
+        REPOSITORY_ROOT / "server" / "src" / "agent_shell" / "frontend_dist"
+    )
+    vite_config = (REPOSITORY_ROOT / "frontend" / "vite.config.ts").read_text(
+        encoding="utf-8"
+    )
+    preparer = (
+        REPOSITORY_ROOT
+        / "packaging"
+        / "development"
+        / "prepare_source_frontend.ps1"
+    ).read_text(encoding="utf-8")
+
+    assert not python_source_output.exists()
+    assert "../runtime/frontend_dist" in vite_config
+    assert 'Join-Path $project "runtime\\frontend_dist"' in preparer
+    assert "server\\src\\agent_shell\\frontend_dist" not in preparer
 
 
 def test_windows_runtime_removes_uv_python_aliases_after_pip_install() -> None:
@@ -94,8 +114,8 @@ def test_listen_probe_reports_an_occupied_port_without_starting_the_app(
 
     monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "management-secret")
     monkeypatch.setattr(
-        launcher.uvicorn,
-        "run",
+        launcher,
+        "_run_server",
         lambda *_args, **_kwargs: pytest.fail("a listen probe must not start uvicorn"),
     )
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
@@ -126,7 +146,7 @@ def test_source_frontend_preparer_builds_only_when_inputs_change(
 ) -> None:
     project = tmp_path / "source clone"
     frontend = project / "frontend"
-    output = project / "server" / "src" / "agent_shell" / "frontend_dist"
+    output = project / "runtime" / "frontend_dist"
     fake_bin = tmp_path / "fake-bin"
     invocation_log = tmp_path / "npm-invocations.txt"
     frontend.mkdir(parents=True)

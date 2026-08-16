@@ -52,15 +52,7 @@ if exist "%SOURCE_APP_DIR%\agent_shell\__main__.py" (
 )
 
 pushd "%SCRIPT_DIR%"
-"!PYTHON_EXE!" !PYTHON_FLAGS! -m agent_shell --home "%SCRIPT_DIR%." --initialize-local-settings
-if errorlevel 1 (
-  popd
-  echo.
-  echo Agent Shell settings could not be prepared. Read the message above.
-  pause
-  exit /b 2
-)
-for /f "tokens=1,2,3 delims=|" %%H in ('!PYTHON_EXE! !PYTHON_FLAGS! -m agent_shell --home "%SCRIPT_DIR%." --print-launch-settings') do (
+for /f "tokens=1,2,3 delims=|" %%H in ('!PYTHON_EXE! !PYTHON_FLAGS! -m agent_shell --home "%SCRIPT_DIR%." --prepare-launch-settings') do (
   set "EFFECTIVE_HOST=%%H"
   set "EFFECTIVE_PORT=%%I"
   set "MANAGEMENT_URL=%%J"
@@ -98,29 +90,16 @@ if defined PORT_FOUND (
 
 :after_port_prompt
 echo Preparing custom Middleware dependencies...
-pushd "%SCRIPT_DIR%"
-"!PYTHON_EXE!" !PYTHON_FLAGS! -m agent_shell.python_packages.dependencies --home "%SCRIPT_DIR%."
-set "MIDDLEWARE_DEPENDENCY_EXIT=%ERRORLEVEL%"
-popd
-if not "!MIDDLEWARE_DEPENDENCY_EXIT!"=="0" goto middleware_dependencies_failed
-
 echo Starting Agent Shell...
 echo   !MANAGEMENT_URL!
 echo.
 pushd "%SCRIPT_DIR%"
-"!PYTHON_EXE!" !PYTHON_FLAGS! -m agent_shell --home "%SCRIPT_DIR%." --port !EFFECTIVE_PORT!
+"!PYTHON_EXE!" !PYTHON_FLAGS! -m agent_shell --home "%SCRIPT_DIR%." --port !EFFECTIVE_PORT! --prepare-dependencies
 set "EXIT_CODE=%ERRORLEVEL%"
 popd
 
 if not "%EXIT_CODE%"=="0" pause
 goto end
-
-:middleware_dependencies_failed
-echo.
-echo Custom Middleware dependencies could not be prepared safely.
-echo The existing Agent Shell runtime was not modified.
-pause
-exit /b 2
 
 :port_kill
 echo Closing PID !OCCUPYING_PID!...

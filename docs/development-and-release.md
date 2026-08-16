@@ -7,7 +7,8 @@
 | 滚动源码 Clone | 当前 `server/src/` | 输入变化时自动 build | `start_server.bat` |
 | 前端 Debug | 当前 `server/src/` | Vite HMR | `packaging/development/start_dev.ps1` |
 
-`frontend/` 是唯一前端源码。`server/src/agent_shell/frontend_dist/` 是 Git 忽略的 production 产物。
+`frontend/` 是唯一前端源码。production 产物只生成到 Git 忽略的 `runtime/frontend_dist/`，不进入
+`server/src/`，避免源码搜索读取生成 bundle。
 
 ## 分支
 
@@ -43,7 +44,8 @@ git pull --ff-only
 文件化 Python 配置扩展的 `requirements.txt` 不进入项目 `pyproject.toml`。Windows 启动器在核心 runtime 准备完成后，
 只按启用 Workflow 可达配置所引用扩展的需求指纹生成 `runtime/python_packages/site-packages`；静态模板和未触达的配置扩展
 不参与，输入未变化时复用。扩展层只能
-增加与核心锁兼容的二进制 wheel，不能修改 `runtime/app`。
+增加与核心锁兼容的二进制 wheel，不能修改 `runtime/app`。启动设置初始化与读取合并为一次 preflight；扩展依赖准备在最终
+服务进程内、应用创建前完成，避免为了相邻启动步骤重复拉起并导入 Python 应用。
 
 ## 当前运行时与依赖基线
 
@@ -100,10 +102,19 @@ npm run build
 ```powershell
 cd server
 .\.venv\Scripts\python.exe -m pytest ..\test\<domain>\test_relevant_module.py -q
-uv run python ..\test\smoke_http.py
+.\.venv\Scripts\python.exe ..\test\smoke_http.py
 ```
 
-首次准备开发依赖时在 `server/` 执行 `uv sync --extra dev`。之后的日常定向 pytest 直接使用项目 `.venv`，避免
+首次准备开发依赖时在 `server/` 显式使用项目自带的 uv 与 CPython，避免 PATH 上其他软件附带的 uv 或用户目录中的
+Python 被写入 `.venv`：
+
+```powershell
+$pythonHome = (Get-Content ..\runtime\app\python-home.txt -Raw).Trim()
+$python = Join-Path (Join-Path ..\runtime\app $pythonHome) python.exe
+& ..\runtime\bootstrap\uv.exe sync --python $python --extra dev --frozen --no-python-downloads
+```
+
+之后的日常定向 pytest 直接使用项目 `.venv`，避免
 每轮测试都让 `uv` 重复检查环境。pytest 临时文件使用 Windows 系统临时目录，不在源码目录设置 `basetemp`；同时禁用
 pytest cache provider，避免生成仓库内 `.pytest_cache`。不要为一次局部改动运行完整 `test/`。大量 TestClient 用例会
 分别创建隔离 data root 和 SQLite，Windows 杀毒软件与目录索引会放大这类全量运行的磁盘成本。
@@ -123,7 +134,7 @@ npm test
 
 ```powershell
 cd server
-uv run pytest ..\test -q
+.\.venv\Scripts\python.exe -m pytest ..\test -q
 ```
 
 `test/smoke_http.py` 是显式进程 smoke，不在默认 pytest 收集范围；真实 Provider 与 Agent eval 也不进入

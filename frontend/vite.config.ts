@@ -14,7 +14,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../server/src/agent_shell/frontend_dist',
+    outDir: '../runtime/frontend_dist',
     emptyOutDir: true,
   },
   server: {
