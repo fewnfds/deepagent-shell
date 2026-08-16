@@ -28,7 +28,6 @@ export type WorkflowCanvasNode = Node<WorkflowCanvasNodeData>
 export interface WorkflowCanvasEdgeData {
   edgeType: string
   branchKey?: string
-  branchLabel?: string
 }
 
 export type WorkflowCanvasEdge = Edge<WorkflowCanvasEdgeData>
@@ -127,24 +126,21 @@ export function workflowDocumentToCanvas(
     nodes: sourceNodes.map((node) => canvasNode(node, document)),
     edges: document.definition.edges.map((edge) => {
       const edgeType = documentEdgeType(edge, document, catalog)
-      const label = edge.branch_key ?? ''
       return {
         id: edge.id,
         source: edge.source,
         sourceHandle: edge.source_handle,
         target: edge.target,
         targetHandle: edge.target_handle,
-        type: 'smoothstep',
+        type: 'default',
         markerEnd: edgeType === 'branch'
           ? WORKFLOW_BRANCH_EDGE_MARKER
           : WORKFLOW_NORMAL_EDGE_MARKER,
         animated: edgeType === 'branch',
         class: edgeType === 'branch' ? 'workflow-edge--branch' : undefined,
-        label: label || undefined,
         data: {
           edgeType,
           branchKey: edge.branch_key ?? undefined,
-          branchLabel: label || undefined,
         },
       }
     }),

@@ -15,13 +15,17 @@ Workflow root 不声明 `messages`。每个画布 Agent 节点由 wrapper 以空
 并行分支读取同一个 LangGraph super-step snapshot，以不同 invocation ID 返回的记录由 reducer 合并，不按开始时间、
 结束时间或 mapping 插入顺序解释先后。同一节点被再次调度时会产生独立 invocation ID，不覆盖先前执行。
 
-【编辑 Flow】进入独立全屏 Vue Flow 页面。左侧组件库当前只有 Agent，可以点击或拖到画布；右侧属性栏编辑所选
-Agent 的 Main Agent 引用并列出该 Node 声明的输入/输出端点。选中连线后，可以选择两端共同支持的 Edge 类型和具体
-source/target endpoint，也可以删除连线；当前唯一选项是 Normal Edge。两侧均可独立收起。一个 Graph 最多保存 100 个
-nodes 和 200 条 edges，同一个 Main Agent 可以被多个 Agent node 重复引用；normal 端点可以连接 `Start -> Agent`、
-`Agent -> Agent` 和 `Agent -> End`，并允许一个
-端点连接多个激活方向。保存直接覆盖当前图，重新打开时恢复节点、边、位置和 viewport；没有
-draft/published revision、自动保存、并发编辑或恢复层。
+【编辑 Flow】进入独立全屏 Vue Flow 页面。左右各有一条始终保留的工具图标轨；点击 active 图标只收起功能 panel，图标轨
+不会消失。左侧组件库提供 Agent 与条件路由，可以点击或拖到画布；元素追踪列出当前全部 Node，点击条目会保持当前缩放、
+把 Node 平滑移到视口中心并打开右侧属性。右侧属性使用紧凑的 `key : value/control` 行，编辑所选 Node 或 Edge；空白点击会
+清除选择并收起属性，平移、缩放和拖动不会触发收起，重新打开空选择属性时显示 Workflow 名称和 State contract。
+
+选中连线后，可以选择两端共同支持的 Edge 类型、具体 source/target endpoint，也可以删除连线。Normal 与 Branch Edge 都
+使用 Bezier 曲线；Branch key 在 Edge 属性中填写并保存，不显示在线段上，Branch 仍以虚线、动画、箭头和端点名称区别。
+画布底部问题条显示当前阻止保存的原因；点击问题可以选中对应 Node、Edge 或 Workflow。一个 Graph 最多保存 100 个 nodes
+和 200 条 edges，同一个 Main Agent 可以被多个 Agent node 重复引用；normal 端点可以连接 `Start -> Agent`、
+`Agent -> Agent` 和 `Agent -> End`，并允许一个端点连接多个激活方向。保存直接覆盖当前图，重新打开时恢复节点、边、位置
+和 viewport；没有 draft/published revision、自动保存、并发编辑或恢复层。
 
 保存入口允许不完整 draft。通过 `/v1/chat/completions` 运行时，Graph 必须至少包含一个 Start、一个 Agent 和一个 End，
 并且每个节点都必须可从某个 Start 到达且能够继续到达某个 End；不满足时在 Agent 装配和 Graph compile 前返回 422。

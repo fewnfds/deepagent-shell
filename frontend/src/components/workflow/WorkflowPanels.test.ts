@@ -2,22 +2,27 @@ import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { MainAgent, WorkflowNodeCatalogItem } from '@/api'
+import type { MainAgent, WorkflowGraphDocument, WorkflowNodeCatalogItem } from '@/api'
 import {
   newAgentCanvasNode,
   newConditionRouterCanvasNode,
   nextWorkflowCanvasEdgeId,
   WORKFLOW_NODE_DRAG_MIME,
   workflowCanvasEdgeTypesBetween,
+  workflowCanvasToDocument,
   workflowCanvasNodeEndpoints,
   workflowConnectionEdgeType,
+  workflowDocumentToCanvas,
   type WorkflowCanvasEdge,
   type WorkflowCanvasNode,
 } from '@/domain/workflowGraph'
+import { workflowCanvasProblems } from '@/domain/workflowCanvasProblems'
 import { en } from '@/locales/en'
 
 import WorkflowInspector from './WorkflowInspector.vue'
 import WorkflowNodeLibrary from './WorkflowNodeLibrary.vue'
+import WorkflowNodeTracker from './WorkflowNodeTracker.vue'
+import WorkflowProblemsPanel from './WorkflowProblemsPanel.vue'
 
 function i18n() {
   return createI18n({ legacy: false, locale: 'en', messages: { en } })
@@ -78,7 +83,6 @@ describe('Workflow canvas panels', () => {
       props: {
         agent: agentCatalog,
         conditionRouter: null,
-        collapsed: false,
         agentDisabled: false,
         conditionRouterDisabled: true,
       },
@@ -100,7 +104,6 @@ describe('Workflow canvas panels', () => {
     const node = newAgentCanvasNode('agent-1', agents[0]!.id)
     const wrapper = mount(WorkflowInspector, {
       props: {
-        collapsed: false,
         edge: null,
         edgeSourceEndpoints: [],
         edgeTargetEndpoints: [],
@@ -139,7 +142,6 @@ describe('Workflow canvas panels', () => {
     }
     const wrapper = mount(WorkflowInspector, {
       props: {
-        collapsed: false,
         edge,
         edgeSourceEndpoints: agentCatalog.output_handles,
         edgeTargetEndpoints: endCatalog.input_handles,
@@ -236,7 +238,6 @@ describe('Workflow canvas panels', () => {
       target: end.id,
       targetHandle: 'in',
       animated: true,
-      label: 'review',
       data: { edgeType: 'branch', branchKey: 'review' },
     }
     const endWithBranchInput = {
@@ -253,7 +254,6 @@ describe('Workflow canvas panels', () => {
 
     const wrapper = mount(WorkflowInspector, {
       props: {
-        collapsed: false,
         edge: branchEdge,
         edgeSourceEndpoints: conditionRouterCatalog.output_handles,
         edgeTargetEndpoints: endWithBranchInput.input_handles,
@@ -271,5 +271,95 @@ describe('Workflow canvas panels', () => {
     })
     await wrapper.get('input[type="text"]').setValue('audit')
     expect(wrapper.emitted('updateBranchKey')).toEqual([[branchEdge.id, 'audit']])
+  })
+
+  it('lists every canvas node and emits the selected node identity', async () => {
+    const start: WorkflowCanvasNode = {
+      id: 'start',
+      type: 'start',
+      position: { x: 0, y: 0 },
+      data: { nodeType: 'start', mainAgentId: '' },
+    }
+    const agent = { ...newAgentCanvasNode('agent-1', agents[0]!.id), selected: true }
+    const router = newConditionRouterCanvasNode('router-1', 'router-config-1')
+    const wrapper = mount(WorkflowNodeTracker, {
+      props: { nodes: [start, agent, router] },
+      global: { plugins: [i18n()] },
+    })
+
+    const items = wrapper.findAll('.workflow-node-tracker-item')
+    expect(items).toHaveLength(3)
+    expect(items[1]!.attributes('data-active')).toBe('true')
+    expect(items[2]!.text()).toContain('Condition Router')
+    await items[0]!.trigger('click')
+    expect(wrapper.emitted('locateNode')).toEqual([[start.id]])
+  })
+
+  it('projects save blockers into the canvas problems panel', async () => {
+    const agent = newAgentCanvasNode('agent-1', '')
+    const branch: WorkflowCanvasEdge = {
+      id: 'edge-review',
+      source: 'router-1',
+      sourceHandle: 'branch',
+      target: agent.id,
+      targetHandle: 'in',
+      data: { edgeType: 'branch' },
+    }
+    const problems = workflowCanvasProblems([agent], [branch])
+    expect(problems.map((problem) => problem.owner_id)).toEqual([agent.id, branch.id])
+
+    const wrapper = mount(WorkflowProblemsPanel, {
+      props: { expanded: true, problems },
+      global: { plugins: [i18n()] },
+    })
+    expect(wrapper.findAll('.workflow-problems-item')).toHaveLength(2)
+    await wrapper.findAll('.workflow-problems-item')[1]!.trigger('click')
+    expect(wrapper.emitted('selectProblem')).toEqual([[problems[1]]])
+  })
+
+  it('uses Bezier presentation without exposing the Branch key as an Edge label', () => {
+    const document: WorkflowGraphDocument = {
+      definition: {
+        schema_version: 1,
+        state_contract: 'agent-shell.workflow.agent-invocations.v1',
+        nodes: [
+          {
+            id: 'router-1',
+            type: 'condition-router',
+            type_version: 1,
+            config: { condition_router_id: 'router-config-1' },
+          },
+          { id: 'end', type: 'end', type_version: 1, config: {} },
+        ],
+        edges: [{
+          id: 'edge-review',
+          source: 'router-1',
+          source_handle: 'branch',
+          target: 'end',
+          target_handle: 'in',
+          branch_key: 'review',
+        }],
+      },
+      layout: {
+        nodes: { 'router-1': { x: 0, y: 0 }, end: { x: 400, y: 0 } },
+        viewport: { x: 0, y: 0, zoom: 1 },
+      },
+    }
+    const endWithBranchInput = {
+      ...endCatalog,
+      input_handles: [{ ...endCatalog.input_handles[0]!, accepted_edge_types: ['normal', 'branch'] }],
+    }
+
+    const canvas = workflowDocumentToCanvas(
+      document,
+      [conditionRouterCatalog, endWithBranchInput],
+    )
+    expect(canvas.edges[0]).toMatchObject({
+      type: 'default',
+      data: { edgeType: 'branch', branchKey: 'review' },
+    })
+    expect(canvas.edges[0]!.label).toBeUndefined()
+    expect(workflowCanvasToDocument(canvas.nodes, canvas.edges, canvas.viewport)
+      .definition.edges[0]!.branch_key).toBe('review')
   })
 })

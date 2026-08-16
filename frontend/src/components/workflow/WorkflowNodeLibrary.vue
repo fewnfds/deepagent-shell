@@ -5,7 +5,6 @@ import { WORKFLOW_NODE_DRAG_MIME } from '@/domain/workflowGraph'
 defineProps<{
   agent: WorkflowNodeCatalogItem | null
   conditionRouter: WorkflowNodeCatalogItem | null
-  collapsed: boolean
   agentDisabled: boolean
   conditionRouterDisabled: boolean
 }>()
@@ -13,7 +12,6 @@ defineProps<{
 const emit = defineEmits<{
   addAgent: []
   addConditionRouter: []
-  toggle: []
 }>()
 
 function startDrag(event: DragEvent, item: WorkflowNodeCatalogItem | null, disabled: boolean): void {
@@ -27,25 +25,15 @@ function startDrag(event: DragEvent, item: WorkflowNodeCatalogItem | null, disab
 </script>
 
 <template>
-  <aside class="workflow-sidebar workflow-sidebar--library" :data-collapsed="collapsed">
-    <header class="workflow-sidebar-header">
-      <h2 v-if="!collapsed" class="workflow-sidebar-title">
+  <section class="workflow-tool-panel" aria-labelledby="workflow-node-library-title">
+    <header class="workflow-tool-panel-header">
+      <h2 id="workflow-node-library-title" class="workflow-tool-panel-title">
         {{ $t('workflows.editor.nodeLibrary') }}
       </h2>
-      <button
-        class="workflow-sidebar-toggle"
-        :aria-label="$t(collapsed ? 'workflows.editor.expandNodeLibrary' : 'workflows.editor.collapseNodeLibrary')"
-        :title="$t(collapsed ? 'workflows.editor.expandNodeLibrary' : 'workflows.editor.collapseNodeLibrary')"
-        type="button"
-        @click="emit('toggle')"
-      >
-        <i v-if="collapsed" class="bi bi-boxes" aria-hidden="true" />
-        <i v-else class="bi bi-chevron-left" aria-hidden="true" />
-      </button>
     </header>
 
-    <div v-if="!collapsed" class="workflow-sidebar-body">
-      <h3 class="workflow-sidebar-section-title">{{ $t('workflows.editor.executionNodes') }}</h3>
+    <div class="workflow-tool-panel-body">
+      <h3 class="workflow-tool-panel-section-title">{{ $t('workflows.editor.executionNodes') }}</h3>
       <div class="workflow-node-library-list">
         <button
           v-if="agent"
@@ -83,5 +71,5 @@ function startDrag(event: DragEvent, item: WorkflowNodeCatalogItem | null, disab
         </button>
       </div>
     </div>
-  </aside>
+  </section>
 </template>

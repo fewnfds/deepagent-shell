@@ -290,17 +290,25 @@
         "classes": [
           "workflow-editor-canvas", "workflow-editor-error", "workflow-editor-flow",
           "workflow-editor-shell", "workflow-editor-toolbar", "workflow-editor-workspace",
-          "workflow-inspector-context", "workflow-inspector-delete", "workflow-inspector-field",
-          "workflow-inspector-label", "workflow-inspector-note", "workflow-inspector-select",
-          "workflow-inspector-value", "workflow-node", "workflow-node--agent", "workflow-node--condition-router",
+          "workflow-inspector-context", "workflow-inspector-control", "workflow-inspector-delete",
+          "workflow-inspector-label", "workflow-inspector-note", "workflow-inspector-row",
+          "workflow-inspector-select", "workflow-inspector-switch", "workflow-inspector-value",
+          "workflow-node", "workflow-node--agent", "workflow-node--condition-router",
           "workflow-node--terminal", "workflow-node-header", "workflow-node-icon",
           "workflow-node-endpoint", "workflow-node-endpoints",
           "workflow-node-library-copy", "workflow-node-library-icon", "workflow-node-library-item", "workflow-node-library-list",
           "workflow-node-library-meta", "workflow-node-library-title", "workflow-node-summary",
-          "workflow-node-title", "workflow-port", "workflow-port--normal", "workflow-port--branch", "workflow-edge--branch", "workflow-sidebar",
-          "workflow-sidebar--inspector", "workflow-sidebar--library", "workflow-sidebar-body",
-          "workflow-sidebar-header", "workflow-sidebar-section-title", "workflow-sidebar-title",
-          "workflow-sidebar-toggle", "form-check", "form-check-input", "form-check-label", "form-select", "form-switch"
+          "workflow-node-title", "workflow-node-tracker-copy", "workflow-node-tracker-icon",
+          "workflow-node-tracker-item", "workflow-node-tracker-list", "workflow-node-tracker-meta",
+          "workflow-node-tracker-title", "workflow-port", "workflow-port--normal", "workflow-port--branch",
+          "workflow-edge--branch", "workflow-problems", "workflow-problems-body", "workflow-problems-empty",
+          "workflow-problems-item", "workflow-problems-list", "workflow-problems-message",
+          "workflow-problems-owner", "workflow-problems-title", "workflow-problems-toggle",
+          "workflow-tool-button", "workflow-tool-dock", "workflow-tool-dock--left",
+          "workflow-tool-dock--right", "workflow-tool-panel", "workflow-tool-panel-body",
+          "workflow-tool-panel-header", "workflow-tool-panel-section-title", "workflow-tool-panel-title",
+          "workflow-tool-rail", "form-check", "form-check-input", "form-check-label", "form-control-sm",
+          "form-select", "form-switch"
         ]
       },
       {
@@ -417,7 +425,6 @@
           "src/editors/SummarizationEditor.vue",
           "src/editors/WorkflowPrepareEditor.vue",
           "src/editors/WorkflowEventOutputEditor.vue",
-          "src/components/workflow/WorkflowInspector.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/StyleLabPage.vue",
           "src/pages/SystemSettingsPage.vue",
@@ -428,7 +435,14 @@
         "name": "WorkflowNodeLibrary",
         "path": "src/components/workflow/WorkflowNodeLibrary.vue",
         "kind": "domain-composition",
-        "reason": "Projects backend-supported Workflow node types into the collapsible drag source without defining runtime behavior",
+        "reason": "Projects backend-supported Workflow node types into the canvas drag source without defining runtime behavior",
+        "callers": ["src/pages/WorkflowEditorPage.vue"]
+      },
+      {
+        "name": "WorkflowNodeTracker",
+        "path": "src/components/workflow/WorkflowNodeTracker.vue",
+        "kind": "domain-composition",
+        "reason": "Projects current canvas Node identities into a compact navigation list and emits the selected Node ID without owning viewport state",
         "callers": ["src/pages/WorkflowEditorPage.vue"]
       },
       {
@@ -443,6 +457,13 @@
         "path": "src/components/workflow/WorkflowInspector.vue",
         "kind": "domain-composition",
         "reason": "Owns the selected Workflow node or edge property surface and emits mechanical configuration changes",
+        "callers": ["src/pages/WorkflowEditorPage.vue"]
+      },
+      {
+        "name": "WorkflowProblemsPanel",
+        "path": "src/components/workflow/WorkflowProblemsPanel.vue",
+        "kind": "product-behavior",
+        "reason": "Keeps save-blocking Workflow canvas issues visible and emits structured issue selection without defining validation rules",
         "callers": ["src/pages/WorkflowEditorPage.vue"]
       },
       {

@@ -37,9 +37,10 @@ def create_router():
 - `state` 是完整 Workflow State 的独立可变副本，包含当前存在的 `shared_vars`、`agent_invocations` 和 `files`；可以修改副本，
   也可以通过 `update` 返回局部更新。
 - `context` 是完整 Workflow Runtime Context 的独立映射，包含请求消息快照、Workflow、Prepare 结果和当前已有的运行字段。
-- `activate` 必须是 Branch Edge key 列表，可以同时激活多个不同分支；key 必须与画布 Edge 上填写的值完全一致。
+- `activate` 必须是 Branch Edge key 列表，可以同时激活多个不同分支；key 必须与画布中选中 Edge 后在属性栏填写的值完全一致，
+  不会显示在线段上。
 - `update` 必须是 Workflow State 的局部映射，只能更新当前 State contract 已声明的顶层字段。
-- 空的 `activate` 自动使用 `otherwise`；`otherwise` 必须在画布上显式连接，且不能和其他分支同时返回。
+- 空的 `activate` 自动使用 `otherwise`；`otherwise` 必须在画布上显式连接并在 Edge 属性中填写，且不能和其他分支同时返回。
 - 返回未知或未连接的 key、重复 key、非法 State 字段、无效入口或异常都会使本次 Workflow 运行失败。
 
 运行时把结果映射为 LangGraph `Command(update=..., goto=[...])`。Branch Edge 只负责声明候选目标，不会再注册为静态

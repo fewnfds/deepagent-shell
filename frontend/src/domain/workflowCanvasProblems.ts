@@ -1,0 +1,81 @@
+import type { ValidationIssue } from '@/api'
+
+import type { WorkflowCanvasEdge, WorkflowCanvasNode } from './workflowGraph'
+
+export interface WorkflowCanvasProblem extends ValidationIssue {
+  blocking: boolean
+  source: 'canvas' | 'server'
+}
+
+function canvasProblem(
+  code: string,
+  messageKey: string,
+  ownerId: string,
+  ownerType: string,
+  path: string,
+): WorkflowCanvasProblem {
+  return {
+    blocking: true,
+    code,
+    message: '',
+    message_args: {},
+    message_key: messageKey,
+    owner_id: ownerId,
+    owner_name: ownerId,
+    owner_type: ownerType,
+    path,
+    scope: 'workflow',
+    severity: 'error',
+    source: 'canvas',
+  }
+}
+
+export function workflowCanvasProblems(
+  nodes: WorkflowCanvasNode[],
+  edges: WorkflowCanvasEdge[],
+): WorkflowCanvasProblem[] {
+  const problems: WorkflowCanvasProblem[] = []
+
+  nodes.forEach((node, index) => {
+    if (node.data.nodeType === 'agent' && !node.data.mainAgentId) {
+      problems.push(canvasProblem(
+        'workflow.canvas.main_agent_required',
+        'workflows.editor.canvasProblems.mainAgentRequired',
+        node.id,
+        node.data.nodeType,
+        `definition.nodes[${index}].config.main_agent_id`,
+      ))
+    }
+    if (node.data.nodeType === 'condition-router' && !node.data.conditionRouterId) {
+      problems.push(canvasProblem(
+        'workflow.canvas.condition_router_required',
+        'workflows.editor.canvasProblems.conditionRouterRequired',
+        node.id,
+        node.data.nodeType,
+        `definition.nodes[${index}].config.condition_router_id`,
+      ))
+    }
+  })
+
+  edges.forEach((edge, index) => {
+    if (edge.data.edgeType === 'branch' && !edge.data.branchKey) {
+      problems.push(canvasProblem(
+        'workflow.canvas.branch_key_required',
+        'workflows.editor.canvasProblems.branchKeyRequired',
+        edge.id,
+        'edge',
+        `definition.edges[${index}].branch_key`,
+      ))
+    }
+  })
+
+  return problems
+}
+
+export function workflowServerProblems(issues: ValidationIssue[]): WorkflowCanvasProblem[] {
+  return issues.map((issue) => ({
+    ...issue,
+    blocking: issue.severity === 'error',
+    source: 'server',
+  }))
+}

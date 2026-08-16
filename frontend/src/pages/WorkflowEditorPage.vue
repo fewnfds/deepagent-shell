@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  ConnectionLineType,
   ConnectionMode,
   VueFlow,
   type Connection,
@@ -7,11 +8,12 @@ import {
   type ViewportTransform,
   type XYPosition,
 } from '@vue-flow/core'
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
 import {
+  ManagementApiError,
   managementApi,
   type MainAgent,
   type SavedBlock,
@@ -22,6 +24,8 @@ import {
 import WorkflowInspector from '@/components/workflow/WorkflowInspector.vue'
 import WorkflowNodeLibrary from '@/components/workflow/WorkflowNodeLibrary.vue'
 import WorkflowNodeEndpoints from '@/components/workflow/WorkflowNodeEndpoints.vue'
+import WorkflowNodeTracker from '@/components/workflow/WorkflowNodeTracker.vue'
+import WorkflowProblemsPanel from '@/components/workflow/WorkflowProblemsPanel.vue'
 import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
 import {
@@ -41,6 +45,14 @@ import {
   type WorkflowCanvasNode,
   type WorkflowEndpointDirection,
 } from '@/domain/workflowGraph'
+import {
+  workflowCanvasProblems,
+  workflowServerProblems,
+  type WorkflowCanvasProblem,
+} from '@/domain/workflowCanvasProblems'
+
+type WorkflowLeftPanel = 'library' | 'tracker'
+type WorkflowRightPanel = 'inspector'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -56,8 +68,10 @@ const edges = ref<WorkflowCanvasEdge[]>([])
 const flow = ref<VueFlowStore | null>(null)
 const stateContract = ref('agent-shell.workflow.agent-invocations.v1')
 const savedViewport = ref<ViewportTransform>({ x: 0, y: 0, zoom: 1 })
-const leftCollapsed = ref(false)
-const rightCollapsed = ref(false)
+const leftPanel = ref<WorkflowLeftPanel | null>('library')
+const rightPanel = ref<WorkflowRightPanel | null>('inspector')
+const problemsExpanded = ref(false)
+const serverProblems = ref<WorkflowCanvasProblem[]>([])
 const loaded = ref(false)
 const saving = ref(false)
 const loadError = ref('')
@@ -78,13 +92,32 @@ const canAddConditionRouter = computed(() => (
   && conditionRouters.value.length > 0
   && conditionRouterCatalogItem.value !== null
 ))
+const canvasProblems = computed(() => workflowCanvasProblems(nodes.value, edges.value))
+const problems = computed(() => [...canvasProblems.value, ...serverProblems.value])
 const canSave = computed(() => (
   loaded.value
   && !saving.value
-  && !nodes.value.some((node) => node.data.nodeType === 'agent' && !node.data.mainAgentId)
-  && !nodes.value.some((node) => node.data.nodeType === 'condition-router' && !node.data.conditionRouterId)
-  && !edges.value.some((edge) => edge.data.edgeType === 'branch' && !edge.data.branchKey)
+  && !problems.value.some((problem) => problem.blocking)
 ))
+const graphRevision = computed(() => JSON.stringify({
+  nodes: nodes.value.map((node) => ({
+    id: node.id,
+    position: node.position,
+    type: node.data.nodeType,
+    mainAgentId: node.data.mainAgentId,
+    conditionRouterId: node.data.conditionRouterId,
+    defer: node.data.defer,
+  })),
+  edges: edges.value.map((edge) => ({
+    id: edge.id,
+    source: edge.source,
+    sourceHandle: edge.sourceHandle,
+    target: edge.target,
+    targetHandle: edge.targetHandle,
+    edgeType: edge.data.edgeType,
+    branchKey: edge.data.branchKey,
+  })),
+}))
 const selectedNode = computed(() => nodes.value.find((node) => node.selected) ?? null)
 const selectedEdge = computed(() => (
   selectedNode.value ? null : edges.value.find((edge) => edge.selected) ?? null
@@ -116,6 +149,14 @@ const selectedEdgeTypeOptions = computed(() => workflowCanvasEdgeTypesBetween(
   selectedEdgeTargetNode.value,
   nodeCatalog.value,
 ))
+
+watch(graphRevision, (current, previous) => {
+  if (previous !== undefined && current !== previous) serverProblems.value = []
+})
+
+watch(() => problems.value.length, (count, previous) => {
+  if (count > 0 && count > previous) problemsExpanded.value = true
+})
 
 function nodeEndpoints(
   nodeType: WorkflowNodeType | undefined,
@@ -152,7 +193,7 @@ function connect(connection: Connection): void {
       sourceHandle: connection.sourceHandle,
       target: connection.target,
       targetHandle: connection.targetHandle,
-      type: 'smoothstep',
+      type: 'default',
       markerEnd: edgeType === 'branch' ? WORKFLOW_BRANCH_EDGE_MARKER : WORKFLOW_NORMAL_EDGE_MARKER,
       animated: edgeType === 'branch',
       class: edgeType === 'branch' ? 'workflow-edge--branch' : undefined,
@@ -160,7 +201,7 @@ function connect(connection: Connection): void {
       data: { edgeType },
     },
   ]
-  rightCollapsed.value = false
+  rightPanel.value = 'inspector'
 }
 
 function addAgent(position?: XYPosition): void {
@@ -174,7 +215,7 @@ function addAgent(position?: XYPosition): void {
     node,
   ]
   edges.value = edges.value.map((edge) => ({ ...edge, selected: false }))
-  rightCollapsed.value = false
+  rightPanel.value = 'inspector'
 }
 
 function addConditionRouter(position?: XYPosition): void {
@@ -192,7 +233,7 @@ function addConditionRouter(position?: XYPosition): void {
     node,
   ]
   edges.value = edges.value.map((edge) => ({ ...edge, selected: false }))
-  rightCollapsed.value = false
+  rightPanel.value = 'inspector'
 }
 
 function nextAgentPosition(): XYPosition {
@@ -343,7 +384,7 @@ function selectConditionRouter(nodeId: string, conditionRouterId: string): void 
 function updateBranchKey(edgeId: string, branchKey: string): void {
   edges.value = edges.value.map((edge) => (
     edge.id === edgeId && edge.data.edgeType === 'branch'
-      ? { ...edge, label: branchKey, data: { ...edge.data, branchKey, branchLabel: branchKey } }
+      ? { ...edge, data: { ...edge.data, branchKey } }
       : edge
   ))
 }
@@ -361,8 +402,57 @@ function clearSelection(): void {
   edges.value = edges.value.map((edge) => ({ ...edge, selected: false }))
 }
 
+function clearSelectionAndCloseInspector(): void {
+  clearSelection()
+  rightPanel.value = null
+}
+
 function showInspector(): void {
-  rightCollapsed.value = false
+  rightPanel.value = 'inspector'
+}
+
+function toggleLeftPanel(panel: WorkflowLeftPanel): void {
+  leftPanel.value = leftPanel.value === panel ? null : panel
+}
+
+function toggleRightPanel(panel: WorkflowRightPanel): void {
+  rightPanel.value = rightPanel.value === panel ? null : panel
+}
+
+async function selectAndCenterNode(nodeId: string): Promise<void> {
+  if (!flow.value) return
+  nodes.value = nodes.value.map((node) => ({ ...node, selected: node.id === nodeId }))
+  edges.value = edges.value.map((edge) => ({ ...edge, selected: false }))
+  rightPanel.value = 'inspector'
+  await nextTick()
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+  const node = flow.value.findNode(nodeId)
+  if (!node || node.dimensions.width <= 0 || node.dimensions.height <= 0) return
+  const viewport = flow.value.getViewport()
+  await flow.value.setCenter(
+    node.computedPosition.x + node.dimensions.width / 2,
+    node.computedPosition.y + node.dimensions.height / 2,
+    { duration: 220, interpolate: 'smooth', zoom: viewport.zoom },
+  )
+}
+
+function selectProblem(problem: WorkflowCanvasProblem): void {
+  if (nodes.value.some((node) => node.id === problem.owner_id)) {
+    void selectAndCenterNode(problem.owner_id)
+    return
+  }
+  if (edges.value.some((edge) => edge.id === problem.owner_id)) {
+    nodes.value = nodes.value.map((node) => ({ ...node, selected: false }))
+    edges.value = edges.value.map((edge) => ({
+      ...edge,
+      selected: edge.id === problem.owner_id,
+    }))
+    rightPanel.value = 'inspector'
+    return
+  }
+  clearSelection()
+  rightPanel.value = 'inspector'
 }
 
 function mainAgentName(mainAgentId: string): string {
@@ -395,10 +485,17 @@ async function save(): Promise<void> {
     await managementApi.updateWorkflowGraph(workflowId.value, document)
     notify({ tone: 'success', title: t('workflows.editor.saved') })
   } catch (error) {
+    const presentation = managementError.describe(error)
+    if (error instanceof ManagementApiError && error.validation) {
+      serverProblems.value = workflowServerProblems(error.validation.issues)
+      problemsExpanded.value = true
+    }
     notify({
       tone: 'danger',
       title: t('workflows.editor.saveFailed'),
-      message: managementError.describe(error).display,
+      message: error instanceof ManagementApiError && error.validation
+        ? presentation.message
+        : presentation.display,
     })
   } finally {
     saving.value = false
@@ -444,21 +541,50 @@ onMounted(async () => {
       </button>
     </header>
 
-    <div
-      class="workflow-editor-workspace"
-      :data-left-collapsed="leftCollapsed"
-      :data-right-collapsed="rightCollapsed"
-    >
-      <WorkflowNodeLibrary
-        :agent="agentCatalogItem"
-        :condition-router="conditionRouterCatalogItem"
-        :collapsed="leftCollapsed"
-        :agent-disabled="!canAddAgent"
-        :condition-router-disabled="!canAddConditionRouter"
-        @add-agent="addAgent()"
-        @add-condition-router="addConditionRouter()"
-        @toggle="leftCollapsed = !leftCollapsed"
-      />
+    <div class="workflow-editor-workspace">
+      <aside
+        class="workflow-tool-dock workflow-tool-dock--left"
+        :data-panel-open="Boolean(leftPanel)"
+      >
+        <nav class="workflow-tool-rail" :aria-label="t('workflows.editor.leftTools')">
+          <button
+            class="workflow-tool-button"
+            :aria-label="t('workflows.editor.showNodeLibrary')"
+            :aria-pressed="leftPanel === 'library'"
+            :data-active="leftPanel === 'library'"
+            :title="t('workflows.editor.showNodeLibrary')"
+            type="button"
+            @click="toggleLeftPanel('library')"
+          >
+            <i class="bi bi-boxes" aria-hidden="true" />
+          </button>
+          <button
+            class="workflow-tool-button"
+            :aria-label="t('workflows.editor.showNodeTracker')"
+            :aria-pressed="leftPanel === 'tracker'"
+            :data-active="leftPanel === 'tracker'"
+            :title="t('workflows.editor.showNodeTracker')"
+            type="button"
+            @click="toggleLeftPanel('tracker')"
+          >
+            <i class="bi bi-list" aria-hidden="true" />
+          </button>
+        </nav>
+        <WorkflowNodeLibrary
+          v-if="leftPanel === 'library'"
+          :agent="agentCatalogItem"
+          :condition-router="conditionRouterCatalogItem"
+          :agent-disabled="!canAddAgent"
+          :condition-router-disabled="!canAddConditionRouter"
+          @add-agent="addAgent()"
+          @add-condition-router="addConditionRouter()"
+        />
+        <WorkflowNodeTracker
+          v-else-if="leftPanel === 'tracker'"
+          :nodes="nodes"
+          @locate-node="selectAndCenterNode"
+        />
+      </aside>
 
       <main
         class="workflow-editor-canvas"
@@ -472,6 +598,7 @@ onMounted(async () => {
           v-model:nodes="nodes"
           v-model:edges="edges"
           class="workflow-editor-flow"
+          :connection-line-type="ConnectionLineType.Bezier"
           :connection-mode="ConnectionMode.Strict"
           default-marker-color="var(--bs-primary)"
           :delete-key-code="['Backspace', 'Delete']"
@@ -482,7 +609,7 @@ onMounted(async () => {
           @edge-click="showInspector"
           @init="initializeFlow"
           @node-click="showInspector"
-          @pane-click="clearSelection"
+          @pane-click="clearSelectionAndCloseInspector"
         >
           <template #node-start="{ id }">
             <div class="workflow-node workflow-node--terminal">
@@ -536,34 +663,57 @@ onMounted(async () => {
             </div>
           </template>
         </VueFlow>
+        <WorkflowProblemsPanel
+          :expanded="problemsExpanded"
+          :problems="problems"
+          @select-problem="selectProblem"
+          @toggle="problemsExpanded = !problemsExpanded"
+        />
       </main>
 
-      <WorkflowInspector
-        :collapsed="rightCollapsed"
-        :edge="selectedEdge"
-        :edge-source-endpoints="selectedEdgeSourceEndpoints"
-        :edge-target-endpoints="selectedEdgeTargetEndpoints"
-        :edge-type-options="selectedEdgeTypeOptions"
-        :input-endpoints="selectedNodeInputEndpoints"
-        :main-agents="mainAgents"
-        :condition-routers="conditionRouters"
-        :node="selectedNode"
-        :node-ids="nodes.map((node) => node.id)"
-        :output-endpoints="selectedNodeOutputEndpoints"
-        :state-contract="stateContract"
-        :workflow-name="workflow?.name ?? ''"
-        @remove-edge="removeEdge"
-        @remove-node="removeNode"
-        @select-edge-source-endpoint="selectEdgeSourceEndpoint"
-        @select-edge-target-endpoint="selectEdgeTargetEndpoint"
-        @select-edge-type="selectEdgeType"
-        @toggle="rightCollapsed = !rightCollapsed"
-        @update-agent="selectAgent"
-        @update-condition-router="selectConditionRouter"
-        @update-node-id="updateNodeId"
-        @update-branch-key="updateBranchKey"
-        @update-defer="selectDefer"
-      />
+      <aside
+        class="workflow-tool-dock workflow-tool-dock--right"
+        :data-panel-open="Boolean(rightPanel)"
+      >
+        <WorkflowInspector
+          v-if="rightPanel === 'inspector'"
+          :edge="selectedEdge"
+          :edge-source-endpoints="selectedEdgeSourceEndpoints"
+          :edge-target-endpoints="selectedEdgeTargetEndpoints"
+          :edge-type-options="selectedEdgeTypeOptions"
+          :input-endpoints="selectedNodeInputEndpoints"
+          :main-agents="mainAgents"
+          :condition-routers="conditionRouters"
+          :node="selectedNode"
+          :node-ids="nodes.map((node) => node.id)"
+          :output-endpoints="selectedNodeOutputEndpoints"
+          :state-contract="stateContract"
+          :workflow-name="workflow?.name ?? ''"
+          @remove-edge="removeEdge"
+          @remove-node="removeNode"
+          @select-edge-source-endpoint="selectEdgeSourceEndpoint"
+          @select-edge-target-endpoint="selectEdgeTargetEndpoint"
+          @select-edge-type="selectEdgeType"
+          @update-agent="selectAgent"
+          @update-condition-router="selectConditionRouter"
+          @update-node-id="updateNodeId"
+          @update-branch-key="updateBranchKey"
+          @update-defer="selectDefer"
+        />
+        <nav class="workflow-tool-rail" :aria-label="t('workflows.editor.rightTools')">
+          <button
+            class="workflow-tool-button"
+            :aria-label="t('workflows.editor.showInspector')"
+            :aria-pressed="rightPanel === 'inspector'"
+            :data-active="rightPanel === 'inspector'"
+            :title="t('workflows.editor.showInspector')"
+            type="button"
+            @click="toggleRightPanel('inspector')"
+          >
+            <i class="bi bi-sliders" aria-hidden="true" />
+          </button>
+        </nav>
+      </aside>
     </div>
   </div>
 </template>
