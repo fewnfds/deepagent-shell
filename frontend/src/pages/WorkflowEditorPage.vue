@@ -8,7 +8,7 @@ import {
   type ViewportTransform,
   type XYPosition,
 } from '@vue-flow/core'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeMount, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -51,7 +51,7 @@ import {
   type WorkflowCanvasProblem,
 } from '@/domain/workflowCanvasProblems'
 
-type WorkflowLeftPanel = 'library' | 'tracker'
+type WorkflowLeftPanel = 'library' | 'tracker' | 'problems'
 type WorkflowRightPanel = 'inspector'
 
 const { t } = useI18n()
@@ -70,7 +70,6 @@ const stateContract = ref('agent-shell.workflow.agent-invocations.v1')
 const savedViewport = ref<ViewportTransform>({ x: 0, y: 0, zoom: 1 })
 const leftPanel = ref<WorkflowLeftPanel | null>('library')
 const rightPanel = ref<WorkflowRightPanel | null>('inspector')
-const problemsExpanded = ref(false)
 const serverProblems = ref<WorkflowCanvasProblem[]>([])
 const loaded = ref(false)
 const saving = ref(false)
@@ -152,10 +151,6 @@ const selectedEdgeTypeOptions = computed(() => workflowCanvasEdgeTypesBetween(
 
 watch(graphRevision, (current, previous) => {
   if (previous !== undefined && current !== previous) serverProblems.value = []
-})
-
-watch(() => problems.value.length, (count, previous) => {
-  if (count > 0 && count > previous) problemsExpanded.value = true
 })
 
 function nodeEndpoints(
@@ -488,7 +483,6 @@ async function save(): Promise<void> {
     const presentation = managementError.describe(error)
     if (error instanceof ManagementApiError && error.validation) {
       serverProblems.value = workflowServerProblems(error.validation.issues)
-      problemsExpanded.value = true
     }
     notify({
       tone: 'danger',
@@ -501,6 +495,10 @@ async function save(): Promise<void> {
     saving.value = false
   }
 }
+
+onBeforeMount(() => {
+  document.documentElement.classList.add('workflow-editor-active')
+})
 
 onMounted(async () => {
   try {
@@ -526,6 +524,10 @@ onMounted(async () => {
   } catch (error) {
     loadError.value = managementError.describe(error).display
   }
+})
+
+onUnmounted(() => {
+  document.documentElement.classList.remove('workflow-editor-active')
 })
 </script>
 
@@ -569,6 +571,22 @@ onMounted(async () => {
           >
             <i class="bi bi-list" aria-hidden="true" />
           </button>
+          <button
+            class="workflow-tool-button"
+            :aria-label="t('workflows.editor.showProblems', { count: problems.length })"
+            :aria-pressed="leftPanel === 'problems'"
+            :data-active="leftPanel === 'problems'"
+            :title="t('workflows.editor.showProblems', { count: problems.length })"
+            type="button"
+            @click="toggleLeftPanel('problems')"
+          >
+            <i class="bi bi-exclamation-triangle" aria-hidden="true" />
+            <span
+              v-if="problems.length > 0"
+              class="workflow-tool-badge"
+              aria-hidden="true"
+            >{{ problems.length > 99 ? '99+' : problems.length }}</span>
+          </button>
         </nav>
         <WorkflowNodeLibrary
           v-if="leftPanel === 'library'"
@@ -583,6 +601,11 @@ onMounted(async () => {
           v-else-if="leftPanel === 'tracker'"
           :nodes="nodes"
           @locate-node="selectAndCenterNode"
+        />
+        <WorkflowProblemsPanel
+          v-else-if="leftPanel === 'problems'"
+          :problems="problems"
+          @select-problem="selectProblem"
         />
       </aside>
 
@@ -663,12 +686,6 @@ onMounted(async () => {
             </div>
           </template>
         </VueFlow>
-        <WorkflowProblemsPanel
-          :expanded="problemsExpanded"
-          :problems="problems"
-          @select-problem="selectProblem"
-          @toggle="problemsExpanded = !problemsExpanded"
-        />
       </main>
 
       <aside

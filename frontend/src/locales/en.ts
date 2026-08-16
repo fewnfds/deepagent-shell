@@ -63,6 +63,7 @@ export const en: MessageSchema = {
       rightTools: 'Workflow right tools',
       showNodeLibrary: 'Components',
       showNodeTracker: 'Node tracker',
+      showProblems: 'Problems ({count})',
       showInspector: 'Properties',
       workflowProperties: 'Workflow',
       removeAgent: 'Remove Agent node',

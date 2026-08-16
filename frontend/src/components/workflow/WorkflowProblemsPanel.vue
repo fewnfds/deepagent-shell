@@ -3,13 +3,11 @@ import { useValidationIssuePresentation } from '@/composables/useValidationIssue
 import type { WorkflowCanvasProblem } from '@/domain/workflowCanvasProblems'
 
 defineProps<{
-  expanded: boolean
   problems: WorkflowCanvasProblem[]
 }>()
 
 const emit = defineEmits<{
   selectProblem: [problem: WorkflowCanvasProblem]
-  toggle: []
 }>()
 
 const issuePresentation = useValidationIssuePresentation()
@@ -20,27 +18,14 @@ function problemKey(problem: WorkflowCanvasProblem, index: number): string {
 </script>
 
 <template>
-  <section class="workflow-problems" aria-live="polite">
-    <button
-      class="workflow-problems-toggle"
-      :aria-expanded="expanded"
-      type="button"
-      @click="emit('toggle')"
-    >
-      <i
-        v-if="problems.length > 0"
-        class="bi bi-exclamation-triangle text-danger"
-        aria-hidden="true"
-      />
-      <i v-else class="bi bi-check-circle text-success" aria-hidden="true" />
-      <span class="workflow-problems-title">{{ $t('workflows.editor.canvasProblems.title') }}</span>
-      <span v-if="problems.length > 0" class="badge text-bg-danger">{{ problems.length }}</span>
-      <span v-else class="badge text-bg-secondary">0</span>
-      <i v-if="expanded" class="bi bi-arrow-down" aria-hidden="true" />
-      <i v-else class="bi bi-arrow-up" aria-hidden="true" />
-    </button>
+  <section class="workflow-tool-panel" aria-labelledby="workflow-problems-title">
+    <header class="workflow-tool-panel-header">
+      <h2 id="workflow-problems-title" class="workflow-tool-panel-title">
+        {{ $t('workflows.editor.canvasProblems.title') }}
+      </h2>
+    </header>
 
-    <div v-if="expanded" class="workflow-problems-body">
+    <div class="workflow-tool-panel-body" aria-live="polite">
       <p v-if="problems.length === 0" class="workflow-problems-empty">
         {{ $t('workflows.editor.canvasProblems.none') }}
       </p>

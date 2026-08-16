@@ -301,13 +301,13 @@
           "workflow-node-title", "workflow-node-tracker-copy", "workflow-node-tracker-icon",
           "workflow-node-tracker-item", "workflow-node-tracker-list", "workflow-node-tracker-meta",
           "workflow-node-tracker-title", "workflow-port", "workflow-port--normal", "workflow-port--branch",
-          "workflow-edge--branch", "workflow-problems", "workflow-problems-body", "workflow-problems-empty",
+          "workflow-edge--branch", "workflow-problems-empty",
           "workflow-problems-item", "workflow-problems-list", "workflow-problems-message",
-          "workflow-problems-owner", "workflow-problems-title", "workflow-problems-toggle",
+          "workflow-problems-owner",
           "workflow-tool-button", "workflow-tool-dock", "workflow-tool-dock--left",
           "workflow-tool-dock--right", "workflow-tool-panel", "workflow-tool-panel-body",
           "workflow-tool-panel-header", "workflow-tool-panel-section-title", "workflow-tool-panel-title",
-          "workflow-tool-rail", "form-check", "form-check-input", "form-check-label", "form-control-sm",
+          "workflow-tool-badge", "workflow-tool-rail", "form-check", "form-check-input", "form-check-label", "form-control-sm",
           "form-select", "form-switch"
         ]
       },

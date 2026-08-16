@@ -309,7 +309,7 @@ describe('Workflow canvas panels', () => {
     expect(problems.map((problem) => problem.owner_id)).toEqual([agent.id, branch.id])
 
     const wrapper = mount(WorkflowProblemsPanel, {
-      props: { expanded: true, problems },
+      props: { problems },
       global: { plugins: [i18n()] },
     })
     expect(wrapper.findAll('.workflow-problems-item')).toHaveLength(2)

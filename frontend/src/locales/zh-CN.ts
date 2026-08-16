@@ -61,6 +61,7 @@ export const zhCN = {
       rightTools: 'Workflow 右侧工具',
       showNodeLibrary: '组件库',
       showNodeTracker: '元素追踪',
+      showProblems: '问题（{count}）',
       showInspector: '属性',
       workflowProperties: 'Workflow',
       removeAgent: '删除 Agent 节点',

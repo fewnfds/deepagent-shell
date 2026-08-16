@@ -233,8 +233,11 @@ describe('WorkflowEditorPage', () => {
 
     expect(leftDock.find('.workflow-tool-rail').exists()).toBe(true)
     expect(rightDock.find('.workflow-tool-rail').exists()).toBe(true)
+    expect(leftDock.findAll('.workflow-tool-button')).toHaveLength(3)
+    expect(leftDock.find('.workflow-tool-badge').exists()).toBe(false)
     expect(leftDock.find('.workflow-node-library-list').exists()).toBe(true)
     expect(rightDock.find('.workflow-inspector-row').exists()).toBe(true)
+    expect(document.documentElement.classList.contains('workflow-editor-active')).toBe(true)
 
     await leftDock.findAll('.workflow-tool-button')[1]!.trigger('click')
     expect(leftDock.find('.workflow-node-tracker-list').exists()).toBe(true)
@@ -244,6 +247,7 @@ describe('WorkflowEditorPage', () => {
     expect(rightDock.find('.workflow-tool-panel').exists()).toBe(false)
     expect(rightDock.find('.workflow-tool-rail').exists()).toBe(true)
     wrapper.unmount()
+    expect(document.documentElement.classList.contains('workflow-editor-active')).toBe(false)
   })
 
   it('centers a tracked node and pane click closes a cleared Inspector', async () => {
@@ -283,14 +287,19 @@ describe('WorkflowEditorPage', () => {
 
     expect(wrapper.get('.workflow-editor-toolbar button:last-child').attributes('disabled'))
       .toBeDefined()
-    expect(wrapper.findAll('.workflow-problems-item')).toHaveLength(1)
+    const leftDock = wrapper.get('.workflow-tool-dock--left')
+    expect(leftDock.get('.workflow-tool-badge').text()).toBe('1')
+    expect(wrapper.find('.workflow-editor-canvas .workflow-problems-list').exists()).toBe(false)
 
-    await wrapper.get('.workflow-problems-item').trigger('click')
+    await leftDock.findAll('.workflow-tool-button')[2]!.trigger('click')
+    expect(leftDock.findAll('.workflow-problems-item')).toHaveLength(1)
+
+    await leftDock.get('.workflow-problems-item').trigger('click')
 
     const rightDock = wrapper.get('.workflow-tool-dock--right')
     expect(rightDock.text()).toContain('Branch Edge')
     expect(rightDock.find('#workflow-edge-branch-key').exists()).toBe(true)
-    expect(wrapper.get('.workflow-problems-item').text()).toContain('Enter a branch key.')
+    expect(leftDock.get('.workflow-problems-item').text()).toContain('Enter a branch key.')
     wrapper.unmount()
   })
 })
