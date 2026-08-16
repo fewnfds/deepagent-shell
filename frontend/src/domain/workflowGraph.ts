@@ -20,6 +20,7 @@ export interface WorkflowCanvasNodeData {
   nodeType: WorkflowNodeType
   mainAgentId: string
   conditionRouterId?: string
+  taskDispatcherId?: string
   defer?: boolean
 }
 
@@ -28,6 +29,7 @@ export type WorkflowCanvasNode = Node<WorkflowCanvasNodeData>
 export interface WorkflowCanvasEdgeData {
   edgeType: string
   branchKey?: string
+  dispatchKey?: string
 }
 
 export type WorkflowCanvasEdge = Edge<WorkflowCanvasEdgeData>
@@ -35,8 +37,9 @@ export type WorkflowCanvasEdge = Edge<WorkflowCanvasEdgeData>
 export const WORKFLOW_NODE_DRAG_MIME = 'application/x-agent-shell-workflow-node'
 export const WORKFLOW_NORMAL_EDGE_MARKER = MarkerType.ArrowClosed
 export const WORKFLOW_BRANCH_EDGE_MARKER = MarkerType.ArrowClosed
+export const WORKFLOW_DISPATCH_EDGE_MARKER = MarkerType.ArrowClosed
 
-export const WORKFLOW_CANVAS_EDGE_TYPES = ['normal', 'branch'] as const
+export const WORKFLOW_CANVAS_EDGE_TYPES = ['normal', 'branch', 'dispatch'] as const
 export type WorkflowCanvasEdgeType = (typeof WORKFLOW_CANVAS_EDGE_TYPES)[number]
 export type WorkflowEndpointDirection = 'input' | 'output'
 
@@ -50,6 +53,7 @@ const defaultPositions = {
   start: { x: 80, y: 180 },
   agent: { x: 360, y: 180 },
   'condition-router': { x: 620, y: 180 },
+  'task-dispatcher': { x: 620, y: 340 },
   end: { x: 900, y: 180 },
 } satisfies Record<WorkflowNodeType, { x: number; y: number }>
 
@@ -58,11 +62,12 @@ function canvasNode(node: WorkflowGraphNode, document: WorkflowGraphDocument): W
     id: node.id,
     type: node.type,
     position: document.layout.nodes[node.id] ?? defaultPositions[node.type],
-    deletable: node.type === 'agent' || node.type === 'condition-router',
+    deletable: ['agent', 'condition-router', 'task-dispatcher'].includes(node.type),
     data: {
       nodeType: node.type,
       mainAgentId: node.config.main_agent_id ?? '',
       conditionRouterId: node.config.condition_router_id ?? '',
+      taskDispatcherId: node.config.task_dispatcher_id ?? '',
       defer: node.config.defer ?? false,
     },
   }
@@ -133,14 +138,13 @@ export function workflowDocumentToCanvas(
         target: edge.target,
         targetHandle: edge.target_handle,
         type: 'default',
-        markerEnd: edgeType === 'branch'
-          ? WORKFLOW_BRANCH_EDGE_MARKER
-          : WORKFLOW_NORMAL_EDGE_MARKER,
-        animated: edgeType === 'branch',
-        class: edgeType === 'branch' ? 'workflow-edge--branch' : undefined,
+        markerEnd: workflowCanvasEdgeMarker(edgeType),
+        animated: workflowCanvasEdgeAnimated(edgeType),
+        class: workflowCanvasEdgeClass(edgeType),
         data: {
           edgeType,
           branchKey: edge.branch_key ?? undefined,
+          dispatchKey: edge.dispatch_key ?? undefined,
         },
       }
     }),
@@ -165,6 +169,8 @@ export function workflowCanvasToDocument(
             }
           : node.data.nodeType === 'condition-router'
             ? { condition_router_id: node.data.conditionRouterId }
+          : node.data.nodeType === 'task-dispatcher'
+            ? { task_dispatcher_id: node.data.taskDispatcherId }
           : {}
         return {
           id: node.id,
@@ -181,6 +187,9 @@ export function workflowCanvasToDocument(
         target_handle: edge.targetHandle ?? '',
         ...(edge.data.edgeType === 'branch' && edge.data.branchKey
           ? { branch_key: edge.data.branchKey }
+          : {}),
+        ...(edge.data.edgeType === 'dispatch' && edge.data.dispatchKey
+          ? { dispatch_key: edge.data.dispatchKey }
           : {}),
       })),
     },
@@ -203,7 +212,13 @@ export function newAgentCanvasNode(
     type: 'agent',
     position: { ...position },
     deletable: true,
-    data: { nodeType: 'agent', mainAgentId, conditionRouterId: '', defer: false },
+    data: {
+      nodeType: 'agent',
+      mainAgentId,
+      conditionRouterId: '',
+      taskDispatcherId: '',
+      defer: false,
+    },
   }
 }
 
@@ -219,6 +234,36 @@ export function newConditionRouterCanvasNode(
     deletable: true,
     data: { nodeType: 'condition-router', mainAgentId: '', conditionRouterId },
   }
+}
+
+export function newTaskDispatcherCanvasNode(
+  id: string,
+  taskDispatcherId: string,
+  position: XYPosition = defaultPositions['task-dispatcher'],
+): WorkflowCanvasNode {
+  return {
+    id,
+    type: 'task-dispatcher',
+    position: { ...position },
+    deletable: true,
+    data: { nodeType: 'task-dispatcher', mainAgentId: '', taskDispatcherId },
+  }
+}
+
+export function workflowCanvasEdgeMarker(edgeType: string): MarkerType {
+  if (edgeType === 'branch') return WORKFLOW_BRANCH_EDGE_MARKER
+  if (edgeType === 'dispatch') return WORKFLOW_DISPATCH_EDGE_MARKER
+  return WORKFLOW_NORMAL_EDGE_MARKER
+}
+
+export function workflowCanvasEdgeAnimated(edgeType: string): boolean {
+  return edgeType === 'branch' || edgeType === 'dispatch'
+}
+
+export function workflowCanvasEdgeClass(edgeType: string): string | undefined {
+  if (edgeType === 'branch') return 'workflow-edge--branch'
+  if (edgeType === 'dispatch') return 'workflow-edge--dispatch'
+  return undefined
 }
 
 export function nextWorkflowCanvasEdgeId(edges: WorkflowCanvasEdge[]): string {
@@ -263,7 +308,7 @@ export function workflowConnectionEdgeType(
     && edge.target === connection.target
     && edge.targetHandle === connection.targetHandle
   ))
-  if (duplicate && sourceHandle.edge_type !== 'branch') return null
+  if (duplicate && !['branch', 'dispatch'].includes(sourceHandle.edge_type)) return null
   return sourceHandle.edge_type
 }
 

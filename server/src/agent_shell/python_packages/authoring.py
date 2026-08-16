@@ -48,6 +48,14 @@ PACKAGE_COMPONENT_SPECS: dict[str, PackageAdapterSpec] = {
         factory_name="create_router",
         factory_parameters=(),
     ),
+    "task-dispatcher": PackageAdapterSpec(
+        template_parts=("workflow", "task_dispatcher"),
+        example_parts=("workflow-components", "task-dispatcher"),
+        family="workflow-node",
+        adapter="task-dispatcher",
+        factory_name="create_dispatcher",
+        factory_parameters=(),
+    ),
     "custom-middleware": PackageAdapterSpec(
         template_parts=("agent", "custom_middleware"),
         example_parts=("agent-components", "custom-middleware"),

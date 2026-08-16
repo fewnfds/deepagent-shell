@@ -189,6 +189,7 @@ def test_workflow_graph_catalog_save_and_reload(
                         "target": "agent",
                         "target_handle": "in",
                         "branch_key": None,
+                        "dispatch_key": None,
                     },
                     {
                         "id": "agent-end",
@@ -197,6 +198,7 @@ def test_workflow_graph_catalog_save_and_reload(
                         "target": "end",
                         "target_handle": "in",
                         "branch_key": None,
+                        "dispatch_key": None,
                     },
                 ],
             },
@@ -224,7 +226,7 @@ def test_workflow_graph_catalog_save_and_reload(
     assert empty.status_code == 200
     assert empty.json()["definition"]["nodes"] == []
     assert [item["type"] for item in catalog.json()] == [
-        "start", "agent", "condition-router", "end"
+        "start", "agent", "condition-router", "task-dispatcher", "end"
     ]
     assert saved.status_code == 200, saved.text
     assert saved.json() == document

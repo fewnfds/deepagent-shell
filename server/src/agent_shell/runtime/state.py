@@ -20,6 +20,14 @@ def merge_shared_vars(
     return {**(current or {}), **(update or {})}
 
 
+class WorkflowTaskContext(TypedDict):
+    dispatcher_node_id: str
+    dispatcher_invocation_id: str
+    task_id: str
+    dispatch_key: str
+    payload: dict[str, JsonValue]
+
+
 class AgentInvocationRecord(TypedDict):
     invocation_id: str
     workflow_id: str
@@ -27,6 +35,7 @@ class AgentInvocationRecord(TypedDict):
     agent_id: str
     invoked_at: float
     messages: list[AnyMessage]
+    workflow_task: NotRequired[WorkflowTaskContext]
 
 
 def merge_agent_invocations(
@@ -51,10 +60,17 @@ class WorkflowState(TypedDict):
     files: FilesystemState.__annotations__["files"]
 
 
+class WorkflowNodeInputState(WorkflowState):
+    """Workflow node input plus an optional private Send payload."""
+
+    workflow_task: NotRequired[WorkflowTaskContext]
+
+
 class AgentShellState(DeepAgentState, FilesystemState):
     """Private Agent state plus Shell-owned variables mapped by its wrapper."""
 
     shared_vars: NotRequired[Annotated[dict[str, JsonValue], merge_shared_vars]]
+    workflow_task: NotRequired[WorkflowTaskContext]
 
 
 class AgentShellStateMiddleware(AgentMiddleware[AgentShellState]):
@@ -68,6 +84,8 @@ __all__ = [
     "AgentShellState",
     "AgentShellStateMiddleware",
     "WorkflowState",
+    "WorkflowNodeInputState",
+    "WorkflowTaskContext",
     "merge_agent_invocations",
     "merge_shared_vars",
 ]

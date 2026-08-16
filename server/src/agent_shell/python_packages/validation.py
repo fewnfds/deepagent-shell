@@ -6,6 +6,7 @@ from typing import Any
 
 from agent_shell.condition_router_packages import resolve_condition_router_package
 from agent_shell.middleware_packages.packages import resolve_middleware_package
+from agent_shell.task_dispatcher_packages import resolve_task_dispatcher_package
 from agent_shell.registries.errors import ResourceScanError
 from agent_shell.validation.models import ValidationIssue
 
@@ -54,6 +55,28 @@ class PythonPackageValidationService:
         return self._reference_issues(
             reference,
             resolver=resolve_condition_router_package,
+            scope=scope,
+            owner_id=owner_id,
+            package_owner_id=package_owner_id,
+            owner_name=owner_name,
+            path_prefix=path_prefix,
+            check_dependencies=check_dependencies,
+        )
+
+    def task_dispatcher_issues(
+        self,
+        reference: dict[str, Any],
+        *,
+        scope: str,
+        owner_id: str,
+        package_owner_id: str,
+        owner_name: str,
+        path_prefix: str,
+        check_dependencies: bool = True,
+    ) -> list[ValidationIssue]:
+        return self._reference_issues(
+            reference,
+            resolver=resolve_task_dispatcher_package,
             scope=scope,
             owner_id=owner_id,
             package_owner_id=package_owner_id,

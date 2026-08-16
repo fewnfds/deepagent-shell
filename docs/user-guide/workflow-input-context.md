@@ -43,11 +43,27 @@ WIC 可以在官方 Middleware hook 中组合以下数据：
 - 父 Workflow：`runtime.context.workflow_state`，包括前序 Agent 完成后写入的
   `agent_invocations[invocation_id]`；
 - 当前身份：`runtime.context.workflow_node_id`、`agent_id` 与 `invocation_id`；
+- 当前动态任务：Task Dispatcher worker 调用中的 `runtime.context.workflow_task`；普通 Agent 调用为空；
 - 共享文件：工厂收到的 Workflow filesystem `backend`，只读取虚拟绝对路径；
 - 当前 Agent State：hook 的 `state` 参数，以及其他 Middleware 声明的 State channel。
 
 `runtime.context.messages` 始终只读。WIC 应复制需要的消息并通过返回值更新 State；消息 channel 使用
 `Overwrite(convert_to_messages(...))`，避免与空初始值或其他 reducer 输入意外追加。
+
+## Task Dispatcher worker
+
+WIC 是任务材料的消费者，不是调度器。Task Dispatcher 先根据 Workflow State 生成任务，Shell 再通过 LangGraph `Send`
+把每项任务作为私有 `workflow_task` 注入目标 Agent wrapper。worker 的 WIC 可以读取：
+
+```python
+task = runtime.context.workflow_task
+task_id = task.get("task_id")
+payload = task.get("payload", {})
+```
+
+同一份任务也存在当前 Agent 私有 State 的 `state["workflow_task"]`，但不写入 Workflow root State。任务完成后，父 State
+的 `agent_invocations` 记录会携带 task identity，供下游汇总 Agent 的 WIC 选择。不要在 WIC 中扫描共享列表并用
+`counting` 字段抢占任务；同一 super-step 的并行 worker 读取各自的 State 快照，不构成实时租约系统。
 
 ## 从内置示例创建
 

@@ -28,11 +28,12 @@ Content-Type: application/json
 构造该 Main Agent 的 Subagent、权限、Middleware、组件和 Provider secret view。构造完成后关闭请求配置快照，
 运行中的图不再回读配置。
 
-当前可执行 Node class 为 Start、Agent、条件路由和 End，Edge class 为 normal 与 branch；一张图可以包含多个 Agent node，并可串联、
+当前可执行 Node class 为 Start、Agent、条件路由、任务分发和 End，Edge class 为 normal、branch 与 dispatch；一张图可以包含多个 Agent node，并可串联、
 fan-out、fan-in 或形成 LangGraph 支持的循环。画布 Start/End 直接映射 LangGraph 官方 `START/END`，normal edge 映射
 `StateGraph.add_edge()`；条件路由脚本读取完整 Workflow State 和 Runtime Context，返回 State partial update 与一个或多个
 分支 key；候选 key 直接由画布具名 Branch Edge 声明，并必须包含显式 `otherwise`，runtime 将其映射为
-`Command(update=..., goto=[...])`。Start 不注入客户端消息。规范化后的 `messages[]` 保存在请求级不可变 Middleware context 中，只有已
+`Command(update=..., goto=[...])`。任务分发脚本从 State/Context 生成具名 JSON 任务，runtime 将每项映射为 LangGraph
+`Send`，并把 `workflow_task` 同时放入目标 Agent 的私有 State 与 Runtime Context。Start 不注入客户端消息。规范化后的 `messages[]` 保存在请求级不可变 Middleware context 中，只有已
 装配的 `before_agent`/`abefore_agent` Middleware 决定如何切割并写入 Agent state。
 
 `stream=false` 返回标准 `chat.completion` JSON。`stream=true` 返回 `chat.completion.chunk` SSE，并以
@@ -44,7 +45,7 @@ fan-out、fan-in 或形成 LangGraph 支持的循环。画布 Start/End 直接�
 
 - Workflow 只有一份当前图，没有 draft/published revision、发布审核或历史回滚；
 - 每次请求是一次新的完整运行，并建立独立 Debug thread；外层 Workflow 使用官方持久 checkpointer，但不提供 resume；
-- 当前不支持通用 conditional edge、动态 worker、Interrupt 或 Subworkflow；条件路由是唯一可编程路由 Node，多个 normal 出边和一次激活的多个 branch 目标会按 LangGraph super-step 语义并行执行；
+- 当前不支持通用 conditional edge、Interrupt、Subworkflow 或跨进程任务队列；Task Dispatcher 已支持请求内动态 worker，多个 normal 出边、一次激活的多个 branch 目标和多个 Send task 按 LangGraph super-step 语义执行；
 - 图不完整、引用失效、Agent 装配失败或 Provider 失败时，本次请求直接返回错误；
 - Workflow Debug 管理 API 提供有界运行索引、结构运行树和 checkpoint 摘要；日志中心展示系统事件、请求级
   错误诊断，并在 DEBUG 开启期间保存正常完成记录、完成元数据文件和完整异常文件。当前不提供 Resume 或旧 Main Agent

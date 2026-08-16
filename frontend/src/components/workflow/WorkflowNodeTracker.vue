@@ -16,6 +16,8 @@ const { t } = useI18n()
 function nodeTypeLabel(node: WorkflowCanvasNode): string {
   const messageKey = node.data.nodeType === 'condition-router'
     ? 'conditionRouter'
+    : node.data.nodeType === 'task-dispatcher'
+      ? 'taskDispatcher'
     : node.data.nodeType
   return t(`workflows.editor.${messageKey}`)
 }
@@ -43,6 +45,7 @@ function nodeTypeLabel(node: WorkflowCanvasNode): string {
             <i v-if="node.data.nodeType === 'start'" class="bi bi-play-fill" />
             <i v-else-if="node.data.nodeType === 'agent'" class="bi bi-robot" />
             <i v-else-if="node.data.nodeType === 'condition-router'" class="bi bi-circle-half" />
+            <i v-else-if="node.data.nodeType === 'task-dispatcher'" class="bi bi-boxes" />
             <i v-else class="bi bi-stop-fill" />
           </span>
           <span class="workflow-node-tracker-copy">

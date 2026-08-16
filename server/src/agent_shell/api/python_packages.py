@@ -18,4 +18,8 @@ def build_python_package_router(
     async def condition_router_templates() -> dict[str, object]:
         return authoring.template_catalog("condition-router")
 
+    @router.get("/api/python-package-templates/task-dispatcher")
+    async def task_dispatcher_templates() -> dict[str, object]:
+        return authoring.template_catalog("task-dispatcher")
+
     return router

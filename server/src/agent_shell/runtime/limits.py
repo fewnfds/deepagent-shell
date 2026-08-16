@@ -11,6 +11,7 @@ from agent_shell.runtime.errors import AgentRuntimeError
 
 
 GRAPH_RECURSION_LIMIT = 100
+WORKFLOW_MAX_CONCURRENCY = 16
 
 
 class ToolErrorBoundaryMiddleware(AgentMiddleware):

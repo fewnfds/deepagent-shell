@@ -79,6 +79,21 @@ class WorkflowStore:
                     return self._public(item)
         return None
 
+    def get_item_by_task_dispatcher(self, component_id: str) -> dict | None:
+        for item in self._repository.config().get("workflows", []):
+            definition = item.get("definition")
+            nodes = definition.get("nodes", []) if isinstance(definition, dict) else []
+            for node in nodes if isinstance(nodes, list) else []:
+                if not isinstance(node, dict) or node.get("type") != "task-dispatcher":
+                    continue
+                node_config = node.get("config")
+                if (
+                    isinstance(node_config, dict)
+                    and node_config.get("task_dispatcher_id") == component_id
+                ):
+                    return self._public(item)
+        return None
+
     def save_item(self, item_id: str, data: dict) -> None:
         existing = self.get_item(item_id)
         empty_definition = WorkflowGraphDefinitionV1().model_dump(mode="json")

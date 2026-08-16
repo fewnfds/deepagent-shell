@@ -7,6 +7,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 from agent_shell.condition_router import BranchKey
+from agent_shell.task_dispatcher import DispatchKey
 
 
 WORKFLOW_SCHEMA_VERSION = 1
@@ -47,6 +48,7 @@ class WorkflowEdgeV1(BaseModel):
     target: NodeId
     target_handle: HandleId
     branch_key: BranchKey | None = None
+    dispatch_key: DispatchKey | None = None
 
 
 class WorkflowGraphDefinitionV1(BaseModel):

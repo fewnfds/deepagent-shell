@@ -127,12 +127,22 @@ const nodeCatalog: WorkflowNodeCatalogItem[] = [
   {
     type: 'condition-router',
     type_version: 1,
-    runtime_kind: 'condition_router',
+    runtime_kind: 'command_router',
     title_key: '',
     description_key: '',
     config_schema: {},
     input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', max_connections: null }],
     output_handles: [{ id: 'branch', kind: 'control', edge_type: 'branch', max_connections: null }],
+  },
+  {
+    type: 'task-dispatcher',
+    type_version: 1,
+    runtime_kind: 'send_dispatcher',
+    title_key: '',
+    description_key: '',
+    config_schema: {},
+    input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', max_connections: null }],
+    output_handles: [{ id: 'dispatch', kind: 'control', edge_type: 'dispatch', max_connections: null }],
   },
   {
     type: 'end',

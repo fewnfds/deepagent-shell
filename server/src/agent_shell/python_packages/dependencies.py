@@ -344,6 +344,7 @@ def prepare_windows_dependencies(
 ) -> None:
     from agent_shell.condition_router_packages import resolve_condition_router_package
     from agent_shell.middleware_packages.packages import resolve_middleware_package
+    from agent_shell.task_dispatcher_packages import resolve_task_dispatcher_package
     from agent_shell.storage.file_config import FileConfigRepository
 
     manifest = _runtime_manifest(runtime_root)
@@ -357,6 +358,7 @@ def prepare_windows_dependencies(
 
     active_main_agent_ids: set[str] = set()
     active_condition_router_ids: set[str] = set()
+    active_task_dispatcher_ids: set[str] = set()
     for workflow in config.get("workflows", []):
         if not isinstance(workflow, dict) or workflow.get("enabled") is not True:
             continue
@@ -373,8 +375,13 @@ def prepare_windows_dependencies(
                 active_condition_router_ids.add(
                     str(node_config.get("condition_router_id", ""))
                 )
+            elif node.get("type") == "task-dispatcher":
+                active_task_dispatcher_ids.add(
+                    str(node_config.get("task_dispatcher_id", ""))
+                )
     active_main_agent_ids.discard("")
     active_condition_router_ids.discard("")
+    active_task_dispatcher_ids.discard("")
 
     main_agents = {
         str(item.get("id", "")): item
@@ -390,6 +397,8 @@ def prepare_windows_dependencies(
     def referenced_ids(component_type: str) -> set[str]:
         if component_type == "condition-router":
             return set(active_condition_router_ids)
+        if component_type == "task-dispatcher":
+            return set(active_task_dispatcher_ids)
         found: set[str] = set()
         active_subagent_ids: set[str] = set()
         for main_agent_id in active_main_agent_ids:
@@ -438,6 +447,11 @@ def prepare_windows_dependencies(
             resolve_condition_router_package,
             "workflow-node",
             "condition-router",
+        ),
+        "task-dispatcher": (
+            resolve_task_dispatcher_package,
+            "workflow-node",
+            "task-dispatcher",
         ),
     }
     for component_type, (resolver, family, adapter) in resolver_specs.items():

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from agent_shell.condition_router import ConditionRouterCallable
+from agent_shell.task_dispatcher import TaskDispatcherCallable
 from agent_shell.validation import ValidationIssue
 from agent_shell.workflow.catalog import NodeHandleSpec, NodeTypeSpec, node_type_spec
 from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
@@ -69,6 +70,7 @@ def validate_workflow_topology(
     document: WorkflowGraphDocumentV1,
     *,
     condition_routers: Mapping[str, ConditionRouterCallable] | None = None,
+    task_dispatchers: Mapping[str, TaskDispatcherCallable] | None = None,
 ) -> tuple[ValidationIssue, ...]:
     nodes = document.definition.nodes
     edges = document.definition.edges
@@ -80,8 +82,12 @@ def validate_workflow_topology(
         specs[node.id] = spec
 
     issues: list[ValidationIssue] = []
-    connections: set[tuple[str, str, str, str, str | None]] = set()
+    connections: set[
+        tuple[str, str, str, str, str | None, str | None]
+    ] = set()
     routed_branches: dict[str, dict[str, int]] = {}
+    routed_dispatches: dict[str, dict[str, int]] = {}
+    incoming_edge_types: dict[str, set[str]] = {}
 
     for index, edge in enumerate(edges):
         source = node_by_id.get(edge.source)
@@ -170,6 +176,7 @@ def validate_workflow_topology(
             edge.target,
             edge.target_handle,
             edge.branch_key,
+            edge.dispatch_key,
         )
         if connection in connections:
             issues.append(
@@ -185,7 +192,23 @@ def validate_workflow_topology(
         else:
             connections.add(connection)
 
+        if source_handle is not None and target is not None:
+            incoming_edge_types.setdefault(target.id, set()).add(
+                source_handle.edge_type
+            )
+
         if source_handle is not None and source_handle.edge_type == "branch":
+            if edge.dispatch_key is not None:
+                issues.append(
+                    _edge_issue(
+                        edge.id,
+                        index,
+                        "workflow.dispatch_key_not_allowed",
+                        "dispatch_key",
+                        "A branch Workflow edge cannot declare a dispatch key.",
+                        "validation.issue.workflow.dispatchKeyNotAllowed",
+                    )
+                )
             if edge.branch_key is None:
                 issues.append(
                     _edge_issue(
@@ -213,17 +236,68 @@ def validate_workflow_topology(
                     )
                 else:
                     by_key[edge.branch_key] = index
-        elif source_handle is not None and edge.branch_key is not None:
-            issues.append(
-                _edge_issue(
-                    edge.id,
-                    index,
-                    "workflow.branch_key_not_allowed",
-                    "branch_key",
-                    "A normal Workflow edge cannot declare a branch key.",
-                    "validation.issue.workflow.branchKeyNotAllowed",
+        elif source_handle is not None and source_handle.edge_type == "dispatch":
+            if edge.branch_key is not None:
+                issues.append(
+                    _edge_issue(
+                        edge.id,
+                        index,
+                        "workflow.branch_key_not_allowed",
+                        "branch_key",
+                        "A dispatch Workflow edge cannot declare a branch key.",
+                        "validation.issue.workflow.branchKeyNotAllowed",
+                    )
                 )
-            )
+            if edge.dispatch_key is None:
+                issues.append(
+                    _edge_issue(
+                        edge.id,
+                        index,
+                        "workflow.dispatch_key_required",
+                        "dispatch_key",
+                        "A dispatch edge requires an explicit dispatch key.",
+                        "validation.issue.workflow.dispatchKeyRequired",
+                    )
+                )
+            else:
+                by_key = routed_dispatches.setdefault(edge.source, {})
+                if edge.dispatch_key in by_key:
+                    issues.append(
+                        _edge_issue(
+                            edge.id,
+                            index,
+                            "workflow.dispatch_key_duplicate",
+                            "dispatch_key",
+                            "A task dispatch key can connect to only one target.",
+                            "validation.issue.workflow.dispatchKeyDuplicate",
+                            message_args={"dispatch_key": edge.dispatch_key},
+                        )
+                    )
+                else:
+                    by_key[edge.dispatch_key] = index
+        elif source_handle is not None:
+            if edge.branch_key is not None:
+                issues.append(
+                    _edge_issue(
+                        edge.id,
+                        index,
+                        "workflow.branch_key_not_allowed",
+                        "branch_key",
+                        "A normal Workflow edge cannot declare a branch key.",
+                        "validation.issue.workflow.branchKeyNotAllowed",
+                    )
+                )
+            if edge.dispatch_key is not None:
+                issues.append(
+                    _edge_issue(
+                        edge.id,
+                        index,
+                        "workflow.dispatch_key_not_allowed",
+                        "dispatch_key",
+                        "A normal Workflow edge cannot declare a dispatch key.",
+                        "validation.issue.workflow.dispatchKeyNotAllowed",
+                    )
+                )
 
     if condition_routers is not None:
         node_indexes = {node.id: index for index, node in enumerate(nodes)}
@@ -258,7 +332,53 @@ def validate_workflow_topology(
                     )
                 )
 
+    if task_dispatchers is not None:
+        node_indexes = {node.id: index for index, node in enumerate(nodes)}
+        for node in nodes:
+            spec = specs[node.id]
+            if spec.runtime_kind != "send_dispatcher":
+                continue
+            dispatcher = task_dispatchers.get(node.id)
+            if dispatcher is None:
+                issues.append(
+                    _issue(
+                        "workflow.task_dispatcher_not_found",
+                        f"definition.nodes[{node_indexes[node.id]}].config.task_dispatcher_id",
+                        "The selected Task Dispatcher configuration does not exist.",
+                        "validation.issue.workflow.taskDispatcherNotFound",
+                        owner_id=node.id,
+                        owner_type=node.type,
+                    )
+                )
+                continue
+            if not routed_dispatches.get(node.id):
+                issues.append(
+                    _issue(
+                        "workflow.task_dispatcher_target_missing",
+                        f"definition.nodes[{node_indexes[node.id]}]",
+                        "A Task Dispatcher requires at least one dispatch edge.",
+                        "validation.issue.workflow.taskDispatcherTargetMissing",
+                        owner_id=node.id,
+                        owner_type=node.type,
+                    )
+                )
+
     node_indexes = {node.id: index for index, node in enumerate(nodes)}
+    for node_id, edge_types in incoming_edge_types.items():
+        if "dispatch" not in edge_types or len(edge_types) == 1:
+            continue
+        node = node_by_id[node_id]
+        issues.append(
+            _issue(
+                "workflow.task_worker_input_mixed",
+                f"definition.nodes[{node_indexes[node_id]}]",
+                "A task worker cannot mix dispatch and ordinary incoming edges.",
+                "validation.issue.workflow.taskWorkerInputMixed",
+                owner_id=node_id,
+                owner_type=node.type,
+            )
+        )
+
     start_ids = {node.id for node in nodes if node.type == "start"}
     end_ids = {node.id for node in nodes if node.type == "end"}
     agent_ids = {node.id for node in nodes if node.type == "agent"}

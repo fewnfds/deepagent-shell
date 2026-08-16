@@ -241,6 +241,20 @@ def build_router(
             message_args={"owner": owner["name"]},
         )
 
+    def reject_task_dispatcher_reference(block_type: str, block_id: str) -> None:
+        if block_type != "task-dispatcher":
+            return
+        owner = workflow_store.get_item_by_task_dispatcher(block_id)
+        if owner is None:
+            return
+        raise management_error(
+            409,
+            code="configuration_referenced",
+            message_key="errors.configurationReferencedByWorkflow",
+            message="The configuration is still referenced by a Workflow.",
+            message_args={"owner": owner["name"]},
+        )
+
     @router.get("/api/catalog")
     async def catalog() -> dict:
         return {
@@ -438,6 +452,7 @@ def build_router(
             reject_workflow_prepare_reference(block_type, block_id)
             reject_workflow_event_output_reference(block_type, block_id)
             reject_condition_router_reference(block_type, block_id)
+            reject_task_dispatcher_reference(block_type, block_id)
             manifest = CAPABILITY_BY_TYPE.get(block_type)
             if manifest is not None and manifest.required:
                 owner = main_agent_block_reference_owner(
@@ -722,6 +737,7 @@ def build_router(
         reject_workflow_prepare_reference(block_type, block_id)
         reject_workflow_event_output_reference(block_type, block_id)
         reject_condition_router_reference(block_type, block_id)
+        reject_task_dispatcher_reference(block_type, block_id)
         manifest = CAPABILITY_BY_TYPE.get(block_type)
         if manifest is not None and manifest.required:
             owner = main_agent_block_reference_owner(config_store, block_type, block_id)

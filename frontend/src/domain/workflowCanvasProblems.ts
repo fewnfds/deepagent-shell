@@ -55,6 +55,15 @@ export function workflowCanvasProblems(
         `definition.nodes[${index}].config.condition_router_id`,
       ))
     }
+    if (node.data.nodeType === 'task-dispatcher' && !node.data.taskDispatcherId) {
+      problems.push(canvasProblem(
+        'workflow.canvas.task_dispatcher_required',
+        'workflows.editor.canvasProblems.taskDispatcherRequired',
+        node.id,
+        node.data.nodeType,
+        `definition.nodes[${index}].config.task_dispatcher_id`,
+      ))
+    }
   })
 
   edges.forEach((edge, index) => {
@@ -65,6 +74,15 @@ export function workflowCanvasProblems(
         edge.id,
         'edge',
         `definition.edges[${index}].branch_key`,
+      ))
+    }
+    if (edge.data.edgeType === 'dispatch' && !edge.data.dispatchKey) {
+      problems.push(canvasProblem(
+        'workflow.canvas.dispatch_key_required',
+        'workflows.editor.canvasProblems.dispatchKeyRequired',
+        edge.id,
+        'edge',
+        `definition.edges[${index}].dispatch_key`,
       ))
     }
   })

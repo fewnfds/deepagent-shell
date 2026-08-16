@@ -8,21 +8,21 @@
 
 Workflow root 不声明 `messages`。每个画布 Agent 节点由 wrapper 以空的私有 `messages` 调用自己的 Agent graph，
 所以后继 Agent 不会自动继承前序对话。Agent 完成后，wrapper 把完整 reduced conversation 保存到父 State 的
-`agent_invocations[invocation_id]`。每条记录只有 `invocation_id`、`workflow_id`、`workflow_node_id`、`agent_id`、
-`invoked_at` 和 Agent graph 公开返回的标准 `messages`。Workflow Input Context 可以显式选择、校验和转换这些记录，
+`agent_invocations[invocation_id]`。每条记录包含 `invocation_id`、`workflow_id`、`workflow_node_id`、`agent_id`、
+`invoked_at` 和 Agent graph 公开返回的标准 `messages`；Task Dispatcher worker 额外包含 `workflow_task`。Workflow Input Context 可以显式选择、校验和转换这些记录，
 再构造当前 Agent 的初始消息。
 
 并行分支读取同一个 LangGraph super-step snapshot，以不同 invocation ID 返回的记录由 reducer 合并，不按开始时间、
 结束时间或 mapping 插入顺序解释先后。同一节点被再次调度时会产生独立 invocation ID，不覆盖先前执行。
 
 【编辑 Flow】进入独立全屏 Vue Flow 页面。左右各有一条始终保留的工具图标轨；点击 active 图标只收起功能 panel，图标轨
-不会消失。左侧提供组件库、元素追踪和问题：组件库提供 Agent 与条件路由，可以点击或拖到画布；元素追踪列出当前全部 Node，
+不会消失。左侧提供组件库、元素追踪和问题：组件库提供 Agent、条件路由与任务分发，可以点击或拖到画布；元素追踪列出当前全部 Node，
 点击条目会保持当前缩放、把 Node 平滑移到视口中心并打开右侧属性；存在问题时问题图标显示红色数量角标，点击后在左侧列出
 当前问题。右侧属性使用紧凑的 `key : value/control` 行，编辑所选 Node 或 Edge；空白点击会
 清除选择并收起属性，平移、缩放和拖动不会触发收起，重新打开空选择属性时显示 Workflow 名称和 State contract。
 
-选中连线后，可以选择两端共同支持的 Edge 类型、具体 source/target endpoint，也可以删除连线。Normal 与 Branch Edge 都
-使用 Bezier 曲线；Branch key 在 Edge 属性中填写并保存，不显示在线段上，Branch 仍以虚线、动画、箭头和端点名称区别。
+选中连线后，可以选择两端共同支持的 Edge 类型、具体 source/target endpoint，也可以删除连线。Normal、Branch 与 Dispatch Edge 都
+使用 Bezier 曲线；Branch/Dispatch key 在 Edge 属性中填写并保存，不显示在线段上，两种动态 Edge 仍以不同虚线、动画、箭头和端点名称区别。
 问题列表显示当前阻止保存的原因；点击问题可以选中对应 Node、Edge 或 Workflow，画布底部不承载问题 UI。一个 Graph 最多保存 100 个 nodes
 和 200 条 edges，同一个 Main Agent 可以被多个 Agent node 重复引用；normal 端点可以连接 `Start -> Agent`、
 `Agent -> Agent` 和 `Agent -> End`，并允许一个端点连接多个激活方向。保存直接覆盖当前图，重新打开时恢复节点、边、位置
@@ -36,6 +36,12 @@ Workflow root 不声明 `messages`。每个画布 Agent 节点由 wrapper 以空
 端点画到 normal 输入端点的线是一条具体连接，只表达后继节点的激活方向。Node 端点来自后端 Catalog 的 input/output
 arrays，保存时仍只记录 `source_handle`/`target_handle`。多条 normal 出边按 LangGraph 官方 Graph API 激活多个后继节点；
 父 Workflow State 是后端 contract，不作为画布变量节点或数据端口编辑。
+
+任务分发节点引用一份配置独占的 `workflow-node/task-dispatcher` Python 包。它从当前 Workflow State/Runtime Context
+生成运行时数量的任务，并由 compiler 转成 LangGraph `Send`；画布只保存一个 Dispatcher Node 和具名 Dispatch Edge，
+不会保存 `n+m` 个临时 worker Node。同一个 Agent Node 可被不同 payload 多次调用，或由不同 `dispatch_key` 路由到不同
+Agent Node。每次 worker 调用都在私有 Agent State 与 `runtime.context.workflow_task` 中得到同一任务，完成记录也保存该
+task identity。完整配置与城市/乡镇示例见[任务分发](../wizard-pages/task-dispatcher-config.md)。
 
 ## Main Agent 与直接 Subagent
 
@@ -73,6 +79,9 @@ Workflow Input Context 通过普通 Custom Middleware 的 `abefore_agent` 构造
 装配槽位；从 `内置示例-workflow-input-context` 创建配置后，由 Main Agent 或 Subagent 的有序 `middleware_refs` 选择并排序。
 Main Agent 可以读取不可变的请求快照，Subagent 默认使用 delegated messages；前序 Agent 输出和 Workflow 文件都必须由当前
 WIC 代码显式选择。完整约定见[Workflow Input Context](workflow-input-context.md)。
+
+WIC 可以读取 `runtime.context.workflow_task`，把当前任务材料编排进 worker 的私有 `messages`；它不负责认领任务、写入
+`counting` 锁或调度其他 Agent。动态任务集合由 Task Dispatcher 在一个确定的 LangGraph Node invocation 中生成。
 
 ### 准备
 

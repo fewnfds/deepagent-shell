@@ -33,6 +33,7 @@ import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
 import {
   blockAdapters,
   type ConditionRouterCatalogItem,
+  type TaskDispatcherCatalogItem,
   type BlockDraftBase,
   type CustomMiddlewareCatalogItem,
   type CustomToolCatalogItem,
@@ -58,6 +59,7 @@ import {
   WorkflowPrepareEditor,
   WorkflowEventOutputEditor,
   ConditionRouterEditor,
+  TaskDispatcherEditor,
 } from '@/editors'
 
 interface PageBlockAdapter {
@@ -89,6 +91,7 @@ const editorComponents: Record<ManagedComponentType, Component> = {
   'workflow-prepare': WorkflowPrepareEditor,
   'workflow-event-output': WorkflowEventOutputEditor,
   'condition-router': ConditionRouterEditor,
+  'task-dispatcher': TaskDispatcherEditor,
 }
 
 const { t } = useI18n()
@@ -136,6 +139,8 @@ const customMiddlewares = ref<CustomMiddlewareCatalogItem[]>([])
 const customMiddlewareErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const conditionRouterPackages = ref<ConditionRouterCatalogItem[]>([])
 const conditionRouterPackageErrors = ref<Record<string, LocalizedMessagePayload>>({})
+const taskDispatcherPackages = ref<TaskDispatcherCatalogItem[]>([])
+const taskDispatcherPackageErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const skills = ref<SkillCatalogItem[]>([])
 const filesystems = ref<FilesystemImportSource[]>([])
 const skillErrors = ref<Record<string, LocalizedMessagePayload>>({})
@@ -191,6 +196,13 @@ const editorProps = computed<Record<string, unknown>>(() => {
         errors: conditionRouterPackageErrors.value,
         loading: loadingResource.value,
       }
+    case 'task-dispatcher':
+      return {
+        defaults: activeDefaults.value,
+        catalog: taskDispatcherPackages.value,
+        errors: taskDispatcherPackageErrors.value,
+        loading: loadingResource.value,
+      }
     case 'skill':
       return {
         defaults: activeDefaults.value,
@@ -236,7 +248,11 @@ function payloadFromDraft(type: ManagedComponentType, value: BlockDraftBase): Bl
 }
 
 function usesPythonExtension(type: ManagedComponentType): boolean {
-  return type === 'custom-middleware' || type === 'condition-router'
+  return (
+    type === 'custom-middleware'
+    || type === 'condition-router'
+    || type === 'task-dispatcher'
+  )
 }
 
 function validationPayloadFromDraft(
@@ -377,6 +393,7 @@ async function loadRoute(): Promise<void> {
     if (!id && (
       manifest.type === 'custom-middleware'
       || manifest.type === 'condition-router'
+      || manifest.type === 'task-dispatcher'
     )) await refreshResource()
   } catch (error) {
     if (sequence !== routeSequence) return
@@ -452,6 +469,7 @@ async function startNew(): Promise<void> {
       if (
         activeType.value === 'custom-middleware'
         || activeType.value === 'condition-router'
+        || activeType.value === 'task-dispatcher'
       ) await refreshResource()
     }
   })
@@ -597,6 +615,10 @@ async function refreshResource(): Promise<void> {
       const result = await managementApi.listConditionRouterTemplates()
       conditionRouterPackages.value = result.catalog
       conditionRouterPackageErrors.value = result.errors
+    } else if (activeType.value === 'task-dispatcher') {
+      const result = await managementApi.listTaskDispatcherTemplates()
+      taskDispatcherPackages.value = result.catalog
+      taskDispatcherPackageErrors.value = result.errors
     } else if (activeType.value === 'skill') {
       const result = await managementApi.listSkills()
       skills.value = result.catalog

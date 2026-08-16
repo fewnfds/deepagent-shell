@@ -6,6 +6,7 @@ import type { MainAgent, WorkflowGraphDocument, WorkflowNodeCatalogItem } from '
 import {
   newAgentCanvasNode,
   newConditionRouterCanvasNode,
+  newTaskDispatcherCanvasNode,
   nextWorkflowCanvasEdgeId,
   WORKFLOW_NODE_DRAG_MIME,
   workflowCanvasEdgeTypesBetween,
@@ -72,6 +73,17 @@ const conditionRouterCatalog: WorkflowNodeCatalogItem = {
   output_handles: [{ id: 'branch', kind: 'control', edge_type: 'branch', accepted_edge_types: ['branch'], max_connections: null }],
 }
 
+const taskDispatcherCatalog: WorkflowNodeCatalogItem = {
+  type: 'task-dispatcher',
+  type_version: 1,
+  runtime_kind: 'send_dispatcher',
+  title_key: 'workflow.nodes.taskDispatcher.title',
+  description_key: 'workflow.nodes.taskDispatcher.description',
+  config_schema: {},
+  input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', accepted_edge_types: ['normal', 'branch'], max_connections: null }],
+  output_handles: [{ id: 'dispatch', kind: 'control', edge_type: 'dispatch', accepted_edge_types: ['dispatch'], max_connections: null }],
+}
+
 const agents: MainAgent[] = [
   { id: 'agent-1', name: 'Research Agent', capability_refs: [], subagents: [] },
   { id: 'agent-2', name: 'Review Agent', capability_refs: [], subagents: [] },
@@ -83,8 +95,10 @@ describe('Workflow canvas panels', () => {
       props: {
         agent: agentCatalog,
         conditionRouter: null,
+        taskDispatcher: null,
         agentDisabled: false,
         conditionRouterDisabled: true,
+        taskDispatcherDisabled: true,
       },
       global: { plugins: [i18n()] },
     })
@@ -111,6 +125,7 @@ describe('Workflow canvas panels', () => {
         inputEndpoints: agentCatalog.input_handles,
         mainAgents: agents,
         conditionRouters: [],
+        taskDispatchers: [],
         node,
         nodeIds: [node.id],
         outputEndpoints: agentCatalog.output_handles,
@@ -149,6 +164,7 @@ describe('Workflow canvas panels', () => {
         inputEndpoints: [],
         mainAgents: agents,
         conditionRouters: [],
+        taskDispatchers: [],
         node: null,
         nodeIds: ['agent-1', 'end'],
         outputEndpoints: [],
@@ -261,6 +277,7 @@ describe('Workflow canvas panels', () => {
         inputEndpoints: [],
         mainAgents: agents,
         conditionRouters: [],
+        taskDispatchers: [],
         node: null,
         nodeIds: [router.id, end.id],
         outputEndpoints: [],
@@ -293,6 +310,67 @@ describe('Workflow canvas panels', () => {
     expect(items[2]!.text()).toContain('Condition Router')
     await items[0]!.trigger('click')
     expect(wrapper.emitted('locateNode')).toEqual([[start.id]])
+  })
+
+  it('round-trips a State-driven Dispatch Edge and requires its dispatch key', async () => {
+    const dispatcher = newTaskDispatcherCanvasNode('dispatcher-1', 'dispatcher-config-1')
+    const worker = newAgentCanvasNode('worker-1', agents[0]!.id)
+    const workerCatalog = {
+      ...agentCatalog,
+      input_handles: [{
+        ...agentCatalog.input_handles[0]!,
+        accepted_edge_types: ['normal', 'branch', 'dispatch'],
+      }],
+    }
+    const edge: WorkflowCanvasEdge = {
+      id: 'edge-city',
+      source: dispatcher.id,
+      sourceHandle: 'dispatch',
+      target: worker.id,
+      targetHandle: 'in',
+      data: { edgeType: 'dispatch', dispatchKey: 'city' },
+    }
+
+    expect(workflowConnectionEdgeType({
+      source: dispatcher.id,
+      sourceHandle: 'dispatch',
+      target: worker.id,
+      targetHandle: 'in',
+    }, [dispatcher, worker], [], [taskDispatcherCatalog, workerCatalog])).toBe('dispatch')
+
+    const document = workflowCanvasToDocument(
+      [dispatcher, worker],
+      [edge],
+      { x: 0, y: 0, zoom: 1 },
+    )
+    expect(document.definition.nodes[0]!.config.task_dispatcher_id)
+      .toBe('dispatcher-config-1')
+    expect(document.definition.edges[0]!.dispatch_key).toBe('city')
+    expect(workflowCanvasProblems([dispatcher, worker], [{
+      ...edge,
+      data: { edgeType: 'dispatch' },
+    }])[0]?.message_key).toBe('workflows.editor.canvasProblems.dispatchKeyRequired')
+
+    const wrapper = mount(WorkflowInspector, {
+      props: {
+        edge,
+        edgeSourceEndpoints: taskDispatcherCatalog.output_handles,
+        edgeTargetEndpoints: workerCatalog.input_handles,
+        edgeTypeOptions: ['dispatch'],
+        inputEndpoints: [],
+        mainAgents: agents,
+        conditionRouters: [],
+        taskDispatchers: [],
+        node: null,
+        nodeIds: [dispatcher.id, worker.id],
+        outputEndpoints: [],
+        stateContract: 'agent-shell.workflow.agent-invocations.v1',
+        workflowName: 'Rainfall Workflow',
+      },
+      global: { plugins: [i18n()] },
+    })
+    await wrapper.get('#workflow-edge-dispatch-key').setValue('town')
+    expect(wrapper.emitted('updateDispatchKey')).toEqual([[edge.id, 'town']])
   })
 
   it('projects save blockers into the canvas problems panel', async () => {

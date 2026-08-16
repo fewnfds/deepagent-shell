@@ -20,6 +20,7 @@
 | 准备 | 在 LangChain 构造前准备本次 Workflow 的静态 runtime context | Workflow 可选绑定 | 不属于 Agent capability |
 | 事件输出 | 用 Python 把 Workflow-owned v3 事件投影为响应字符串 | Workflow 可选绑定 | 不属于 Agent capability |
 | 条件路由 | 读取完整 Workflow State/Context，更新 State 并激活具名 Branch Edge | 画布 Node 引用 | 不属于 Agent capability |
+| 任务分发 | 从 Workflow State/Context 生成任务，并通过 Dispatch Edge 动态 Send 到 worker | 画布 Node 引用 | 不属于 Agent capability |
 
 组件编辑页从服务端 catalog 取得字段、默认值和资源发现结果。草稿校验与保存校验都以后端 contract
 为准；记录使用 UUID 引用，重命名不会断开引用。
@@ -53,7 +54,12 @@ dict，返回值必须是字符串。它只控制 Workflow-owned 非 Agent 事�
 `activate` 返回一个或多个完全匹配的 key，并可通过 `update` 返回 State 局部更新，空列表使用必须显式连接的 `otherwise`。
 完整 package 和返回契约见[条件路由](../wizard-pages/condition-router-config.md)。
 
-这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。自定义 Middleware 和 Condition Router 从用户模板或内置示例
+任务分发组件保存一个 `workflow-node/task-dispatcher` Python 扩展引用。同步 `create_dispatcher()` 工厂物化
+`async dispatch(state, context)`；返回的每个任务包含稳定 `task_id`、匹配画布 Dispatch Edge 的 `dispatch_key` 和 JSON
+`payload`。Shell 将任务映射为 LangGraph `Send`，目标 Agent 的 State、Runtime Context 和完成 invocation 都带 task identity。
+完整规则和城市/乡镇示例见[任务分发](../wizard-pages/task-dispatcher-config.md)。
+
+这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。自定义 Middleware、Condition Router 和 Task Dispatcher 从用户模板或内置示例
 创建配置独占的 Python 扩展，并在扩展目录可选的 `requirements.txt` 声明外部包；模板和示例本身不运行也不参与依赖。
 Workflow Prepare 仍在组件配置中保存源码与 `python_requirements`。requirements 修改后重启生效；文件化扩展源码在下一次请求重新加载，
 仍为内联形式的组件源码按各自组件说明生效。

@@ -21,7 +21,11 @@ from agent_shell.registries.errors import ResourceScanError
 
 
 PythonPackageFamily = Literal["workflow-node", "middleware"]
-PythonPackageAdapter = Literal["condition-router", "agent-middleware"]
+PythonPackageAdapter = Literal[
+    "condition-router",
+    "task-dispatcher",
+    "agent-middleware",
+]
 _TEMPLATE_KEY = re.compile(r"^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$")
 
 
@@ -35,6 +39,7 @@ class _ManifestBase(BaseModel):
     def validate_adapter_family(self) -> "_ManifestBase":
         expected = {
             "condition-router": "workflow-node",
+            "task-dispatcher": "workflow-node",
             "agent-middleware": "middleware",
         }[self.adapter]
         if self.family != expected:

@@ -19,17 +19,21 @@ Agent Shell 的文件化 Python 扩展分为扩展模板、配置扩展和组件
 data/
   templates/
     workflow/condition_router/<template-key>/
+    workflow/task_dispatcher/<template-key>/
     agent/custom_middleware/<template-key>/
   config/
     components/<type>/<configuration-uuid>.yaml
     python_package_instances/
       condition-router/
         <configuration-uuid>/
+      task-dispatcher/
+        <configuration-uuid>/
       agent-middleware/
         <configuration-uuid>/
 
 examples/
   workflow-components/condition-router/<example-key>/
+  workflow-components/task-dispatcher/<example-key>/
   agent-components/custom-middleware/<example-key>/
 ```
 
@@ -56,7 +60,7 @@ examples/
 
 ## 配置引用
 
-Condition Router 和 Custom Middleware 使用同一 YAML 外壳：
+Condition Router、Task Dispatcher 和 Custom Middleware 使用同一 YAML 外壳：
 
 ```yaml
 python_package:
@@ -95,6 +99,34 @@ def create_router():
 `route(state, context)` 返回 `activate` 和 `update`。画布 compiler 将结果映射为 LangGraph `Command`；包不接触 Node ID，
 也不直接返回 `Command`。
 
+## Task Dispatcher
+
+Task Dispatcher 使用 `family: workflow-node`、`adapter: task-dispatcher`。同步工厂返回固定签名的 async callable：
+
+```python
+def create_dispatcher():
+    async def dispatch(state, context):
+        cities = state.get("shared_vars", {}).get("cities", [])
+        return {
+            "tasks": [
+                {
+                    "task_id": f"city:{city['id']}",
+                    "dispatch_key": "city",
+                    "payload": {"kind": "city", "record": city},
+                }
+                for city in cities
+            ],
+            "update": {},
+        }
+
+    return dispatch
+```
+
+`tasks` 必须包含 1–1000 个具有唯一稳定 `task_id` 的 JSON payload；`dispatch_key` 必须匹配画布同源 Dispatch Edge。
+compiler 为每项构造 Shell-owned `WorkflowTaskContext`，再映射为 LangGraph `Send`。包不接触 Node ID，也不直接返回
+`Send`/`Command`。worker 子图通过私有 State 和 `runtime.context.workflow_task` 读取任务。完整规则与内置示例见
+[任务分发](../wizard-pages/task-dispatcher-config.md)。
+
 ## Custom Middleware
 
 Middleware 使用 `family: middleware`、`adapter: agent-middleware`。每个配置的工厂只返回一个官方 `AgentMiddleware`：
@@ -126,7 +158,7 @@ hook、state schema、tools 或 stream transformer。运行链使用
 Python 名称仍需显式 `import`。本地模块使用正常相对导入，例如 `from .helpers import build_route`。非核心直接依赖逐行写入配置扩展
 的可选 `requirements.txt`。
 
-启动器只从启用 Workflow 可达的 Condition Router、Main Agent 和其 Subagent 引用中收集配置扩展 requirements。静态模板和
+启动器只从启用 Workflow 可达的 Condition Router、Task Dispatcher、Main Agent 和其 Subagent 引用中收集配置扩展 requirements。静态模板和
 未被运行配置触达的扩展不进入依赖指纹，也不影响全局依赖。依赖层生成在
 `runtime/python_packages/site-packages/`；requirements 修改后重启生效，Python 源码在下一次请求重新加载。
 

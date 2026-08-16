@@ -39,6 +39,7 @@ class WorkflowRuntimeContext:
     workflow_node_id: str = ""
     agent_id: str = ""
     invocation_id: str = ""
+    workflow_task: Mapping[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_request(
@@ -68,6 +69,7 @@ class WorkflowRuntimeContext:
         workflow_node_id: str,
         agent_id: str,
         invocation_id: str,
+        workflow_task: Mapping[str, Any] | None = None,
     ) -> "WorkflowRuntimeContext":
         """Bind the parent State reference and canvas Agent identity to a child run."""
 
@@ -77,6 +79,7 @@ class WorkflowRuntimeContext:
             workflow_node_id=workflow_node_id,
             agent_id=agent_id,
             invocation_id=invocation_id,
+            workflow_task=_freeze(deepcopy(dict(workflow_task or {}))),
         )
 
 

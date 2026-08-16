@@ -14,11 +14,15 @@ from agent_shell.runtime.capabilities import DeepAgentsWorkspace
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.middleware_packages.runtime import MiddlewarePackageRuntime
 from agent_shell.condition_router_packages import ConditionRouterPackageRuntime
+from agent_shell.task_dispatcher_packages import TaskDispatcherPackageRuntime
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.model_response import ModelResponse
 from agent_shell.runtime.input_messages import validate_client_messages
-from agent_shell.runtime.limits import GRAPH_RECURSION_LIMIT
+from agent_shell.runtime.limits import (
+    GRAPH_RECURSION_LIMIT,
+    WORKFLOW_MAX_CONCURRENCY,
+)
 from agent_shell.runtime.media_response import MainAgentMediaResponse
 from agent_shell.runtime.output_event_pool import OutputEventRectifier
 from agent_shell.runtime.output_projection import OutputProjector, WorkflowOutputProjector
@@ -76,6 +80,7 @@ class AgentExecution:
     media_response: MainAgentMediaResponse
     middleware_runtimes: tuple[MiddlewarePackageRuntime, ...] = ()
     condition_router_runtime: ConditionRouterPackageRuntime | None = None
+    task_dispatcher_runtime: TaskDispatcherPackageRuntime | None = None
     event_observers: tuple[Callable[[OutputEvent], None], ...] = ()
     context: WorkflowRuntimeContext | None = None
     run_config: dict[str, Any] | None = None
@@ -123,6 +128,8 @@ class AgentExecution:
                 await runtime.close()
             if self.condition_router_runtime is not None:
                 await self.condition_router_runtime.close()
+            if self.task_dispatcher_runtime is not None:
+                await self.task_dispatcher_runtime.close()
 
     async def _stream_text_inner(self) -> AsyncIterator[str]:
 
@@ -417,6 +424,7 @@ class AgentRuntime:
         workflow_built: tuple[tuple[str, BuiltAgent], ...] = (),
         workflow_output_config: dict[str, object] | None = None,
         condition_router_runtime: ConditionRouterPackageRuntime | None = None,
+        task_dispatcher_runtime: TaskDispatcherPackageRuntime | None = None,
         context: WorkflowRuntimeContext | None = None,
         run_config: dict[str, Any] | None = None,
         durability: str | None = None,
@@ -473,6 +481,7 @@ class AgentRuntime:
                 for _, agent in workflow_agents[1:]
             ),
             condition_router_runtime=condition_router_runtime,
+            task_dispatcher_runtime=task_dispatcher_runtime,
             context=context,
             run_config=run_config,
             durability=durability,
@@ -535,6 +544,7 @@ class AgentRuntime:
         from agent_shell.workflow.catalog import (
             AgentNodeConfig,
             ConditionRouterNodeConfig,
+            TaskDispatcherNodeConfig,
         )
         from agent_shell.workflow.compiler import compile_workflow
 
@@ -545,6 +555,11 @@ class AgentRuntime:
             node
             for node in document.definition.nodes
             if node.type == "condition-router"
+        ]
+        task_dispatcher_nodes = [
+            node
+            for node in document.definition.nodes
+            if node.type == "task-dispatcher"
         ]
         messages = validate_client_messages(raw_messages)
         assemblies: dict[str, StaticAssembly] = {}
@@ -564,6 +579,7 @@ class AgentRuntime:
             return ValidationReport(stage="workflow_publish")
 
         from agent_shell.condition_router import ConditionRouterBlock
+        from agent_shell.task_dispatcher import TaskDispatcherBlock
 
         condition_router_blocks: dict[str, tuple[str, ConditionRouterBlock]] = {}
         for router_node in condition_router_nodes:
@@ -593,8 +609,48 @@ class AgentRuntime:
                     status_code=422,
                 ) from exc
 
+        task_dispatcher_blocks: dict[
+            str,
+            tuple[str, TaskDispatcherBlock],
+        ] = {}
+        for dispatcher_node in task_dispatcher_nodes:
+            dispatcher_id = str(
+                TaskDispatcherNodeConfig.model_validate(
+                    dispatcher_node.config
+                ).task_dispatcher_id
+            )
+            stored_dispatcher = (
+                self._blocks.get_block_internal(
+                    "task-dispatcher",
+                    dispatcher_id,
+                )
+                if self._blocks is not None
+                else None
+            )
+            if stored_dispatcher is None:
+                continue
+            try:
+                task_dispatcher_blocks[dispatcher_node.id] = (
+                    dispatcher_id,
+                    TaskDispatcherBlock.model_validate(
+                        {
+                            key: value
+                            for key, value in stored_dispatcher.items()
+                            if key != "id"
+                        }
+                    ),
+                )
+            except Exception as exc:
+                raise AgentRuntimeError(
+                    "workflow.task_dispatcher_invalid",
+                    "The selected Task Dispatcher configuration is invalid.",
+                    status_code=422,
+                ) from exc
+
         condition_router_runtime: ConditionRouterPackageRuntime | None = None
+        task_dispatcher_runtime: TaskDispatcherPackageRuntime | None = None
         condition_routers: dict[str, Any] = {}
+        task_dispatchers: dict[str, Any] = {}
         if condition_router_blocks:
             if self._python_packages_dir is None or self._runtime_dir is None:
                 raise AgentRuntimeError(
@@ -603,6 +659,18 @@ class AgentRuntime:
                     status_code=500,
                 )
             condition_router_runtime = ConditionRouterPackageRuntime(
+                request_id=request_id,
+                packages_dir=self._python_packages_dir,
+                runtime_root=self._runtime_dir,
+            )
+        if task_dispatcher_blocks:
+            if self._python_packages_dir is None or self._runtime_dir is None:
+                raise AgentRuntimeError(
+                    "workflow.python_package_runtime_unavailable",
+                    "The Python package runtime is not configured.",
+                    status_code=500,
+                )
+            task_dispatcher_runtime = TaskDispatcherPackageRuntime(
                 request_id=request_id,
                 packages_dir=self._python_packages_dir,
                 runtime_root=self._runtime_dir,
@@ -619,27 +687,46 @@ class AgentRuntime:
                     )
                     for node_id, (router_id, block) in condition_router_blocks.items()
                 }
+            if task_dispatcher_runtime is None:
+                task_dispatchers = {}
+            else:
+                task_dispatchers = {
+                    node_id: task_dispatcher_runtime.dispatcher_for(
+                        node_id,
+                        dispatcher_id,
+                        block.model_dump(mode="python")["python_package"],
+                    )
+                    for node_id, (
+                        dispatcher_id,
+                        block,
+                    ) in task_dispatcher_blocks.items()
+                }
         except Exception:
             if condition_router_runtime is not None:
                 await condition_router_runtime.close()
+            if task_dispatcher_runtime is not None:
+                await task_dispatcher_runtime.close()
             raise
 
-        async def close_condition_router_runtime() -> None:
+        async def close_workflow_package_runtimes() -> None:
             if condition_router_runtime is not None:
                 await condition_router_runtime.close()
+            if task_dispatcher_runtime is not None:
+                await task_dispatcher_runtime.close()
 
         try:
             executable = validate_workflow_executable(
                 document,
                 validate_main_agent=validate_main_agent,
                 condition_routers=condition_routers,
+                task_dispatchers=task_dispatchers,
             )
         except Exception:
-            await close_condition_router_runtime()
+            await close_workflow_package_runtimes()
             raise
         if not executable.valid:
             issue = executable.issues[0]
-            await close_condition_router_runtime()
+            await close_workflow_package_runtimes()
             raise AgentRuntimeError(
                 issue.code,
                 issue.message,
@@ -799,6 +886,7 @@ class AgentRuntime:
                 document,
                 node_agents=dict(built_agents),
                 condition_routers=condition_routers,
+                task_dispatchers=task_dispatchers,
                 checkpointer=(
                     workflow_debug.checkpointer
                     if workflow_debug is not None
@@ -808,14 +896,14 @@ class AgentRuntime:
         except asyncio.CancelledError:
             for _, agent in built_agents:
                 await agent.middleware_runtime.close()
-            await close_condition_router_runtime()
+            await close_workflow_package_runtimes()
             if debug_run is not None:
                 await debug_run.finish("cancelled", error_code="request_cancelled")
             raise
         except Exception as exc:
             for _, agent in built_agents:
                 await agent.middleware_runtime.close()
-            await close_condition_router_runtime()
+            await close_workflow_package_runtimes()
             error_code = (
                 exc.code
                 if isinstance(exc, AgentRuntimeError)
@@ -863,8 +951,12 @@ class AgentRuntime:
             public_model=public_model,
             workflow_output_config=workflow_output_config,
             context=context,
-            run_config=debug_run.config() if debug_run is not None else None,
+            run_config={
+                **(debug_run.config() if debug_run is not None else {}),
+                "max_concurrency": WORKFLOW_MAX_CONCURRENCY,
+            },
             durability="sync" if debug_run is not None else None,
             debug_run=debug_run,
             condition_router_runtime=condition_router_runtime,
+            task_dispatcher_runtime=task_dispatcher_runtime,
         )

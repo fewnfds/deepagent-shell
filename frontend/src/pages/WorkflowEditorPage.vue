@@ -31,10 +31,12 @@ import { useToasts } from '@/composables/useToasts'
 import {
   newAgentCanvasNode,
   newConditionRouterCanvasNode,
+  newTaskDispatcherCanvasNode,
   nextWorkflowCanvasEdgeId,
   WORKFLOW_NODE_DRAG_MIME,
-  WORKFLOW_NORMAL_EDGE_MARKER,
-  WORKFLOW_BRANCH_EDGE_MARKER,
+  workflowCanvasEdgeAnimated,
+  workflowCanvasEdgeClass,
+  workflowCanvasEdgeMarker,
   workflowCanvasEdgeTypesBetween,
   workflowCanvasNodeEndpoints,
   workflowCanvasToDocument,
@@ -62,6 +64,7 @@ const { notify } = useToasts()
 const workflow = ref<Workflow | null>(null)
 const mainAgents = ref<MainAgent[]>([])
 const conditionRouters = ref<SavedBlock[]>([])
+const taskDispatchers = ref<SavedBlock[]>([])
 const nodeCatalog = ref<WorkflowNodeCatalogItem[]>([])
 const nodes = ref<WorkflowCanvasNode[]>([])
 const edges = ref<WorkflowCanvasEdge[]>([])
@@ -91,6 +94,14 @@ const canAddConditionRouter = computed(() => (
   && conditionRouters.value.length > 0
   && conditionRouterCatalogItem.value !== null
 ))
+const taskDispatcherCatalogItem = computed(() => (
+  nodeCatalog.value.find((item) => item.type === 'task-dispatcher') ?? null
+))
+const canAddTaskDispatcher = computed(() => (
+  loaded.value
+  && taskDispatchers.value.length > 0
+  && taskDispatcherCatalogItem.value !== null
+))
 const canvasProblems = computed(() => workflowCanvasProblems(nodes.value, edges.value))
 const problems = computed(() => [...canvasProblems.value, ...serverProblems.value])
 const canSave = computed(() => (
@@ -105,6 +116,7 @@ const graphRevision = computed(() => JSON.stringify({
     type: node.data.nodeType,
     mainAgentId: node.data.mainAgentId,
     conditionRouterId: node.data.conditionRouterId,
+    taskDispatcherId: node.data.taskDispatcherId,
     defer: node.data.defer,
   })),
   edges: edges.value.map((edge) => ({
@@ -115,6 +127,7 @@ const graphRevision = computed(() => JSON.stringify({
     targetHandle: edge.targetHandle,
     edgeType: edge.data.edgeType,
     branchKey: edge.data.branchKey,
+    dispatchKey: edge.data.dispatchKey,
   })),
 }))
 const selectedNode = computed(() => nodes.value.find((node) => node.selected) ?? null)
@@ -189,9 +202,9 @@ function connect(connection: Connection): void {
       target: connection.target,
       targetHandle: connection.targetHandle,
       type: 'default',
-      markerEnd: edgeType === 'branch' ? WORKFLOW_BRANCH_EDGE_MARKER : WORKFLOW_NORMAL_EDGE_MARKER,
-      animated: edgeType === 'branch',
-      class: edgeType === 'branch' ? 'workflow-edge--branch' : undefined,
+      markerEnd: workflowCanvasEdgeMarker(edgeType),
+      animated: workflowCanvasEdgeAnimated(edgeType),
+      class: workflowCanvasEdgeClass(edgeType),
       selected: true,
       data: { edgeType },
     },
@@ -231,6 +244,24 @@ function addConditionRouter(position?: XYPosition): void {
   rightPanel.value = 'inspector'
 }
 
+function addTaskDispatcher(position?: XYPosition): void {
+  const firstDispatcher = taskDispatchers.value[0]
+  if (!canAddTaskDispatcher.value || !firstDispatcher) return
+  const nodeId = nextTaskDispatcherNodeId()
+  const node = newTaskDispatcherCanvasNode(
+    nodeId,
+    firstDispatcher.id,
+    position ?? nextTaskDispatcherPosition(),
+  )
+  node.selected = true
+  nodes.value = [
+    ...nodes.value.map((item) => ({ ...item, selected: false })),
+    node,
+  ]
+  edges.value = edges.value.map((edge) => ({ ...edge, selected: false }))
+  rightPanel.value = 'inspector'
+}
+
 function nextAgentPosition(): XYPosition {
   const count = nodes.value.filter((node) => node.data.nodeType === 'agent').length
   return {
@@ -256,22 +287,40 @@ function nextConditionRouterNodeId(): string {
   return `condition-router-${index}`
 }
 
+function nextTaskDispatcherPosition(): XYPosition {
+  const count = nodes.value.filter((node) => node.data.nodeType === 'task-dispatcher').length
+  return { x: 620 + (count % 3) * 280, y: 340 + Math.floor(count / 3) * 160 }
+}
+
+function nextTaskDispatcherNodeId(): string {
+  let index = 1
+  while (nodes.value.some((node) => node.id === `task-dispatcher-${index}`)) index += 1
+  return `task-dispatcher-${index}`
+}
+
 function dragOver(event: DragEvent): void {
-  if ((!canAddAgent.value && !canAddConditionRouter.value) || !event.dataTransfer?.types.includes(WORKFLOW_NODE_DRAG_MIME)) return
+  if (
+    (!canAddAgent.value && !canAddConditionRouter.value && !canAddTaskDispatcher.value)
+    || !event.dataTransfer?.types.includes(WORKFLOW_NODE_DRAG_MIME)
+  ) return
   event.preventDefault()
   event.dataTransfer.dropEffect = 'copy'
 }
 
 function dropNode(event: DragEvent): void {
   if (
-    (!canAddAgent.value && !canAddConditionRouter.value)
+    (!canAddAgent.value && !canAddConditionRouter.value && !canAddTaskDispatcher.value)
     || !flow.value
-    || !['agent', 'condition-router'].includes(event.dataTransfer?.getData(WORKFLOW_NODE_DRAG_MIME) ?? '')
+    || !['agent', 'condition-router', 'task-dispatcher'].includes(
+      event.dataTransfer?.getData(WORKFLOW_NODE_DRAG_MIME) ?? '',
+    )
   ) return
   event.preventDefault()
   const position = flow.value.screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
-  if (event.dataTransfer?.getData(WORKFLOW_NODE_DRAG_MIME) === 'agent') addAgent(position)
-  else addConditionRouter(position)
+  const nodeType = event.dataTransfer?.getData(WORKFLOW_NODE_DRAG_MIME)
+  if (nodeType === 'agent') addAgent(position)
+  else if (nodeType === 'condition-router') addConditionRouter(position)
+  else addTaskDispatcher(position)
 }
 
 function removeNode(nodeId: string): void {
@@ -325,10 +374,14 @@ function replaceEdgeEndpoints(
           ...item,
           sourceHandle,
           targetHandle,
-          data: { ...item.data, edgeType },
-          markerEnd: edgeType === 'branch' ? WORKFLOW_BRANCH_EDGE_MARKER : WORKFLOW_NORMAL_EDGE_MARKER,
-          animated: edgeType === 'branch',
-          class: edgeType === 'branch' ? 'workflow-edge--branch' : undefined,
+          data: {
+            edgeType,
+            branchKey: edgeType === 'branch' ? item.data.branchKey : undefined,
+            dispatchKey: edgeType === 'dispatch' ? item.data.dispatchKey : undefined,
+          },
+          markerEnd: workflowCanvasEdgeMarker(edgeType),
+          animated: workflowCanvasEdgeAnimated(edgeType),
+          class: workflowCanvasEdgeClass(edgeType),
         }
       : item
   ))
@@ -376,10 +429,26 @@ function selectConditionRouter(nodeId: string, conditionRouterId: string): void 
   ))
 }
 
+function selectTaskDispatcher(nodeId: string, taskDispatcherId: string): void {
+  nodes.value = nodes.value.map((node) => (
+    node.id === nodeId
+      ? { ...node, data: { ...node.data, taskDispatcherId } }
+      : node
+  ))
+}
+
 function updateBranchKey(edgeId: string, branchKey: string): void {
   edges.value = edges.value.map((edge) => (
     edge.id === edgeId && edge.data.edgeType === 'branch'
       ? { ...edge, data: { ...edge.data, branchKey } }
+      : edge
+  ))
+}
+
+function updateDispatchKey(edgeId: string, dispatchKey: string): void {
+  edges.value = edges.value.map((edge) => (
+    edge.id === edgeId && edge.data.edgeType === 'dispatch'
+      ? { ...edge, data: { ...edge.data, dispatchKey } }
       : edge
   ))
 }
@@ -460,6 +529,11 @@ function conditionRouterName(conditionRouterId: string): string {
     ?? t('workflows.editor.noConditionRouterSelected')
 }
 
+function taskDispatcherName(taskDispatcherId: string): string {
+  return taskDispatchers.value.find((dispatcher) => dispatcher.id === taskDispatcherId)?.name
+    ?? t('workflows.editor.noTaskDispatcherSelected')
+}
+
 async function initializeFlow(instance: VueFlowStore): Promise<void> {
   flow.value = instance
   if (loaded.value) {
@@ -502,16 +576,18 @@ onBeforeMount(() => {
 
 onMounted(async () => {
   try {
-    const [metadata, graph, agents, conditionRouterRecords, catalog] = await Promise.all([
+    const [metadata, graph, agents, conditionRouterRecords, taskDispatcherRecords, catalog] = await Promise.all([
       managementApi.getWorkflow(workflowId.value),
       managementApi.getWorkflowGraph(workflowId.value),
       managementApi.listMainAgents(),
       managementApi.listBlocks('condition-router'),
+      managementApi.listBlocks('task-dispatcher'),
       managementApi.listWorkflowNodeCatalog(),
     ])
     workflow.value = metadata
     mainAgents.value = agents
     conditionRouters.value = conditionRouterRecords
+    taskDispatchers.value = taskDispatcherRecords
     nodeCatalog.value = catalog
     stateContract.value = graph.definition.state_contract
     const canvas = workflowDocumentToCanvas(graph, nodeCatalog.value)
@@ -592,10 +668,13 @@ onUnmounted(() => {
           v-if="leftPanel === 'library'"
           :agent="agentCatalogItem"
           :condition-router="conditionRouterCatalogItem"
+          :task-dispatcher="taskDispatcherCatalogItem"
           :agent-disabled="!canAddAgent"
           :condition-router-disabled="!canAddConditionRouter"
+          :task-dispatcher-disabled="!canAddTaskDispatcher"
           @add-agent="addAgent()"
           @add-condition-router="addConditionRouter()"
+          @add-task-dispatcher="addTaskDispatcher()"
         />
         <WorkflowNodeTracker
           v-else-if="leftPanel === 'tracker'"
@@ -675,6 +754,18 @@ onUnmounted(() => {
             </div>
           </template>
 
+          <template #node-task-dispatcher="{ id, data }">
+            <div class="workflow-node workflow-node--task-dispatcher">
+              <WorkflowNodeEndpoints direction="input" :endpoints="nodeEndpoints('task-dispatcher', 'input')" />
+              <div class="workflow-node-header">
+                <span class="workflow-node-icon" aria-hidden="true"><i class="bi bi-boxes" /></span>
+                <span class="workflow-node-title">{{ id }}</span>
+              </div>
+              <span class="workflow-node-summary">{{ taskDispatcherName(data.taskDispatcherId ?? '') }}</span>
+              <WorkflowNodeEndpoints direction="output" :endpoints="nodeEndpoints('task-dispatcher', 'output')" />
+            </div>
+          </template>
+
           <template #node-end="{ id }">
             <div class="workflow-node workflow-node--terminal">
               <WorkflowNodeEndpoints
@@ -701,6 +792,7 @@ onUnmounted(() => {
           :input-endpoints="selectedNodeInputEndpoints"
           :main-agents="mainAgents"
           :condition-routers="conditionRouters"
+          :task-dispatchers="taskDispatchers"
           :node="selectedNode"
           :node-ids="nodes.map((node) => node.id)"
           :output-endpoints="selectedNodeOutputEndpoints"
@@ -713,8 +805,10 @@ onUnmounted(() => {
           @select-edge-type="selectEdgeType"
           @update-agent="selectAgent"
           @update-condition-router="selectConditionRouter"
+          @update-task-dispatcher="selectTaskDispatcher"
           @update-node-id="updateNodeId"
           @update-branch-key="updateBranchKey"
+          @update-dispatch-key="updateDispatchKey"
           @update-defer="selectDefer"
         />
         <nav class="workflow-tool-rail" :aria-label="t('workflows.editor.rightTools')">

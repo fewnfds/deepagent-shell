@@ -16,7 +16,11 @@ export type BlockType =
   | 'summarization'
   | 'prompt-caching'
 
-export type WorkflowComponentType = 'workflow-prepare' | 'workflow-event-output' | 'condition-router'
+export type WorkflowComponentType =
+  | 'workflow-prepare'
+  | 'workflow-event-output'
+  | 'condition-router'
+  | 'task-dispatcher'
 export type ManagedComponentType = BlockType | WorkflowComponentType
 
 export interface CapabilityManifest {
@@ -198,7 +202,7 @@ export interface PythonPackageManifest {
   format_version: 1
   id: string
   family: 'workflow-node' | 'middleware'
-  adapter: 'condition-router' | 'agent-middleware'
+  adapter: 'condition-router' | 'task-dispatcher' | 'agent-middleware'
   folder: string
 }
 
@@ -219,7 +223,7 @@ export interface PythonPackageTemplate {
   format_version: 1
   key: string
   family: 'workflow-node' | 'middleware'
-  adapter: 'condition-router' | 'agent-middleware'
+  adapter: 'condition-router' | 'task-dispatcher' | 'agent-middleware'
   name: string
   files: PythonPackageFile[]
   revision: string
@@ -248,7 +252,7 @@ export interface Workflow extends WorkflowPayload {
   id: string
 }
 
-export type WorkflowNodeType = 'start' | 'agent' | 'condition-router' | 'end'
+export type WorkflowNodeType = 'start' | 'agent' | 'condition-router' | 'task-dispatcher' | 'end'
 
 export interface WorkflowNodeHandleSpec {
   id: string
@@ -261,7 +265,12 @@ export interface WorkflowNodeHandleSpec {
 export interface WorkflowNodeCatalogItem {
   type: WorkflowNodeType
   type_version: 1
-  runtime_kind: 'graph_entry' | 'graph_exit' | 'agent_wrapper' | 'command_router'
+  runtime_kind:
+    | 'graph_entry'
+    | 'graph_exit'
+    | 'agent_wrapper'
+    | 'command_router'
+    | 'send_dispatcher'
   title_key: string
   description_key: string
   config_schema: Record<string, unknown>
@@ -276,6 +285,7 @@ export interface WorkflowGraphNode {
   config: {
     main_agent_id?: string
     condition_router_id?: string
+    task_dispatcher_id?: string
     defer?: boolean
   }
 }
@@ -287,6 +297,7 @@ export interface WorkflowGraphEdge {
   target: string
   target_handle: string
   branch_key?: string | null
+  dispatch_key?: string | null
 }
 
 export interface WorkflowGraphDocument {

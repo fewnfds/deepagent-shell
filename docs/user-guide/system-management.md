@@ -8,7 +8,7 @@
 data/
   config/
     components/<type>/<uuid>.yaml
-    python_package_instances/{condition-router,agent-middleware}/
+    python_package_instances/{condition-router,task-dispatcher,agent-middleware}/
     agents/main/<uuid>.yaml
     agents/subagent/<uuid>.yaml
     workflows/<uuid>.yaml
@@ -17,7 +17,7 @@ data/
   state/agent-shell.sqlite3*
   files/
   resources/{skills,custom_tools}/
-  templates/{workflow/condition_router,agent/custom_middleware}/
+  templates/{workflow/condition_router,workflow/task_dispatcher,agent/custom_middleware}/
   logs/security-events.jsonl
   logs/debug/*.log
 ```
@@ -36,7 +36,7 @@ data/
 【系统 / 文件管理】只开放四个 scope：普通文件、Skill、自定义工具和 Python templates。支持浏览、新建、
 上传、下载、ZIP、重命名、文本编辑和递归删除。
 
-Python templates scope 用于在 `workflow/condition_router/` 或 `agent/custom_middleware/` 类别中建档静态代码模板。
+Python templates scope 用于在 `workflow/condition_router/`、`workflow/task_dispatcher/` 或 `agent/custom_middleware/` 类别中建档静态代码模板。
 项目源码不携带实例 data，也不会自动生成默认模板；空模板目录不会影响运行中的配置扩展。
 
 - 文本编辑上限 2 MiB，并使用 revision 防止静默覆盖；

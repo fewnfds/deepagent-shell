@@ -731,7 +731,9 @@ pre code {
   gap: 8px;
 }
 
-.workflow-node--agent {
+.workflow-node--agent,
+.workflow-node--condition-router,
+.workflow-node--task-dispatcher {
   display: grid;
   gap: 10px;
 }
@@ -807,6 +809,14 @@ pre code {
   box-shadow: 0 0 0 1px var(--bs-warning);
 }
 
+.workflow-port[data-edge-type='dispatch'] {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--bs-body-bg);
+  background: var(--bs-info);
+  box-shadow: 0 0 0 1px var(--bs-info);
+}
+
 .workflow-editor-flow .vue-flow__connection-path,
 .workflow-editor-flow .vue-flow__edge-path {
   stroke: var(--bs-primary);
@@ -816,6 +826,11 @@ pre code {
 .workflow-editor-flow .vue-flow__edge.workflow-edge--branch .vue-flow__edge-path {
   stroke: var(--bs-warning);
   stroke-dasharray: 7 5;
+}
+
+.workflow-editor-flow .vue-flow__edge.workflow-edge--dispatch .vue-flow__edge-path {
+  stroke: var(--bs-info);
+  stroke-dasharray: 3 4;
 }
 
 .workflow-editor-flow .vue-flow__edge.selected .vue-flow__edge-path {

@@ -24,6 +24,7 @@ const api = vi.hoisted(() => ({
   listCustomTools: vi.fn(),
   listMiddlewareTemplates: vi.fn(),
   listConditionRouterTemplates: vi.fn(),
+  listTaskDispatcherTemplates: vi.fn(),
   listSkills: vi.fn(),
   fetchModels: vi.fn(),
   listModelProviders: vi.fn(),
@@ -86,6 +87,14 @@ const conditionRouterManifest: WorkflowComponentManifest = {
   terminology_key: 'condition_router',
   label: 'Condition router',
   editor_key: 'condition-router',
+}
+
+const taskDispatcherManifest: WorkflowComponentManifest = {
+  ...workflowPrepareManifest,
+  type: 'task-dispatcher',
+  terminology_key: 'task_dispatcher',
+  label: 'Task dispatcher',
+  editor_key: 'task-dispatcher',
 }
 
 const conditionRouterTemplate = {
@@ -177,6 +186,7 @@ beforeEach(() => {
   api.listCustomTools.mockResolvedValue({ catalog: [], errors: {} })
   api.listMiddlewareTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listConditionRouterTemplates.mockResolvedValue({ catalog: [], errors: {} })
+  api.listTaskDispatcherTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listSkills.mockResolvedValue({
     catalog: [{ name: 'research', folder: 'research', description: 'Research skill' }],
     errors: {},
@@ -230,6 +240,7 @@ describe('ComponentsPage', () => {
       'navigation.sections.workflowPrepare',
       'navigation.sections.workflowEventOutput',
       'navigation.sections.conditionRouter',
+      'navigation.sections.taskDispatcher',
     ])
     expect(wrapper.get('.page-action-dock').findAll('button').map((button) => button.text())).toEqual([
       'common.new',
@@ -380,6 +391,35 @@ describe('ComponentsPage', () => {
     expect(api.listConditionRouterTemplates).toHaveBeenCalledOnce()
     expect(api.listMiddlewareTemplates).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="validation-checklist"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('loads Task Dispatcher packages in the Workflow component editor', async () => {
+    api.getCatalog.mockResolvedValueOnce({
+      block_types: [skillManifest, modelManifest],
+      workflow_component_types: [taskDispatcherManifest],
+      editor_defaults: { 'task-dispatcher': {} },
+    })
+    api.listBlocks.mockResolvedValueOnce([])
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{
+        path: '/workflow-components/:type',
+        component: ComponentsPage,
+        props: { scope: 'workflow' },
+      }],
+    })
+    await router.push('/workflow-components/task-dispatcher')
+    await router.isReady()
+
+    const wrapper = mount(ComponentsPage, {
+      props: { scope: 'workflow' },
+      global: { plugins: [router] },
+    })
+    await flushPromises()
+
+    expect(api.listTaskDispatcherTemplates).toHaveBeenCalledOnce()
+    expect(wrapper.find('[data-editor="task-dispatcher"]').exists()).toBe(true)
     wrapper.unmount()
   })
 

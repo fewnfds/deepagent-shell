@@ -506,6 +506,7 @@ _EDITOR_DEFAULTS = {
     ),
     "workflow_event_output": _workflow_event_output_default(),
     "condition_router": {},
+    "task_dispatcher": {},
 }
 
 

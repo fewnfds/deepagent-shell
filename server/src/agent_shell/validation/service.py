@@ -260,6 +260,11 @@ class ConfigurationValidationService:
                 reference,
                 **arguments,
             )
+        if block_type == "task-dispatcher":
+            return self._python_package_validation.task_dispatcher_issues(
+                reference,
+                **arguments,
+            )
         return []
 
     def validate_subagent(

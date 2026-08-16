@@ -25,6 +25,12 @@ class ConditionRouterNodeConfig(BaseModel):
     condition_router_id: UUID
 
 
+class TaskDispatcherNodeConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_dispatcher_id: UUID
+
+
 @dataclass(frozen=True, slots=True)
 class NodeHandleSpec:
     id: str
@@ -55,6 +61,7 @@ class NodeTypeSpec:
         "graph_exit",
         "agent_wrapper",
         "command_router",
+        "send_dispatcher",
     ]
     title_key: str
     description_key: str
@@ -78,8 +85,15 @@ class NodeTypeSpec:
 _IN = (
     NodeHandleSpec("in", accepted_edge_types=("normal", "branch")),
 )
+_AGENT_IN = (
+    NodeHandleSpec(
+        "in",
+        accepted_edge_types=("normal", "branch", "dispatch"),
+    ),
+)
 _NEXT = (NodeHandleSpec("next"),)
 _BRANCH = (NodeHandleSpec("branch", edge_type="branch"),)
+_DISPATCH = (NodeHandleSpec("dispatch", edge_type="dispatch"),)
 
 NODE_CATALOG: tuple[NodeTypeSpec, ...] = (
     NodeTypeSpec(
@@ -99,7 +113,7 @@ NODE_CATALOG: tuple[NodeTypeSpec, ...] = (
         title_key="workflow.nodes.agent.title",
         description_key="workflow.nodes.agent.description",
         config_model=AgentNodeConfig,
-        input_handles=_IN,
+        input_handles=_AGENT_IN,
         output_handles=_NEXT,
     ),
     NodeTypeSpec(
@@ -111,6 +125,16 @@ NODE_CATALOG: tuple[NodeTypeSpec, ...] = (
         config_model=ConditionRouterNodeConfig,
         input_handles=_IN,
         output_handles=_BRANCH,
+    ),
+    NodeTypeSpec(
+        type="task-dispatcher",
+        type_version=1,
+        runtime_kind="send_dispatcher",
+        title_key="workflow.nodes.taskDispatcher.title",
+        description_key="workflow.nodes.taskDispatcher.description",
+        config_model=TaskDispatcherNodeConfig,
+        input_handles=_IN,
+        output_handles=_DISPATCH,
     ),
     NodeTypeSpec(
         type="end",
@@ -152,6 +176,7 @@ __all__ = [
     "NODE_CATALOG",
     "NodeHandleSpec",
     "NodeTypeSpec",
+    "TaskDispatcherNodeConfig",
     "node_catalog_payload",
     "node_type_spec",
     "supported_node_versions",

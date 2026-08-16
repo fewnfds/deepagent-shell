@@ -14,6 +14,7 @@ import { todoListAdapter } from './blocks/todoList'
 import { workflowPrepareAdapter } from './blocks/workflowPrepare'
 import { workflowEventOutputAdapter } from './blocks/workflowEventOutput'
 import { conditionRouterAdapter } from './blocks/conditionRouter'
+import { taskDispatcherAdapter } from './blocks/taskDispatcher'
 
 export type {
   CustomMiddlewareCatalogItem,
@@ -70,6 +71,11 @@ export type {
   ConditionRouterDefaults,
   ConditionRouterDraft,
 } from './blocks/conditionRouter'
+export type {
+  TaskDispatcherCatalogItem,
+  TaskDispatcherDefaults,
+  TaskDispatcherDraft,
+} from './blocks/taskDispatcher'
 
 export {
   customMiddlewareAdapter,
@@ -88,6 +94,7 @@ export {
   workflowPrepareAdapter,
   workflowEventOutputAdapter,
   conditionRouterAdapter,
+  taskDispatcherAdapter,
 }
 
 export const blockTypes = [
@@ -106,7 +113,13 @@ export const blockTypes = [
   'prompt-caching',
 ] as const
 
-export const managedComponentTypes = [...blockTypes, 'workflow-prepare', 'workflow-event-output', 'condition-router'] as const
+export const managedComponentTypes = [
+  ...blockTypes,
+  'workflow-prepare',
+  'workflow-event-output',
+  'condition-router',
+  'task-dispatcher',
+] as const
 
 export const blockAdapters = {
   model: modelAdapter,
@@ -125,4 +138,5 @@ export const blockAdapters = {
   'workflow-prepare': workflowPrepareAdapter,
   'workflow-event-output': workflowEventOutputAdapter,
   'condition-router': conditionRouterAdapter,
+  'task-dispatcher': taskDispatcherAdapter,
 } as const

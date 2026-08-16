@@ -17,6 +17,7 @@ const props = defineProps<{
   inputEndpoints: WorkflowNodeHandleSpec[]
   mainAgents: MainAgent[]
   conditionRouters: SavedBlock[]
+  taskDispatchers: SavedBlock[]
   node: WorkflowCanvasNode | null
   nodeIds: string[]
   outputEndpoints: WorkflowNodeHandleSpec[]
@@ -32,8 +33,10 @@ const emit = defineEmits<{
   selectEdgeType: [edgeId: string, edgeType: WorkflowCanvasEdgeType]
   updateAgent: [nodeId: string, mainAgentId: string]
   updateConditionRouter: [nodeId: string, conditionRouterId: string]
+  updateTaskDispatcher: [nodeId: string, taskDispatcherId: string]
   updateNodeId: [nodeId: string, nextNodeId: string]
   updateBranchKey: [edgeId: string, branchKey: string]
+  updateDispatchKey: [edgeId: string, dispatchKey: string]
   updateDefer: [nodeId: string, defer: boolean]
 }>()
 
@@ -58,9 +61,12 @@ watch(
 
 const contextTitle = computed(() => {
   if (props.node) {
-    return t(`workflows.editor.${props.node.data.nodeType === 'condition-router'
+    const nodeTypeKey = props.node.data.nodeType === 'condition-router'
       ? 'conditionRouter'
-      : props.node.data.nodeType}`)
+      : props.node.data.nodeType === 'task-dispatcher'
+        ? 'taskDispatcher'
+        : props.node.data.nodeType
+    return t(`workflows.editor.${nodeTypeKey}`)
   }
   if (props.edge) return edgeTypeLabel(props.edge.data?.edgeType ?? '')
   return t('workflows.editor.workflowProperties')
@@ -75,6 +81,7 @@ const edgeTargetOptions = computed(() => props.edgeTargetEndpoints.filter((endpo
 function edgeTypeLabel(edgeType: string): string {
   if (edgeType === 'normal') return t('workflows.editor.normalEdge')
   if (edgeType === 'branch') return t('workflows.editor.branchEdge')
+  if (edgeType === 'dispatch') return t('workflows.editor.dispatchEdge')
   return edgeType
 }
 
@@ -90,6 +97,11 @@ function updateAgent(event: Event): void {
 function updateConditionRouter(event: Event): void {
   if (!props.node || props.node.data.nodeType !== 'condition-router') return
   emit('updateConditionRouter', props.node.id, (event.target as HTMLSelectElement).value)
+}
+
+function updateTaskDispatcher(event: Event): void {
+  if (!props.node || props.node.data.nodeType !== 'task-dispatcher') return
+  emit('updateTaskDispatcher', props.node.id, (event.target as HTMLSelectElement).value)
 }
 
 function commitNodeId(): void {
@@ -121,6 +133,11 @@ function updateDefer(event: Event): void {
 function updateBranchKey(event: Event): void {
   if (!props.edge || props.edge.data?.edgeType !== 'branch') return
   emit('updateBranchKey', props.edge.id, (event.target as HTMLInputElement).value)
+}
+
+function updateDispatchKey(event: Event): void {
+  if (!props.edge || props.edge.data?.edgeType !== 'dispatch') return
+  emit('updateDispatchKey', props.edge.id, (event.target as HTMLInputElement).value)
 }
 
 function selectEdgeType(event: Event): void {
@@ -230,6 +247,16 @@ function selectEdgeTargetEndpoint(event: Event): void {
           </div>
           <button class="workflow-inspector-delete" type="button" @click="emit('removeNode', node.id)"><i class="bi bi-trash" aria-hidden="true" />{{ $t('workflows.editor.removeConditionRouter') }}</button>
         </template>
+        <template v-else-if="node.data.nodeType === 'task-dispatcher'">
+          <div class="workflow-inspector-row">
+            <label class="workflow-inspector-label" for="workflow-node-task-dispatcher"><span>{{ $t('workflows.editor.taskDispatcherConfig') }}</span><span aria-hidden="true">:</span></label>
+            <select id="workflow-node-task-dispatcher" class="form-select form-select-sm workflow-inspector-select" :value="node.data.taskDispatcherId" @change="updateTaskDispatcher">
+              <option v-if="taskDispatchers.length === 0" value="">{{ $t('workflows.editor.noTaskDispatchers') }}</option>
+              <option v-for="dispatcher in taskDispatchers" :key="dispatcher.id" :value="dispatcher.id">{{ dispatcher.name }}</option>
+            </select>
+          </div>
+          <button class="workflow-inspector-delete" type="button" @click="emit('removeNode', node.id)"><i class="bi bi-trash" aria-hidden="true" />{{ $t('workflows.editor.removeTaskDispatcher') }}</button>
+        </template>
         <p v-else class="workflow-inspector-note">{{ $t('workflows.editor.fixedNode') }}</p>
       </template>
 
@@ -241,6 +268,10 @@ function selectEdgeTargetEndpoint(event: Event): void {
         <div v-if="edge.data?.edgeType === 'branch'" class="workflow-inspector-row">
           <label class="workflow-inspector-label" for="workflow-edge-branch-key"><span>{{ $t('workflows.editor.branchKey') }}</span><span aria-hidden="true">:</span></label>
           <input id="workflow-edge-branch-key" class="form-control form-control-sm font-monospace" type="text" :value="edge.data.branchKey ?? ''" @input="updateBranchKey">
+        </div>
+        <div v-if="edge.data?.edgeType === 'dispatch'" class="workflow-inspector-row">
+          <label class="workflow-inspector-label" for="workflow-edge-dispatch-key"><span>{{ $t('workflows.editor.dispatchKey') }}</span><span aria-hidden="true">:</span></label>
+          <input id="workflow-edge-dispatch-key" class="form-control form-control-sm font-monospace" type="text" :value="edge.data.dispatchKey ?? ''" @input="updateDispatchKey">
         </div>
         <div class="workflow-inspector-row">
           <label class="workflow-inspector-label" for="workflow-edge-source-endpoint"><span>{{ $t('workflows.editor.source') }}</span><span aria-hidden="true">:</span></label>

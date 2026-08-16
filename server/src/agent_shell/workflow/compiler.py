@@ -6,7 +6,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
-from langgraph.types import Command
+from langgraph.types import Command, Send
 
 from agent_shell.condition_router import (
     ConditionRouterCallable,
@@ -15,7 +15,12 @@ from agent_shell.condition_router import (
 )
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.context import WorkflowRuntimeContext
-from agent_shell.runtime.state import WorkflowState
+from agent_shell.runtime.state import WorkflowNodeInputState, WorkflowState
+from agent_shell.task_dispatcher import (
+    TaskDispatcherCallable,
+    TaskDispatcherError,
+    run_task_dispatcher,
+)
 from agent_shell.workflow.catalog import node_type_spec
 from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
 from agent_shell.workflow.topology import validate_workflow_topology
@@ -59,7 +64,7 @@ def _invocation_metadata(runtime: Runtime[Any]) -> tuple[str, float]:
 
 def _make_agent_node(*, node_id: str, built_agent: Any):
     async def call_agent(
-        state: WorkflowState,
+        state: WorkflowNodeInputState,
         config: RunnableConfig,
         runtime: Runtime[WorkflowRuntimeContext],
     ) -> dict[str, Any]:
@@ -73,17 +78,21 @@ def _make_agent_node(*, node_id: str, built_agent: Any):
             )
         parent_shared_vars = dict(state.get("shared_vars", {}))
         parent_files = dict(state.get("files", {}))
+        workflow_task = dict(state.get("workflow_task", {}))
         child_input = {
             **dict(built_agent.input_state),
             "messages": [],
             "shared_vars": parent_shared_vars,
             "files": parent_files,
         }
+        if workflow_task:
+            child_input["workflow_task"] = workflow_task
         child_context = runtime.context.for_workflow_agent(
             state,
             workflow_node_id=node_id,
             agent_id=built_agent.agent_id,
             invocation_id=invocation_id,
+            workflow_task=workflow_task,
         )
         result = await built_agent.graph.ainvoke(
             child_input,
@@ -98,6 +107,8 @@ def _make_agent_node(*, node_id: str, built_agent: Any):
             "invoked_at": invoked_at,
             "messages": result["messages"],
         }
+        if workflow_task:
+            invocation_record["workflow_task"] = workflow_task
         update: dict[str, Any] = {
             "agent_invocations": {invocation_id: invocation_record}
         }
@@ -151,11 +162,60 @@ def _make_condition_router_node(
     return call_router
 
 
+def _make_task_dispatcher_node(
+    *,
+    node_id: str,
+    dispatch: TaskDispatcherCallable,
+    dispatch_targets: Mapping[str, str],
+):
+    async def call_dispatcher(
+        state: WorkflowState,
+        runtime: Runtime[WorkflowRuntimeContext],
+    ) -> Command:
+        invocation_id, _invoked_at = _invocation_metadata(runtime)
+        try:
+            result = await run_task_dispatcher(
+                dispatch,
+                state=state,
+                context=runtime.context,
+                allowed_dispatch_keys=dispatch_targets,
+            )
+        except TaskDispatcherError as exc:
+            raise AgentRuntimeError(
+                "workflow.task_dispatcher_failed",
+                "The Task Dispatcher script failed.",
+                status_code=422,
+            ) from exc
+
+        parent_state = {
+            key: state[key]
+            for key in WorkflowState.__annotations__
+            if key in state
+        }
+        sends = []
+        for item in result.tasks:
+            workflow_task = {
+                "dispatcher_node_id": node_id,
+                "dispatcher_invocation_id": invocation_id,
+                **item.model_dump(mode="json"),
+            }
+            sends.append(
+                Send(
+                    dispatch_targets[item.dispatch_key],
+                    {**parent_state, "workflow_task": workflow_task},
+                )
+            )
+        return Command(update=result.update, goto=sends)
+
+    return call_dispatcher
+
+
 def compile_workflow(
     document: WorkflowGraphDocumentV1,
     *,
     node_agents: Mapping[str, Any],
     condition_routers: Mapping[str, ConditionRouterCallable] | None = None,
+    task_dispatchers: Mapping[str, TaskDispatcherCallable] | None = None,
     checkpointer: Any | None = None,
 ) -> Any:
     """Compile catalog-declared canvas nodes into an official StateGraph."""
@@ -166,9 +226,11 @@ def compile_workflow(
         raise _compile_error(issue.code, issue.message)
 
     router_configs = condition_routers or {}
+    dispatcher_configs = task_dispatchers or {}
     topology_issues = validate_workflow_topology(
         normalized,
         condition_routers=router_configs,
+        task_dispatchers=dispatcher_configs,
     )
     if topology_issues:
         issue = topology_issues[0]
@@ -191,6 +253,7 @@ def compile_workflow(
     node_by_id = {node.id: node for node in nodes}
     edge_types: dict[str, str] = {}
     branch_targets: dict[str, dict[str, str]] = {}
+    dispatch_targets: dict[str, dict[str, str]] = {}
     for edge in normalized.definition.edges:
         source_node = node_by_id[edge.source]
         source_spec = node_type_spec(source_node.type, source_node.type_version)
@@ -204,6 +267,11 @@ def compile_workflow(
         if source_handle.edge_type == "branch":
             assert edge.branch_key is not None
             branch_targets.setdefault(edge.source, {})[edge.branch_key] = (
+                END if edge.target in exit_ids else edge.target
+            )
+        elif source_handle.edge_type == "dispatch":
+            assert edge.dispatch_key is not None
+            dispatch_targets.setdefault(edge.source, {})[edge.dispatch_key] = (
                 END if edge.target in exit_ids else edge.target
             )
 
@@ -224,6 +292,24 @@ def compile_workflow(
                 _make_condition_router_node(
                     route=route,
                     route_targets=targets,
+                ),
+                destinations=tuple(dict.fromkeys(targets.values())),
+            )
+            continue
+        if spec.runtime_kind == "send_dispatcher":
+            dispatch = dispatcher_configs.get(node.id)
+            if dispatch is None:
+                raise _compile_error(
+                    "workflow.task_dispatcher_not_found",
+                    "The selected Task Dispatcher configuration does not exist.",
+                )
+            targets = dispatch_targets.get(node.id, {})
+            builder.add_node(
+                node.id,
+                _make_task_dispatcher_node(
+                    node_id=node.id,
+                    dispatch=dispatch,
+                    dispatch_targets=targets,
                 ),
                 destinations=tuple(dict.fromkeys(targets.values())),
             )

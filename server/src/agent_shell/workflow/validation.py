@@ -5,6 +5,7 @@ from collections.abc import Callable, Mapping
 from pydantic import ValidationError
 
 from agent_shell.condition_router import ConditionRouterCallable
+from agent_shell.task_dispatcher import TaskDispatcherCallable
 from agent_shell.validation import (
     ValidationIssue,
     ValidationReport,
@@ -261,6 +262,7 @@ def validate_workflow_executable(
     *,
     validate_main_agent: MainAgentValidator,
     condition_routers: Mapping[str, ConditionRouterCallable] | None = None,
+    task_dispatchers: Mapping[str, TaskDispatcherCallable] | None = None,
 ) -> ValidationReport:
     admission, normalized = admit_workflow_document(document)
     if normalized is None:
@@ -273,6 +275,7 @@ def validate_workflow_executable(
         validate_workflow_topology(
             normalized,
             condition_routers=condition_routers,
+            task_dispatchers=task_dispatchers,
         )
     )
     node_index = {

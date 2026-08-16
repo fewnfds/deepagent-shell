@@ -17,6 +17,7 @@ from pydantic import (
 from agent_shell.python_requirements import parse_python_requirements
 from agent_shell.script_source import validate_module_function
 from agent_shell.condition_router import ConditionRouterBlock
+from agent_shell.task_dispatcher import TaskDispatcherBlock
 from agent_shell.workflow_event_output import WorkflowEventOutputBlock
 
 
@@ -96,6 +97,7 @@ WORKFLOW_COMPONENT_MODELS = {
     "workflow-prepare": WorkflowPrepareBlock,
     "workflow-event-output": WorkflowEventOutputBlock,
     "condition-router": ConditionRouterBlock,
+    "task-dispatcher": TaskDispatcherBlock,
 }
 WORKFLOW_COMPONENT_CATALOG = (
     {
@@ -121,6 +123,14 @@ WORKFLOW_COMPONENT_CATALOG = (
         "order": 3,
         "icon_key": "circle-half",
         "editor_key": "condition_router",
+    },
+    {
+        "type": "task-dispatcher",
+        "terminology_key": "task-dispatcher",
+        "label": "Task Dispatcher",
+        "order": 4,
+        "icon_key": "boxes",
+        "editor_key": "task_dispatcher",
     },
 )
 
