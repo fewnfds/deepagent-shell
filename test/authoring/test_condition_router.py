@@ -7,6 +7,8 @@ from pathlib import Path
 import pytest
 from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
+from langgraph.runtime import Runtime
+from langgraph.store.memory import InMemoryStore
 
 from agent_shell.condition_router import ConditionRouterError, run_condition_router
 from agent_shell.condition_router_packages import ConditionRouterPackageRuntime
@@ -20,6 +22,10 @@ from agent_shell.workflow.topology import validate_workflow_topology
 ROUTER_ID = "11111111-1111-4111-8111-111111111111"
 AGENT_A = "22222222-2222-4222-8222-222222222222"
 AGENT_B = "33333333-3333-4333-8333-333333333333"
+
+
+def _runtime(**kwargs) -> Runtime[WorkflowRuntimeContext]:
+    return Runtime(context=WorkflowRuntimeContext(**kwargs))
 
 
 class _MiddlewareRuntime:
@@ -50,15 +56,15 @@ def _built_agent(agent_id: str, content: str) -> BuiltAgent:
 
 
 def test_condition_router_receives_complete_values_and_converts_state_mutation() -> None:
-    async def router(state, context):
-        state.setdefault("shared_vars", {})["approved"] = context["prepare"]["approved"]
+    async def router(state, runtime):
+        state.setdefault("shared_vars", {})["approved"] = runtime.context.prepare["approved"]
         return {"activate": ["review", "audit"], "update": {}}
 
     result = asyncio.run(
         run_condition_router(
             router,
             state={"shared_vars": {"risk": 90}, "agent_invocations": {}, "files": {}},
-            context=WorkflowRuntimeContext(
+            runtime=_runtime(
                 request_id="request-1",
                 workflow={"id": "workflow-1"},
                 prepare={"approved": True},
@@ -72,38 +78,38 @@ def test_condition_router_receives_complete_values_and_converts_state_mutation()
 
 
 def test_condition_router_uses_otherwise_for_empty_result_and_rejects_unmapped_keys() -> None:
-    async def router(state, context):
+    async def router(state, runtime):
         return {"activate": [], "update": {}}
     result = asyncio.run(
         run_condition_router(
             router,
             state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
-            context=WorkflowRuntimeContext(),
+            runtime=_runtime(),
             allowed_branches={"review", "audit", "otherwise"},
         )
     )
     assert result.activate == ["otherwise"]
 
-    async def invalid(state, context):
+    async def invalid(state, runtime):
         return {"activate": ["otherwise", "review"], "update": {}}
     with pytest.raises(ConditionRouterError):
         asyncio.run(
             run_condition_router(
                 invalid,
                 state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
-                context=WorkflowRuntimeContext(),
+                runtime=_runtime(),
                 allowed_branches={"review", "audit", "otherwise"},
             )
         )
 
-    async def unmapped(state, context):
+    async def unmapped(state, runtime):
         return {"activate": ["missing edge"], "update": {}}
     with pytest.raises(ConditionRouterError):
         asyncio.run(
             run_condition_router(
                 unmapped,
                 state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
-                context=WorkflowRuntimeContext(),
+                runtime=_runtime(),
                 allowed_branches={"review", "audit", "otherwise"},
             )
         )
@@ -112,15 +118,14 @@ def test_condition_router_uses_otherwise_for_empty_result_and_rejects_unmapped_k
 def test_condition_router_package_loads_local_modules_and_materializes_async_route(
     tmp_path: Path,
 ) -> None:
-    package_id = "44444444-4444-4444-8444-444444444444"
-    folder_name = f"{ROUTER_ID}--threshold-router--{package_id}"
+    folder_name = ROUTER_ID
     package_dir = tmp_path / "packages" / "condition-router" / folder_name
     package_dir.mkdir(parents=True)
     (package_dir / "package.json").write_text(
         json.dumps(
             {
                 "format_version": 1,
-                "id": package_id,
+                "id": ROUTER_ID,
                 "family": "workflow-node",
                 "adapter": "condition-router",
             }
@@ -135,7 +140,7 @@ def test_condition_router_package_loads_local_modules_and_materializes_async_rou
     )
     (package_dir / "routing.py").write_text(
         "def build_route(threshold):\n"
-        "    async def route(state, context):\n"
+        "    async def route(state, runtime):\n"
         "        branch = 'review' if state['shared_vars']['risk'] >= threshold else 'otherwise'\n"
         "        return {'activate': [branch], 'update': {}}\n"
         "    return route\n",
@@ -156,7 +161,7 @@ def test_condition_router_package_loads_local_modules_and_materializes_async_rou
         run_condition_router(
             route,
             state={"shared_vars": {"risk": 90}, "agent_invocations": {}, "files": {}},
-            context=WorkflowRuntimeContext(),
+            runtime=_runtime(),
             allowed_branches={"review", "otherwise"},
         )
     )
@@ -196,7 +201,7 @@ def test_compiler_uses_command_for_named_multi_branch_routing() -> None:
     admission, document = admit_workflow_document(payload)
     assert admission.valid is True
     assert document is not None
-    async def router(state, context):
+    async def router(state, runtime):
         return {
             "activate": ["review", "audit"],
             "update": {"shared_vars": {"routed": True}},
@@ -222,12 +227,17 @@ def test_compiler_uses_command_for_named_multi_branch_routing() -> None:
             "agent-b": _built_agent(AGENT_B, "agent-b"),
         },
         condition_routers={"router": router},
+        store=InMemoryStore(),
     )
 
     result = asyncio.run(
         graph.ainvoke(
             {"shared_vars": {}, "agent_invocations": {}, "files": {}},
-            context=WorkflowRuntimeContext(workflow={"id": "workflow-1"}),
+            context=WorkflowRuntimeContext(
+                lifecycle_id="lifecycle-1",
+                run_id="run-1",
+                workflow={"id": "workflow-1"},
+            ),
         )
     )
 

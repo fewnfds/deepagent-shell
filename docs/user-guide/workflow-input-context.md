@@ -21,10 +21,10 @@ WIC 不是画布 Node，也不是一类 capability 组件。当前实现是普�
 客户端 messages[]
         │
         ▼
-WorkflowRuntimeContext（不可变请求快照）
+Lifecycle Store（不可变请求快照）
         │
-        ├── 当前 Workflow State / 前序 agent_invocations
-        ├── 当前 Agent 私有 State
+        ├── WorkflowRuntimeContext（run/invocation 身份）
+        ├── 当前 Agent State 的父图快照
         └── Workflow Filesystem backend
                     │
                     ▼
@@ -38,16 +38,19 @@ WorkflowRuntimeContext（不可变请求快照）
 
 WIC 可以在官方 Middleware hook 中组合以下数据：
 
-- Main Agent：`runtime.context.messages` 中冻结的 OpenAI `system/user/assistant` 请求快照；
+- Main Agent：用 `runtime.context.lifecycle_id` 定位 `runtime.store` 中冻结的 OpenAI
+  `system/user/assistant` 请求快照；
 - Subagent：`state["messages"]` 中由 Deep Agents `task` 委派产生的私有消息，不自动附加根请求；
-- 父 Workflow：`runtime.context.workflow_state`，包括前序 Agent 完成后写入的
-  `agent_invocations[invocation_id]`；
-- 当前身份：`runtime.context.workflow_node_id`、`agent_id` 与 `invocation_id`；
-- 当前动态任务：Task Dispatcher worker 调用中的 `runtime.context.workflow_task`；普通 Agent 调用为空；
+- 父 Workflow：`state["workflow_state_snapshot"]`，包括前序 Agent 完成后写入的
+  `agent_invocations[invocation_id]` 轻量引用；完整 invocation artifact 通过 `runtime.store` 和 `result_ref` 读取；
+- 当前身份：`runtime.context.lifecycle_id`、`run_id`、`thread_id`、`launcher_id`、`background_task_id`、
+  `workflow_node_id`、`agent_id` 与 `invocation_id`。`launcher_id` 是后台 Run 发起者；后台 Agent 不属于画布 Node，
+  因此其 `workflow_node_id` 为空；
+- 当前动态任务：Task Dispatcher worker 的 `state["workflow_task"]`；普通 Agent 调用不存在该字段；
 - 共享文件：工厂收到的 Workflow filesystem `backend`，只读取虚拟绝对路径；
 - 当前 Agent State：hook 的 `state` 参数，以及其他 Middleware 声明的 State channel。
 
-`runtime.context.messages` 始终只读。WIC 应复制需要的消息并通过返回值更新 State；消息 channel 使用
+Lifecycle Store 中的输入记录由平台写入，WIC 只读取并复制需要的消息，再通过返回值更新 State；消息 channel 使用
 `Overwrite(convert_to_messages(...))`，避免与空初始值或其他 reducer 输入意外追加。
 
 ## Task Dispatcher worker
@@ -56,13 +59,13 @@ WIC 是任务材料的消费者，不是调度器。Task Dispatcher 先根据 Wo
 把每项任务作为私有 `workflow_task` 注入目标 Agent wrapper。worker 的 WIC 可以读取：
 
 ```python
-task = runtime.context.workflow_task
+task = state["workflow_task"]
 task_id = task.get("task_id")
 payload = task.get("payload", {})
 ```
 
-同一份任务也存在当前 Agent 私有 State 的 `state["workflow_task"]`，但不写入 Workflow root State。任务完成后，父 State
-的 `agent_invocations` 记录会携带 task identity，供下游汇总 Agent 的 WIC 选择。不要在 WIC 中扫描共享列表并用
+该任务不写入 Workflow root State，也不复制到 Runtime Context。任务完成后，父 State 的 `agent_invocations` 记录会携带
+task identity，供下游汇总 Agent 的 WIC 选择。不要在 WIC 中扫描共享列表并用
 `counting` 字段抢占任务；同一 super-step 的并行 worker 读取各自的 State 快照，不构成实时租约系统。
 
 ## 从内置示例创建
@@ -86,7 +89,7 @@ examples/agent-components/custom-middleware/workflow-input-context/
 示例把通用功能集中在两个位置：
 
 - `WIC_CONFIG`：配置附加文件和非顶部 system 转 user；
-- `customize_context_messages(state, context)`：把 `context.messages` 复制为可编辑消息，并集中放置当前
+- `customize_context_messages(state, context, request_messages)`：接收从 Lifecycle Store 复制出的可编辑消息，并集中放置当前
   WIC 的选择、裁剪和重排逻辑；
 - `build_workflow_input_context()`：集中执行附加文件和 system 转 user 等可选通用功能。
 
@@ -116,8 +119,10 @@ LangChain 对 `before_*` hook 按 Middleware 列表正序执行；因此，如�
 ## 边界
 
 - WIC 只构造当前 Agent invocation 的私有上下文，不修改客户端请求快照；
+- Store 保存 Lifecycle 内跨 Run 公共事实，Runtime Context 只保存当前 Run/Invocation 的不可变身份，Graph State
+  继续保存参与路由、reducer 与 checkpoint 的变化数据；
 - Workflow root State 不保存整包输入，也不会自动累积成产品聊天历史；
-- 前序 Agent 输出必须从 `agent_invocations` 显式选择，不能依赖 mapping 插入顺序；
+- 前序 Agent 输出必须先从 `agent_invocations` 显式选择因果可见的引用，再从 Store 读取 artifact；不能依赖 mapping 插入顺序；
 - 同一画布节点再次执行会产生新的 invocation ID，WIC 应按节点身份或明确 ID 选择记录；
 - Subagent 默认保留 delegated messages，是否加入根请求必须由该 Subagent 的 WIC 明确决定；
 - 文件路径属于 Workflow 虚拟 Filesystem，不接受宿主绝对路径；

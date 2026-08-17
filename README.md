@@ -1,7 +1,8 @@
 # Agent Shell
 
-Agent Shell 是本地 Workflow 与 Deep Agents 管理台。启用的 Workflow 作为 OpenAI-compatible model；每个 Workflow
-保存一份当前 Vue Flow 图和共享 Filesystem。画布支持 Start、Agent、条件路由和 End 节点；Agent 节点引用完整
+Agent Shell 是本地 Workflow 与 Deep Agents 管理台。启用的父图 Workflow 作为 OpenAI-compatible model；每个 Workflow
+保存一份当前 Vue Flow 图和共享 Filesystem。画布支持 Start、Agent、条件路由、任务分发和 End 节点；后台 Run 管理通过
+官方 Runtime Context 的窄命令 facade 提供，不占用画布 Node。Agent 节点引用完整
 Main Agent 装配，并可通过官方 `SubAgentMiddleware` 同步委派 Subagent。
 
 管理台将 Agent 组件与 Workflow 组件分开管理。Workflow 组件按受限类型逐个提供配置、校验、画布和运行时闭环；

@@ -58,6 +58,32 @@ ON workflow_runs(request_id);
 CREATE INDEX IF NOT EXISTS idx_workflow_runs_workflow
 ON workflow_runs(workflow_id, started_at DESC);
 
+CREATE TABLE IF NOT EXISTS workflow_lifecycles (
+    lifecycle_id TEXT PRIMARY KEY,
+    request_id TEXT NOT NULL,
+    parent_run_id TEXT NOT NULL,
+    parent_thread_id TEXT NOT NULL,
+    workflow_id TEXT NOT NULL,
+    workflow_name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    lifecycle_status TEXT NOT NULL CHECK (
+        lifecycle_status IN ('active', 'deleting')
+    ),
+    parent_status TEXT NOT NULL CHECK (
+        parent_status IN ('running', 'completed', 'failed', 'cancelled')
+    ),
+    parent_finished_at TEXT,
+    deletion_started_at TEXT,
+    messages_sha TEXT NOT NULL,
+    message_count INTEGER NOT NULL CHECK (message_count >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_lifecycles_created
+ON workflow_lifecycles(created_at DESC, lifecycle_id DESC);
+
+CREATE INDEX IF NOT EXISTS idx_workflow_lifecycles_parent_status
+ON workflow_lifecycles(parent_status);
+
 CREATE TABLE IF NOT EXISTS media_output_assets (
     id TEXT PRIMARY KEY,
     request_id TEXT NOT NULL,

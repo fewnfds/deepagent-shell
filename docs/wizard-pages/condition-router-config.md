@@ -16,7 +16,7 @@
 def create_router():
     threshold = 80
 
-    async def route(state, context):
+    async def route(state, runtime):
         risk = state.get("shared_vars", {}).get("risk", 0)
         branch = "manual_review" if risk >= threshold else "otherwise"
         return {
@@ -36,7 +36,8 @@ def create_router():
 
 - `state` 是完整 Workflow State 的独立可变副本，包含当前存在的 `shared_vars`、`agent_invocations` 和 `files`；可以修改副本，
   也可以通过 `update` 返回局部更新。
-- `context` 是完整 Workflow Runtime Context 的独立映射，包含请求消息快照、Workflow、Prepare 结果和当前已有的运行字段。
+- `runtime` 是 LangGraph 注入的官方 `Runtime[WorkflowRuntimeContext]`。不可变身份与 Prepare 在 `runtime.context`；Lifecycle
+  Store 在 `runtime.store`；后台 Run 命令在 `runtime.context.background_runs`。它不是 detached dict，也不要使用全局 service locator。
 - `activate` 必须是 Branch Edge key 列表，可以同时激活多个不同分支；key 必须与画布中选中 Edge 后在属性栏填写的值完全一致，
   不会显示在线段上。
 - `update` 必须是 Workflow State 的局部映射，只能更新当前 State contract 已声明的顶层字段。

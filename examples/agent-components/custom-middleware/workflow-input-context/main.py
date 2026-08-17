@@ -11,6 +11,11 @@ from langgraph.runtime import Runtime
 from langgraph.types import Overwrite
 
 from agent_shell.middleware_packages.messages import mutable_request_messages
+from agent_shell.runtime.workflow_lifecycle import (
+    LIFECYCLE_INPUT_KEY,
+    lifecycle_input_namespace,
+    lifecycle_invocations_namespace,
+)
 
 
 # 这份配置只属于从示例创建出来的当前 Middleware 实例。
@@ -31,23 +36,42 @@ WIC_CONFIG: dict[str, Any] = {
 }
 
 
-def customize_context_messages(
-    state: dict[str, Any],
-    context: Any,
-) -> list[dict[str, Any]]:
-    """从不可变的 Workflow 请求快照创建并改造当前 Agent 的输入消息。"""
+async def load_invocation_artifact(
+    runtime: Runtime[Any],
+    record: dict[str, Any],
+) -> dict[str, Any]:
+    context = runtime.context
+    result_ref = str(record.get("result_ref", ""))
+    if runtime.store is None or not result_ref:
+        raise RuntimeError("workflow invocation artifact is unavailable")
+    item = await runtime.store.aget(
+        lifecycle_invocations_namespace(context.lifecycle_id, context.run_id),
+        result_ref,
+    )
+    value = getattr(item, "value", None)
+    if not isinstance(value, dict):
+        raise RuntimeError("workflow invocation artifact is unavailable")
+    return deepcopy(value)
 
-    user_messages = mutable_request_messages(context.messages)
+
+async def customize_context_messages(
+    state: dict[str, Any],
+    runtime: Runtime[Any],
+    request_messages: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """从 Lifecycle Store 输入创建并改造当前 Agent 的消息。"""
+
+    user_messages = mutable_request_messages(request_messages)
 
     # ---- 在这里编写当前 WIC 变种自己的消息选择、裁剪和重排逻辑。 ----
-    # 可读取：state、context、context.workflow_state。
-    # 例如可以从 context.workflow_state["agent_invocations"] 选择前序 Agent 的结果，
-    # 然后修改或替换 user_messages。不要修改 context.messages 本身。
+    # 可读取：state、context、state["workflow_state_snapshot"]。
+    # 例如先从快照的 agent_invocations 选择轻量引用，再调用
+    # await load_invocation_artifact(runtime, record) 读取完整 messages。
 
     return user_messages
 
 
-def _initial_messages(
+async def _initial_messages(
     state: dict[str, Any],
     runtime: Runtime[Any],
     *,
@@ -56,9 +80,21 @@ def _initial_messages(
     if scope == "subagent":
         # Subagent 的输入是 Main Agent 委派给它的私有 messages。
         return deepcopy(convert_to_openai_messages(convert_to_messages(state.get("messages", []))))
-    # Workflow Agent 的原始输入只在 runtime.context 中；不从 Workflow root State 取整包消息。
+    # Workflow Agent 的原始输入位于 Lifecycle Store；不进入 root State 或 Context。
     context = getattr(runtime, "context", None)
-    return customize_context_messages(state, context)
+    store = getattr(runtime, "store", None)
+    lifecycle_id = str(getattr(context, "lifecycle_id", ""))
+    if store is None or not lifecycle_id:
+        raise RuntimeError("workflow lifecycle input is unavailable")
+    item = await store.aget(
+        lifecycle_input_namespace(lifecycle_id),
+        LIFECYCLE_INPUT_KEY,
+    )
+    value = getattr(item, "value", None)
+    request_messages = value.get("messages") if isinstance(value, dict) else None
+    if not isinstance(request_messages, list):
+        raise RuntimeError("workflow lifecycle input is unavailable")
+    return await customize_context_messages(state, runtime, request_messages)
 
 
 def _validate_virtual_path(path: str) -> str:
@@ -144,7 +180,7 @@ class WorkflowInputContextMiddleware(AgentMiddleware):
         state: dict[str, Any],
         runtime: Runtime[Any],
     ) -> dict[str, Any]:
-        messages = _initial_messages(state, runtime, scope=self._scope)
+        messages = await _initial_messages(state, runtime, scope=self._scope)
         messages = await build_workflow_input_context(
             messages,
             read_file=self._read_file,

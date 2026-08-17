@@ -11,8 +11,14 @@ from langgraph.graph import END, START, StateGraph
 from agent_shell.app import create_app
 from agent_shell.runtime.agent_builder import BuiltAgent
 from agent_shell.runtime.context import WorkflowRuntimeContext
+from agent_shell.runtime.input_messages import client_messages_sha
 from agent_shell.runtime.state import AgentShellState
 from agent_shell.runtime.workflow_debug import WorkflowDebugService
+from agent_shell.runtime.workflow_lifecycle import (
+    LIFECYCLE_INPUT_KEY,
+    WorkflowLifecycleService,
+    lifecycle_input_namespace,
+)
 from agent_shell.storage.database import SQLiteDatabase
 from agent_shell.storage.file_config import FileConfigRepository
 from agent_shell.storage.history_retention import HistoryRetentionStore
@@ -27,6 +33,87 @@ AGENT_ID = "11111111-1111-4111-8111-111111111111"
 class _MiddlewareRuntime:
     async def close(self) -> None:
         return None
+
+
+def test_workflow_debug_retention_never_prunes_running_runs(tmp_path) -> None:
+    data_root = tmp_path / "data"
+    database = SQLiteDatabase(data_root / "state" / "agent-shell.sqlite3")
+    configuration = FileConfigRepository(data_root)
+    retention = HistoryRetentionStore(configuration)
+    retention.set_limit("workflow_debug_history", 1)
+    store = WorkflowRunStore(database, retention)
+
+    def begin(thread_id: str, started_at: str) -> None:
+        store.begin(
+            {
+                "thread_id": thread_id,
+                "run_id": f"run-{thread_id}",
+                "request_id": "request",
+                "workflow_id": "workflow",
+                "workflow_name": "Workflow",
+                "messages_sha": "a" * 64,
+                "started_at": started_at,
+                "langsmith_project": "test",
+                "tracing_enabled": False,
+                "run_tree": [],
+            }
+        )
+
+    begin("running", "2026-01-01T00:00:00.000+00:00")
+    begin("old-terminal", "2026-01-01T00:00:01.000+00:00")
+    store.finish(
+        thread_id="old-terminal",
+        status="completed",
+        finished_at="2026-01-01T00:00:02.000+00:00",
+        error_code="",
+        run_tree=[],
+    )
+    begin("new-terminal", "2026-01-01T00:00:03.000+00:00")
+    store.finish(
+        thread_id="new-terminal",
+        status="completed",
+        finished_at="2026-01-01T00:00:04.000+00:00",
+        error_code="",
+        run_tree=[],
+    )
+
+    assert store.get("running")["status"] == "running"  # type: ignore[index]
+    assert store.get("old-terminal") is None
+    assert store.get("new-terminal")["status"] == "completed"  # type: ignore[index]
+
+
+def test_workflow_debug_retention_update_prunes_only_terminal_index(tmp_path) -> None:
+    data_root = tmp_path / "data"
+    database = SQLiteDatabase(data_root / "state" / "agent-shell.sqlite3")
+    configuration = FileConfigRepository(data_root)
+    store = WorkflowRunStore(database, HistoryRetentionStore(configuration))
+
+    for index in range(3):
+        thread_id = f"terminal-{index}"
+        store.begin(
+            {
+                "thread_id": thread_id,
+                "run_id": f"run-{index}",
+                "request_id": "request",
+                "workflow_id": "workflow",
+                "workflow_name": "Workflow",
+                "messages_sha": "a" * 64,
+                "started_at": f"2026-01-01T00:00:0{index}.000+00:00",
+                "langsmith_project": "test",
+                "tracing_enabled": False,
+                "run_tree": [],
+            }
+        )
+        store.finish(
+            thread_id=thread_id,
+            status="completed",
+            finished_at=f"2026-01-01T00:00:1{index}.000+00:00",
+            error_code="",
+            run_tree=[],
+        )
+
+    assert store.set_retention(1)["retention_limit"] == 1
+    assert [item["thread_id"] for item in store.list(limit=10)] == ["terminal-2"]
 
 
 def _workflow_payload() -> dict[str, object]:
@@ -79,6 +166,9 @@ def test_workflow_debug_persists_official_checkpoints_without_turning_input_into
         data_root = tmp_path / "data"
         database = SQLiteDatabase(data_root / "state" / "agent-shell.sqlite3")
         configuration = FileConfigRepository(data_root)
+        HistoryRetentionStore(configuration).set_limit(
+            "workflow_debug_history", 1
+        )
         store = WorkflowRunStore(
             database,
             HistoryRetentionStore(configuration),
@@ -89,16 +179,13 @@ def test_workflow_debug_persists_official_checkpoints_without_turning_input_into
             tracing_enabled=False,
             langsmith_project="workflow-debug-test",
         )
+        lifecycle = WorkflowLifecycleService(database.path)
         raw_messages = [
             {"role": "system", "content": "private-system-attention-sentinel"},
             {"role": "assistant", "content": "private-assistant-data-sentinel"},
             {"role": "user", "content": "private-user-data-sentinel"},
         ]
-        context = WorkflowRuntimeContext.from_request(
-            raw_messages,
-            request_id="request-1",
-            workflow={"id": "workflow-1", "name": "Debug Workflow"},
-        )
+        messages_sha = client_messages_sha(raw_messages)
         observed_root_messages: list[object] = []
 
         def inspect_state(state: AgentShellState) -> dict[str, object]:
@@ -119,13 +206,29 @@ def test_workflow_debug_persists_official_checkpoints_without_turning_input_into
         assert admission.valid is True
         assert document is not None
 
+        await lifecycle.start()
         await service.start()
         try:
             run = service.create_run(
                 request_id="request-1",
                 workflow_id="workflow-1",
                 workflow_name="Debug Workflow",
-                messages_sha=context.messages_sha,
+                messages_sha=messages_sha,
+            )
+            lifecycle_id = await lifecycle.create(
+                raw_messages,
+                request_id="request-1",
+                run_id=str(run.run_id),
+                thread_id=run.thread_id,
+                workflow_id="workflow-1",
+                workflow_name="Debug Workflow",
+            )
+            context = WorkflowRuntimeContext.for_run(
+                request_id="request-1",
+                lifecycle_id=lifecycle_id,
+                run_id=str(run.run_id),
+                thread_id=run.thread_id,
+                workflow={"id": "workflow-1", "name": "Debug Workflow"},
             )
             run.begin()
             graph = compile_workflow(
@@ -142,6 +245,7 @@ def test_workflow_debug_persists_official_checkpoints_without_turning_input_into
                     )
                 },
                 checkpointer=service.checkpointer,
+                store=lifecycle.store,
             )
 
             result = await graph.ainvoke(
@@ -156,7 +260,7 @@ def test_workflow_debug_persists_official_checkpoints_without_turning_input_into
             assert observed_root_messages == []
             detail = await service.detail(run.thread_id)
             assert detail is not None
-            assert detail["messages_sha"] == context.messages_sha
+            assert detail["messages_sha"] == messages_sha
             assert detail["status"] == "completed"
             assert detail["checkpoints"]
             assert all(
@@ -180,10 +284,30 @@ def test_workflow_debug_persists_official_checkpoints_without_turning_input_into
             assert "private-assistant-data-sentinel" not in serialized
             assert "private-user-data-sentinel" not in serialized
 
-            assert await service.delete(run.thread_id) is True
+            lifecycle_input = await lifecycle.store.aget(
+                lifecycle_input_namespace(lifecycle_id),
+                LIFECYCLE_INPUT_KEY,
+            )
+            assert lifecycle_input is not None
+            assert lifecycle_input.value["messages"] == raw_messages
+            assert lifecycle_input.value["messages_sha"] == messages_sha
+
+            newer = service.create_run(
+                request_id="request-2",
+                workflow_id="workflow-1",
+                workflow_name="Newer Debug Workflow",
+                messages_sha="b" * 64,
+            )
+            newer.begin()
+            await newer.finish("completed")
+
             assert await service.detail(run.thread_id) is None
+            assert await service.checkpoint_count(run.thread_id) > 0
+            assert await service.purge_thread(run.thread_id) is False
+            assert await service.checkpoint_count(run.thread_id) == 0
         finally:
             await service.close()
+            await lifecycle.close()
 
     asyncio.run(scenario())
 

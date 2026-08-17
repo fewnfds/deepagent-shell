@@ -68,7 +68,7 @@ def test_execution_yields_each_completed_semantic_event_once() -> None:
                 }
             ),
         ]
-        execution = AgentExecution(
+        execution = RunExecution(
             graph=EventGraph(events),
             input_state={"messages": []},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
@@ -96,7 +96,7 @@ def test_non_string_lifecycle_output_stays_behind_the_runtime_error_boundary() -
             "enabled": True,
             "output_source": "def output(event):\n    return event\n",
         }
-        execution = AgentExecution(
+        execution = RunExecution(
             graph=EventGraph([]),
             input_state={"messages": []},
             rectifier=OutputEventRectifier(OutputProjector(settings)),

@@ -11,7 +11,7 @@ from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.validation.models import validation_failure_detail
 from agent_shell.workflow.catalog import node_catalog_payload
 from agent_shell.workflow.validation import admit_workflow_document
-from agent_shell.workflow_contracts import WorkflowDefinition
+from agent_shell.workflow_contracts import WorkflowDefinition, WorkflowRole
 
 
 class WorkflowBulkDelete(BaseModel):
@@ -91,8 +91,8 @@ def build_workflow_router(
         return node_catalog_payload()
 
     @router.get("/api/workflows")
-    async def list_workflows() -> list[dict]:
-        return store.list_items()
+    async def list_workflows(workflow_role: WorkflowRole | None = None) -> list[dict]:
+        return store.list_items(workflow_role=workflow_role)
 
     @router.post("/api/workflows")
     async def create_workflow(payload: dict) -> dict:
@@ -147,19 +147,24 @@ def build_workflow_router(
 
     @router.put("/api/workflows/{item_id}/graph")
     async def update_workflow_graph(item_id: str, payload: dict) -> dict:
-        report, document = admit_workflow_document(payload)
-        if document is None:
-            raise HTTPException(
-                status_code=422,
-                detail=validation_failure_detail(report),
-            )
-        if not store.save_graph(item_id, document):
+        workflow = store.get_item(item_id)
+        if workflow is None:
             raise management_error(
                 404,
                 code="workflow_not_found",
                 message_key="errors.workflowNotFound",
                 message="The Workflow does not exist.",
             )
+        report, document = admit_workflow_document(
+            payload,
+            workflow_role=workflow["workflow_role"],
+        )
+        if document is None:
+            raise HTTPException(
+                status_code=422,
+                detail=validation_failure_detail(report),
+            )
+        assert store.save_graph(item_id, document)
         return document.model_dump(mode="json")
 
     @router.delete("/api/workflows/{item_id}")

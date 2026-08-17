@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 from typing_extensions import TypedDict
 from typing_extensions import NotRequired
 
 from deepagents import DeepAgentState
 from deepagents.middleware.filesystem import FilesystemState
 from langchain.agents.middleware import AgentMiddleware
-from langchain_core.messages import AnyMessage
 from pydantic import JsonValue
 
 
@@ -28,21 +27,71 @@ class WorkflowTaskContext(TypedDict):
     payload: dict[str, JsonValue]
 
 
+class WorkflowTaskReference(TypedDict):
+    dispatcher_node_id: str
+    dispatcher_invocation_id: str
+    task_id: str
+    dispatch_key: str
+
+
 class AgentInvocationRecord(TypedDict):
     invocation_id: str
     workflow_id: str
     workflow_node_id: str
     agent_id: str
     invoked_at: float
-    messages: list[AnyMessage]
+    result_ref: str
+    workflow_task: NotRequired[WorkflowTaskReference]
+
+
+class AgentInvocationArtifact(TypedDict):
+    invocation_id: str
+    workflow_id: str
+    workflow_node_id: str
+    agent_id: str
+    invoked_at: float
+    messages: list[Any]
     workflow_task: NotRequired[WorkflowTaskContext]
+
+
+def _agent_invocation_slot(record: AgentInvocationRecord) -> tuple[str, ...]:
+    workflow_task = record.get("workflow_task")
+    if workflow_task is not None:
+        return (
+            "task",
+            workflow_task["dispatcher_node_id"],
+            workflow_task["task_id"],
+        )
+    workflow_node_id = record.get("workflow_node_id")
+    if workflow_node_id:
+        return ("node", workflow_node_id)
+    return ("invocation", record["invocation_id"])
 
 
 def merge_agent_invocations(
     current: dict[str, AgentInvocationRecord] | None,
     update: dict[str, AgentInvocationRecord] | None,
 ) -> dict[str, AgentInvocationRecord]:
-    """Merge independently identified Agent invocations across graph branches."""
+    """Keep the latest reference for each logical Agent or dispatcher task slot."""
+
+    by_slot: dict[tuple[str, ...], AgentInvocationRecord] = {}
+    order: list[tuple[str, ...]] = []
+    for record in [*(current or {}).values(), *(update or {}).values()]:
+        slot = _agent_invocation_slot(record)
+        if slot not in by_slot:
+            order.append(slot)
+        by_slot[slot] = record
+    return {
+        by_slot[slot]["invocation_id"]: by_slot[slot]
+        for slot in order
+    }
+
+
+def merge_background_tasks(
+    current: dict[str, dict[str, JsonValue]] | None,
+    update: dict[str, dict[str, JsonValue]] | None,
+) -> dict[str, dict[str, JsonValue]]:
+    """Merge the latest explicitly checked snapshot for each background task."""
 
     return {**(current or {}), **(update or {})}
 
@@ -56,6 +105,9 @@ class WorkflowState(TypedDict):
             dict[str, AgentInvocationRecord],
             merge_agent_invocations,
         ]
+    ]
+    background_tasks: NotRequired[
+        Annotated[dict[str, dict[str, JsonValue]], merge_background_tasks]
     ]
     files: FilesystemState.__annotations__["files"]
 
@@ -71,6 +123,7 @@ class AgentShellState(DeepAgentState, FilesystemState):
 
     shared_vars: NotRequired[Annotated[dict[str, JsonValue], merge_shared_vars]]
     workflow_task: NotRequired[WorkflowTaskContext]
+    workflow_state_snapshot: NotRequired[dict[str, Any]]
 
 
 class AgentShellStateMiddleware(AgentMiddleware[AgentShellState]):
@@ -81,11 +134,14 @@ class AgentShellStateMiddleware(AgentMiddleware[AgentShellState]):
 
 __all__ = [
     "AgentInvocationRecord",
+    "AgentInvocationArtifact",
     "AgentShellState",
     "AgentShellStateMiddleware",
     "WorkflowState",
     "WorkflowNodeInputState",
     "WorkflowTaskContext",
+    "WorkflowTaskReference",
     "merge_agent_invocations",
+    "merge_background_tasks",
     "merge_shared_vars",
 ]

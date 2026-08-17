@@ -62,7 +62,7 @@ function canvasNode(node: WorkflowGraphNode, document: WorkflowGraphDocument): W
     id: node.id,
     type: node.type,
     position: document.layout.nodes[node.id] ?? defaultPositions[node.type],
-    deletable: ['agent', 'condition-router', 'task-dispatcher'].includes(node.type),
+    deletable: !['start', 'end'].includes(node.type),
     data: {
       nodeType: node.type,
       mainAgentId: node.config.main_agent_id ?? '',

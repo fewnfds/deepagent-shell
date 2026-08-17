@@ -13,7 +13,7 @@ Windows 源码 Clone 从项目根运行：
 
 ## 管理台入口
 
-- 【Workflow】：管理公开 model、共享 Filesystem 和 Vue Flow 画布；
+- 【Workflow】：分别管理父图与子图、共享 Filesystem 和 Vue Flow 画布；只有启用的父图映射公开 model；
 - 【系统】：系统配置、文件管理和日志中心；
 - 【Agent】：Main Agent 与一层可复用 Subagent；
 - 【组件】：可复用 Agent/Workflow 配置，包括 Filesystem、权限和独立 Middleware 装配；
@@ -25,7 +25,7 @@ Windows 源码 Clone 从项目根运行：
 1. 在【组件 / Filesystem】创建共享空间配置。
 2. 创建模型、输出模式和 Main Agent；需要把客户端多轮消息整理到 Agent 初始上下文时，从
    `内置示例-workflow-input-context` 创建 Custom Middleware 并装配到 Agent。
-3. 在【Workflow】新建记录，选择该 Filesystem；点击【编辑 Flow】进入全屏画布。
+3. 在【Workflow / 父图】新建记录，选择该 Filesystem；点击【编辑 Flow】进入全屏画布。
 4. 添加 Agent 节点，选择 Main Agent，连接 `Start -> Agent -> End` 并保存。
 5. 启用 Workflow，在首页设置 API Key 并启动 API Server。
 6. 调用 `/v1/models` 确认名称，再使用该名称调用 `/v1/chat/completions`。

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Mapping
 
 from langchain.chat_models import init_chat_model
+from langgraph.store.base import BaseStore
 from pydantic import SecretStr
 
 from agent_shell import __version__
@@ -144,6 +145,7 @@ class AgentBuilder:
         skills_dir: Path,
         validation: ConfigurationValidationService,
         provider_http_clients: ProviderHttpClients,
+        store: BaseStore,
     ) -> None:
         self._secrets = secrets
         self._custom_tools_dir = custom_tools_dir
@@ -152,6 +154,7 @@ class AgentBuilder:
         self._skills_dir = skills_dir
         self._validation = validation
         self._provider_http_clients = provider_http_clients
+        self._store = store
         self._middleware_runtime: MiddlewarePackageRuntime | None = None
 
     async def close_failed_build(self) -> None:
@@ -211,6 +214,7 @@ class AgentBuilder:
         owner_name: str,
         workflow_node_id: str | None = None,
         workspace: DeepAgentsWorkspace | None = None,
+        mapped_directory_paths: Mapping[str, Path] | None = None,
         disabled_capabilities: frozenset[str] = frozenset(),
     ) -> MaterializedAgentProfile:
         model_id = references["model"]
@@ -340,6 +344,7 @@ class AgentBuilder:
                 filesystem_mode=filesystem_mode,
                 skills_dir=self._skills_dir,
                 workspace=workspace,
+                mapped_directory_paths=mapped_directory_paths,
             )
         except DeepAgentsCapabilityError as exc:
             raise configuration_error(
@@ -483,6 +488,7 @@ class AgentBuilder:
         workflow_filesystem_id: str | None = None,
         workflow_node_id: str | None = None,
         workspace: DeepAgentsWorkspace | None = None,
+        mapped_directory_paths: Mapping[str, Path] | None = None,
     ) -> BuiltAgent:
         # Validate the immutable request snapshot before any selected user module
         # can be imported or any optional capability can be materialized.
@@ -499,6 +505,7 @@ class AgentBuilder:
             request_id=request_id,
             workflow_node_id=workflow_node_id,
             workspace=workspace,
+            mapped_directory_paths=mapped_directory_paths,
         )
 
     async def build_resolved(
@@ -511,6 +518,7 @@ class AgentBuilder:
         request_id: str = "",
         workflow_node_id: str | None = None,
         workspace: DeepAgentsWorkspace | None = None,
+        mapped_directory_paths: Mapping[str, Path] | None = None,
     ) -> BuiltAgent:
         main_agent = assembly.main_agent
         references = assembly.references
@@ -543,6 +551,7 @@ class AgentBuilder:
             owner_name=main_agent_name,
             workflow_node_id=workflow_node_id,
             workspace=workspace,
+            mapped_directory_paths=mapped_directory_paths,
             disabled_capabilities=assembly.disabled_capabilities,
         )
         constructor: dict[str, object] = {
@@ -550,6 +559,7 @@ class AgentBuilder:
             "name": str(main_agent["name"]),
             "state_schema": AgentShellState,
             "context_schema": WorkflowRuntimeContext,
+            "store": self._store,
         }
         if materialized.system_prompt is not None:
             constructor["system_prompt"] = materialized.system_prompt

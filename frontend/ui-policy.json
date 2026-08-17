@@ -400,6 +400,7 @@
           "src/pages/SubagentPage.vue",
           "src/pages/SystemSettingsPage.vue",
           "src/pages/TerminologyPage.vue",
+          "src/pages/WorkflowLifecyclesPage.vue",
           "src/pages/WorkflowsPage.vue"
         ]
       },
@@ -548,6 +549,7 @@
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/EventFeedPage.vue",
           "src/pages/TerminologyPage.vue",
+          "src/pages/WorkflowLifecyclesPage.vue",
           "src/pages/WorkflowsPage.vue"
         ]
       },

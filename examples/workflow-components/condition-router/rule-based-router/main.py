@@ -5,7 +5,7 @@ def create_router():
     matched_branch = "matched"
     fallback_branch = "otherwise"
 
-    async def route(state, context):
+    async def route(state, runtime):
         # 在这里读取上游节点写入的 Workflow State。
         # 本示例约定分数位于 state["shared_vars"][state_key]。
         shared_vars = state.get("shared_vars", {})
@@ -24,7 +24,7 @@ def create_router():
         # activate 中的字符串必须与画布上的 Branch Edge key 完全一致。
         # 可以返回多个不同的 key 来并行激活多条分支，例如 ["audit", "notify"]。
         # update 是可选的 Workflow State 局部更新；不需要更新时保持空字典。
-        # context 包含请求、Workflow 和 Prepare 等运行上下文，可按需读取。
+        # runtime.context 包含请求、Workflow、Prepare 和后台 Run 命令。
         return {
             "activate": [branch],
             "update": {},

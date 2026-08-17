@@ -56,6 +56,22 @@ function isVirtualFilePathInvalid(virtualPath: string, sourcePath: string): bool
             <div class="filesystem-mapping-secondary">
               <label class="visually-hidden" :for="`mapped-directory-local-path-${index}`">{{ t('fields.local_path') }}</label>
               <input :id="`mapped-directory-local-path-${index}`" v-model="item.local_path" class="form-control" :placeholder="t('editors.filesystem.mappingExamples.localDirectory')">
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="visually-hidden" :for="`mapped-directory-path-origin-${index}`">{{ t('editors.filesystem.pathOriginLabel') }}</label>
+                  <select :id="`mapped-directory-path-origin-${index}`" v-model="item.path_origin" class="form-select" :aria-label="t('editors.filesystem.pathOriginLabel')">
+                    <option value="absolute">{{ t('editors.filesystem.pathOrigins.absolute') }}</option>
+                    <option value="data-root-relative">{{ t('editors.filesystem.pathOrigins.dataRootRelative') }}</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="visually-hidden" :for="`mapped-directory-lifecycle-mode-${index}`">{{ t('editors.filesystem.lifecycleModeLabel') }}</label>
+                  <select :id="`mapped-directory-lifecycle-mode-${index}`" v-model="item.lifecycle_mode" class="form-select" :aria-label="t('editors.filesystem.lifecycleModeLabel')">
+                    <option value="fixed">{{ t('editors.filesystem.lifecycleModes.fixed') }}</option>
+                    <option value="dynamic">{{ t('editors.filesystem.lifecycleModes.dynamic') }}</option>
+                  </select>
+                </div>
+              </div>
             </div>
             <div class="filesystem-mapping-arrow" aria-hidden="true"><i class="bi bi-arrow-right" /></div>
             <div class="filesystem-mapping-primary">
@@ -70,7 +86,7 @@ function isVirtualFilePathInvalid(virtualPath: string, sourcePath: string): bool
         </div>
         <p v-else class="text-body-secondary mb-0">{{ t('editors.filesystem.emptyMappedDirectories') }}</p>
         <div class="simple-mapping-footer">
-          <LteButton :aria-label="t('editors.common.add')" :title="t('editors.common.add')" data-action="add-mapped-directory" size="sm" theme="success" type="button" @click="draft.mapped_directories.push({ virtual_path: '', local_path: '' })"><i class="bi bi-plus-lg" aria-hidden="true" /></LteButton>
+          <LteButton :aria-label="t('editors.common.add')" :title="t('editors.common.add')" data-action="add-mapped-directory" size="sm" theme="success" type="button" @click="draft.mapped_directories.push({ virtual_path: '', local_path: '', path_origin: 'absolute', lifecycle_mode: 'fixed' })"><i class="bi bi-plus-lg" aria-hidden="true" /></LteButton>
         </div>
       </div>
     </section>

@@ -2,15 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Collection, Mapping, Sequence
 from copy import deepcopy
-from dataclasses import fields
-from typing import TYPE_CHECKING, Annotated, Any, Callable
+from typing import Annotated, Any, Callable
 
+from langgraph.runtime import Runtime
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from agent_shell.python_packages.contracts import PythonPackageReference
-
-if TYPE_CHECKING:
-    from agent_shell.runtime.context import WorkflowRuntimeContext
+from agent_shell.runtime.context import WorkflowRuntimeContext
 
 
 BranchKey = Annotated[
@@ -18,7 +16,10 @@ BranchKey = Annotated[
     StringConstraints(strip_whitespace=True),
     Field(min_length=1, max_length=64),
 ]
-ConditionRouterCallable = Callable[[dict[str, Any], dict[str, Any]], Awaitable[Any]]
+ConditionRouterCallable = Callable[
+    [dict[str, Any], Runtime[WorkflowRuntimeContext]],
+    Awaitable[Any],
+]
 
 
 class ConditionRouterBlock(BaseModel):
@@ -60,15 +61,6 @@ def _detached(value: Any) -> Any:
     return deepcopy(value)
 
 
-def workflow_context_value(context: WorkflowRuntimeContext) -> dict[str, Any]:
-    """Project every current Runtime Context field into a detached mapping."""
-
-    return {
-        field.name: _detached(getattr(context, field.name))
-        for field in fields(context)
-    }
-
-
 def _state_delta(
     before: Mapping[str, Any], after: Mapping[str, Any]
 ) -> dict[str, Any]:
@@ -97,7 +89,7 @@ async def run_condition_router(
     route: ConditionRouterCallable,
     *,
     state: Mapping[str, Any],
-    context: WorkflowRuntimeContext,
+    runtime: Runtime[WorkflowRuntimeContext],
     allowed_branches: Collection[str],
 ) -> ConditionRouterResult:
     from agent_shell.runtime.state import WorkflowState
@@ -107,7 +99,7 @@ async def run_condition_router(
     try:
         value = await route(
             state=script_state,
-            context=workflow_context_value(context),
+            runtime=runtime,
         )
         result = ConditionRouterResult.model_validate(value)
         mutation_update = _state_delta(original_state, script_state)
@@ -141,5 +133,4 @@ __all__ = [
     "ConditionRouterError",
     "ConditionRouterResult",
     "run_condition_router",
-    "workflow_context_value",
 ]

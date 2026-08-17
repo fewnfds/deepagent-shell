@@ -9,10 +9,12 @@ import pytest
 from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
+from langgraph.store.memory import InMemoryStore
 
 from agent_shell.runtime.agent_builder import BuiltAgent
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.runtime.state import AgentShellState
+from agent_shell.runtime.workflow_lifecycle import lifecycle_invocations_namespace
 from agent_shell.task_dispatcher import TaskDispatcherError, run_task_dispatcher
 from agent_shell.task_dispatcher_packages import TaskDispatcherPackageRuntime
 from agent_shell.workflow import admit_workflow_document, compile_workflow
@@ -25,6 +27,10 @@ DISPATCHER_ID = "11111111-1111-4111-8111-111111111111"
 WORKER_ID = "22222222-2222-4222-8222-222222222222"
 TOWN_WORKER_ID = "55555555-5555-4555-8555-555555555555"
 COLLECTOR_ID = "33333333-3333-4333-8333-333333333333"
+
+
+def _runtime(**kwargs) -> Runtime[WorkflowRuntimeContext]:
+    return Runtime(context=WorkflowRuntimeContext(**kwargs))
 
 
 class _MiddlewareRuntime:
@@ -129,8 +135,8 @@ def _graph_payload() -> dict:
 
 
 def test_dispatcher_validates_task_identity_routes_and_state_updates() -> None:
-    async def dispatch(state, context):
-        state.setdefault("shared_vars", {})["planned"] = context["prepare"]["count"]
+    async def dispatch(state, runtime):
+        state.setdefault("shared_vars", {})["planned"] = runtime.context.prepare["count"]
         return {
             "tasks": [
                 {
@@ -146,7 +152,7 @@ def test_dispatcher_validates_task_identity_routes_and_state_updates() -> None:
         run_task_dispatcher(
             dispatch,
             state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
-            context=WorkflowRuntimeContext(prepare={"count": 1}),
+            runtime=_runtime(prepare={"count": 1}),
             allowed_dispatch_keys={"city"},
         )
     )
@@ -154,7 +160,7 @@ def test_dispatcher_validates_task_identity_routes_and_state_updates() -> None:
     assert result.tasks[0].payload == {"value": 1}
     assert result.update == {"shared_vars": {"planned": 1}}
 
-    async def duplicate(state, context):
+    async def duplicate(state, runtime):
         return {
             "tasks": [
                 {"task_id": "same", "dispatch_key": "city", "payload": {}},
@@ -168,12 +174,12 @@ def test_dispatcher_validates_task_identity_routes_and_state_updates() -> None:
             run_task_dispatcher(
                 duplicate,
                 state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
-                context=WorkflowRuntimeContext(),
+                runtime=_runtime(),
                 allowed_dispatch_keys={"city"},
             )
         )
 
-    async def unmapped(state, context):
+    async def unmapped(state, runtime):
         return {
             "tasks": [{"task_id": "city:2", "dispatch_key": "missing", "payload": {}}],
             "update": {},
@@ -184,12 +190,12 @@ def test_dispatcher_validates_task_identity_routes_and_state_updates() -> None:
             run_task_dispatcher(
                 unmapped,
                 state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
-                context=WorkflowRuntimeContext(),
+                runtime=_runtime(),
                 allowed_dispatch_keys={"city"},
             )
         )
 
-    async def invalid_payload(state, context):
+    async def invalid_payload(state, runtime):
         return {
             "tasks": [
                 {
@@ -206,7 +212,7 @@ def test_dispatcher_validates_task_identity_routes_and_state_updates() -> None:
             run_task_dispatcher(
                 invalid_payload,
                 state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
-                context=WorkflowRuntimeContext(),
+                runtime=_runtime(),
                 allowed_dispatch_keys={"city"},
             )
         )
@@ -229,7 +235,7 @@ def test_task_dispatcher_package_materializes_async_dispatch(tmp_path: Path) -> 
     )
     (package_dir / "main.py").write_text(
         "def create_dispatcher():\n"
-        "    async def dispatch(state, context):\n"
+        "    async def dispatch(state, runtime):\n"
         "        city = state['shared_vars']['cities'][0]\n"
         "        return {'tasks': [{'task_id': city['id'], 'dispatch_key': 'city', 'payload': city}], 'update': {}}\n"
         "    return dispatch\n",
@@ -254,7 +260,7 @@ def test_task_dispatcher_package_materializes_async_dispatch(tmp_path: Path) -> 
                 "agent_invocations": {},
                 "files": {},
             },
-            context=WorkflowRuntimeContext(),
+            runtime=_runtime(),
             allowed_dispatch_keys={"city"},
         )
     )
@@ -269,7 +275,9 @@ def test_compiler_sends_private_task_to_worker_state_and_subgraph_context() -> N
     assert admission.valid is True
     assert document is not None
 
-    async def dispatch(state, context):
+    async def dispatch(state, runtime):
+        assert runtime.context.workflow_node_id == "dispatcher"
+        assert runtime.context.invocation_id
         return {
             "tasks": [
                 {"task_id": "record:1", "dispatch_key": "record", "payload": {"value": 1}},
@@ -284,14 +292,14 @@ def test_compiler_sends_private_task_to_worker_state_and_subgraph_context() -> N
         runtime: Runtime[WorkflowRuntimeContext],
     ) -> dict:
         task = state["workflow_task"]
-        assert runtime.context.workflow_task["task_id"] == task["task_id"]
+        assert runtime.context.workflow_node_id in {"worker", "town-worker"}
         return {"messages": [AIMessage(content=str(task["payload"]["value"]))]}
 
     def collector(
-        _state: AgentShellState,
+        state: AgentShellState,
         runtime: Runtime[WorkflowRuntimeContext],
     ) -> dict:
-        records = runtime.context.workflow_state["agent_invocations"].values()
+        records = state["workflow_state_snapshot"]["agent_invocations"].values()
         task_ids = sorted(
             record["workflow_task"]["task_id"]
             for record in records
@@ -313,6 +321,7 @@ def test_compiler_sends_private_task_to_worker_state_and_subgraph_context() -> N
         .add_edge("collector", END)
         .compile()
     )
+    store = InMemoryStore()
     graph = compile_workflow(
         document,
         node_agents={
@@ -321,12 +330,17 @@ def test_compiler_sends_private_task_to_worker_state_and_subgraph_context() -> N
             "collector": _built_agent(COLLECTOR_ID, collector_graph),
         },
         task_dispatchers={"dispatcher": dispatch},
+        store=store,
     )
 
     result = asyncio.run(
         graph.ainvoke(
             {"shared_vars": {}, "agent_invocations": {}, "files": {}},
-            context=WorkflowRuntimeContext(workflow={"id": "workflow-1"}),
+            context=WorkflowRuntimeContext(
+                lifecycle_id="lifecycle-1",
+                run_id="run-1",
+                workflow={"id": "workflow-1"},
+            ),
         )
     )
 
@@ -344,7 +358,21 @@ def test_compiler_sends_private_task_to_worker_state_and_subgraph_context() -> N
         "town:1"
     ]
     assert len(collector_records) == 1
-    assert collector_records[0]["messages"][-1].content == "record:1,record:2,town:1"
+    collector_artifact = store.get(
+        lifecycle_invocations_namespace("lifecycle-1", "run-1"),
+        collector_records[0]["result_ref"],
+    )
+    assert collector_artifact is not None
+    assert collector_artifact.value["messages"][-1]["content"] == (
+        "record:1,record:2,town:1"
+    )
+    worker_artifact = store.get(
+        lifecycle_invocations_namespace("lifecycle-1", "run-1"),
+        worker_records[0]["result_ref"],
+    )
+    assert worker_artifact is not None
+    assert worker_artifact.value["workflow_task"]["payload"] == {"value": 1}
+    assert "payload" not in worker_records[0]["workflow_task"]
     assert result["shared_vars"] == {"planned": 2}
 
 
@@ -365,7 +393,7 @@ def test_dispatch_edges_require_unique_keys_and_cannot_mix_worker_inputs() -> No
         )
     )
 
-    async def dispatch(state, context):
+    async def dispatch(state, runtime):
         return {"tasks": [], "update": {}}
 
     issues = validate_workflow_topology(

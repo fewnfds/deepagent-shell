@@ -109,7 +109,7 @@ Router 使用 `family: workflow-node`、`adapter: condition-router`。同步工�
 def create_router():
     threshold = 80
 
-    async def route(state, context):
+    async def route(state, runtime):
         risk = state.get("shared_vars", {}).get("risk", 0)
         branch = "review" if risk >= threshold else "otherwise"
         return {"activate": [branch], "update": {}}
@@ -117,7 +117,7 @@ def create_router():
     return route
 ```
 
-`route(state, context)` 返回 `activate` 和 `update`。画布 compiler 将结果映射为 LangGraph `Command`；包不接触 Node ID，
+`route(state, runtime)` 返回 `activate` 和 `update`。画布 compiler 将结果映射为 LangGraph `Command`；包不接触 Node ID，
 也不直接返回 `Command`。
 
 ## Task Dispatcher
@@ -126,7 +126,7 @@ Task Dispatcher 使用 `family: workflow-node`、`adapter: task-dispatcher`。�
 
 ```python
 def create_dispatcher():
-    async def dispatch(state, context):
+    async def dispatch(state, runtime):
         cities = state.get("shared_vars", {}).get("cities", [])
         return {
             "tasks": [
@@ -145,7 +145,7 @@ def create_dispatcher():
 
 `tasks` 必须包含 1–1000 个具有唯一稳定 `task_id` 的 JSON payload；`dispatch_key` 必须匹配画布同源 Dispatch Edge。
 compiler 为每项构造 Shell-owned `WorkflowTaskContext`，再映射为 LangGraph `Send`。包不接触 Node ID，也不直接返回
-`Send`/`Command`。worker 子图通过私有 State 和 `runtime.context.workflow_task` 读取任务。完整规则与内置示例见
+`Send`/`Command`。worker 子图通过私有 State 的 `workflow_task` 读取任务。完整规则与内置示例见
 [任务分发](../wizard-pages/task-dispatcher-config.md)。payload 拒绝 Python 对象和非有限数；`update` 仍可写任意已声明
 Workflow State channel，但值必须通过该 channel 的现有类型校验。
 

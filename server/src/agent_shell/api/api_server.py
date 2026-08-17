@@ -14,7 +14,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 from agent_shell.api.errors import management_error
-from agent_shell.runtime.agent_runtime import AgentExecution
+from agent_shell.runtime.agent_runtime import RunExecution
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.input_messages import MAX_CHAT_COMPLETION_BODY_BYTES
 from agent_shell.runtime.request_snapshot import RequestSnapshotRuntime
@@ -202,7 +202,7 @@ def _completion_payload(
     *,
     model: str,
     content: str,
-    execution: AgentExecution,
+    execution: RunExecution,
 ) -> dict[str, object]:
     return {
         "id": f"chatcmpl_{uuid4().hex}",
@@ -273,7 +273,7 @@ async def _intercepted_completion_stream(model: str) -> AsyncIterator[str]:
 
 
 async def _completion_stream(
-    execution: AgentExecution,
+    execution: RunExecution,
     model: str,
 ) -> AsyncIterator[str]:
     completion_id = f"chatcmpl_{uuid4().hex}"
@@ -490,7 +490,10 @@ def build_api_server_router(
             return _openai_error(503, "api_server_stopped", "The API server is stopped.")
         workflow_models = [
             _model_object(item["name"])
-            for item in workflows.list_items(enabled_only=True)
+            for item in workflows.list_items(
+                enabled_only=True,
+                workflow_role="parent",
+            )
         ]
         return JSONResponse(content={"object": "list", "data": workflow_models})
 
@@ -566,7 +569,11 @@ def build_api_server_router(
                 "The current Workflow configuration could not be captured.",
             )
         workflow = request_snapshot.workflow_by_name(model)
-        if workflow is None or not workflow["enabled"]:
+        if (
+            workflow is None
+            or not workflow["enabled"]
+            or workflow["workflow_role"] != "parent"
+        ):
             return _openai_error(
                 404,
                 "model_not_found",

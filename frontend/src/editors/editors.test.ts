@@ -260,11 +260,15 @@ describe('dedicated block editors', () => {
     filesystemDraft.mapped_directories.push({
       virtual_path: '/workspace',
       local_path: 'C:/workspace',
+      path_origin: 'absolute',
+      lifecycle_mode: 'fixed',
     })
     const filesystem = mount(FilesystemEditor, {
       props: { modelValue: filesystemDraft, defaults: filesystemDefaults },
       global: { plugins: [localizedI18n] },
     })
+    expect(filesystem.get('#mapped-directory-path-origin-0').element).toHaveProperty('value', 'absolute')
+    expect(filesystem.get('#mapped-directory-lifecycle-mode-0').element).toHaveProperty('value', 'fixed')
     expect(filesystem.findAll('[data-action="add-mapped-directory"]')).toHaveLength(1)
     expect(filesystem.findAll('[data-action="add-virtual-directory"]')).toHaveLength(1)
     expect(filesystem.findAll('[data-action="add-virtual-file"]')).toHaveLength(1)

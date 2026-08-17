@@ -20,9 +20,9 @@ def _items(value: Any, name: str) -> list[dict[str, Any]]:
 
 def create_dispatcher():
     # This factory is called once when the Workflow request is assembled.
-    async def dispatch(state, context):
+    async def dispatch(state, runtime):
         # Customize this section to select work from Workflow State or the
-        # detached Runtime Context. This example expects an upstream node to
+        # official Runtime Context. This example expects an upstream node to
         # write cities and towns into shared_vars.
         shared_vars = state.get("shared_vars", {})
         if not isinstance(shared_vars, dict):

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from copy import deepcopy
 from typing import Any
 
 from langchain_core.runnables import RunnableConfig
+from langchain_core.messages.utils import convert_to_openai_messages
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
+from langgraph.store.base import BaseStore
 from langgraph.types import Command, Send
 
 from agent_shell.condition_router import (
@@ -16,6 +19,7 @@ from agent_shell.condition_router import (
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.runtime.state import WorkflowNodeInputState, WorkflowState
+from agent_shell.runtime.workflow_lifecycle import lifecycle_invocations_namespace
 from agent_shell.task_dispatcher import (
     TaskDispatcherCallable,
     TaskDispatcherError,
@@ -25,6 +29,7 @@ from agent_shell.workflow.catalog import node_type_spec
 from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
 from agent_shell.workflow.topology import validate_workflow_topology
 from agent_shell.workflow.validation import admit_workflow_document
+from agent_shell.workflow_contracts import WorkflowRole
 
 
 def _compile_error(code: str, message: str) -> AgentRuntimeError:
@@ -76,6 +81,12 @@ def _make_agent_node(*, node_id: str, built_agent: Any):
                 "The Workflow runtime did not provide the Workflow identity.",
                 status_code=500,
             )
+        if runtime.store is None:
+            raise AgentRuntimeError(
+                "workflow.store_unavailable",
+                "The Workflow invocation artifact Store is unavailable.",
+                status_code=500,
+            )
         parent_shared_vars = dict(state.get("shared_vars", {}))
         parent_files = dict(state.get("files", {}))
         workflow_task = dict(state.get("workflow_task", {}))
@@ -87,28 +98,59 @@ def _make_agent_node(*, node_id: str, built_agent: Any):
         }
         if workflow_task:
             child_input["workflow_task"] = workflow_task
+        child_input["workflow_state_snapshot"] = deepcopy(
+            {key: value for key, value in state.items() if key != "files"}
+        )
         child_context = runtime.context.for_workflow_agent(
-            state,
             workflow_node_id=node_id,
             agent_id=built_agent.agent_id,
             invocation_id=invocation_id,
-            workflow_task=workflow_task,
         )
         result = await built_agent.graph.ainvoke(
             child_input,
             config,
             context=child_context,
         )
-        invocation_record = {
+        invocation_artifact = {
             "invocation_id": invocation_id,
             "workflow_id": workflow_id,
             "workflow_node_id": node_id,
             "agent_id": built_agent.agent_id,
             "invoked_at": invoked_at,
-            "messages": result["messages"],
+            "messages": convert_to_openai_messages(result["messages"]),
         }
         if workflow_task:
-            invocation_record["workflow_task"] = workflow_task
+            invocation_artifact["workflow_task"] = deepcopy(workflow_task)
+        await runtime.store.aput(
+            lifecycle_invocations_namespace(
+                runtime.context.lifecycle_id,
+                runtime.context.run_id,
+            ),
+            invocation_id,
+            invocation_artifact,
+            index=False,
+        )
+        invocation_record = {
+            key: invocation_artifact[key]
+            for key in (
+                "invocation_id",
+                "workflow_id",
+                "workflow_node_id",
+                "agent_id",
+                "invoked_at",
+            )
+        }
+        invocation_record["result_ref"] = invocation_id
+        if workflow_task:
+            invocation_record["workflow_task"] = {
+                key: workflow_task[key]
+                for key in (
+                    "dispatcher_node_id",
+                    "dispatcher_invocation_id",
+                    "task_id",
+                    "dispatch_key",
+                )
+            }
         update: dict[str, Any] = {
             "agent_invocations": {invocation_id: invocation_record}
         }
@@ -134,6 +176,7 @@ def _make_agent_node(*, node_id: str, built_agent: Any):
 
 def _make_condition_router_node(
     *,
+    node_id: str,
     route: ConditionRouterCallable,
     route_targets: Mapping[str, str],
 ):
@@ -141,11 +184,18 @@ def _make_condition_router_node(
         state: WorkflowState,
         runtime: Runtime[WorkflowRuntimeContext],
     ) -> Command:
+        invocation_id, _invoked_at = _invocation_metadata(runtime)
+        node_runtime = runtime.override(
+            context=runtime.context.for_workflow_node(
+                workflow_node_id=node_id,
+                invocation_id=invocation_id,
+            )
+        )
         try:
             result = await run_condition_router(
                 route,
                 state=state,
-                context=runtime.context,
+                runtime=node_runtime,
                 allowed_branches=route_targets,
             )
         except ConditionRouterError as exc:
@@ -173,11 +223,17 @@ def _make_task_dispatcher_node(
         runtime: Runtime[WorkflowRuntimeContext],
     ) -> Command:
         invocation_id, _invoked_at = _invocation_metadata(runtime)
+        node_runtime = runtime.override(
+            context=runtime.context.for_workflow_node(
+                workflow_node_id=node_id,
+                invocation_id=invocation_id,
+            )
+        )
         try:
             result = await run_task_dispatcher(
                 dispatch,
                 state=state,
-                context=runtime.context,
+                runtime=node_runtime,
                 allowed_dispatch_keys=dispatch_targets,
             )
         except TaskDispatcherError as exc:
@@ -216,11 +272,16 @@ def compile_workflow(
     node_agents: Mapping[str, Any],
     condition_routers: Mapping[str, ConditionRouterCallable] | None = None,
     task_dispatchers: Mapping[str, TaskDispatcherCallable] | None = None,
+    workflow_role: WorkflowRole | None = None,
     checkpointer: Any | None = None,
+    store: BaseStore | None = None,
 ) -> Any:
     """Compile catalog-declared canvas nodes into an official StateGraph."""
 
-    admission, normalized = admit_workflow_document(document)
+    admission, normalized = admit_workflow_document(
+        document,
+        workflow_role=workflow_role,
+    )
     if normalized is None:
         issue = admission.issues[0]
         raise _compile_error(issue.code, issue.message)
@@ -290,6 +351,7 @@ def compile_workflow(
             builder.add_node(
                 node.id,
                 _make_condition_router_node(
+                    node_id=node.id,
                     route=route,
                     route_targets=targets,
                 ),
@@ -346,7 +408,7 @@ def compile_workflow(
         if not sources:
             continue
         builder.add_edge(sources[0] if len(sources) == 1 else sources, target)
-    return builder.compile(checkpointer=checkpointer)
+    return builder.compile(checkpointer=checkpointer, store=store)
 
 
 __all__ = ["compile_workflow"]

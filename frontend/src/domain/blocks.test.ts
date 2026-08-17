@@ -233,7 +233,12 @@ describe('block adapters', () => {
       },
     } as never, filesystemDefaults)
     expect(filesystem.mapped_directories).toEqual([
-      { virtual_path: '/kept/', local_path: 'H:\\kept' },
+      {
+        virtual_path: '/kept/',
+        local_path: 'H:\\kept',
+        path_origin: 'absolute',
+        lifecycle_mode: 'fixed',
+      },
     ])
     expect(filesystem.virtual_directories).toEqual([])
     expect(filesystem.system_prompt_override).toBe(filesystemDefaults.system_prompt)
@@ -275,12 +280,24 @@ describe('block adapters', () => {
 
     blank.name = ' Files '
     blank.mapped_directories.push(
-      { virtual_path: '', local_path: '' },
-      { virtual_path: ' /workspace/ ', local_path: ' H:\\workspace ' },
+      {
+        virtual_path: '', local_path: '', path_origin: 'absolute', lifecycle_mode: 'fixed',
+      },
+      {
+        virtual_path: ' /workspace/ ',
+        local_path: ' workspaces ',
+        path_origin: 'data-root-relative',
+        lifecycle_mode: 'dynamic',
+      },
     )
     const payload = filesystemAdapter.toPayload(blank, filesystemDefaults)
     expect(payload.mapped_directories).toEqual([
-      { virtual_path: '/workspace/', local_path: 'H:\\workspace' },
+      {
+        virtual_path: '/workspace/',
+        local_path: 'workspaces',
+        path_origin: 'data-root-relative',
+        lifecycle_mode: 'dynamic',
+      },
     ])
     expect(payload.system_prompt_override).toBeNull()
     blank.tool_configs.read_file.visible = false

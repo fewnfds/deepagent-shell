@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Collection, Mapping, Sequence
 from copy import deepcopy
-from dataclasses import fields
 from functools import cache
-from typing import TYPE_CHECKING, Annotated, Any, Callable
+from typing import Annotated, Any, Callable
 
 from pydantic import (
     BaseModel,
@@ -15,11 +14,10 @@ from pydantic import (
     TypeAdapter,
     field_validator,
 )
+from langgraph.runtime import Runtime
 
 from agent_shell.python_packages.contracts import PythonPackageReference
-
-if TYPE_CHECKING:
-    from agent_shell.runtime.context import WorkflowRuntimeContext
+from agent_shell.runtime.context import WorkflowRuntimeContext
 
 
 DispatchKey = Annotated[
@@ -33,7 +31,7 @@ TaskId = Annotated[
     Field(min_length=1, max_length=128),
 ]
 TaskDispatcherCallable = Callable[
-    [dict[str, Any], dict[str, Any]],
+    [dict[str, Any], Runtime[WorkflowRuntimeContext]],
     Awaitable[Any],
 ]
 
@@ -97,13 +95,6 @@ def _detached(value: Any) -> Any:
     return deepcopy(value)
 
 
-def _workflow_context_value(context: WorkflowRuntimeContext) -> dict[str, Any]:
-    return {
-        field.name: _detached(getattr(context, field.name))
-        for field in fields(context)
-    }
-
-
 def _state_delta(
     before: Mapping[str, Any],
     after: Mapping[str, Any],
@@ -134,7 +125,7 @@ async def run_task_dispatcher(
     dispatch: TaskDispatcherCallable,
     *,
     state: Mapping[str, Any],
-    context: WorkflowRuntimeContext,
+    runtime: Runtime[WorkflowRuntimeContext],
     allowed_dispatch_keys: Collection[str],
 ) -> TaskDispatcherResult:
     from agent_shell.runtime.state import WorkflowState
@@ -144,7 +135,7 @@ async def run_task_dispatcher(
     try:
         value = await dispatch(
             state=script_state,
-            context=_workflow_context_value(context),
+            runtime=runtime,
         )
         result = TaskDispatcherResult.model_validate(value)
         mutation_update = _state_delta(original_state, script_state)

@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 
+from langgraph.store.memory import InMemoryStore
+
 from agent_shell.capability_manifest import DEFAULT_MIDDLEWARE_CAPABILITY_TYPES
 from agent_shell.runtime import agent_builder, deepagents_harness
 from agent_shell.runtime.agent_builder import AgentBuilder
@@ -70,6 +72,7 @@ def test_agent_builder_disabled_capabilities_override_deep_agents_default_stack(
         skills_dir=tmp_path / "skills",
         validation=object(),
         provider_http_clients=object(),
+        store=InMemoryStore(),
     )
     profile = builder._materialize_profile(
         {"model": "model-id"},

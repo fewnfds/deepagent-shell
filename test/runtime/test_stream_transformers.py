@@ -8,7 +8,7 @@ from langchain_core.tools import tool
 from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 
-from agent_shell.runtime.agent_runtime import AgentExecution
+from agent_shell.runtime.agent_runtime import RunExecution
 from agent_shell.runtime.output_event_pool import OutputEventRectifier
 from agent_shell.runtime.output_projection import OutputProjector, WorkflowOutputProjector
 from agent_shell.runtime.output_stream import V3EventNormalizer
@@ -94,7 +94,7 @@ def test_agent_execution_projects_real_stream_writer_custom_event() -> None:
     builder.add_edge("emit_progress", END)
     graph = builder.compile()
 
-    execution = AgentExecution(
+    execution = RunExecution(
         graph=graph,
         input_state={},
         rectifier=OutputEventRectifier(
@@ -147,7 +147,7 @@ def test_agent_execution_projects_real_tool_result() -> None:
         "enabled": True,
         "output_source": output_source("tool={{tool_name}} output={{output}}"),
     }
-    execution = AgentExecution(
+    execution = RunExecution(
         graph=graph,
         input_state={},
         rectifier=OutputEventRectifier(OutputProjector(output_mode)),

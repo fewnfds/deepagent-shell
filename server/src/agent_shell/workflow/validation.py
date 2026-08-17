@@ -19,6 +19,7 @@ from agent_shell.workflow.contracts import (
     canonical_workflow_document_json,
 )
 from agent_shell.workflow.topology import validate_workflow_topology
+from agent_shell.workflow_contracts import WorkflowRole
 
 
 WORKFLOW_ADMISSION_STAGE = "workflow_draft"
@@ -111,6 +112,8 @@ def _config_issues(
 def _normalize_nodes(
     document: WorkflowGraphDocumentV1,
     issues: list[ValidationIssue],
+    *,
+    workflow_role: WorkflowRole | None,
 ) -> list[WorkflowNodeV1]:
     indexes: dict[str, int] = {}
     normalized = []
@@ -173,14 +176,28 @@ def _normalize_nodes(
             normalized.append(node)
         else:
             normalized.append(node.model_copy(update={"config": config}))
+        if workflow_role is not None and workflow_role not in spec.workflow_roles:
+            issues.append(
+                _node_issue(
+                    node,
+                    index,
+                    code="workflow.node_role_not_allowed",
+                    field="type",
+                    message="The Workflow node type is not available for this Workflow role.",
+                    message_key="validation.issue.workflow.nodeRoleNotAllowed",
+                    message_args={"workflow_role": workflow_role},
+                )
+            )
     return normalized
 
 
 def _admission_issues(
     document: WorkflowGraphDocumentV1,
+    *,
+    workflow_role: WorkflowRole | None,
 ) -> tuple[list[ValidationIssue], WorkflowGraphDocumentV1]:
     issues: list[ValidationIssue] = []
-    nodes = _normalize_nodes(document, issues)
+    nodes = _normalize_nodes(document, issues, workflow_role=workflow_role)
     normalized = document.model_copy(
         update={
             "definition": document.definition.model_copy(update={"nodes": nodes})
@@ -238,6 +255,8 @@ def _admission_issues(
 
 def admit_workflow_document(
     payload: object,
+    *,
+    workflow_role: WorkflowRole | None = None,
 ) -> tuple[ValidationReport, WorkflowGraphDocumentV1 | None]:
     try:
         document = WorkflowGraphDocumentV1.model_validate(payload)
@@ -252,7 +271,10 @@ def admit_workflow_document(
             None,
         )
 
-    issues, normalized = _admission_issues(document)
+    issues, normalized = _admission_issues(
+        document,
+        workflow_role=workflow_role,
+    )
     report = ValidationReport(stage=WORKFLOW_ADMISSION_STAGE, issues=tuple(issues))
     return report, normalized if report.valid else None
 
@@ -263,8 +285,12 @@ def validate_workflow_executable(
     validate_main_agent: MainAgentValidator,
     condition_routers: Mapping[str, ConditionRouterCallable] | None = None,
     task_dispatchers: Mapping[str, TaskDispatcherCallable] | None = None,
+    workflow_role: WorkflowRole | None = None,
 ) -> ValidationReport:
-    admission, normalized = admit_workflow_document(document)
+    admission, normalized = admit_workflow_document(
+        document,
+        workflow_role=workflow_role,
+    )
     if normalized is None:
         return ValidationReport(
             stage=WORKFLOW_EXECUTABLE_STAGE,

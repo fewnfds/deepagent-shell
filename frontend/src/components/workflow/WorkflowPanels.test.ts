@@ -36,6 +36,7 @@ const agentCatalog: WorkflowNodeCatalogItem = {
   title_key: 'workflow.nodes.agent.title',
   description_key: 'workflow.nodes.agent.description',
   config_schema: {},
+  workflow_roles: ['parent', 'child'],
   input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', max_connections: null }],
   output_handles: [{ id: 'next', kind: 'control', edge_type: 'normal', max_connections: null }],
 }
@@ -47,6 +48,7 @@ const startCatalog: WorkflowNodeCatalogItem = {
   title_key: 'workflow.nodes.start.title',
   description_key: 'workflow.nodes.start.description',
   config_schema: {},
+  workflow_roles: ['parent', 'child'],
   input_handles: [],
   output_handles: [{ id: 'next', kind: 'control', edge_type: 'normal', max_connections: null }],
 }
@@ -58,6 +60,7 @@ const endCatalog: WorkflowNodeCatalogItem = {
   title_key: 'workflow.nodes.end.title',
   description_key: 'workflow.nodes.end.description',
   config_schema: {},
+  workflow_roles: ['parent', 'child'],
   input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', max_connections: null }],
   output_handles: [],
 }
@@ -69,6 +72,7 @@ const conditionRouterCatalog: WorkflowNodeCatalogItem = {
   title_key: 'workflow.nodes.conditionRouter.title',
   description_key: 'workflow.nodes.conditionRouter.description',
   config_schema: {},
+  workflow_roles: ['parent', 'child'],
   input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', accepted_edge_types: ['normal', 'branch'], max_connections: null }],
   output_handles: [{ id: 'branch', kind: 'control', edge_type: 'branch', accepted_edge_types: ['branch'], max_connections: null }],
 }
@@ -80,6 +84,7 @@ const taskDispatcherCatalog: WorkflowNodeCatalogItem = {
   title_key: 'workflow.nodes.taskDispatcher.title',
   description_key: 'workflow.nodes.taskDispatcher.description',
   config_schema: {},
+  workflow_roles: ['parent', 'child'],
   input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', accepted_edge_types: ['normal', 'branch'], max_connections: null }],
   output_handles: [{ id: 'dispatch', kind: 'control', edge_type: 'dispatch', accepted_edge_types: ['dispatch'], max_connections: null }],
 }

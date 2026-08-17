@@ -8,12 +8,14 @@ from deepagents import create_deep_agent
 from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import PrivateStateAttr
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
+from langgraph.store.memory import InMemoryStore
 from typing_extensions import TypedDict
 
 from agent_shell.runtime import agent_builder, subagent_middleware
 from agent_shell.runtime.agent_builder import AgentBuilder
 from agent_shell.runtime.agent_compilation import MaterializedAgentProfile
 from agent_shell.runtime.context import WorkflowRuntimeContext
+from agent_shell.runtime.state import AgentShellState
 from agent_shell.validation.assembly import (
     ResolvedSubagent,
     ResolvedSubagentEdge,
@@ -37,7 +39,7 @@ class _ScopeReadingMiddleware(AgentMiddleware):
                     "role": "user",
                     "content": (
                         f"private={len(state['messages'])};"
-                        f"parent={len(runtime.context.workflow_state['agent_invocations'])};"
+                        f"parent={len(state['workflow_state_snapshot']['agent_invocations'])};"
                         f"node={runtime.context.workflow_node_id};"
                         f"invocation={runtime.context.invocation_id}"
                     ),
@@ -82,18 +84,30 @@ def test_custom_middleware_reads_private_agent_state_and_parent_workflow_snapsho
     agent = create_deep_agent(
         model=_ToolCapableFakeModel(responses=["answer"]),
         middleware=[middleware],
+        state_schema=AgentShellState,
     )
-    context = WorkflowRuntimeContext.from_request(
-        [{"role": "user", "content": "external request"}],
+    context = WorkflowRuntimeContext.for_run(
         request_id="request-1",
+        lifecycle_id="lifecycle-1",
+        run_id="run-1",
+        thread_id="thread-1",
     ).for_workflow_agent(
-        {"agent_invocations": {"prior": {"workflow_node_id": "agent-prior"}}},
         workflow_node_id="agent-current",
         agent_id="agent-id",
         invocation_id="invocation-current",
     )
 
-    result = agent.invoke({"messages": []}, context=context)
+    result = agent.invoke(
+        {
+            "messages": [],
+            "workflow_state_snapshot": {
+                "agent_invocations": {
+                    "prior": {"workflow_node_id": "agent-prior"}
+                }
+            },
+        },
+        context=context,
+    )
 
     assert result["messages"][0].content == (
         "private=0;parent=1;node=agent-current;invocation=invocation-current"
@@ -175,6 +189,7 @@ def test_custom_package_middleware_is_the_shell_caller_tail_for_main_and_subagen
         skills_dir=tmp_path / "skills",
         validation=validation,
         provider_http_clients=SimpleNamespace(),
+        store=InMemoryStore(),
     )
 
     def materialize(*_args, scope: str, **_kwargs):

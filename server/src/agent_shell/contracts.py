@@ -449,9 +449,27 @@ class MappedDirectory(BaseModel):
 
     virtual_path: VirtualPath
     local_path: LocalPath
+    path_origin: Literal["absolute", "data-root-relative"] = "absolute"
+    lifecycle_mode: Literal["fixed", "dynamic"] = "fixed"
 
     _virtual_path = field_validator("virtual_path")(_validate_virtual_directory_path)
-    _local_path = field_validator("local_path")(_validate_required_local_path)
+
+    @model_validator(mode="after")
+    def validate_local_path(self) -> "MappedDirectory":
+        if not self.local_path:
+            raise ValueError("local path must not be empty")
+        local = Path(self.local_path)
+        if self.path_origin == "absolute":
+            if not local.is_absolute():
+                raise ValueError("absolute mapped local_path must be absolute")
+            return self
+        if local.is_absolute():
+            raise ValueError("data-root-relative mapped local_path must be relative")
+        if any(part in {".", ".."} for part in local.parts):
+            raise ValueError(
+                "data-root-relative mapped local_path must not contain . or .."
+            )
+        return self
 
 
 class VirtualFileSource(BaseModel):
@@ -611,9 +629,13 @@ class FilesystemBlock(StrictBlock):
         mapped_local_paths: set[str] = set()
         for item in self.mapped_directories:
             local = Path(item.local_path)
-            if not local.is_dir():
+            if item.path_origin == "absolute" and not local.is_dir():
                 raise ValueError(f"mapped local_path must be an existing directory: {local}")
-            canonical = os.path.normcase(str(local.resolve()))
+            canonical = (
+                os.path.normcase(str(local.resolve()))
+                if item.path_origin == "absolute"
+                else f"data-root-relative:{os.path.normcase(str(local))}"
+            )
             if canonical in mapped_local_paths:
                 raise ValueError(f"mapped local directories must be unique: {local}")
             mapped_local_paths.add(canonical)

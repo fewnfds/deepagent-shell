@@ -3,6 +3,44 @@ from __future__ import annotations
 from .support import *
 
 
+def test_workflow_runtime_boundaries_and_debug_retention_are_managed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        workflow = create_workflow(client, name="Managed boundaries")
+        updated = client.put(
+            f"/api/workflows/{workflow['id']}",
+            json={
+                "name": workflow["name"],
+                "workflow_role": workflow["workflow_role"],
+                "description": workflow["description"],
+                "filesystem_id": workflow["filesystem_id"],
+                "recursion_limit": 250,
+                "execution_timeout_seconds": 900,
+                "max_concurrency": 32,
+                "enabled": True,
+            },
+        )
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["max_concurrency"] == 32
+
+        current = client.get("/api/history-retention/workflow-debug")
+        assert current.status_code == 200, current.text
+        assert current.json()["retention_limit"] == 50
+        saved = client.put(
+            "/api/history-retention/workflow-debug",
+            json={"retention_limit": 25},
+        )
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["retention_limit"] == 25
+
+        invalid = client.put(
+            "/api/history-retention/workflow-debug",
+            json={"retention_limit": 0},
+        )
+        assert invalid.status_code == 422
+
+
 def test_workflow_event_output_is_a_reusable_component_reference(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -20,7 +58,9 @@ def test_workflow_event_output_is_a_reusable_component_reference(
             f"/api/workflows/{workflow['id']}",
             json={
                 **{key: workflow[key] for key in (
-                    "name", "description", "filesystem_id", "workflow_prepare_id", "enabled"
+                    "name", "workflow_role", "description", "filesystem_id",
+                    "workflow_prepare_id", "recursion_limit",
+                    "execution_timeout_seconds", "max_concurrency", "enabled"
                 )},
                 "workflow_event_output_id": output.json()["id"],
             },
@@ -37,7 +77,7 @@ def test_workflow_event_output_is_a_reusable_component_reference(
         assert saved["workflow_event_output_id"] == output.json()["id"]
 
 
-def test_workflow_crud_publishes_enabled_tbd_entries_without_main_agent_reference(
+def test_workflow_roles_filter_management_and_public_model_entries(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
@@ -48,11 +88,24 @@ def test_workflow_crud_publishes_enabled_tbd_entries_without_main_agent_referenc
             client,
             name="Research Workflow",
         )
+        child = create_workflow(
+            client,
+            name="Research Child",
+            workflow_role="child",
+        )
         assert client.get(f"/api/workflows/{created['id']}").json() == created
-        assert client.get("/api/workflows").json() == [created]
+        assert client.get("/api/workflows").json() == [child, created]
+        assert client.get(
+            "/api/workflows?workflow_role=parent"
+        ).json() == [created]
+        assert client.get(
+            "/api/workflows?workflow_role=child"
+        ).json() == [child]
         assert [item["id"] for item in client.get("/v1/models").json()["data"]] == [
             "Research Workflow"
         ]
+        assert created["workflow_role"] == "parent"
+        assert child["workflow_role"] == "child"
         assert created["filesystem_id"]
 
         assert client.delete(f"/api/main-agents/{main_agent['id']}").json() == {
@@ -63,6 +116,7 @@ def test_workflow_crud_publishes_enabled_tbd_entries_without_main_agent_referenc
             f"/api/workflows/{created['id']}",
             json={
                 "name": "Research Workflow",
+                "workflow_role": "parent",
                 "description": "Disabled test Workflow.",
                 "filesystem_id": created["filesystem_id"],
                 "enabled": False,
@@ -84,6 +138,7 @@ def test_workflow_rejects_duplicate_names_and_removed_main_agent_field(
             "/api/workflows",
             json={
                 "name": "Unique Workflow",
+                "workflow_role": "parent",
                 "description": "Duplicate.",
                 "filesystem_id": existing["filesystem_id"],
                 "enabled": True,
@@ -93,6 +148,7 @@ def test_workflow_rejects_duplicate_names_and_removed_main_agent_field(
             "/api/workflows",
             json={
                 "name": "Legacy Workflow",
+                "workflow_role": "parent",
                 "description": "Rejected legacy shape.",
                 "main_agent_id": "missing-agent",
                 "filesystem_id": existing["filesystem_id"],
@@ -114,6 +170,7 @@ def test_workflow_requires_existing_filesystem_and_protects_its_reference(
             "/api/workflows",
             json={
                 "name": "Missing Filesystem",
+                "workflow_role": "parent",
                 "description": "Rejected reference.",
                 "filesystem_id": "00000000-0000-0000-0000-000000000000",
                 "enabled": True,
@@ -135,6 +192,7 @@ def test_workflow_requires_existing_filesystem_and_protects_its_reference(
             f"/api/workflows/{workflow['id']}",
             json={
                 "name": workflow["name"],
+                "workflow_role": workflow["workflow_role"],
                 "description": workflow["description"],
                 "filesystem_id": second["id"],
                 "enabled": workflow["enabled"],
@@ -216,6 +274,7 @@ def test_workflow_graph_catalog_save_and_reload(
             f"/api/workflows/{workflow['id']}",
             json={
                 "name": workflow["name"],
+                "workflow_role": workflow["workflow_role"],
                 "description": "Metadata changed without touching the graph.",
                 "filesystem_id": workflow["filesystem_id"],
                 "enabled": True,
@@ -226,9 +285,52 @@ def test_workflow_graph_catalog_save_and_reload(
     assert empty.status_code == 200
     assert empty.json()["definition"]["nodes"] == []
     assert [item["type"] for item in catalog.json()] == [
-        "start", "agent", "condition-router", "task-dispatcher", "end"
+        "start",
+        "agent",
+        "condition-router",
+        "task-dispatcher",
+        "end",
     ]
     assert saved.status_code == 200, saved.text
     assert saved.json() == document
     assert metadata.status_code == 200, metadata.text
     assert reloaded.json() == document
+
+
+def test_graph_save_rejects_background_action_as_node(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        main_agent = create_main_agent(client)
+        child = create_workflow(client, name="Child", workflow_role="child")
+        save_linear_workflow_graph(client, child, main_agent)
+        graph_url = f"/api/workflows/{child['id']}/graph"
+        document = client.get(graph_url).json()
+        document["definition"]["nodes"].insert(
+            1,
+            {
+                "id": "background-start",
+                "type": "background-workflow-start",
+                "type_version": 1,
+                "config": {"child_workflow_id": child["id"]},
+            },
+        )
+        document["definition"]["edges"][0]["target"] = "background-start"
+        document["definition"]["edges"].insert(
+            1,
+            {
+                "id": "background-agent",
+                "source": "background-start",
+                "source_handle": "next",
+                "target": "agent",
+                "target_handle": "in",
+            },
+        )
+
+        response = client.put(graph_url, json=document)
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["validation"]["issues"][0]["code"] == (
+        "workflow.node_type_unsupported"
+    )

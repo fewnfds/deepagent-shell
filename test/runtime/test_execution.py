@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+from types import SimpleNamespace
 
 from .support import *
 from .support import _build_chat_model
@@ -11,7 +12,7 @@ from agent_shell.provider_http import PROVIDER_HTTP_TIMEOUT
 from agent_shell.provider_integrations import bundled_provider_integrations
 from agent_shell.runtime import agent_builder
 from agent_shell.runtime.model_response import ModelResponse, finish_reason_category
-from agent_shell.runtime.output_stream import OutputEvent
+from agent_shell.runtime.output_stream import MainAgentMediaBlock, OutputEvent
 
 @pytest.mark.parametrize(
     ("reason", "category"),
@@ -28,6 +29,37 @@ def test_finish_reason_categories_keep_unknown_provider_values_explicit(
     reason: str | None, category: str
 ) -> None:
     assert finish_reason_category(reason) == category
+
+
+def test_workflow_run_completion_does_not_inherit_an_agent_finish_reason() -> None:
+    normalizer = SimpleNamespace(
+        usage={},
+        finish_reason="length",
+        finish_reason_source="response_metadata.finish_reason",
+    )
+    workflow = RunExecution(
+        graph=None,
+        input_state={},
+        rectifier=None,
+        normalizer=normalizer,
+        middleware_runtime=noop_middleware_runtime(),
+        media_response=noop_media_response(),
+        run_kind="workflow",
+    )
+    agent = RunExecution(
+        graph=None,
+        input_state={},
+        rectifier=None,
+        normalizer=normalizer,
+        middleware_runtime=noop_middleware_runtime(),
+        media_response=noop_media_response(),
+        run_kind="agent",
+    )
+
+    assert workflow.finish_reason == "stop"
+    assert workflow.finish_reason_source is None
+    assert agent.finish_reason == "length"
+    assert agent.finish_reason_source == "response_metadata.finish_reason"
 
 def test_agent_execution_closes_v3_stream_when_consumer_is_cancelled() -> None:
     async def scenario() -> bool:
@@ -72,7 +104,7 @@ def test_agent_execution_closes_v3_stream_when_consumer_is_cancelled() -> None:
             "output_source": output_source(),
         }
         run = BlockingRun()
-        execution = AgentExecution(
+        execution = RunExecution(
             graph=Graph(run),
             input_state={"messages": [{"role": "user", "content": "cancel me"}]},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
@@ -127,9 +159,6 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch) -> None:
                 assert transformers
                 return self.run
 
-        monkeypatch.setattr(
-            "agent_shell.runtime.agent_runtime.EXECUTION_TIMEOUT_SECONDS", 0.01
-        )
         settings = config(mode="blocklist")
         settings["event_outputs"]["assistant_text"]["enabled"] = False
         settings["event_outputs"]["lifecycle"] = {
@@ -137,13 +166,14 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch) -> None:
             "output_source": output_source(),
         }
         run = BlockingRun()
-        execution = AgentExecution(
+        execution = RunExecution(
             graph=Graph(run),
             input_state={"messages": [{"role": "user", "content": "wait"}]},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
             normalizer=V3EventNormalizer("Main Agent"),
             middleware_runtime=noop_middleware_runtime(),
             media_response=noop_media_response(),
+            execution_timeout_seconds=0.01,
         )
         stream = execution.stream_text()
         assert await anext(stream) == "running"
@@ -200,7 +230,7 @@ def test_successful_execution_reports_completion_after_workflow_debug_failure() 
                 self.codes.append("request_completed")
 
         diagnostics = RecordingDiagnostics()
-        execution = AgentExecution(
+        execution = RunExecution(
             graph=Graph(),
             input_state={"messages": [], "shared_vars": {}},
             rectifier=OutputEventRectifier(OutputProjector(config(mode="blocklist"))),
@@ -223,6 +253,112 @@ def test_successful_execution_reports_completion_after_workflow_debug_failure() 
         "request_completed",
     ]
 
+
+def test_silent_execution_skips_public_projectors_observers_and_media() -> None:
+    async def scenario() -> dict[str, object] | None:
+        class OneEnvelopeRun:
+            def __init__(self) -> None:
+                self._sent = False
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, _exc_type, _exc, _traceback) -> None:
+                return None
+
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                if self._sent:
+                    raise StopAsyncIteration
+                self._sent = True
+                return object()
+
+            async def output(self):
+                return {"shared_vars": {"result": "ok"}}
+
+        class Graph:
+            async def astream_events(
+                self, _input, *, config: dict, version: str, transformers: tuple = ()
+            ):
+                assert version == "v3"
+                assert transformers
+                return OneEnvelopeRun()
+
+        class SilentNormalizer:
+            usage: dict[str, int] = {}
+            finish_reason = "stop"
+            finish_reason_source = None
+            last_main_agent_response = None
+
+            def lifecycle(self, phase: str, **_kwargs) -> OutputEvent:
+                return OutputEvent(
+                    event_type="lifecycle",
+                    phase=phase,
+                    sequence=1,
+                    timestamp="now",
+                )
+
+            def feed(self, _envelope):
+                return [
+                    MainAgentMediaBlock(
+                        timestamp="now",
+                        namespace="root",
+                        agent_name="Agent",
+                        node="agent",
+                        message_id="message-1",
+                        block_index=0,
+                        content={"type": "image", "url": "private"},
+                    )
+                ]
+
+            def close_main_agent_messages(self) -> None:
+                return None
+
+            def abort_main_agent_messages(self) -> None:
+                return None
+
+            def media_notification(self, *_args):
+                raise AssertionError("silent execution must not create media output")
+
+        class ExplodingProjector:
+            def enabled(self, _event) -> bool:
+                raise AssertionError("silent execution must not inspect output policy")
+
+            def render(self, _event) -> str:
+                raise AssertionError("silent execution must not render output")
+
+        class ExplodingMediaResponse:
+            async def project(self, _event):
+                raise AssertionError("silent execution must not persist response media")
+
+            @property
+            def assets(self):
+                return []
+
+            def structured_blocks(self, _response):
+                return []
+
+        def observe(_event) -> None:
+            raise AssertionError("silent execution must not call public observers")
+
+        execution = RunExecution(
+            graph=Graph(),
+            input_state={"shared_vars": {}},
+            rectifier=OutputEventRectifier(ExplodingProjector()),  # type: ignore[arg-type]
+            normalizer=SilentNormalizer(),  # type: ignore[arg-type]
+            middleware_runtime=noop_middleware_runtime(),
+            media_response=ExplodingMediaResponse(),  # type: ignore[arg-type]
+            event_observers=(observe,),
+            public_output=False,
+        )
+
+        await execution.execute()
+        return execution.final_state
+
+    assert asyncio.run(scenario()) == {"shared_vars": {"result": "ok"}}
+
 def test_graph_recursion_failure_uses_step_limit_error() -> None:
     async def scenario() -> str:
         from langgraph.errors import GraphRecursionError
@@ -234,7 +370,7 @@ def test_graph_recursion_failure_uses_step_limit_error() -> None:
                 assert transformers
                 raise GraphRecursionError("private graph state")
 
-        execution = AgentExecution(
+        execution = RunExecution(
             graph=Graph(),
             input_state={"messages": [{"role": "user", "content": "loop"}]},
             rectifier=OutputEventRectifier(
@@ -305,7 +441,7 @@ def test_unclassified_graph_failure_is_not_mislabeled_as_provider() -> None:
             "output_source": output_source(),
         }
         diagnostics = RecordingDiagnostics()
-        execution = AgentExecution(
+        execution = RunExecution(
             graph=Graph(),
             input_state={"messages": [{"role": "user", "content": "fail"}]},
             rectifier=OutputEventRectifier(OutputProjector(settings)),
@@ -346,7 +482,7 @@ def test_classified_graph_failure_emits_matching_lifecycle_error() -> None:
             "enabled": True,
             "output_source": output_source("{{phase}}:{{error_code}}"),
         }
-        execution = AgentExecution(
+        execution = RunExecution(
             graph=Graph(),
             input_state={"messages": [{"role": "user", "content": "fail"}]},
             rectifier=OutputEventRectifier(OutputProjector(settings)),

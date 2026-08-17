@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from langchain_core.messages import AIMessage
 from langgraph.graph import END, START, StateGraph
+from langgraph.store.memory import InMemoryStore
 
 from agent_shell.runtime.agent_builder import BuiltAgent
 from agent_shell.runtime.agent_runtime import AgentRuntime
@@ -111,6 +112,13 @@ def test_workflow_prepare_runs_after_all_resolution_and_before_agent_builds(
         def _execution(self, built: BuiltAgent, **kwargs):
             return {"built": built, **kwargs}
 
+    class Lifecycle:
+        store = InMemoryStore()
+
+        async def create(self, *_args, **_kwargs) -> str:
+            events.append("lifecycle")
+            return "lifecycle-id"
+
     class PrepareRuntime:
         def __init__(self, **_kwargs) -> None:
             pass
@@ -140,10 +148,12 @@ def test_workflow_prepare_runs_after_all_resolution_and_before_agent_builds(
             assert owner_id == router_id
             assert reference["folder"] == router_id
 
-            async def route(state, context):
+            async def route(state, runtime):
                 events.append("router-call")
                 assert state["shared_vars"] == {}
-                assert context["prepare"] == {"prepared": True}
+                assert runtime.context.prepare == {"prepared": True}
+                assert runtime.context.workflow_node_id == "router"
+                assert runtime.context.invocation_id
                 return {"activate": ["otherwise"], "update": {}}
 
             return route
@@ -151,16 +161,16 @@ def test_workflow_prepare_runs_after_all_resolution_and_before_agent_builds(
         async def close(self) -> None:
             return None
 
-    original_from_request = WorkflowRuntimeContext.from_request
+    original_for_run = WorkflowRuntimeContext.for_run
 
-    def from_request(_cls, raw_messages, **kwargs):
+    def for_run(_cls, **kwargs):
         events.append("context")
-        return original_from_request(raw_messages, **kwargs)
+        return original_for_run(**kwargs)
 
     monkeypatch.setattr(
         WorkflowRuntimeContext,
-        "from_request",
-        classmethod(from_request),
+        "for_run",
+        classmethod(for_run),
     )
     monkeypatch.setattr(
         "agent_shell.runtime.agent_runtime.WorkflowPreparePackageRuntime",
@@ -203,6 +213,7 @@ def test_workflow_prepare_runs_after_all_resolution_and_before_agent_builds(
         blocks=blocks,
         python_packages_dir=tmp_path / "packages",
         runtime_dir=tmp_path / "runtime",
+        workflow_lifecycle=Lifecycle(),
     )  # type: ignore[arg-type]
     payload = {
         "definition": {
@@ -265,6 +276,7 @@ def test_workflow_prepare_runs_after_all_resolution_and_before_agent_builds(
     assert events == [
         f"resolve:{agent_a}",
         f"resolve:{agent_b}",
+        "lifecycle",
         "prepare-factory",
         "prepare",
         "prepare-close",

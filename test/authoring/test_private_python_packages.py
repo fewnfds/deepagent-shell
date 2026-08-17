@@ -17,7 +17,7 @@ def _write_router_template(data_root: Path, *, key: str = "basic_router") -> Pat
     (folder / "main.py").write_text(
         "def create_router():\n"
         "    branch = 'otherwise'\n"
-        "    async def route(state, context):\n"
+        "    async def route(state, runtime):\n"
         "        return {'activate': [branch], 'update': {}}\n"
         "    return route\n",
         encoding="utf-8",
@@ -176,7 +176,7 @@ def test_builtin_example_coexists_with_same_named_user_template_and_is_copied(
     example.mkdir(parents=True)
     example_source = (
         "def create_router():\n"
-        "    async def route(state, context):\n"
+        "    async def route(state, runtime):\n"
         "        return {'activate': ['builtin'], 'update': {}}\n"
         "    return route\n"
     )
@@ -212,7 +212,7 @@ def test_condition_router_can_be_created_from_empty_template_selection(
     client = make_client(tmp_path, monkeypatch)
     source = (
         "def create_router():\n"
-        "    async def route(state, context):\n"
+        "    async def route(state, runtime):\n"
         "        return {'activate': ['otherwise'], 'update': {}}\n"
         "    return route\n"
     )

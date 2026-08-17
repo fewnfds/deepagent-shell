@@ -78,6 +78,14 @@ const loaded = ref(false)
 const saving = ref(false)
 const loadError = ref('')
 const workflowId = computed(() => String(route.params.id ?? ''))
+const workflowListPath = computed(() => (
+  workflow.value?.workflow_role === 'child'
+    ? '/workflows/children'
+    : '/workflows/parents'
+))
+const workflowRoleLabel = computed(() => (
+  workflow.value ? t(`workflows.roles.${workflow.value.workflow_role}`) : ''
+))
 const agentCatalogItem = computed(() => (
   nodeCatalog.value.find((item) => item.type === 'agent') ?? null
 ))
@@ -576,7 +584,14 @@ onBeforeMount(() => {
 
 onMounted(async () => {
   try {
-    const [metadata, graph, agents, conditionRouterRecords, taskDispatcherRecords, catalog] = await Promise.all([
+    const [
+      metadata,
+      graph,
+      agents,
+      conditionRouterRecords,
+      taskDispatcherRecords,
+      catalog,
+    ] = await Promise.all([
       managementApi.getWorkflow(workflowId.value),
       managementApi.getWorkflowGraph(workflowId.value),
       managementApi.listMainAgents(),
@@ -588,7 +603,7 @@ onMounted(async () => {
     mainAgents.value = agents
     conditionRouters.value = conditionRouterRecords
     taskDispatchers.value = taskDispatcherRecords
-    nodeCatalog.value = catalog
+    nodeCatalog.value = catalog.filter((item) => item.workflow_roles.includes(metadata.workflow_role))
     stateContract.value = graph.definition.state_contract
     const canvas = workflowDocumentToCanvas(graph, nodeCatalog.value)
     nodes.value = canvas.nodes
@@ -610,10 +625,10 @@ onUnmounted(() => {
 <template>
   <div class="workflow-editor-shell">
     <header class="workflow-editor-toolbar">
-      <button :aria-label="t('workflows.editor.back')" :title="t('workflows.editor.back')" type="button" @click="router.push('/workflows')">
+      <button :aria-label="t('workflows.editor.back')" :title="t('workflows.editor.back')" type="button" @click="router.push(workflowListPath)">
         <i class="bi bi-chevron-left" aria-hidden="true" />
       </button>
-      <h1>{{ workflow?.name ?? t('workflows.editor.title') }}</h1>
+      <h1>{{ workflow ? `${workflowRoleLabel} - ${workflow.name}` : t('workflows.editor.title') }}</h1>
       <button :aria-label="t('common.save')" :disabled="!canSave" :title="t('common.save')" type="button" @click="save">
         <i class="bi bi-floppy" aria-hidden="true" />
       </button>

@@ -21,17 +21,21 @@ from agent_shell.api.api_server import (
 )
 from agent_shell.api.event_feed import build_event_feed_router
 from agent_shell.api.runtime_diagnostics import build_runtime_diagnostics_router
+from agent_shell.api.history_retention import build_history_retention_router
 from agent_shell.api.file_manager import build_file_manager_router
 from agent_shell.api.provider_integrations import build_provider_integrations_router
 from agent_shell.api.system_settings import build_system_settings_router
 from agent_shell.api.validation import build_validation_router
 from agent_shell.api.workflows import build_workflow_router
 from agent_shell.api.workflow_debug import build_workflow_debug_router
+from agent_shell.api.workflow_lifecycles import build_workflow_lifecycle_router
 from agent_shell.provider_http import ProviderHttpClients
 from agent_shell.provider_secrets import ProviderSecretResolver
 from agent_shell.langsmith_tracing import configure_project_langsmith_tracing
 from agent_shell.runtime.request_snapshot import RequestSnapshotRuntime
+from agent_shell.runtime.background_tasks import BackgroundTaskManager
 from agent_shell.runtime.workflow_debug import WorkflowDebugService
+from agent_shell.runtime.workflow_lifecycle import WorkflowLifecycleService
 from agent_shell.settings import (
     Settings,
     SettingsError,
@@ -139,6 +143,10 @@ def create_app(
         packages_dir=python_package_instances_dir,
         runtime_root=runtime_dir,
     )
+    workflow_lifecycle = WorkflowLifecycleService(
+        database,
+        data_root=settings.data_root,
+    )
     python_package_authoring = PythonPackageAuthoringService(
         templates_root=python_templates_dir,
         examples_root=application_home / "examples",
@@ -165,6 +173,10 @@ def create_app(
         api_server_events.publish_nowait,
         store=runtime_diagnostic_store,
         debug_logs=runtime_debug_logs,
+    )
+    background_tasks = BackgroundTaskManager(
+        workflow_lifecycle,
+        runtime_diagnostics=runtime_diagnostics,
     )
     event_logger.set_failure_reporter(
         lambda exc, request_id: runtime_diagnostics.observation_error(
@@ -201,6 +213,8 @@ def create_app(
         provider_http_clients=provider_http_clients,
         media_outputs=media_outputs,
         workflow_debug=workflow_debug,
+        workflow_lifecycle=workflow_lifecycle,
+        background_tasks=background_tasks,
         runtime_diagnostics=runtime_diagnostics,
     )
 
@@ -232,7 +246,13 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
-        await workflow_debug.start()
+        await workflow_lifecycle.start()
+        try:
+            await workflow_debug.start()
+        except BaseException:
+            await workflow_lifecycle.close()
+            raise
+        await background_tasks.start()
         try:
             event_logger.emit(
                 "security_configuration_loaded",
@@ -253,17 +273,23 @@ def create_app(
             yield
         finally:
             try:
-                await provider_http_clients.aclose()
+                await background_tasks.close()
             finally:
                 try:
-                    await workflow_debug.close()
+                    await provider_http_clients.aclose()
                 finally:
-                    event_logger.emit(
-                        "service_stopped", {"reason": "application_shutdown"}
-                    )
-                    runtime_diagnostics.close()
-                    if langsmith_client is not None:
-                        langsmith_client.close(timeout=5.0)
+                    try:
+                        await workflow_debug.close()
+                    finally:
+                        try:
+                            await workflow_lifecycle.close()
+                        finally:
+                            event_logger.emit(
+                                "service_stopped", {"reason": "application_shutdown"}
+                            )
+                            runtime_diagnostics.close()
+                            if langsmith_client is not None:
+                                langsmith_client.close(timeout=5.0)
 
     app = FastAPI(
         title=settings.app_name,
@@ -423,6 +449,8 @@ def create_app(
     app.state.provider_http_clients = provider_http_clients
     app.state.event_feed = event_feed
     app.state.workflow_debug = workflow_debug
+    app.state.workflow_lifecycle = workflow_lifecycle
+    app.state.background_tasks = background_tasks
     app.state.system_log_settings = system_log_settings
     app.add_middleware(
         ScopeAuthenticationMiddleware,
@@ -475,6 +503,13 @@ def create_app(
     )
     app.include_router(build_workflow_debug_router(workflow_debug))
     app.include_router(
+        build_workflow_lifecycle_router(
+            workflow_lifecycle,
+            background_tasks,
+            workflow_debug,
+        )
+    )
+    app.include_router(
         build_validation_router(
             configuration_validation,
             configuration_validation_settings,
@@ -484,6 +519,7 @@ def create_app(
         build_python_package_router(python_package_authoring)
     )
     app.include_router(build_runtime_diagnostics_router(runtime_diagnostics))
+    app.include_router(build_history_retention_router(workflow_run_store))
     app.include_router(
         build_event_feed_router(
             event_feed,

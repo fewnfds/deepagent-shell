@@ -65,7 +65,7 @@ function mediaQuery(query: string) {
 function titleKeyForPath(path: string): string {
   if (path.startsWith('/system/')) return 'navigation.system'
   if (path.startsWith('/agents/')) return 'navigation.agents'
-  if (path === '/workflows') return 'navigation.workflows'
+  if (path.startsWith('/workflows')) return 'navigation.workflows'
   if (path.startsWith('/agent-components')) return 'components.title'
   if (path.startsWith('/library/')) return 'library.title'
   if (path === '/terminology') return 'terminology.title'
@@ -79,6 +79,8 @@ async function mountShell(path = '/', api = createShellApi()) {
     routes: [
       '/',
       '/workflows',
+      '/workflows/parents',
+      '/workflows/children',
       '/system/config',
       '/system/files',
       '/system/events',
@@ -159,7 +161,7 @@ describe('AppShell', () => {
     await nextTick()
     expect(title.text()).toBe('Agent component configuration')
 
-    await router.push('/workflows')
+    await router.push('/workflows/parents')
     await nextTick()
     expect(title.text()).toBe('Workflows')
     expect(shell.get('a[href="/workflows"]').classes()).toContain('active')

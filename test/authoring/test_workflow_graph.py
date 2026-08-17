@@ -10,11 +10,13 @@ from langchain_core.messages import AIMessage
 from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
+from langgraph.store.memory import InMemoryStore
 
 from agent_shell.runtime.agent_builder import BuiltAgent
 from agent_shell.runtime.agent_runtime import AgentRuntime
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.runtime.state import AgentShellState, WorkflowState
+from agent_shell.runtime.workflow_lifecycle import lifecycle_invocations_namespace
 from agent_shell.validation.assembly import StaticAssembly
 from agent_shell.validation import ValidationIssue, ValidationReport
 from agent_shell.workflow import (
@@ -144,6 +146,39 @@ def test_catalog_exposes_the_first_supported_node_and_handle_paradigms() -> None
         "default": False,
         "title": "Defer",
         "type": "boolean",
+    }
+
+
+@pytest.mark.parametrize(
+    "node_type, config",
+    [
+        ("background-workflow-start", {"child_workflow_id": AGENT_B}),
+        ("background-agent-start", {"main_agent_id": AGENT_B}),
+        ("background-check", {}),
+        ("background-list", {}),
+        ("background-cancel", {}),
+    ],
+)
+def test_background_actions_are_runtime_commands_not_canvas_nodes(
+    node_type: str,
+    config: dict[str, object],
+) -> None:
+    payload = graph_payload(AGENT_A)
+    payload["definition"]["nodes"].insert(  # type: ignore[index]
+        1,
+        {
+            "id": "background-start",
+            "type": node_type,
+            "type_version": 1,
+            "config": config,
+        },
+    )
+
+    report, document = admit_workflow_document(payload, workflow_role="parent")
+
+    assert document is None
+    assert {issue.code for issue in report.issues} == {
+        "workflow.node_type_unsupported"
     }
 
 
@@ -441,6 +476,7 @@ def test_compiler_maps_canvas_start_and_end_to_langgraph_sentinels() -> None:
         .add_edge("answer", END)
         .compile()
     )
+    store = InMemoryStore()
     graph = compile_workflow(
         document,
         node_agents={
@@ -450,6 +486,7 @@ def test_compiler_maps_canvas_start_and_end_to_langgraph_sentinels() -> None:
                 agent_name="Agent A",
             )
         },
+        store=store,
     )
 
     result = asyncio.run(
@@ -457,6 +494,8 @@ def test_compiler_maps_canvas_start_and_end_to_langgraph_sentinels() -> None:
             {"shared_vars": {}, "agent_invocations": {}},
             context=WorkflowRuntimeContext(
                 request_id="request-1",
+                lifecycle_id="lifecycle-1",
+                run_id="run-1",
                 workflow={"id": "workflow-id"},
             ),
         )
@@ -470,14 +509,19 @@ def test_compiler_maps_canvas_start_and_end_to_langgraph_sentinels() -> None:
         "workflow_node_id",
         "agent_id",
         "invoked_at",
-        "messages",
+        "result_ref",
     }
     assert record["invocation_id"] in result["agent_invocations"]
     assert record["workflow_id"] == "workflow-id"
     assert record["workflow_node_id"] == "agent-1"
     assert record["agent_id"] == AGENT_A
     assert isinstance(record["invoked_at"], float)
-    assert record["messages"][-1].content == "compiled workflow response"
+    artifact = store.get(
+        lifecycle_invocations_namespace("lifecycle-1", "run-1"),
+        record["result_ref"],
+    )
+    assert artifact is not None
+    assert artifact.value["messages"][-1]["content"] == "compiled workflow response"
 
 
 def test_serial_agents_have_private_messages_and_explicit_parent_snapshot() -> None:
@@ -494,7 +538,7 @@ def test_serial_agents_have_private_messages_and_explicit_parent_snapshot() -> N
         ) -> dict[str, list[AIMessage]]:
             observations[node_id] = (
                 len(state.get("messages", [])),
-                len(runtime.context.workflow_state.get("agent_invocations", {})),
+                len(state.get("workflow_state_snapshot", {}).get("agent_invocations", {})),
             )
             return {"messages": [AIMessage(content=content)]}
 
@@ -506,6 +550,7 @@ def test_serial_agents_have_private_messages_and_explicit_parent_snapshot() -> N
             .compile()
         )
 
+    store = InMemoryStore()
     graph = compile_workflow(
         document,
         node_agents={
@@ -520,6 +565,7 @@ def test_serial_agents_have_private_messages_and_explicit_parent_snapshot() -> N
                 agent_name="Agent B",
             ),
         },
+        store=store,
     )
 
     result = asyncio.run(
@@ -527,6 +573,8 @@ def test_serial_agents_have_private_messages_and_explicit_parent_snapshot() -> N
             {"shared_vars": {}, "agent_invocations": {}},
             context=WorkflowRuntimeContext(
                 request_id="request-1",
+                lifecycle_id="lifecycle-1",
+                run_id="run-1",
                 workflow={"id": "workflow-id"},
             ),
         )
@@ -538,7 +586,14 @@ def test_serial_agents_have_private_messages_and_explicit_parent_snapshot() -> N
         "agent-1",
         "agent-2",
     ]
-    assert [record["messages"][-1].content for record in records] == [
+    artifacts = [
+        store.get(
+            lifecycle_invocations_namespace("lifecycle-1", "run-1"),
+            record["result_ref"],
+        ).value
+        for record in records
+    ]
+    assert [artifact["messages"][-1]["content"] for artifact in artifacts] == [
         "first agent",
         "second agent",
     ]
@@ -597,7 +652,7 @@ def test_normal_edge_fan_out_and_fan_in_merge_invocations_and_independent_files(
         ) -> dict[str, object]:
             observations[node_id] = (
                 len(state.get("messages", [])),
-                len(runtime.context.workflow_state.get("agent_invocations", {})),
+                len(state.get("workflow_state_snapshot", {}).get("agent_invocations", {})),
                 frozenset(state.get("files", {})),
             )
             update: dict[str, object] = {
@@ -618,6 +673,7 @@ def test_normal_edge_fan_out_and_fan_in_merge_invocations_and_independent_files(
             .compile()
         )
 
+    store = InMemoryStore()
     graph = compile_workflow(
         document,
         node_agents={
@@ -637,6 +693,7 @@ def test_normal_edge_fan_out_and_fan_in_merge_invocations_and_independent_files(
                 agent_name="Agent C",
             ),
         },
+        store=store,
     )
 
     result = asyncio.run(
@@ -644,6 +701,8 @@ def test_normal_edge_fan_out_and_fan_in_merge_invocations_and_independent_files(
             {"shared_vars": {}, "agent_invocations": {}, "files": {}},
             context=WorkflowRuntimeContext(
                 request_id="request-1",
+                lifecycle_id="lifecycle-1",
+                run_id="run-1",
                 workflow={"id": "workflow-id"},
             ),
         )
@@ -730,6 +789,7 @@ def test_normal_multi_in_compiles_as_one_all_of_barrier_and_runs_target_once() -
             .compile()
         )
 
+    store = InMemoryStore()
     graph = compile_workflow(
         document,
         node_agents={
@@ -743,13 +803,17 @@ def test_normal_multi_in_compiles_as_one_all_of_barrier_and_runs_target_once() -
                 agent_graph("agent-3"), agent_id=AGENT_C, agent_name="Agent C"
             ),
         },
+        store=store,
     )
 
     result = asyncio.run(
         graph.ainvoke(
             {"shared_vars": {}, "agent_invocations": {}},
             context=WorkflowRuntimeContext(
-                request_id="request-1", workflow={"id": "workflow-id"}
+                request_id="request-1",
+                lifecycle_id="lifecycle-1",
+                run_id="run-1",
+                workflow={"id": "workflow-id"},
             ),
         )
     )
@@ -794,12 +858,16 @@ def test_agent_defer_config_is_forwarded_to_langgraph_node(monkeypatch) -> None:
 
 
 def test_repeated_node_execution_uses_distinct_langgraph_task_invocations() -> None:
+    def answer(state: AgentShellState):
+        count = int(state.get("shared_vars", {}).get("count", 0)) + 1
+        return {
+            "messages": [AIMessage(content="completed")],
+            "shared_vars": {"count": count},
+        }
+
     agent_graph = (
         StateGraph(AgentShellState)
-        .add_node(
-            "answer",
-            lambda _state: {"messages": [AIMessage(content="completed")]},
-        )
+        .add_node("answer", answer)
         .add_edge(START, "answer")
         .add_edge("answer", END)
         .compile()
@@ -818,24 +886,27 @@ def test_repeated_node_execution_uses_distinct_langgraph_task_invocations() -> N
     parent.add_conditional_edges(
         "agent-loop",
         lambda state: (
-            "again" if len(state.get("agent_invocations", {})) < 2 else "done"
+            "again" if state.get("shared_vars", {}).get("count", 0) < 2 else "done"
         ),
         {"again": "agent-loop", "done": END},
     )
-    graph = parent.compile()
+    store = InMemoryStore()
+    graph = parent.compile(store=store)
 
     result = asyncio.run(
         graph.ainvoke(
             {"shared_vars": {}, "agent_invocations": {}},
             context=WorkflowRuntimeContext(
                 request_id="request-loop",
+                lifecycle_id="lifecycle-loop",
+                run_id="run-loop",
                 workflow={"id": "workflow-id"},
             ),
         )
     )
     records = result["agent_invocations"]
 
-    assert len(records) == 2
+    assert len(records) == 1
     assert {record["workflow_node_id"] for record in records.values()} == {
         "agent-loop"
     }
@@ -847,8 +918,13 @@ def test_repeated_node_execution_uses_distinct_langgraph_task_invocations() -> N
         "workflow_node_id",
         "agent_id",
         "invoked_at",
-        "messages",
+        "result_ref",
     } for record in records.values())
+    artifacts = store.search(
+        lifecycle_invocations_namespace("lifecycle-loop", "run-loop")
+    )
+    assert len(artifacts) == 2
+    assert {item.key for item in artifacts} != set(records)
 
 
 def test_static_normal_edge_cycle_has_no_controlled_exit() -> None:
@@ -878,6 +954,7 @@ def test_static_normal_edge_cycle_has_no_controlled_exit() -> None:
             .compile()
         )
 
+    store = InMemoryStore()
     graph = compile_workflow(
         document,
         node_agents={
@@ -888,6 +965,7 @@ def test_static_normal_edge_cycle_has_no_controlled_exit() -> None:
                 agent_graph("agent-2"), agent_id=AGENT_B, agent_name="Agent B"
             ),
         },
+        store=store,
     )
 
     with pytest.raises(GraphRecursionError):
@@ -895,7 +973,11 @@ def test_static_normal_edge_cycle_has_no_controlled_exit() -> None:
             graph.ainvoke(
                 {"shared_vars": {}, "agent_invocations": {}},
                 config={"recursion_limit": 4},
-                context=WorkflowRuntimeContext(workflow={"id": "workflow-id"}),
+                context=WorkflowRuntimeContext(
+                    lifecycle_id="lifecycle-1",
+                    run_id="run-1",
+                    workflow={"id": "workflow-id"},
+                ),
             )
         )
 
@@ -928,6 +1010,7 @@ def test_workflow_agent_nodes_share_official_state_backend_files() -> None:
             .compile()
         )
 
+    store = InMemoryStore()
     graph = compile_workflow(
         document,
         node_agents={
@@ -938,12 +1021,17 @@ def test_workflow_agent_nodes_share_official_state_backend_files() -> None:
                 agent_graph(write=False), agent_id=AGENT_B, agent_name="Agent B"
             ),
         },
+        store=store,
     )
 
     result = asyncio.run(
         graph.ainvoke(
             {"shared_vars": {}, "agent_invocations": {}, "files": {}},
-            context=WorkflowRuntimeContext(workflow={"id": "workflow-id"}),
+            context=WorkflowRuntimeContext(
+                lifecycle_id="lifecycle-1",
+                run_id="run-1",
+                workflow={"id": "workflow-id"},
+            ),
         )
     )
 
@@ -962,6 +1050,15 @@ def test_runtime_builds_repeated_main_agent_references_per_workflow_node() -> No
             self._blocks = None
             self._workflow_debug = None
             self._runtime_diagnostics = None
+            lifecycle_store = InMemoryStore()
+
+            class Lifecycle:
+                store = lifecycle_store
+
+                async def create(self, *_args, **_kwargs) -> str:
+                    return "lifecycle-id"
+
+            self._workflow_lifecycle = Lifecycle()
             self._builder = type(
                 "Builder",
                 (),
@@ -1034,11 +1131,10 @@ def test_runtime_builds_repeated_main_agent_references_per_workflow_node() -> No
         (
             record["agent_id"],
             record["workflow_node_id"],
-            record["messages"][-1].content,
         )
         for record in result["agent_invocations"].values()
     ] == [
-        (AGENT_A, "agent-1", AGENT_A),
-        (AGENT_A, "agent-2", AGENT_A),
+        (AGENT_A, "agent-1"),
+        (AGENT_A, "agent-2"),
     ]
     assert len(set(result["agent_invocations"])) == 2

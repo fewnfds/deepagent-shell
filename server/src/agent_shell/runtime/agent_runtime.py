@@ -7,8 +7,10 @@ from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+from uuid import UUID, uuid4
 
+from agent_shell.contracts import FilesystemBlock
 from agent_shell.runtime.agent_builder import AgentBuilder, BuiltAgent
 from agent_shell.runtime.capabilities import DeepAgentsWorkspace
 from agent_shell.runtime.context import WorkflowRuntimeContext
@@ -36,6 +38,7 @@ from agent_shell.runtime.stream_transformers import RawCustomEventTransformer
 from agent_shell.storage.media_outputs import MediaOutputStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.runtime.workflow_debug import WorkflowDebugRun, WorkflowDebugService
+from agent_shell.runtime.workflow_lifecycle import WorkflowLifecycleService
 from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
 from agent_shell.workflow.validation import validate_workflow_executable
 from agent_shell.validation import ValidationReport
@@ -76,7 +79,7 @@ def _resolved_agent_prepare_snapshot(assembly: StaticAssembly) -> dict[str, Any]
 
 
 @dataclass(slots=True)
-class AgentExecution:
+class RunExecution:
     graph: Any
     input_state: dict[str, Any]
     rectifier: OutputEventRectifier
@@ -91,12 +94,20 @@ class AgentExecution:
     run_config: dict[str, Any] | None = None
     durability: str | None = None
     debug_run: WorkflowDebugRun | None = None
+    lifecycle_service: WorkflowLifecycleService | None = None
+    lifecycle_id: str = ""
+    owns_lifecycle: bool = False
     runtime_diagnostics: RuntimeDiagnostics | None = None
     request_id: str = ""
     public_model: str = ""
     agent_name: str = ""
+    include_tool_call_transformer: bool = True
+    public_output: bool = True
+    run_kind: Literal["agent", "workflow"] = "agent"
+    execution_timeout_seconds: int = EXECUTION_TIMEOUT_SECONDS
     final_state: dict[str, Any] | None = None
     _started: bool = False
+    _lifecycle_finished: bool = False
 
     @property
     def usage(self) -> dict[str, int]:
@@ -104,25 +115,19 @@ class AgentExecution:
 
     @property
     def finish_reason(self) -> str:
+        if self.run_kind == "workflow":
+            return "stop"
         return self.normalizer.finish_reason
 
     @property
     def finish_reason_source(self) -> str | None:
+        if self.run_kind == "workflow":
+            return None
         return self.normalizer.finish_reason_source
-
-    @property
-    def response_blocks(self) -> list[dict[str, Any]]:
-        return self.media_response.structured_blocks(
-            self.normalizer.last_main_agent_response
-        )
-
-    @property
-    def media_assets(self) -> list[dict[str, Any]]:
-        return self.media_response.assets
 
     async def stream_text(self) -> AsyncIterator[str]:
         if self._started:
-            raise RuntimeError("AgentExecution can only be consumed once")
+            raise RuntimeError("RunExecution can only be consumed once")
         self._started = True
         try:
             async for part in self._stream_text_inner():
@@ -137,6 +142,27 @@ class AgentExecution:
                 await self.task_dispatcher_runtime.close()
 
     async def _stream_text_inner(self) -> AsyncIterator[str]:
+
+        async def finish_lifecycle(status: str) -> None:
+            if (
+                not self.owns_lifecycle
+                or self.lifecycle_service is None
+                or not self.lifecycle_id
+                or self._lifecycle_finished
+            ):
+                return
+            self._lifecycle_finished = True
+            try:
+                await self.lifecycle_service.finish_parent(self.lifecycle_id, status)
+            except Exception as exc:
+                if self.runtime_diagnostics is not None:
+                    self.runtime_diagnostics.observation_error(
+                        exc,
+                        request_id=self.request_id,
+                        model=self.public_model,
+                        agent_name=self.agent_name,
+                        code="workflow_lifecycle_record_failed",
+                    )
 
         async def finish_debug(
             status: str,
@@ -179,6 +205,8 @@ class AgentExecution:
                 )
 
         def project_event(event: OutputEvent) -> list[str]:
+            if not self.public_output:
+                return []
             for observer in self.event_observers:
                 observer(event)
             return self.rectifier.feed(event)
@@ -209,7 +237,7 @@ class AgentExecution:
             ):
                 if rendered:
                     yield rendered
-            async with asyncio.timeout(EXECUTION_TIMEOUT_SECONDS):
+            async with asyncio.timeout(self.execution_timeout_seconds):
                 with warnings.catch_warnings():
                     warnings.filterwarnings(
                         "ignore",
@@ -225,8 +253,9 @@ class AgentExecution:
                         "config": config,
                         "version": "v3",
                         "transformers": (
-                            RawCustomEventTransformer,
-                            ToolCallTransformer,
+                            (RawCustomEventTransformer, ToolCallTransformer)
+                            if self.include_tool_call_transformer
+                            else (RawCustomEventTransformer,)
                         ),
                     }
                     if self.durability is not None:
@@ -255,7 +284,9 @@ class AgentExecution:
                             next_envelope = asyncio.ensure_future(anext(envelopes))
                             for event in self.normalizer.feed(envelope):
                                 if isinstance(event, ModelCallBoundary):
-                                    if event.source_key and event.cycle_key:
+                                    if not self.public_output:
+                                        projected = []
+                                    elif event.source_key and event.cycle_key:
                                         projected = self.rectifier.flush_cycle(
                                             event.source_key, event.cycle_key
                                         )
@@ -266,7 +297,11 @@ class AgentExecution:
                                     else:
                                         projected = self.rectifier.flush()
                                 elif isinstance(event, MainAgentMediaBlock):
-                                    notification = await self.media_response.project(event)
+                                    notification = (
+                                        await self.media_response.project(event)
+                                        if self.public_output
+                                        else None
+                                    )
                                     projected = (
                                         project_event(
                                             self.normalizer.media_notification(
@@ -289,14 +324,19 @@ class AgentExecution:
                     output = await stream.output()
                     self.final_state = dict(output) if isinstance(output, Mapping) else None
                     self.normalizer.close_main_agent_messages()
-                    for rendered in self.rectifier.flush():
+                    final_parts = (
+                        self.rectifier.flush()
+                        if self.public_output
+                        else []
+                    )
+                    for rendered in final_parts:
                         if rendered:
                             yield rendered
             for rendered in project_event(
                 self.normalizer.lifecycle(
                     "end",
                     status="completed",
-                    finish_reason=self.normalizer.finish_reason,
+                    finish_reason=self.finish_reason,
                 )
             ):
                 if rendered:
@@ -305,6 +345,7 @@ class AgentExecution:
             self.normalizer.abort_main_agent_messages()
             self.rectifier.discard()
             await finish_debug("cancelled", error_code="request_cancelled")
+            await finish_lifecycle("cancelled")
             raise
         except TimeoutError as exc:
             error = AgentRuntimeError(
@@ -316,12 +357,14 @@ class AgentExecution:
                 yield rendered
             record_runtime_error(error, error.code, debug_exception=exc)
             await finish_debug("failed", error_code=error.code, error=error)
+            await finish_lifecycle("failed")
             raise error from exc
         except AgentRuntimeError as exc:
             for rendered in failure_output(exc.code):
                 yield rendered
             record_runtime_error(exc, exc.code)
             await finish_debug("failed", error_code=exc.code, error=exc)
+            await finish_lifecycle("failed")
             raise
         except Exception as exc:
             if isinstance(exc, GraphRecursionError):
@@ -340,8 +383,10 @@ class AgentExecution:
                 yield rendered
             record_runtime_error(error, error.code, debug_exception=exc)
             await finish_debug("failed", error_code=error.code, error=error)
+            await finish_lifecycle("failed")
             raise error from exc
         await finish_debug("completed")
+        await finish_lifecycle("completed")
         if self.runtime_diagnostics is not None:
             self.runtime_diagnostics.runtime_completed(
                 request_id=self.request_id,
@@ -355,6 +400,12 @@ class AgentExecution:
         parts = [part async for part in self.stream_text()]
         return "".join(parts), self.usage
 
+    async def execute(self) -> None:
+        """Run to completion without collecting a public response body."""
+
+        async for _part in self.stream_text():
+            pass
+
 
 class AgentRuntime:
     def __init__(
@@ -366,6 +417,7 @@ class AgentRuntime:
         python_packages_dir: Path | None = None,
         runtime_dir: Path | None = None,
         workflow_debug: WorkflowDebugService | None = None,
+        workflow_lifecycle: WorkflowLifecycleService,
         runtime_diagnostics: RuntimeDiagnostics | None = None,
     ) -> None:
         self._builder = builder
@@ -374,7 +426,28 @@ class AgentRuntime:
         self._python_packages_dir = python_packages_dir
         self._runtime_dir = runtime_dir
         self._workflow_debug = workflow_debug
+        self._workflow_lifecycle = workflow_lifecycle
         self._runtime_diagnostics = runtime_diagnostics
+
+    async def _finish_parent_lifecycle(
+        self,
+        lifecycle_id: str,
+        status: str,
+        *,
+        request_id: str,
+        public_model: str,
+    ) -> None:
+        try:
+            await self._workflow_lifecycle.finish_parent(lifecycle_id, status)
+        except Exception as exc:
+            if self._runtime_diagnostics is not None:
+                self._runtime_diagnostics.observation_error(
+                    exc,
+                    request_id=request_id,
+                    model=public_model,
+                    agent_name="",
+                    code="workflow_lifecycle_record_failed",
+                )
 
     async def build_agent(
         self,
@@ -415,6 +488,37 @@ class AgentRuntime:
             await self._builder.close_failed_build()
             raise
 
+    async def _resolved_mapped_directory_paths(
+        self,
+        lifecycle_id: str,
+        assembly: StaticAssembly,
+    ) -> dict[str, Path] | None:
+        stored = assembly.blocks.get("filesystem")
+        if stored is None:
+            return None
+        filesystem_id = str(stored.get("id", ""))
+        if not filesystem_id:
+            raise AgentRuntimeError(
+                "filesystem_identity_missing",
+                "The selected Filesystem has no stable identity.",
+                status_code=422,
+            )
+        filesystem = FilesystemBlock.model_validate(
+            {key: value for key, value in stored.items() if key != "id"}
+        )
+        try:
+            return await self._workflow_lifecycle.resolve_mapped_directories(
+                lifecycle_id,
+                filesystem_id,
+                filesystem,
+            )
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise AgentRuntimeError(
+                "filesystem_mapping_unavailable",
+                "The selected Filesystem mapping could not be resolved.",
+                status_code=422,
+            ) from exc
+
     def _execution(
         self,
         built: BuiltAgent,
@@ -434,7 +538,12 @@ class AgentRuntime:
         run_config: dict[str, Any] | None = None,
         durability: str | None = None,
         debug_run: WorkflowDebugRun | None = None,
-    ) -> AgentExecution:
+        owns_lifecycle: bool = False,
+        include_tool_call_transformer: bool = True,
+        public_output: bool = True,
+        execution_timeout_seconds: int = EXECUTION_TIMEOUT_SECONDS,
+        run_kind: Literal["agent", "workflow"] = "agent",
+    ) -> RunExecution:
         observers = []
         if event_observer is not None:
             observers.append(event_observer)
@@ -450,14 +559,18 @@ class AgentRuntime:
                 )
                 for node_id, agent in workflow_agents
             }
+        else:
+            workflow_sources = None
+        if not public_output:
+            projector = OutputProjector({})
+        elif workflow_node_id:
             projector = WorkflowOutputProjector(
                 {node_id: agent.output_config for node_id, agent in workflow_agents},
                 workflow_output_config=workflow_output_config,
             )
         else:
-            workflow_sources = None
             projector = OutputProjector(built.output_config)
-        return AgentExecution(
+        return RunExecution(
             graph=graph if graph is not None else built.graph,
             input_state=input_state if input_state is not None else built.input_state,
             middleware_runtime=built.middleware_runtime,
@@ -491,46 +604,93 @@ class AgentRuntime:
             run_config=run_config,
             durability=durability,
             debug_run=debug_run,
+            lifecycle_service=self._workflow_lifecycle,
+            lifecycle_id=context.lifecycle_id if context is not None else "",
+            owns_lifecycle=owns_lifecycle,
             runtime_diagnostics=self._runtime_diagnostics,
             request_id=request_id,
             public_model=public_model,
-            agent_name=built.agent_name,
+            agent_name=built.agent_name if run_kind == "agent" else "",
+            include_tool_call_transformer=include_tool_call_transformer,
+            public_output=public_output,
+            run_kind=run_kind,
+            execution_timeout_seconds=execution_timeout_seconds,
         )
 
-    async def start(
+    async def start_background_agent(
         self,
-        main_agent_id: str,
+        assembly: StaticAssembly,
         raw_messages: object,
         *,
-        model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
-        model_response_observer: Callable[[ModelResponse], None] | None = None,
-        event_observer: Callable[[OutputEvent], None] | None = None,
-        request_id: str = "",
-        public_model: str = "",
-        workflow_filesystem_id: str | None = None,
-    ) -> AgentExecution:
-        context = WorkflowRuntimeContext.from_request(
-            raw_messages,
-            request_id=request_id,
-            workflow={
-                "filesystem_id": workflow_filesystem_id or "",
-            },
+        workflow_snapshot: Mapping[str, Any],
+        prepare_snapshot: Mapping[str, Any],
+        launcher_id: str,
+        request_id: str,
+        lifecycle_id: str,
+        run_id: str,
+        thread_id: str,
+        parent_run_id: str,
+        background_task_id: str,
+        run_depth: int,
+        initial_shared_vars: Mapping[str, Any] | None = None,
+        initial_workflow_task: Mapping[str, Any] | None = None,
+        background_runtime: Any | None = None,
+    ) -> RunExecution:
+        messages = validate_client_messages(raw_messages)
+        mapped_directory_paths = await self._resolved_mapped_directory_paths(
+            lifecycle_id,
+            assembly,
         )
-        built = await self.build_agent(
-            main_agent_id,
-            raw_messages,
-            model_request_observer=model_request_observer,
-            model_response_observer=model_response_observer,
+        built = await self.build_resolved_agent(
+            assembly,
+            messages,
             request_id=request_id,
-            workflow_filesystem_id=workflow_filesystem_id,
+            workflow_node_id=None,
+            mapped_directory_paths=mapped_directory_paths,
         )
+        context = WorkflowRuntimeContext.for_run(
+            request_id=request_id,
+            lifecycle_id=lifecycle_id,
+            run_id=run_id,
+            thread_id=thread_id,
+            parent_run_id=parent_run_id,
+            background_task_id=background_task_id,
+            launcher_id=launcher_id,
+            run_depth=run_depth,
+            workflow=workflow_snapshot,
+            prepare=prepare_snapshot,
+            background_runtime=background_runtime,
+        ).for_background_agent(
+            agent_id=built.agent_id,
+            invocation_id=background_task_id,
+        )
+        input_state = deepcopy(dict(built.input_state))
+        input_state["messages"] = []
+        input_state["shared_vars"] = deepcopy(dict(initial_shared_vars or {}))
+        if initial_workflow_task is not None:
+            input_state["workflow_task"] = deepcopy(dict(initial_workflow_task))
         return self._execution(
             built,
-            event_observer=event_observer,
-            model_response_observer=model_response_observer,
+            input_state=input_state,
             request_id=request_id,
-            public_model=public_model,
+            public_model=built.agent_name,
             context=context,
+            run_config={
+                "recursion_limit": int(
+                    workflow_snapshot.get("recursion_limit", GRAPH_RECURSION_LIMIT)
+                ),
+                "max_concurrency": int(
+                    workflow_snapshot.get("max_concurrency", WORKFLOW_MAX_CONCURRENCY)
+                ),
+            },
+            execution_timeout_seconds=int(
+                workflow_snapshot.get(
+                    "execution_timeout_seconds",
+                    EXECUTION_TIMEOUT_SECONDS,
+                )
+            ),
+            include_tool_call_transformer=False,
+            public_output=False,
         )
 
     async def start_workflow(
@@ -545,7 +705,18 @@ class AgentRuntime:
         event_observer: Callable[[OutputEvent], None] | None = None,
         request_id: str = "",
         public_model: str = "",
-    ) -> AgentExecution:
+        lifecycle_id: str | None = None,
+        run_id: str | None = None,
+        thread_id: str | None = None,
+        parent_run_id: str = "",
+        background_task_id: str = "",
+        launcher_id: str = "",
+        run_depth: int = 0,
+        initial_shared_vars: Mapping[str, Any] | None = None,
+        initial_workflow_task: Mapping[str, Any] | None = None,
+        background_runtime: Any | None = None,
+        public_output: bool = True,
+    ) -> RunExecution:
         from agent_shell.workflow.catalog import (
             AgentNodeConfig,
             ConditionRouterNodeConfig,
@@ -567,6 +738,7 @@ class AgentRuntime:
             if node.type == "task-dispatcher"
         ]
         messages = validate_client_messages(raw_messages)
+        messages_sha = client_messages_sha(messages)
         assemblies: dict[str, StaticAssembly] = {}
 
         def validate_main_agent(main_agent_id: str) -> ValidationReport:
@@ -663,6 +835,7 @@ class AgentRuntime:
             validate_main_agent=validate_main_agent,
             condition_routers=resolved_condition_router_nodes,
             task_dispatchers=resolved_task_dispatcher_nodes,
+            workflow_role=(workflow_snapshot or {}).get("workflow_role"),
         )
         if not executable.valid:
             issue = executable.issues[0]
@@ -677,7 +850,6 @@ class AgentRuntime:
             "filesystem_id": workflow_filesystem_id,
             "graph": document.model_dump(mode="json"),
         }
-        messages_sha = client_messages_sha(messages)
         workflow_debug = getattr(self, "_workflow_debug", None)
         runtime_diagnostics = getattr(self, "_runtime_diagnostics", None)
         workflow_identity = dict(workflow_snapshot or {})
@@ -689,10 +861,42 @@ class AgentRuntime:
                     workflow_identity.get("name", public_model or "workflow")
                 ),
                 messages_sha=messages_sha,
+                run_id=UUID(run_id) if run_id else None,
+                thread_id=thread_id,
             )
             if workflow_debug is not None
             else None
         )
+        resolved_run_id = (
+            str(debug_run.run_id)
+            if debug_run is not None
+            else run_id or str(uuid4())
+        )
+        resolved_thread_id = (
+            debug_run.thread_id
+            if debug_run is not None
+            else thread_id or str(uuid4())
+        )
+        owns_lifecycle = lifecycle_id is None
+        if owns_lifecycle:
+            resolved_lifecycle_id = await self._workflow_lifecycle.create(
+                messages,
+                request_id=request_id,
+                run_id=resolved_run_id,
+                thread_id=resolved_thread_id,
+                workflow_id=str(workflow_identity.get("id", "")),
+                workflow_name=str(
+                    workflow_identity.get("name", public_model or "workflow")
+                ),
+            )
+        else:
+            if await self._workflow_lifecycle.input_record(lifecycle_id) is None:
+                raise AgentRuntimeError(
+                    "workflow_lifecycle_not_found",
+                    "The Workflow lifecycle input does not exist.",
+                    status_code=409,
+                )
+            resolved_lifecycle_id = lifecycle_id
         if debug_run is not None:
             try:
                 debug_run.begin()
@@ -805,11 +1009,18 @@ class AgentRuntime:
                 finally:
                     await prepare_runtime.close()
                 prepare_context = prepare_result.context
-            context = WorkflowRuntimeContext.from_request(
-                messages,
+            context = WorkflowRuntimeContext.for_run(
                 request_id=request_id,
+                lifecycle_id=resolved_lifecycle_id,
+                run_id=resolved_run_id,
+                thread_id=resolved_thread_id,
+                parent_run_id=parent_run_id,
+                background_task_id=background_task_id,
+                launcher_id=launcher_id,
+                run_depth=run_depth,
                 workflow=workflow_context,
                 prepare=prepare_context,
+                background_runtime=background_runtime,
             )
 
             if condition_router_blocks or task_dispatcher_blocks:
@@ -852,7 +1063,7 @@ class AgentRuntime:
                 }
 
             output_id = (workflow_snapshot or {}).get("workflow_event_output_id")
-            if output_id is not None:
+            if public_output and output_id is not None:
                 stored_output = (
                     self._blocks.get_block_internal(
                         "workflow-event-output", str(output_id)
@@ -871,6 +1082,14 @@ class AgentRuntime:
                 ).model_dump(mode="python", exclude={"name"})
 
             for agent_node, assembly in resolved_agents:
+                mapped_directory_paths = (
+                    await self._resolved_mapped_directory_paths(
+                        resolved_lifecycle_id,
+                        assembly,
+                    )
+                    if workspace is None
+                    else None
+                )
                 built = await self.build_resolved_agent(
                     assembly,
                     messages,
@@ -879,6 +1098,7 @@ class AgentRuntime:
                     request_id=request_id,
                     workflow_node_id=agent_node.id,
                     workspace=workspace,
+                    mapped_directory_paths=mapped_directory_paths,
                 )
                 built_agents.append((agent_node.id, built))
                 if workspace is None:
@@ -894,11 +1114,13 @@ class AgentRuntime:
                 node_agents=dict(built_agents),
                 condition_routers=condition_routers,
                 task_dispatchers=task_dispatchers,
+                workflow_role=(workflow_snapshot or {}).get("workflow_role"),
                 checkpointer=(
                     workflow_debug.checkpointer
                     if workflow_debug is not None
                     else None
                 ),
+                store=self._workflow_lifecycle.store,
             )
         except asyncio.CancelledError:
             for _, agent in built_agents:
@@ -906,6 +1128,13 @@ class AgentRuntime:
             await close_workflow_package_runtimes()
             if debug_run is not None:
                 await debug_run.finish("cancelled", error_code="request_cancelled")
+            if owns_lifecycle:
+                await self._finish_parent_lifecycle(
+                    resolved_lifecycle_id,
+                    "cancelled",
+                    request_id=request_id,
+                    public_model=public_model,
+                )
             raise
         except Exception as exc:
             for _, agent in built_agents:
@@ -938,12 +1167,22 @@ class AgentRuntime:
                             agent_name="",
                             code="workflow_debug_record_failed",
                         )
+            if owns_lifecycle:
+                await self._finish_parent_lifecycle(
+                    resolved_lifecycle_id,
+                    "failed",
+                    request_id=request_id,
+                    public_model=public_model,
+                )
             raise
         first_node_id, built = built_agents[0]
         input_state: dict[str, Any] = {
-            "shared_vars": {},
+            "shared_vars": deepcopy(dict(initial_shared_vars or {})),
             "agent_invocations": {},
+            "background_tasks": {},
         }
+        if initial_workflow_task is not None:
+            input_state["workflow_task"] = deepcopy(dict(initial_workflow_task))
         if "files" in built.input_state:
             input_state["files"] = built.input_state["files"]
         return self._execution(
@@ -960,10 +1199,29 @@ class AgentRuntime:
             context=context,
             run_config={
                 **(debug_run.config() if debug_run is not None else {}),
-                "max_concurrency": WORKFLOW_MAX_CONCURRENCY,
+                "recursion_limit": int(
+                    (workflow_snapshot or {}).get(
+                        "recursion_limit",
+                        GRAPH_RECURSION_LIMIT,
+                    )
+                ),
+                "max_concurrency": int(
+                    (workflow_snapshot or {}).get(
+                        "max_concurrency", WORKFLOW_MAX_CONCURRENCY
+                    )
+                ),
             },
+            execution_timeout_seconds=int(
+                (workflow_snapshot or {}).get(
+                    "execution_timeout_seconds",
+                    EXECUTION_TIMEOUT_SECONDS,
+                )
+            ),
             durability="sync" if debug_run is not None else None,
             debug_run=debug_run,
+            owns_lifecycle=owns_lifecycle,
+            public_output=public_output,
+            run_kind="workflow",
             condition_router_runtime=condition_router_runtime,
             task_dispatcher_runtime=task_dispatcher_runtime,
         )

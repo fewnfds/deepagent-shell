@@ -4,6 +4,7 @@ import asyncio
 from typing import Any
 
 import pytest
+from langgraph.runtime import Runtime
 
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.task_dispatcher import (
@@ -19,7 +20,7 @@ def _run(dispatch: TaskDispatcherCallable) -> TaskDispatcherResult:
         run_task_dispatcher(
             dispatch,
             state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
-            context=WorkflowRuntimeContext(),
+            runtime=Runtime(context=WorkflowRuntimeContext()),
             allowed_dispatch_keys={"city"},
         )
     )
@@ -39,7 +40,7 @@ def _result(*, payload: dict[str, Any], update: dict[str, Any]) -> dict[str, Any
 
 
 def test_dispatcher_accepts_every_declared_workflow_state_channel() -> None:
-    async def dispatch(state, context):
+    async def dispatch(state, runtime):
         return _result(
             payload={},
             update={
@@ -69,7 +70,7 @@ def test_dispatcher_accepts_every_declared_workflow_state_channel() -> None:
 def test_dispatcher_rejects_non_finite_payload_numbers(
     payload: dict[str, Any],
 ) -> None:
-    async def dispatch(state, context):
+    async def dispatch(state, runtime):
         return _result(payload=payload, update={})
 
     with pytest.raises(TaskDispatcherError):
@@ -93,7 +94,7 @@ def test_dispatcher_rejects_non_finite_payload_numbers(
 def test_dispatcher_rejects_invalid_declared_channel_values(
     update: dict[str, Any],
 ) -> None:
-    async def dispatch(state, context):
+    async def dispatch(state, runtime):
         return _result(payload={}, update=update)
 
     with pytest.raises(TaskDispatcherError):

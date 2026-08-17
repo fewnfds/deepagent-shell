@@ -94,6 +94,55 @@ def test_filesystem_runtime_options_and_tool_switches_are_compiled(tmp_path: Pat
     assert middleware._grep_max_count == 321
     assert middleware._max_execute_timeout == 45
 
+
+def test_resolved_mapped_directory_replaces_configured_parent(tmp_path: Path) -> None:
+    configured_parent = tmp_path / "configured"
+    resolved = configured_parent / "lifecycle-run"
+    configured_parent.mkdir()
+    resolved.mkdir()
+    (resolved / "probe.txt").write_text("resolved route", encoding="utf-8")
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+    filesystem = FilesystemBlock.model_validate(
+        {
+            "name": "Dynamic workspace",
+            "mapped_directories": [
+                {
+                    "virtual_path": "/workspace/",
+                    "local_path": str(configured_parent),
+                    "lifecycle_mode": "dynamic",
+                }
+            ],
+        }
+    )
+
+    capabilities = build_deepagents_capabilities(
+        filesystem,
+        None,
+        filesystem_mode="configured-shared",
+        skills_dir=skills_dir,
+        mapped_directory_paths={"/workspace/": resolved},
+    )
+
+    route = capabilities.workspace.routes["/workspace/"]
+    result = route.read("/probe.txt")
+    assert result.error is None
+    assert result.file_data is not None
+    assert result.file_data["content"] == "resolved route"
+
+    second = build_deepagents_capabilities(
+        filesystem,
+        None,
+        filesystem_mode="configured-shared",
+        skills_dir=skills_dir,
+        mapped_directory_paths={"/workspace/": resolved},
+    )
+    assert second.workspace.default_backend is not capabilities.workspace.default_backend
+    shared_result = second.workspace.routes["/workspace/"].read("/probe.txt")
+    assert shared_result.error is None
+    assert shared_result.file_data is not None
+    assert shared_result.file_data["content"] == "resolved route"
+
 def test_filesystem_permissions_atomically_override_tools_prompt_and_paths(
     tmp_path: Path,
 ) -> None:

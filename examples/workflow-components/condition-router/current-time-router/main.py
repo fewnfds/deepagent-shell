@@ -4,7 +4,7 @@ from datetime import datetime
 def create_router():
     current_time_key = "current_time"
 
-    async def route(state, context):
+    async def route(state, runtime):
         # 取一次本地时间，保证路由判断和写入 State 使用同一个时间点。
         now = datetime.now()
         second_unit = now.second % 10

@@ -114,7 +114,7 @@ class ConditionRouterPackageRuntime:
             ) from exc
         parameters = list(signature.parameters.values())
         if (
-            [parameter.name for parameter in parameters] != ["state", "context"]
+            [parameter.name for parameter in parameters] != ["state", "runtime"]
             or any(
                 parameter.kind is not parameter.POSITIONAL_OR_KEYWORD
                 or parameter.default is not parameter.empty
@@ -123,7 +123,7 @@ class ConditionRouterPackageRuntime:
         ):
             raise AgentRuntimeError(
                 "condition_router_package.result_invalid",
-                f"Condition Router package {folder!r} route must accept exactly state and context.",
+                f"Condition Router package {folder!r} route must accept exactly state and runtime.",
                 status_code=422,
             )
         self._routers[owner_id] = route

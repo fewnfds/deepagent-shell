@@ -6,7 +6,18 @@
 {
   "name": "写作工作区",
   "mapped_directories": [
-    {"virtual_path": "/output/", "local_path": "H:\\novel\\output"}
+    {
+      "virtual_path": "/output/",
+      "local_path": "H:\\novel\\output",
+      "path_origin": "absolute",
+      "lifecycle_mode": "fixed"
+    },
+    {
+      "virtual_path": "/scratch/",
+      "local_path": "files\\scratch-roots",
+      "path_origin": "data-root-relative",
+      "lifecycle_mode": "dynamic"
+    }
   ],
   "virtual_directories": [
     {"virtual_path": "/drafts/", "source_path": "H:\\novel\\drafts"}
@@ -41,13 +52,17 @@
   `write_file`、`edit_file`、`delete`、`glob`、`grep`。`read_file` 固定可见；`execute` 固定不可见；
   `delete` 默认关闭。
 
-同一次请求中的 Main Agent 与同步 Subagent 共享普通 StateBackend、初始文件和 mapped routes；Subagent settings
-不能单独替换文件系统。每个 Agent 的 `/skills/` 仍按最终 Skill 选择建立只读视图。需要让不同 Agent 对共享
+同一个 Workflow Run 中的 Main Agent 与同步 Subagent 共享普通 StateBackend、初始文件和 mapped routes；Subagent settings
+不能单独替换文件系统。独立后台 Run 各自拥有私有 StateBackend，不复制或合并其中的临时文件；同一 Lifecycle 的
+父 Run 和后台 Run 通过相同的 resolved mapped route 共享已落盘文件。每个 Agent 的 `/skills/` 仍按最终 Skill 选择建立只读视图。需要让不同 Agent 对共享
 workspace 使用不同路径权限、文件工具或文件系统提示词时，另行选择[文件系统权限](filesystem-permissions-config.md)。
 
 ## 来源类型
 
-- `mapped_directories`：把虚拟目录实时映射到现有宿主绝对目录；写入直接落盘；
+- `mapped_directories`：把虚拟目录实时映射到宿主目录；写入直接落盘。`path_origin=absolute` 要求
+  `local_path` 是宿主绝对路径；`path_origin=data-root-relative` 以当前实例 `data/` 为根解析相对路径；
+  `lifecycle_mode=fixed` 直接使用配置目录，`lifecycle_mode=dynamic` 则在该目录下为每个顶层 Workflow
+  Lifecycle 创建一次 `lifecycle-{uuid}` 子目录。同一 Lifecycle 的父 Run 和后台 Run 复用同一解析结果；
 - `virtual_directories`：每次请求开始时把现有目录文件复制到内存 workspace，不回写来源；
 - `virtual_files`：每次请求复制一个现有普通文件，不回写来源。
 
@@ -61,5 +76,6 @@ workspace 使用不同路径权限、文件工具或文件系统提示词时，�
 `max_execute_timeout` 是 execute 单次命令的最大秒数（execute 当前默认不可见，但仍可提前配置）。
 没有装配文件系统权限时，路径默认可读写，文件系统组件中的提示词和工具配置直接生效。
 
-虚拟来源会在每个新请求中重新完整读取，当前没有单文件、展开文件数或总字节配额。不要选择依赖缓存、
+动态目录不会在 Workflow End 时隐式删除，生命周期清理由管理能力显式处理。磁盘目录不进入 checkpoint，平台也不处理
+多个 Agent 同时写同一文件的冲突。虚拟来源会在每个新请求中重新完整读取，当前没有单文件、展开文件数或总字节配额。不要选择依赖缓存、
 构建产物、媒体目录或其他大型路径。并行 Subagent 不应同时修改同一临时文件。

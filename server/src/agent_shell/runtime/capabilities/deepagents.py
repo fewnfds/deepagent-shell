@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import os
 from pathlib import Path, PurePosixPath
 import stat
-from typing import Any
+from typing import Any, Mapping
 
 from agent_shell.capability_manifest import (
     FILESYSTEM_TOOL_NAMES,
@@ -408,6 +408,7 @@ def build_deepagents_capabilities(
     filesystem_mode: FilesystemMode,
     skills_dir: Path,
     workspace: DeepAgentsWorkspace | None = None,
+    mapped_directory_paths: Mapping[str, Path] | None = None,
 ) -> DeepAgentsCapabilities:
     """Compile one Agent's policy against a request-level shared workspace."""
     (
@@ -456,7 +457,16 @@ def build_deepagents_capabilities(
     if workspace is None:
         shared_routes: dict[str, Any] = {}
         for route in filesystem.mapped_directories if filesystem is not None else ():
-            local_path = Path(route.local_path)
+            local_path = (
+                mapped_directory_paths.get(route.virtual_path)
+                if mapped_directory_paths is not None
+                else Path(route.local_path)
+            )
+            if local_path is None:
+                raise DeepAgentsCapabilityError(
+                    "resolved mapped directory is missing: "
+                    f"{route.virtual_path}"
+                )
             if not local_path.is_dir():
                 raise DeepAgentsCapabilityError(
                     f"mapped local_path is not a directory: {local_path}"

@@ -17,7 +17,7 @@
 
 DEBUG 开关位于日志中心，默认关闭，修改后立即生效。
 
-开启后，每个正常完成的 Agent 请求会新增一条 `INFO` 运行日志，并把完成状态、finish reason 和 token usage 写入
+开启后，每个正常完成的 Workflow Run 会新增一条 `INFO` 运行日志，并把完成状态、finish reason 和 token usage 写入
 `data/logs/debug/`。运行异常仍在包装之前保存完整 Python exception chain 和 traceback。对应的 Agent 运行日志行会显示
 下载按钮；关闭开关后正常请求不再生成运行日志或 DEBUG 文件，错误摘要仍会保留。已有文件仍可下载和删除。
 
@@ -27,9 +27,11 @@ DEBUG 文件可能包含请求内容、Provider 返回、凭据、宿主路径�
 
 每次 Workflow 请求建立独立 thread，并由 LangGraph `AsyncSqliteSaver` 写入
 `data/state/agent-shell.sqlite3`。当前 management API 提供有界运行索引、结构运行树和 checkpoint 摘要，用于定位失败的
-Workflow、Agent、model 或 tool 节点；当前管理台没有 Workflow Debug 页面。它不替代 DEBUG traceback。
+Workflow、Agent、model 或 tool 节点；当前管理台没有 Workflow Debug 详情页面。日志中心的保留设置可以调整
+Workflow Debug 运行索引上限，但它不替代 DEBUG traceback。
 
-当前 checkpoint 只用于 Debug，不提供 Resume。
+当前 checkpoint 尚未提供 Resume，但作为 Workflow Lifecycle 资源保留到用户显式清场；Workflow Debug retention 只影响运行索引和结构运行树，
+不会隐式删除仍由 Lifecycle 引用的 parent/child thread checkpoint。
 
 ## LangSmith
 

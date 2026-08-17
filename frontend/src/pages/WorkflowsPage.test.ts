@@ -26,10 +26,14 @@ function i18n() {
 const workflow: Workflow = {
   id: 'workflow-1',
   name: 'Research Workflow',
+  workflow_role: 'parent',
   description: 'Runs the research agent.',
   filesystem_id: 'filesystem-1',
   workflow_prepare_id: null,
   workflow_event_output_id: null,
+  recursion_limit: 100,
+  execution_timeout_seconds: 600,
+  max_concurrency: 16,
   enabled: true,
 }
 const filesystem: SavedBlock = {
@@ -53,6 +57,8 @@ function testRouter() {
     history: createMemoryHistory(),
     routes: [
       { path: '/workflows', component: { template: '<div />' } },
+      { path: '/workflows/parents', component: { template: '<div />' } },
+      { path: '/workflows/children', component: { template: '<div />' } },
       { path: '/workflows/:id/editor', component: { template: '<div />' } },
     ],
   })
@@ -72,10 +78,13 @@ describe('WorkflowsPage', () => {
     const create = vi.spyOn(managementApi, 'createWorkflow').mockResolvedValue(workflow)
     const remove = vi.spyOn(managementApi, 'deleteWorkflow').mockResolvedValue({ ok: true })
     const router = testRouter()
-    await router.push('/workflows')
+    await router.push('/workflows/parents')
     await router.isReady()
 
-    const wrapper = mount(WorkflowsPage, { global: { plugins: [i18n(), router] } })
+    const wrapper = mount(WorkflowsPage, {
+      props: { workflowRole: 'parent' },
+      global: { plugins: [i18n(), router] },
+    })
     await flushPromises()
 
     expect(wrapper.text()).toContain(workflow.name)
@@ -90,15 +99,23 @@ describe('WorkflowsPage', () => {
     await componentSelects[0]!.setValue(prepare.id)
     await componentSelects[1]!.setValue(eventOutput.id)
     await wrapper.get('#workflow-form select[required]').setValue(filesystem.id)
+    const runtimeLimits = wrapper.findAll('#workflow-form input[type="number"]')
+    await runtimeLimits[0]!.setValue(250)
+    await runtimeLimits[1]!.setValue(900)
+    await runtimeLimits[2]!.setValue(32)
     await wrapper.get('#workflow-form').trigger('submit')
     await flushPromises()
 
     expect(create).toHaveBeenCalledWith({
       name: 'New Workflow',
+      workflow_role: 'parent',
       description: 'New description',
       filesystem_id: filesystem.id,
       workflow_prepare_id: prepare.id,
       workflow_event_output_id: eventOutput.id,
+      recursion_limit: 250,
+      execution_timeout_seconds: 900,
+      max_concurrency: 32,
       enabled: true,
     })
 
@@ -107,6 +124,43 @@ describe('WorkflowsPage', () => {
     await flushPromises()
 
     expect(remove).toHaveBeenCalledWith(workflow.id)
+    wrapper.unmount()
+  })
+
+  it('queries and creates child Workflows from the child page', async () => {
+    const list = vi.spyOn(managementApi, 'listWorkflows').mockResolvedValue([])
+    mockComponentLists()
+    const child = { ...workflow, id: 'workflow-child', workflow_role: 'child' as const }
+    const create = vi.spyOn(managementApi, 'createWorkflow').mockResolvedValue(child)
+    const router = testRouter()
+    await router.push('/workflows/children')
+    await router.isReady()
+
+    const wrapper = mount(WorkflowsPage, {
+      props: { workflowRole: 'child' },
+      global: { plugins: [i18n(), router] },
+    })
+    await flushPromises()
+
+    expect(list).toHaveBeenCalledWith('child')
+    await wrapper.findAll('button').find((button) => button.text() === 'New')!.trigger('click')
+    await wrapper.get('#workflow-form input[type="text"]').setValue('Child Workflow')
+    await wrapper.get('#workflow-form select[required]').setValue(filesystem.id)
+    await wrapper.get('#workflow-form').trigger('submit')
+    await flushPromises()
+
+    expect(create).toHaveBeenCalledWith({
+      name: 'Child Workflow',
+      workflow_role: 'child',
+      description: '',
+      filesystem_id: filesystem.id,
+      workflow_prepare_id: null,
+      workflow_event_output_id: null,
+      recursion_limit: 100,
+      execution_timeout_seconds: 600,
+      max_concurrency: 16,
+      enabled: true,
+    })
     wrapper.unmount()
   })
 
@@ -120,10 +174,13 @@ describe('WorkflowsPage', () => {
     mockComponentLists()
     const update = vi.spyOn(managementApi, 'updateWorkflow').mockResolvedValue(configured)
     const router = testRouter()
-    await router.push('/workflows')
+    await router.push('/workflows/parents')
     await router.isReady()
 
-    const wrapper = mount(WorkflowsPage, { global: { plugins: [i18n(), router] } })
+    const wrapper = mount(WorkflowsPage, {
+      props: { workflowRole: 'parent' },
+      global: { plugins: [i18n(), router] },
+    })
     await flushPromises()
 
     await wrapper.findAll('button').find((button) => button.text() === 'Configure')!.trigger('click')
@@ -137,10 +194,14 @@ describe('WorkflowsPage', () => {
 
     expect(update).toHaveBeenCalledWith(workflow.id, {
       name: workflow.name,
+      workflow_role: 'parent',
       description: workflow.description,
       filesystem_id: filesystem.id,
       workflow_prepare_id: prepare.id,
       workflow_event_output_id: eventOutput.id,
+      recursion_limit: 100,
+      execution_timeout_seconds: 600,
+      max_concurrency: 16,
       enabled: true,
     })
     wrapper.unmount()
@@ -196,6 +257,7 @@ describe('WorkflowsPage', () => {
         title_key: '',
         description_key: '',
         config_schema: {},
+        workflow_roles: ['parent', 'child'],
         input_handles: [],
         output_handles: [{ id: 'next', kind: 'control', edge_type: 'normal', max_connections: null }],
       },
@@ -206,6 +268,7 @@ describe('WorkflowsPage', () => {
         title_key: '',
         description_key: '',
         config_schema: {},
+        workflow_roles: ['parent', 'child'],
         input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', max_connections: null }],
         output_handles: [{ id: 'next', kind: 'control', edge_type: 'normal', max_connections: null }],
       },
@@ -216,6 +279,7 @@ describe('WorkflowsPage', () => {
         title_key: '',
         description_key: '',
         config_schema: {},
+        workflow_roles: ['parent', 'child'],
         input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', max_connections: null }],
         output_handles: [],
       },

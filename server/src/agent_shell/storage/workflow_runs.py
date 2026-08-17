@@ -4,7 +4,10 @@ import json
 import sqlite3
 
 from agent_shell.storage.database import SQLiteDatabase
-from agent_shell.storage.history_retention import HistoryRetentionStore
+from agent_shell.storage.history_retention import (
+    HistoryRetentionStore,
+    MAX_HISTORY_RETENTION_LIMIT,
+)
 
 
 class WorkflowRunStore:
@@ -94,7 +97,7 @@ class WorkflowRunStore:
         finished_at: str,
         error_code: str,
         run_tree: list[dict[str, object]],
-    ) -> tuple[str, ...]:
+    ) -> None:
         with self._database.transaction() as connection:
             connection.execute(
                 "UPDATE workflow_runs SET status = ?, finished_at = ?, "
@@ -111,8 +114,10 @@ class WorkflowRunStore:
                 connection, "workflow_debug_history"
             )
             removed = connection.execute(
-                "SELECT thread_id FROM workflow_runs WHERE thread_id NOT IN ("
                 "SELECT thread_id FROM workflow_runs "
+                "WHERE status != 'running' AND thread_id NOT IN ("
+                "SELECT thread_id FROM workflow_runs "
+                "WHERE status != 'running' "
                 "ORDER BY started_at DESC, thread_id DESC LIMIT ?)",
                 (retention,),
             ).fetchall()
@@ -122,7 +127,6 @@ class WorkflowRunStore:
                     "DELETE FROM workflow_runs WHERE thread_id = ?",
                     ((item,) for item in removed_ids),
                 )
-        return removed_ids
 
     def list(self, *, limit: int) -> list[dict[str, object]]:
         with self._database.transaction() as connection:
@@ -148,6 +152,26 @@ class WorkflowRunStore:
                 (thread_id,),
             )
         return cursor.rowcount > 0
+
+    def retention(self) -> dict[str, int]:
+        return {
+            "retention_limit": self._history_retention.get_limit("workflow_debug_history"),
+            "max_retention_limit": MAX_HISTORY_RETENTION_LIMIT,
+        }
+
+    def set_retention(self, retention_limit: int) -> dict[str, int]:
+        with self._database.transaction() as connection:
+            self._history_retention.set_limit_in(
+                connection, "workflow_debug_history", retention_limit
+            )
+            connection.execute(
+                "DELETE FROM workflow_runs WHERE status != 'running' AND thread_id NOT IN ("
+                "SELECT thread_id FROM workflow_runs WHERE status != 'running' "
+                "ORDER BY started_at DESC, thread_id DESC LIMIT ?)",
+                (retention_limit,),
+            )
+            connection.commit()
+        return self.retention()
 
 
 __all__ = ["WorkflowRunStore"]

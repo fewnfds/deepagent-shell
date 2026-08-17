@@ -17,8 +17,7 @@
 4. 建立 `dispatch_key=town` 的 Dispatch Edge 到乡镇 worker Node；
 5. 上游 Node 在 `shared_vars.cities` 和 `shared_vars.towns` 写入待处理记录。
 
-每个下游 worker 收到一份私有 `workflow_task`。如果下游是 Agent compiled subgraph，它的 State 和
-`runtime.context.workflow_task` 都能读取相同任务：
+每个下游 worker 在自己的私有 State 中收到一份 `workflow_task`：
 
 ```python
 {
@@ -34,4 +33,4 @@
 ```
 
 用户可以修改 `main.py` 改变数据来源、任务粒度、key 和 payload，但固定入口仍是 `create_dispatcher()`，返回的
-异步函数仍接收 `state, context` 并返回 `tasks + update`。不要在 package 中返回 Node ID、`Send` 或 `Command`。
+异步函数仍接收 `state, runtime` 并返回 `tasks + update`。不要在 package 中返回 Node ID、`Send` 或 `Command`。

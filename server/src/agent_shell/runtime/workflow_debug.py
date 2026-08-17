@@ -236,15 +236,13 @@ class WorkflowDebugRun:
             return
         self._finished = True
         self.collector.finish_root(self.run_id, status=status, error=error)
-        removed = self.service.store.finish(
+        self.service.store.finish(
             thread_id=self.thread_id,
             status=status,
             finished_at=_now(),
             error_code=_label(error_code, limit=120),
             run_tree=self.collector.snapshot(),
         )
-        for thread_id in removed:
-            await self.service.checkpointer.adelete_thread(thread_id)
 
 
 class WorkflowDebugService:
@@ -296,17 +294,19 @@ class WorkflowDebugService:
         workflow_id: str,
         workflow_name: str,
         messages_sha: str,
+        run_id: UUID | None = None,
+        thread_id: str | None = None,
     ) -> WorkflowDebugRun:
-        run_id = uuid4()
+        resolved_run_id = run_id or uuid4()
         return WorkflowDebugRun(
             service=self,
-            thread_id=str(uuid4()),
-            run_id=run_id,
+            thread_id=thread_id or str(uuid4()),
+            run_id=resolved_run_id,
             request_id=request_id,
             workflow_id=workflow_id,
             workflow_name=workflow_name,
             messages_sha=messages_sha,
-            collector=WorkflowRunTreeCollector(run_id, workflow_name),
+            collector=WorkflowRunTreeCollector(resolved_run_id, workflow_name),
         )
 
     async def checkpoint_history(
@@ -339,9 +339,18 @@ class WorkflowDebugService:
         return {**run, "checkpoints": await self.checkpoint_history(thread_id)}
 
     async def delete(self, thread_id: str) -> bool:
+        return self.store.delete(thread_id)
+
+    async def checkpoint_count(self, thread_id: str) -> int:
+        config = {"configurable": {"thread_id": thread_id}}
+        count = 0
+        async for _ in self.checkpointer.alist(config):
+            count += 1
+        return count
+
+    async def purge_thread(self, thread_id: str) -> bool:
         deleted = self.store.delete(thread_id)
-        if deleted:
-            await self.checkpointer.adelete_thread(thread_id)
+        await self.checkpointer.adelete_thread(thread_id)
         return deleted
 
 

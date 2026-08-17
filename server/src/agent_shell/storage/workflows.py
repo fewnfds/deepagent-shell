@@ -9,6 +9,7 @@ from agent_shell.workflow.contracts import (
     WorkflowGraphDocumentV1,
     WorkflowLayoutV1,
 )
+from agent_shell.workflow_contracts import WorkflowRole
 
 
 class WorkflowStore:
@@ -21,17 +22,28 @@ class WorkflowStore:
         return {
             "id": str(record["id"]),
             "name": str(record["name"]),
+            "workflow_role": str(record["workflow_role"]),
             "description": str(record["description"]),
             "filesystem_id": str(record["filesystem_id"]),
             "workflow_prepare_id": record.get("workflow_prepare_id"),
             "workflow_event_output_id": record.get("workflow_event_output_id"),
+            "recursion_limit": int(record["recursion_limit"]),
+            "execution_timeout_seconds": int(record["execution_timeout_seconds"]),
+            "max_concurrency": int(record.get("max_concurrency", 16)),
             "enabled": bool(record["enabled"]),
         }
 
-    def list_items(self, *, enabled_only: bool = False) -> list[dict]:
+    def list_items(
+        self,
+        *,
+        enabled_only: bool = False,
+        workflow_role: WorkflowRole | None = None,
+    ) -> list[dict]:
         records = [self._public(item) for item in self._repository.config().get("workflows", [])]
         if enabled_only:
             records = [item for item in records if item["enabled"]]
+        if workflow_role is not None:
+            records = [item for item in records if item["workflow_role"] == workflow_role]
         return sorted(records, key=lambda value: (value["name"].casefold(), value["id"]))
 
     def get_item(self, item_id: str) -> dict | None:

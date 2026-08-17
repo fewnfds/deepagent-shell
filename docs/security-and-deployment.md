@@ -54,8 +54,8 @@ Middleware 包没有 sandbox，以 Agent Shell 服务进程权限运行。它可
 
 部署者负责磁盘、内存、上传大小、外部映射和并发限制。文件管理文本编辑限制为 2 MiB；其他文件传输
 采用流式处理，但不构成实例配额。运行诊断使用可配置保存条数，系统日志使用文件大小上限。
-降低上限会永久裁剪旧数据；裁剪 runtime 诊断时同步删除对应 DEBUG 文件。Workflow Debug 运行索引有界保存；官方 checkpoint 与索引共用实例 SQLite，删除运行
-记录时同步调用 checkpointer 删除对应 thread。
+降低上限会永久裁剪旧数据；裁剪 runtime 诊断时同步删除对应 DEBUG 文件。Workflow Debug 运行索引上限可在日志中心调整；官方 checkpoint 与索引共用实例 SQLite，
+但由 Workflow Lifecycle 显式清场负责删除对应 thread，Debug retention 或单独删除 Debug 记录不会删除 checkpoint。
 
 ## 系统配置与变量
 

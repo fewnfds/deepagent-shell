@@ -105,7 +105,7 @@ def test_condition_router_uses_component_crud_storage_and_repository_validation(
 ) -> None:
     source = (
         "def create_router():\n"
-        "    async def route(state, context):\n"
+        "    async def route(state, runtime):\n"
         "        return {'activate': ['review'], 'update': {}}\n"
         "    return route\n"
     )
@@ -311,6 +311,55 @@ def test_filesystem_rejects_framework_reserved_virtual_namespaces(
         )
         assert response.status_code == 422, (field, namespace, response.text)
         assert namespace.rstrip("/") in response.text
+
+
+def test_filesystem_mapped_directory_modes_are_explicit(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    client = make_client(tmp_path, monkeypatch)
+    relative = client.post(
+        "/api/blocks/filesystem",
+        json={
+            "name": "Lifecycle mapping",
+            "mapped_directories": [
+                {
+                    "virtual_path": "/workspace/",
+                    "local_path": "files/workspaces",
+                    "path_origin": "data-root-relative",
+                    "lifecycle_mode": "dynamic",
+                }
+            ],
+        },
+    )
+    assert relative.status_code == 200, relative.text
+    assert relative.json()["mapped_directories"] == [
+        {
+            "virtual_path": "/workspace/",
+            "local_path": "files/workspaces",
+            "path_origin": "data-root-relative",
+            "lifecycle_mode": "dynamic",
+        }
+    ]
+
+    for path_origin, local_path in (
+        ("absolute", "relative/path"),
+        ("data-root-relative", str(tmp_path.resolve())),
+    ):
+        response = client.post(
+            "/api/blocks/filesystem",
+            json={
+                "name": f"Invalid {path_origin}",
+                "mapped_directories": [
+                    {
+                        "virtual_path": "/workspace/",
+                        "local_path": local_path,
+                        "path_origin": path_origin,
+                    }
+                ],
+            },
+        )
+        assert response.status_code == 422, response.text
 
 
 def test_basic_payload_shape_errors_are_rejected(tmp_path: Path, monkeypatch) -> None:

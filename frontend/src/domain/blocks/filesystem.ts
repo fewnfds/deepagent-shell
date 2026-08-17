@@ -12,6 +12,8 @@ import {
 export interface MappedDirectory {
   virtual_path: string
   local_path: string
+  path_origin: 'absolute' | 'data-root-relative'
+  lifecycle_mode: 'fixed' | 'dynamic'
 }
 
 export interface VirtualSource {
@@ -130,6 +132,24 @@ function mappingRows<T>(
   })
 }
 
+function mappedDirectoryRows(value: unknown): MappedDirectory[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    if (!isRecord(item) || (
+      typeof item.virtual_path !== 'string'
+      && typeof item.local_path !== 'string'
+    )) return []
+    return [{
+      virtual_path: stringValue(item.virtual_path),
+      local_path: stringValue(item.local_path),
+      path_origin: item.path_origin === 'data-root-relative'
+        ? 'data-root-relative'
+        : 'absolute',
+      lifecycle_mode: item.lifecycle_mode === 'dynamic' ? 'dynamic' : 'fixed',
+    }]
+  })
+}
+
 function normalizeTokenLimit(value: unknown, fallback: number | null): number | string | null {
   if (value === undefined) return fallback
   if (value === null) return null
@@ -160,10 +180,7 @@ export const filesystemAdapter = {
   fromApi(value: FilesystemApiRecord, defaults: FilesystemDefaults): FilesystemDraft {
     return {
       ...identity(value),
-      mapped_directories: mappingRows<MappedDirectory>(
-        value.mapped_directories,
-        ['virtual_path', 'local_path'],
-      ),
+      mapped_directories: mappedDirectoryRows(value.mapped_directories),
       virtual_directories: mappingRows<VirtualSource>(
         value.virtual_directories,
         ['virtual_path', 'source_path'],
@@ -200,7 +217,12 @@ export const filesystemAdapter = {
       name: cleanName(value.name),
       mapped_directories: value.mapped_directories
         .filter((item) => nonBlankMapping(item, 'local_path'))
-        .map((item) => ({ virtual_path: item.virtual_path.trim(), local_path: item.local_path.trim() })),
+        .map((item) => ({
+          virtual_path: item.virtual_path.trim(),
+          local_path: item.local_path.trim(),
+          path_origin: item.path_origin,
+          lifecycle_mode: item.lifecycle_mode,
+        })),
       virtual_directories: value.virtual_directories
         .filter((item) => nonBlankMapping(item, 'source_path'))
         .map((item) => ({ virtual_path: item.virtual_path.trim(), source_path: item.source_path.trim() })),

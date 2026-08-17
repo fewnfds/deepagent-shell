@@ -18,11 +18,22 @@ import WorkflowEditorPage from './WorkflowEditorPage.vue'
 const workflow: Workflow = {
   id: 'workflow-1',
   name: 'Research Workflow',
+  workflow_role: 'parent',
   description: 'Runs the research agent.',
   filesystem_id: 'filesystem-1',
   workflow_prepare_id: null,
   workflow_event_output_id: null,
+  recursion_limit: 100,
+  execution_timeout_seconds: 600,
+  max_concurrency: 16,
   enabled: true,
+}
+
+const childWorkflow: Workflow = {
+  ...workflow,
+  id: 'workflow-child-1',
+  name: 'Research Child',
+  workflow_role: 'child',
 }
 
 const agent: MainAgent = {
@@ -111,6 +122,7 @@ const nodeCatalog: WorkflowNodeCatalogItem[] = [
     title_key: '',
     description_key: '',
     config_schema: {},
+    workflow_roles: ['parent', 'child'],
     input_handles: [],
     output_handles: [{ id: 'next', kind: 'control', edge_type: 'normal', max_connections: null }],
   },
@@ -121,6 +133,7 @@ const nodeCatalog: WorkflowNodeCatalogItem[] = [
     title_key: '',
     description_key: '',
     config_schema: {},
+    workflow_roles: ['parent', 'child'],
     input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', max_connections: null }],
     output_handles: [{ id: 'next', kind: 'control', edge_type: 'normal', max_connections: null }],
   },
@@ -131,6 +144,7 @@ const nodeCatalog: WorkflowNodeCatalogItem[] = [
     title_key: '',
     description_key: '',
     config_schema: {},
+    workflow_roles: ['parent', 'child'],
     input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', max_connections: null }],
     output_handles: [{ id: 'branch', kind: 'control', edge_type: 'branch', max_connections: null }],
   },
@@ -141,6 +155,7 @@ const nodeCatalog: WorkflowNodeCatalogItem[] = [
     title_key: '',
     description_key: '',
     config_schema: {},
+    workflow_roles: ['parent', 'child'],
     input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', max_connections: null }],
     output_handles: [{ id: 'dispatch', kind: 'control', edge_type: 'dispatch', max_connections: null }],
   },
@@ -151,6 +166,7 @@ const nodeCatalog: WorkflowNodeCatalogItem[] = [
     title_key: '',
     description_key: '',
     config_schema: {},
+    workflow_roles: ['parent', 'child'],
     input_handles: [{
       id: 'in',
       kind: 'control',
@@ -223,6 +239,7 @@ beforeEach(() => {
   vi.spyOn(managementApi, 'getWorkflowGraph').mockResolvedValue(graph)
   vi.spyOn(managementApi, 'listMainAgents').mockResolvedValue([agent])
   vi.spyOn(managementApi, 'listBlocks').mockResolvedValue([])
+  vi.spyOn(managementApi, 'listWorkflows').mockResolvedValue([childWorkflow])
   vi.spyOn(managementApi, 'listWorkflowNodeCatalog').mockResolvedValue(nodeCatalog)
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
     callback(0)

@@ -36,9 +36,9 @@ Workflow Input Context 是重要的 Agent 上下文约定，但不是 catalog �
 `内置示例-workflow-input-context` 创建独立配置，再由 Main Agent 或 Subagent 的 `middleware_refs` 选择。完整原理和修改位置见
 [Workflow Input Context](workflow-input-context.md)。
 
-每个画布 Agent wrapper 在 Main Agent graph 成功完成后，把公开返回的完整 reduced messages 写入父 Workflow State 的
-`agent_invocations`。记录包含 invocation、Workflow、画布节点和 Agent 身份以及首次调用时间；同一节点再次调度时使用
-独立 invocation。同步 Subagent 仍由 Deep Agents 官方 Middleware 在 Main Agent 内部调度，不建立隐藏归档 wrapper。
+每个画布 Agent wrapper 在 Main Agent graph 成功完成后，把公开返回的完整 reduced messages 以 invocation ID 幂等写入
+Lifecycle/Run Store；父 Workflow State 的 `agent_invocations` 只保存身份和 `result_ref`，并按 Node/Dispatcher task 逻辑槽
+保留最新引用。同步 Subagent 仍由 Deep Agents 官方 Middleware 在 Main Agent 内部调度，不建立隐藏归档 wrapper。
 这条父子 State 输出映射不需要额外的结束 Hook 或 Recorder 组件。
 
 准备是 Workflow-owned 外围组件。它从模板创建 `workflow/workflow-prepare` 配置独占 Python 扩展；无参数
@@ -51,12 +51,12 @@ dict，返回值必须是字符串。它只控制 Workflow-owned 非 Agent 事�
 最终 State 或 Agent 自己的输出模式。字段和 Python 对象类型见[事件输出](../wizard-pages/workflow-event-output-config.md)。
 
 条件路由组件保存一个 `workflow-node/condition-router` Python 扩展引用和普通 config。扩展通过同步
-`create_router()` 工厂物化 `async route(state, context)`；用户在画布 Branch Edge 上直接填写分支 key，route 通过
+`create_router()` 工厂物化 `async route(state, runtime)`；用户在画布 Branch Edge 上直接填写分支 key，route 通过
 `activate` 返回一个或多个完全匹配的 key，并可通过 `update` 返回 State 局部更新，空列表使用必须显式连接的 `otherwise`。
 完整 package 和返回契约见[条件路由](../wizard-pages/condition-router-config.md)。
 
 任务分发组件保存一个 `workflow-node/task-dispatcher` Python 扩展引用。同步 `create_dispatcher()` 工厂物化
-`async dispatch(state, context)`；返回的每个任务包含稳定 `task_id`、匹配画布 Dispatch Edge 的 `dispatch_key` 和 JSON
+`async dispatch(state, runtime)`；返回的每个任务包含稳定 `task_id`、匹配画布 Dispatch Edge 的 `dispatch_key` 和 JSON
 `payload`；任意 Python 对象和非有限数会在 Node 边界被拒绝。Shell 将任务映射为 LangGraph `Send`，目标 Agent 的 State、
 Runtime Context 和完成 invocation 都带 task identity。
 完整规则和城市/乡镇示例见[任务分发](../wizard-pages/task-dispatcher-config.md)。

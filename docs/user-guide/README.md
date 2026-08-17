@@ -1,6 +1,6 @@
 # Agent Shell 用户指南
 
-Agent Shell 通过管理台组合 Deep Agents 配置，并把启用的 Workflow 暴露为 OpenAI-compatible model。
+Agent Shell 通过管理台组合 Deep Agents 配置，并把启用的父图 Workflow 暴露为 OpenAI-compatible model。
 
 推荐顺序：
 

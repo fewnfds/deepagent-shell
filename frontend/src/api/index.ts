@@ -23,9 +23,12 @@ import type {
   HealthResponse,
   ManagementEvent,
   Workflow,
+  WorkflowLifecyclePage,
   WorkflowGraphDocument,
   WorkflowNodeCatalogItem,
   WorkflowPayload,
+  WorkflowRole,
+  WorkflowDebugRetention,
   ManagedArchivePreview,
   ManagedDirectory,
   ManagedFileScopeCatalog,
@@ -127,8 +130,9 @@ export const managementApi = {
     return managementRequest('/api/skills')
   },
 
-  listWorkflows(): Promise<Workflow[]> {
-    return managementRequest('/api/workflows')
+  listWorkflows(workflowRole?: WorkflowRole): Promise<Workflow[]> {
+    const query = workflowRole ? `?workflow_role=${encodeURIComponent(workflowRole)}` : ''
+    return managementRequest(`/api/workflows${query}`)
   },
 
   listWorkflowNodeCatalog(): Promise<WorkflowNodeCatalogItem[]> {
@@ -152,6 +156,24 @@ export const managementApi = {
 
   deleteWorkflow(id: string): Promise<{ ok: boolean }> {
     return managementRequest(`/api/workflows/${id}`, { method: 'DELETE' })
+  },
+
+  listWorkflowLifecycles(
+    request?: { page?: number; page_size?: number; query?: string },
+  ): Promise<WorkflowLifecyclePage> {
+    const params = new URLSearchParams()
+    if (request?.page !== undefined) params.set('page', String(request.page))
+    if (request?.page_size !== undefined) params.set('page_size', String(request.page_size))
+    if (request?.query) params.set('query', request.query)
+    const query = params.toString()
+    return managementRequest(`/api/workflow-lifecycles${query ? `?${query}` : ''}`)
+  },
+
+  deleteWorkflowLifecycle(id: string): Promise<{ ok: boolean }> {
+    return managementRequest(
+      `/api/workflow-lifecycles/${encodeURIComponent(id)}?delete_dynamic_directories=true`,
+      { method: 'DELETE' },
+    )
   },
 
   getWorkflowGraph(id: string): Promise<WorkflowGraphDocument> {
@@ -495,6 +517,17 @@ export const managementApi = {
     return managementRequest('/api/runtime-diagnostics/debug', {
       method: 'PUT',
       body: JSON.stringify({ enabled }),
+    })
+  },
+
+  getWorkflowDebugRetention(): Promise<WorkflowDebugRetention> {
+    return managementRequest('/api/history-retention/workflow-debug')
+  },
+
+  updateWorkflowDebugRetention(retentionLimit: number): Promise<WorkflowDebugRetention> {
+    return managementRequest('/api/history-retention/workflow-debug', {
+      method: 'PUT',
+      body: JSON.stringify({ retention_limit: retentionLimit }),
     })
   },
 

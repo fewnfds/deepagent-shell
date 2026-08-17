@@ -32,6 +32,14 @@ interface SectionNavigationGroup {
 
 const sectionNavigationGroups: SectionNavigationGroup[] = [
   {
+    prefix: '/workflows',
+    items: [
+      { path: '/workflows/parents', labelKey: 'navigation.sections.parentWorkflows' },
+      { path: '/workflows/children', labelKey: 'navigation.sections.childWorkflows' },
+      { path: '/workflows/lifecycles', labelKey: 'navigation.sections.workflowLifecycles' },
+    ],
+  },
+  {
     prefix: '/system',
     items: [
       { path: '/system/config', labelKey: 'navigation.sections.systemSettings' },

@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 from types import ModuleType
 from typing import Any, Callable
+from uuid import uuid4
 
 from agent_shell.python_packages.packages import (
     PythonPackageAdapter,
@@ -35,6 +36,9 @@ class PythonPackageLoader:
         self._adapter = adapter
         self._factory_name = factory_name
         self._factory_parameters = factory_parameters
+        self._module_namespace = (
+            f"_agent_shell_python_package_{uuid4().hex}"
+        )
         self._modules: dict[
             tuple[str, str, int], tuple[ModuleType, dict[str, object], Path]
         ] = {}
@@ -83,10 +87,7 @@ class PythonPackageLoader:
                 f"Python package {folder!r} dependencies are not ready.",
                 status_code=409,
             )
-        module_name = (
-            "_agent_shell_python_package_"
-            f"{self._request_id.replace('-', '_')}_{len(self._modules)}"
-        )
+        module_name = f"{self._module_namespace}_{len(self._modules)}"
         spec = importlib.util.spec_from_file_location(
             module_name,
             package_dir / "main.py",

@@ -239,12 +239,18 @@ export interface PythonPackageProjection {
   dependency_error_code: string
 }
 
+export type WorkflowRole = 'parent' | 'child'
+
 export interface WorkflowPayload {
   name: string
+  workflow_role: WorkflowRole
   description: string
   filesystem_id: string
   workflow_prepare_id: string | null
   workflow_event_output_id: string | null
+  recursion_limit: number
+  execution_timeout_seconds: number
+  max_concurrency: number
   enabled: boolean
 }
 
@@ -252,7 +258,37 @@ export interface Workflow extends WorkflowPayload {
   id: string
 }
 
-export type WorkflowNodeType = 'start' | 'agent' | 'condition-router' | 'task-dispatcher' | 'end'
+export interface WorkflowLifecycleSummary {
+  lifecycle_id: string
+  lifecycle_status: 'active' | 'deleting'
+  request_id: string
+  parent_run_id: string
+  parent_thread_id: string
+  parent_status: 'running' | 'completed' | 'failed' | 'cancelled'
+  workflow_id: string
+  workflow_name: string
+  created_at: string
+  messages_sha: string
+  message_count: number
+  task_count: number
+  active_task_count: number
+  task_status_counts: Record<string, number>
+  debug_run_count: number
+  checkpoint_count: number
+  store_item_count: number
+  filesystem_count: number
+  route_count: number
+  dynamic_directory_count: number
+}
+
+export type WorkflowLifecyclePage = PaginationResponse<WorkflowLifecycleSummary>
+
+export type WorkflowNodeType =
+  | 'start'
+  | 'agent'
+  | 'condition-router'
+  | 'task-dispatcher'
+  | 'end'
 
 export interface WorkflowNodeHandleSpec {
   id: string
@@ -276,6 +312,7 @@ export interface WorkflowNodeCatalogItem {
   config_schema: Record<string, unknown>
   input_handles: WorkflowNodeHandleSpec[]
   output_handles: WorkflowNodeHandleSpec[]
+  workflow_roles: WorkflowRole[]
 }
 
 export interface WorkflowGraphNode {
@@ -481,6 +518,11 @@ export interface RuntimeDiagnostics {
   retention_limit: number
   max_retention_limit: number
   debug_enabled: boolean
+}
+
+export interface WorkflowDebugRetention {
+  retention_limit: number
+  max_retention_limit: number
 }
 
 export type ManagementEvent =

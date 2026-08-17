@@ -39,6 +39,12 @@ def test_models_publish_only_enabled_workflows_and_chat_runs_current_graph(
         main_agent = create_main_agent(client)
         workflow = create_workflow(client, name="Published Workflow")
         save_linear_workflow_graph(client, workflow, main_agent)
+        child = create_workflow(
+            client,
+            name="Internal Child Workflow",
+            workflow_role="child",
+        )
+        save_linear_workflow_graph(client, child, main_agent)
         create_workflow(client, name="Disabled Workflow", enabled=False)
 
         models = client.get("/v1/models")
@@ -46,6 +52,13 @@ def test_models_publish_only_enabled_workflows_and_chat_runs_current_graph(
             "/v1/chat/completions",
             json={
                 "model": workflow["name"],
+                "messages": [{"role": "user", "content": "run"}],
+            },
+        )
+        child_reply = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": child["name"],
                 "messages": [{"role": "user", "content": "run"}],
             },
         )
@@ -70,9 +83,62 @@ def test_models_publish_only_enabled_workflows_and_chat_runs_current_graph(
     message = workflow_reply.json()["choices"][0]["message"]
     assert message["role"] == "assistant"
     assert message["content"] == "runtime reply"
-    for response in (main_agent_name_reply, main_agent_id_reply):
+    for response in (child_reply, main_agent_name_reply, main_agent_id_reply):
         assert response.status_code == 404
         assert response.json()["error"]["code"] == "model_not_found"
+
+
+def test_workflow_runtime_limits_reach_the_graph_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent_shell.runtime.agent_runtime import AgentRuntime
+
+    captured: dict[str, object] = {}
+    original_execution = AgentRuntime._execution
+
+    def observe_execution(self, *args, **kwargs):
+        captured["run_config"] = kwargs.get("run_config")
+        captured["execution_timeout_seconds"] = kwargs.get(
+            "execution_timeout_seconds"
+        )
+        return original_execution(self, *args, **kwargs)
+
+    monkeypatch.setattr(AgentRuntime, "_execution", observe_execution)
+    with make_client(tmp_path, monkeypatch) as client:
+        main_agent = create_main_agent(client)
+        workflow = create_workflow(client, name="Configured limits")
+        save_linear_workflow_graph(client, workflow, main_agent)
+        updated = client.put(
+            f"/api/workflows/{workflow['id']}",
+            json={
+                "name": workflow["name"],
+                "workflow_role": workflow["workflow_role"],
+                "description": workflow["description"],
+                "filesystem_id": workflow["filesystem_id"],
+                "workflow_prepare_id": workflow["workflow_prepare_id"],
+                "workflow_event_output_id": workflow[
+                    "workflow_event_output_id"
+                ],
+                "recursion_limit": 321,
+                "execution_timeout_seconds": 42,
+                "max_concurrency": 7,
+                "enabled": True,
+            },
+        )
+        assert updated.status_code == 200, updated.text
+        reply = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": workflow["name"],
+                "messages": [{"role": "user", "content": "run"}],
+            },
+        )
+        assert reply.status_code == 200, reply.text
+
+    assert captured["execution_timeout_seconds"] == 42
+    assert captured["run_config"]["recursion_limit"] == 321
+    assert captured["run_config"]["max_concurrency"] == 7
 
 
 def test_chat_rejects_an_incomplete_saved_workflow_draft(
@@ -129,7 +195,7 @@ def test_chat_materializes_condition_router_package_before_compiling_workflow(
     package_dir.mkdir(parents=True)
     (package_dir / "main.py").write_text(
         "def create_router():\n"
-        "    async def route(state, context):\n"
+        "    async def route(state, runtime):\n"
         "        return {'activate': ['run'], 'update': {}}\n"
         "    return route\n",
         encoding="utf-8",
@@ -228,7 +294,7 @@ def test_chat_completion_stream_runs_current_graph(
         chunk["choices"][0]["delta"].get("content", "") for chunk in chunks
     )
     assert content == "runtime reply"
-    assert chunks[-1]["choices"][0]["finish_reason"] == "unknown"
+    assert chunks[-1]["choices"][0]["finish_reason"] == "stop"
 
 
 def test_message_interception_captures_raw_request_before_workflow_resolution(
@@ -324,9 +390,11 @@ def test_workflow_agent_middleware_injects_frozen_client_messages(
         "request-injection",
         "from langchain.agents.middleware import AgentMiddleware\n"
         "from langchain_core.messages import HumanMessage\n"
+        "from agent_shell.runtime.workflow_lifecycle import LIFECYCLE_INPUT_KEY, lifecycle_input_namespace\n"
         "class InjectRequest(AgentMiddleware):\n"
         "    async def abefore_agent(self, state, runtime):\n"
-        "        content = runtime.context.messages[-1]['content']\n"
+        "        item = await runtime.store.aget(lifecycle_input_namespace(runtime.context.lifecycle_id), LIFECYCLE_INPUT_KEY)\n"
+        "        content = item.value['messages'][-1]['content']\n"
         "        return {'messages': [HumanMessage(content=content)]}\n"
         "def create_middleware(agent):\n"
         "    return InjectRequest()\n",

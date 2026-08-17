@@ -54,5 +54,6 @@ state["shared_vars"]["score"]
 
 - 在 `main.py` 顶部修改规则参数，或在标有“在这里填写自己的条件判断”的位置编写判断。
 - 返回的 branch key 必须与画布 Edge 完全一致；未知、重复或未连接的 key 会使本次 Workflow 失败。
-- `state` 是完整 Workflow State 的副本，`context` 是完整 Workflow Runtime Context 的副本。
+- `state` 是完整 Workflow State 的 detached 可变副本；`runtime` 是 LangGraph 注入的官方 Runtime，身份与 Prepare 从
+  `runtime.context` 读取，Lifecycle Store 从 `runtime.store` 读取。
 - 保存配置后，可以继续在组件页面编辑 `main.py`，也可以直接编辑该配置的扩展代码目录。

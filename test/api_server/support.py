@@ -133,6 +133,7 @@ def create_workflow(
     name: str | None = None,
     enabled: bool = True,
     filesystem_id: str | None = None,
+    workflow_role: str = "parent",
 ) -> dict:
     workflow_name = name or "Test Workflow"
     if filesystem_id is None:
@@ -146,6 +147,7 @@ def create_workflow(
         "/api/workflows",
         json={
             "name": workflow_name,
+            "workflow_role": workflow_role,
             "description": "Test Workflow.",
             "filesystem_id": filesystem_id,
             "enabled": enabled,

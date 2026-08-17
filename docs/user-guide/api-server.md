@@ -10,7 +10,7 @@ GET /v1/models
 Authorization: Bearer <API Key>
 ```
 
-返回当前启用的 Workflow 名称。Main Agent 名称和内部 UUID 不属于 model ID。
+返回当前启用的父图 Workflow 名称。子图、Main Agent 名称和内部 UUID 不属于 model ID。
 
 ```http
 POST /v1/chat/completions
@@ -24,7 +24,7 @@ Content-Type: application/json
 }
 ```
 
-请求按 Workflow name 捕获一次配置快照，从同一快照读取当前 Graph、共享 Filesystem 和画布 Agent 节点引用，再递归
+请求只按父图 Workflow name 捕获一次配置快照，从同一快照读取当前 Graph、共享 Filesystem 和画布 Agent 节点引用，再递归
 构造该 Main Agent 的 Subagent、权限、Middleware、组件和 Provider secret view。构造完成后关闭请求配置快照，
 运行中的图不再回读配置。
 
@@ -33,8 +33,12 @@ fan-out、fan-in 或形成 LangGraph 支持的循环。画布 Start/End 直接�
 `StateGraph.add_edge()`；条件路由脚本读取完整 Workflow State 和 Runtime Context，返回 State partial update 与一个或多个
 分支 key；候选 key 直接由画布具名 Branch Edge 声明，并必须包含显式 `otherwise`，runtime 将其映射为
 `Command(update=..., goto=[...])`。任务分发脚本从 State/Context 生成具名 JSON 任务，runtime 将每项映射为 LangGraph
-`Send`，并把 `workflow_task` 同时放入目标 Agent 的私有 State 与 Runtime Context。Start 不注入客户端消息。规范化后的 `messages[]` 保存在请求级不可变 Middleware context 中，只有已
-装配的 `before_agent`/`abefore_agent` Middleware 决定如何切割并写入 Agent state。
+`Send`，并把 `workflow_task` 放入目标 Agent 的私有 State。Start 不注入客户端消息。规范化后的 `messages[]` 保存在
+Lifecycle Store；Runtime Context 只携带定位输入所需的 lifecycle/run/invocation 身份。只有已装配的
+`before_agent`/`abefore_agent` Middleware 决定如何读取、切割并写入 Agent state。
+
+每个 Workflow 显式配置 `recursion_limit` 和 `execution_timeout_seconds`。前者传给 LangGraph Runnable config，后者限制
+整个 parent/child Run 的事件流消费时间；后台 Agent 继承启动它的父 Workflow 配置，后台 Workflow 使用自己的配置。
 
 `stream=false` 返回标准 `chat.completion` JSON。`stream=true` 返回 `chat.completion.chunk` SSE，并以
 `data: [DONE]` 结束。两种模式都消费同一次 LangGraph v3 事件流，并按 Workflow node 对应 Main Agent 的
@@ -53,12 +57,18 @@ fan-out、fan-in 或形成 LangGraph 支持的循环。画布 Start/End 直接�
 ## 当前边界
 
 - Workflow 只有一份当前图，没有 draft/published revision、发布审核或历史回滚；
+- parent/child 是同一 Workflow 实体的使用角色；子图不通过 `/v1` 直接启动；
 - 每次请求是一次新的完整运行，并建立独立 Debug thread；外层 Workflow 使用官方持久 checkpointer，但不提供 resume；
-- 当前不支持通用 conditional edge、Interrupt、Subworkflow 或跨进程任务队列；Task Dispatcher 已支持请求内动态 worker，多个 normal 出边、一次激活的多个 branch 目标和多个 Send task 按 LangGraph super-step 语义执行；
+- 当前不支持通用 conditional edge、Interrupt 或跨进程任务队列；单进程后台 Agent/Workflow Run 通过 Runtime Context 的 `background_runs` 命令启动和查询，不属于 Graph Node；Task Dispatcher 已支持请求内动态 worker，多个 normal 出边、一次激活的多个 branch 目标和多个 Send task 按 LangGraph super-step 语义执行；
 - 图不完整、引用失效、Agent 装配失败或 Provider 失败时，本次请求直接返回错误；
 - Workflow Debug 管理 API 提供有界运行索引、结构运行树和 checkpoint 摘要；日志中心展示系统事件、请求级
   错误诊断，并在 DEBUG 开启期间保存正常完成记录、完成元数据文件和完整异常文件。当前不提供 Resume 或旧 Main Agent
   直连兼容。
+- management-only `/api/history-retention/workflow-debug` 读写 Workflow Debug 运行索引上限；降低上限只裁剪
+  已终止 Debug index，不删除 Lifecycle 所有的 checkpoint。
+- management-only `/api/workflow-lifecycles` 提供 Lifecycle 摘要和显式删除；摘要不返回 messages 或宿主路径，删除在仍有
+  active 后台任务时拒绝，并可显式清理受管动态目录。列表使用 `page/page_size/query` 的后端分页，默认按创建时间倒序每页
+  10 条，并只为当前页生成 task/checkpoint/Store/filesystem 摘要。没有定时 retention、End 自动清场或后台清理调度器。
 
 ## API Key 与状态
 

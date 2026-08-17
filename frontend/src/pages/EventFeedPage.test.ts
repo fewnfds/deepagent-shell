@@ -33,6 +33,14 @@ function api() {
       max_retention_limit: 10_000,
       debug_enabled: enabled,
     })),
+    getWorkflowDebugRetention: vi.fn(async () => ({
+      retention_limit: 50,
+      max_retention_limit: 10_000,
+    })),
+    updateWorkflowDebugRetention: vi.fn(async (retentionLimit: number) => ({
+      retention_limit: retentionLimit,
+      max_retention_limit: 10_000,
+    })),
     getSystemLogSettings: vi.fn(async () => ({
       max_size_mib: 5,
       min_size_mib: 1,
@@ -74,6 +82,7 @@ describe('EventFeedPage', () => {
     const wrapper = await mountPage(mockApi)
 
     expect(wrapper.find('[data-testid="retention-runtime"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="retention-workflow-debug"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="retention-api_call"]').exists()).toBe(false)
     const debugControl = wrapper.get('[data-testid="runtime-debug"]')
     expect(debugControl.get('.form-label').text()).toBe('Full DEBUG logs')

@@ -2,22 +2,22 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
-from types import MappingProxyType
 from typing import Any, Mapping
 
-from agent_shell.runtime.input_messages import (
-    client_messages_sha,
-    validate_prepared_messages,
+from agent_shell.runtime.background_commands import (
+    BackgroundRunCaller,
+    BackgroundRunCommands,
+    BackgroundRunRuntime,
 )
 
 
-def _freeze(value: Any) -> Any:
+def _detached(value: Any) -> Any:
     if isinstance(value, dict):
-        return MappingProxyType({str(key): _freeze(item) for key, item in value.items()})
+        return {str(key): _detached(item) for key, item in value.items()}
     if isinstance(value, list):
-        return tuple(_freeze(item) for item in value)
+        return tuple(_detached(item) for item in value)
     if isinstance(value, tuple):
-        return tuple(_freeze(item) for item in value)
+        return tuple(_detached(item) for item in value)
     return value
 
 
@@ -25,61 +25,126 @@ def _freeze(value: Any) -> Any:
 class WorkflowRuntimeContext:
     """Per-invocation context passed through the Workflow graph.
 
-    ``messages`` is the immutable OpenAI request snapshot.  LangGraph does not
-    put runtime context into the model prompt automatically; an AgentMiddleware
-    hook decides how to select and write messages into that Agent's graph state.
+    Lifecycle-shared input lives in the graph Store. This context contains only
+    immutable identity and configuration for the current run or invocation.
     """
 
     request_id: str = ""
-    messages: tuple[Mapping[str, Any], ...] = ()
-    messages_sha: str = ""
+    lifecycle_id: str = ""
+    run_id: str = ""
+    thread_id: str = ""
+    parent_run_id: str = ""
+    background_task_id: str = ""
+    launcher_id: str = ""
+    run_depth: int = 0
     workflow: Mapping[str, Any] = field(default_factory=dict)
     prepare: Mapping[str, Any] = field(default_factory=dict)
-    workflow_state: Mapping[str, Any] = field(default_factory=dict)
     workflow_node_id: str = ""
     agent_id: str = ""
     invocation_id: str = ""
-    workflow_task: Mapping[str, Any] = field(default_factory=dict)
+    background_runs: BackgroundRunCommands | None = None
 
     @classmethod
-    def from_request(
+    def for_run(
         cls,
-        raw_messages: object,
         *,
         request_id: str,
+        lifecycle_id: str,
+        run_id: str,
+        thread_id: str,
+        parent_run_id: str = "",
+        background_task_id: str = "",
+        launcher_id: str = "",
+        run_depth: int = 0,
         workflow: Mapping[str, Any] | None = None,
         prepare: Mapping[str, Any] | None = None,
+        background_runtime: BackgroundRunRuntime | None = None,
     ) -> "WorkflowRuntimeContext":
-        messages = validate_prepared_messages(raw_messages)
-        frozen_messages = tuple(
-            _freeze(message) for message in deepcopy(messages)
-        )
-        return cls(
+        context = cls(
             request_id=request_id,
-            messages=frozen_messages,
-            messages_sha=client_messages_sha(messages),
-            workflow=_freeze(deepcopy(dict(workflow or {}))),
-            prepare=_freeze(deepcopy(dict(prepare or {}))),
+            lifecycle_id=lifecycle_id,
+            run_id=run_id,
+            thread_id=thread_id,
+            parent_run_id=parent_run_id,
+            background_task_id=background_task_id,
+            launcher_id=launcher_id,
+            run_depth=run_depth,
+            workflow=_detached(deepcopy(dict(workflow or {}))),
+            prepare=_detached(deepcopy(dict(prepare or {}))),
+        )
+        if background_runtime is None:
+            return context
+        return replace(
+            context,
+            background_runs=BackgroundRunCommands(
+                background_runtime,
+                BackgroundRunCaller(
+                    request_id=request_id,
+                    lifecycle_id=lifecycle_id,
+                    run_id=run_id,
+                    run_depth=run_depth,
+                    workflow=context.workflow,
+                    prepare=context.prepare,
+                ),
+            ),
+        )
+
+    def for_workflow_node(
+        self,
+        *,
+        workflow_node_id: str,
+        invocation_id: str,
+    ) -> "WorkflowRuntimeContext":
+        """Bind one canvas Node invocation to run-scoped dependencies."""
+
+        background_runs = (
+            self.background_runs.for_caller(workflow_node_id)
+            if self.background_runs is not None
+            else None
+        )
+        return replace(
+            self,
+            workflow_node_id=workflow_node_id,
+            invocation_id=invocation_id,
+            background_runs=background_runs,
         )
 
     def for_workflow_agent(
         self,
-        workflow_state: Mapping[str, Any],
         *,
         workflow_node_id: str,
         agent_id: str,
         invocation_id: str,
-        workflow_task: Mapping[str, Any] | None = None,
     ) -> "WorkflowRuntimeContext":
-        """Bind the parent State reference and canvas Agent identity to a child run."""
+        """Bind stable canvas Agent identity to a foreground child invocation."""
 
         return replace(
+            self.for_workflow_node(
+                workflow_node_id=workflow_node_id,
+                invocation_id=invocation_id,
+            ),
+            agent_id=agent_id,
+        )
+
+    def for_background_agent(
+        self,
+        *,
+        agent_id: str,
+        invocation_id: str,
+    ) -> "WorkflowRuntimeContext":
+        """Bind an Agent Run that is not owned by a canvas Agent Node."""
+
+        background_runs = (
+            self.background_runs.for_caller(invocation_id)
+            if self.background_runs is not None
+            else None
+        )
+        return replace(
             self,
-            workflow_state=workflow_state,
-            workflow_node_id=workflow_node_id,
+            workflow_node_id="",
             agent_id=agent_id,
             invocation_id=invocation_id,
-            workflow_task=_freeze(deepcopy(dict(workflow_task or {}))),
+            background_runs=background_runs,
         )
 
 

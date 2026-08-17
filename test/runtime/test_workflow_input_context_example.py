@@ -6,8 +6,13 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 from deepagents.backends.utils import create_file_data
+from langgraph.store.memory import InMemoryStore
 
 from agent_shell.runtime.context import WorkflowRuntimeContext
+from agent_shell.runtime.workflow_lifecycle import (
+    LIFECYCLE_INPUT_KEY,
+    lifecycle_input_namespace,
+)
 
 
 def _load_example() -> ModuleType:
@@ -46,19 +51,28 @@ def test_workflow_input_context_example_applies_central_file_and_system_settings
         scope="main_agent",
         package_id="example-id",
     )
-    context = WorkflowRuntimeContext.from_request(
-        (
+    messages = [
             {"role": "system", "content": "leading"},
             {"role": "assistant", "content": "prior"},
             {"role": "system", "content": "late"},
-        ),
+    ]
+    context = WorkflowRuntimeContext.for_run(
         request_id="request-id",
+        lifecycle_id="lifecycle-id",
+        run_id="run-id",
+        thread_id="thread-id",
+    )
+    store = InMemoryStore()
+    store.put(
+        lifecycle_input_namespace(context.lifecycle_id),
+        LIFECYCLE_INPUT_KEY,
+        {"messages": messages},
     )
 
     update = asyncio.run(
         middleware.abefore_agent(
             {"messages": []},
-            SimpleNamespace(context=context),
+            SimpleNamespace(context=context, store=store),
         )
     )
 

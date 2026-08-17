@@ -115,7 +115,7 @@ class TaskDispatcherPackageRuntime:
             ) from exc
         parameters = list(signature.parameters.values())
         if (
-            [parameter.name for parameter in parameters] != ["state", "context"]
+            [parameter.name for parameter in parameters] != ["state", "runtime"]
             or any(
                 parameter.kind is not parameter.POSITIONAL_OR_KEYWORD
                 or parameter.default is not parameter.empty
@@ -124,7 +124,7 @@ class TaskDispatcherPackageRuntime:
         ):
             raise AgentRuntimeError(
                 "task_dispatcher_package.result_invalid",
-                f"Task Dispatcher package {folder!r} dispatch must accept exactly state and context.",
+                f"Task Dispatcher package {folder!r} dispatch must accept exactly state and runtime.",
                 status_code=422,
             )
         self._dispatchers[owner_id] = dispatch
