@@ -2,6 +2,8 @@
 
 Agent Shell 通过管理台组合 Deep Agents 配置，并把启用的父图 Workflow 暴露为 OpenAI-compatible model。
 
+AI 或自动化程序应先完整阅读 [AI Workflow 装配指南](ai-workflow-authoring.md)，再按需查阅下面的详细页面。
+
 推荐顺序：
 
 1. [启动并认识管理台](getting-started.md)
