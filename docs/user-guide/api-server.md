@@ -41,6 +41,15 @@ fan-out、fan-in 或形成 LangGraph 支持的循环。画布 Start/End 直接�
 `output-mode` 的同步 Python `output(event)` 过滤和渲染；Workflow-owned 非 Agent 事件由 Workflow 可选绑定的事件输出
 组件处理。脚本收到稳定 dict、必须返回字符串；两条路径都不会从最终 state 绕过输出策略读取原始 Agent 内容。
 
+## 拦截消息
+
+【系统 / 拦截消息】提供一个独立于 Workflow 的 Shell 入站开关。开启后，合法 Chat Completions 请求完成鉴权、
+请求体大小限制和基础 OpenAI 字段检查后立即短路，不捕获 Workflow 配置快照，不装配 Agent，也不创建 checkpoint。
+调用方按原 `stream` 模式收到 OpenAI-compatible 的“消息已拦截”回复，token usage 为零。
+
+页面通过 management-only API 显示进程内最新一条请求原文。开关持久化，正文不落盘、不进入日志，重新开启开关或
+重启服务时清空。
+
 ## 当前边界
 
 - Workflow 只有一份当前图，没有 draft/published revision、发布审核或历史回滚；

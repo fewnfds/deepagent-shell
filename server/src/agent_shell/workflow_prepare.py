@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import builtins
+from collections.abc import Awaitable, Callable
 from copy import deepcopy
 from typing import Annotated, Any
 
@@ -9,45 +9,22 @@ from pydantic import (
     ConfigDict,
     Field,
     JsonValue,
-    StringConstraints,
-    field_validator,
-    model_validator,
 )
 
-from agent_shell.python_requirements import parse_python_requirements
-from agent_shell.script_source import validate_module_function
 from agent_shell.condition_router import ConditionRouterBlock
+from agent_shell.python_packages.contracts import PythonPackageReference
 from agent_shell.task_dispatcher import TaskDispatcherBlock
 from agent_shell.workflow_event_output import WorkflowEventOutputBlock
 
 
-ScriptSource = Annotated[str, StringConstraints(strip_whitespace=False)]
-DEFAULT_WORKFLOW_PREPARE_SOURCE = (
-    "async def prepare(input):\n"
-    "    return {\"context\": {}}\n"
-)
+WorkflowPrepareCallable = Callable[[dict[str, Any]], Awaitable[Any]]
 
 
 class WorkflowPrepareBlock(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: Annotated[str, Field(min_length=1, max_length=120)]
-    enabled: bool = True
-    prepare_source: ScriptSource = Field(
-        default=DEFAULT_WORKFLOW_PREPARE_SOURCE,
-        max_length=100_000,
-    )
-    python_requirements: list[str] = Field(default_factory=list, max_length=100)
-
-    @field_validator("python_requirements")
-    @classmethod
-    def validate_python_requirements(cls, values: list[str]) -> list[str]:
-        return list(parse_python_requirements(values).values)
-
-    @model_validator(mode="after")
-    def validate_source(self) -> "WorkflowPrepareBlock":
-        validate_module_function(self.prepare_source, "prepare", asynchronous=True)
-        return self
+    python_package: PythonPackageReference
 
 
 class WorkflowPrepareResult(BaseModel):
@@ -69,21 +46,11 @@ class WorkflowPrepareError(RuntimeError):
 
 
 async def run_workflow_prepare(
-    block: dict[str, Any],
+    prepare: WorkflowPrepareCallable,
     *,
     input_value: dict[str, Any],
 ) -> WorkflowPrepareResult:
-    configuration = WorkflowPrepareBlock.model_validate(block)
-    if not configuration.enabled:
-        return WorkflowPrepareResult()
-    namespace: dict[str, Any] = {"__builtins__": builtins.__dict__}
     try:
-        exec(
-            compile(configuration.prepare_source, "<workflow-prepare>", "exec"),
-            namespace,
-            namespace,
-        )
-        prepare = namespace["prepare"]
         prepared_input = WorkflowPrepareInput.model_validate(input_value).model_dump(
             mode="json"
         )
@@ -136,10 +103,10 @@ WORKFLOW_COMPONENT_CATALOG = (
 
 
 __all__ = [
-    "DEFAULT_WORKFLOW_PREPARE_SOURCE",
     "WORKFLOW_COMPONENT_CATALOG",
     "WORKFLOW_COMPONENT_MODELS",
     "WorkflowPrepareBlock",
+    "WorkflowPrepareCallable",
     "WorkflowPrepareError",
     "WorkflowPrepareInput",
     "WorkflowPrepareResult",

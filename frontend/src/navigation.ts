@@ -36,6 +36,10 @@ const sectionNavigationGroups: SectionNavigationGroup[] = [
     items: [
       { path: '/system/config', labelKey: 'navigation.sections.systemSettings' },
       { path: '/system/files', labelKey: 'navigation.sections.fileManager' },
+      {
+        path: '/system/message-interception',
+        labelKey: 'navigation.sections.messageInterception',
+      },
       { path: '/system/events', labelKey: 'navigation.sections.eventFeed' },
     ],
   },

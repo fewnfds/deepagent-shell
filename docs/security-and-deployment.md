@@ -24,10 +24,10 @@ Provider credential、API Key、管理密码和 LangSmith API Key 保存在实�
 的变量引用，`agent-shell.env` 保存实际敏感值；当前文件不是加密 vault。保护整个 `data/` 的磁盘权限、备份和传输，
 不要提交 Git 或公开分享。
 
-普通 API、DOM、系统日志和运行诊断摘要不回显 credential、Bearer token、宿主敏感路径、traceback 或
+普通 API、普通 DOM、系统日志和运行诊断摘要不回显 credential、Bearer token、宿主敏感路径、traceback 或
 Provider 原始错误正文。以下 management-only 功能会按产品用途保存完整内容：
 
-- Provider 前拦截记录；
+- 拦截消息页在进程内暂存并展示最新一条 OpenAI 请求原文，服务重启后清空；
 - 日志中心显式开启后写入 `data/logs/debug/` 的正常完成元数据和完整异常日志；
 - 用户创建的组件、文件和 Python 资源。
 
@@ -53,7 +53,7 @@ Middleware 包没有 sandbox，以 Agent Shell 服务进程权限运行。它可
 ## 容量与保留
 
 部署者负责磁盘、内存、上传大小、外部映射和并发限制。文件管理文本编辑限制为 2 MiB；其他文件传输
-采用流式处理，但不构成实例配额。拦截记录和运行诊断使用可配置保存条数，系统日志使用文件大小上限。
+采用流式处理，但不构成实例配额。运行诊断使用可配置保存条数，系统日志使用文件大小上限。
 降低上限会永久裁剪旧数据；裁剪 runtime 诊断时同步删除对应 DEBUG 文件。Workflow Debug 运行索引有界保存；官方 checkpoint 与索引共用实例 SQLite，删除运行
 记录时同步调用 checkpointer 删除对应 thread。
 
@@ -72,6 +72,10 @@ settings:
   langsmith_workspace_id: null
   cors_origins: []
   trusted_proxy_cidrs: []
+api_server:
+  enabled: true
+  max_initial_messages: 1000
+  message_interception_enabled: false
 ```
 
 `data/config/agent-shell.env` 保存敏感变量：

@@ -23,6 +23,7 @@ const api = vi.hoisted(() => ({
   validateRepository: vi.fn(),
   listCustomTools: vi.fn(),
   listMiddlewareTemplates: vi.fn(),
+  listWorkflowPrepareTemplates: vi.fn(),
   listConditionRouterTemplates: vi.fn(),
   listTaskDispatcherTemplates: vi.fn(),
   listSkills: vi.fn(),
@@ -185,6 +186,7 @@ beforeEach(() => {
   api.validateRepository.mockResolvedValue({ valid: true, stage: 'repository_load', issues: [] })
   api.listCustomTools.mockResolvedValue({ catalog: [], errors: {} })
   api.listMiddlewareTemplates.mockResolvedValue({ catalog: [], errors: {} })
+  api.listWorkflowPrepareTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listConditionRouterTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listTaskDispatcherTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listSkills.mockResolvedValue({
@@ -212,13 +214,7 @@ describe('ComponentsPage', () => {
     api.getCatalog.mockResolvedValueOnce({
       block_types: [skillManifest, modelManifest],
       workflow_component_types: [workflowPrepareManifest],
-      editor_defaults: {
-        'workflow-prepare': {
-          enabled: false,
-          prepare_source: '',
-          python_requirements: [],
-        },
-      },
+      editor_defaults: { 'workflow-prepare': {} },
     })
     const router = createRouter({
       history: createMemoryHistory(),
@@ -235,6 +231,8 @@ describe('ComponentsPage', () => {
       global: { plugins: [router] },
     })
     await flushPromises()
+
+    expect(api.listWorkflowPrepareTemplates).toHaveBeenCalledOnce()
 
     expect(wrapper.findAll('[data-testid="section-nav"] button').map((item) => item.text())).toEqual([
       'navigation.sections.workflowPrepare',

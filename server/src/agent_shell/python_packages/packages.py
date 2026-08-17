@@ -20,8 +20,9 @@ from agent_shell.python_packages.dependencies import (
 from agent_shell.registries.errors import ResourceScanError
 
 
-PythonPackageFamily = Literal["workflow-node", "middleware"]
+PythonPackageFamily = Literal["workflow", "workflow-node", "middleware"]
 PythonPackageAdapter = Literal[
+    "workflow-prepare",
     "condition-router",
     "task-dispatcher",
     "agent-middleware",
@@ -38,6 +39,7 @@ class _ManifestBase(BaseModel):
     @model_validator(mode="after")
     def validate_adapter_family(self) -> "_ManifestBase":
         expected = {
+            "workflow-prepare": "workflow",
             "condition-router": "workflow-node",
             "task-dispatcher": "workflow-node",
             "agent-middleware": "middleware",

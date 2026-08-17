@@ -41,9 +41,10 @@ Workflow Input Context 是重要的 Agent 上下文约定，但不是 catalog �
 独立 invocation。同步 Subagent 仍由 Deep Agents 官方 Middleware 在 Main Agent 内部调度，不建立隐藏归档 wrapper。
 这条父子 State 输出映射不需要额外的结束 Hook 或 Recorder 组件。
 
-准备是 Workflow-owned 组件。它在所有 Agent 配置解析完成后、任何模型/Middleware/Agent/StateGraph
-构造前执行一次 `async def prepare(input)`；当前只允许返回 `{"context": {...}}`，结果冻结到
-`runtime.context.prepare`。它不属于 Main Agent/Subagent capability，也不是通用生命周期 Hook。
+准备是 Workflow-owned 外围组件。它从模板创建 `workflow/workflow-prepare` 配置独占 Python 扩展；无参数
+`create_prepare()` 工厂返回 `async prepare(input)`。Shell 在所有 Agent 配置解析完成后、最终 Context 以及任何
+Router/Dispatcher/模型/Middleware/Agent/StateGraph 物化前执行一次；当前只允许返回 `{"context": {...}}`，结果冻结到
+`runtime.context.prepare`。它不属于 Main Agent/Subagent capability，不是 LangChain middleware、LangGraph node 或通用生命周期 Hook。
 
 事件输出也是 Workflow-owned 组件。Workflow 通过 UUID 可选绑定一份配置；各事件的同步 `output(event)` 读取稳定
 dict，返回值必须是字符串。它只控制 Workflow-owned 非 Agent 事件的 OpenAI 响应投影，不改变 checkpoint、Debug、
@@ -60,7 +61,6 @@ dict，返回值必须是字符串。它只控制 Workflow-owned 非 Agent 事�
 Runtime Context 和完成 invocation 都带 task identity。
 完整规则和城市/乡镇示例见[任务分发](../wizard-pages/task-dispatcher-config.md)。
 
-这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。自定义 Middleware、Condition Router 和 Task Dispatcher 从用户模板或内置示例
+这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。Workflow Prepare、自定义 Middleware、Condition Router 和 Task Dispatcher 从用户模板或内置示例
 创建配置独占的 Python 扩展，并在扩展目录可选的 `requirements.txt` 声明外部包；模板和示例本身不运行也不参与依赖。
-Workflow Prepare 仍在组件配置中保存源码与 `python_requirements`。requirements 修改后重启生效；文件化扩展源码在下一次请求重新加载，
-仍为内联形式的组件源码按各自组件说明生效。
+requirements 修改后重启生效；文件化扩展源码在下一次请求重新加载。仍为内联形式的事件输出等组件源码按各自组件说明生效。

@@ -14,6 +14,10 @@ def build_python_package_router(
     async def middleware_templates() -> dict[str, object]:
         return authoring.template_catalog("custom-middleware")
 
+    @router.get("/api/python-package-templates/workflow-prepare")
+    async def workflow_prepare_templates() -> dict[str, object]:
+        return authoring.template_catalog("workflow-prepare")
+
     @router.get("/api/python-package-templates/condition-router")
     async def condition_router_templates() -> dict[str, object]:
         return authoring.template_catalog("condition-router")

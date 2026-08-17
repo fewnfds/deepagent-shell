@@ -18,12 +18,15 @@ Agent Shell 的文件化 Python 扩展分为扩展模板、配置扩展和组件
 ```text
 data/
   templates/
+    workflow/prepare/<template-key>/
     workflow/condition_router/<template-key>/
     workflow/task_dispatcher/<template-key>/
     agent/custom_middleware/<template-key>/
   config/
     components/<type>/<configuration-uuid>.yaml
     python_package_instances/
+      workflow-prepare/
+        <configuration-uuid>/
       condition-router/
         <configuration-uuid>/
       task-dispatcher/
@@ -32,6 +35,7 @@ data/
         <configuration-uuid>/
 
 examples/
+  workflow-components/prepare/<example-key>/
   workflow-components/condition-router/<example-key>/
   workflow-components/task-dispatcher/<example-key>/
   agent-components/custom-middleware/<example-key>/
@@ -60,7 +64,7 @@ examples/
 
 ## 配置引用
 
-Condition Router、Task Dispatcher 和 Custom Middleware 使用同一 YAML 外壳：
+Workflow Prepare、Condition Router、Task Dispatcher 和 Custom Middleware 使用同一 YAML 外壳：
 
 ```yaml
 python_package:
@@ -79,6 +83,23 @@ YAML 不保存源码、requirements、manifest 投影、模板引用、revision 
 首次保存才创建配置扩展。已有配置每次打开都从自己的扩展代码目录读取文件，保存时只能更新原目录，不能改指向另一模板或配置扩展。
 不存在的相对路径显示非阻塞警告；填写内容后保存会创建文件，保持空内容则继续缺失。未列出的文件保持原样。
 绝对路径、`..`、反斜杠路径、重复路径和 `package.json` 会被拒绝。文件保存使用 revision，若目录已被外部修改，必须重新载入后再保存。
+
+## Workflow Prepare
+
+Prepare 使用 `family: workflow`、`adapter: workflow-prepare`。它是 Agent Shell 的 Workflow-owned 外围能力，不是
+LangChain middleware 或 LangGraph node。无参数同步工厂返回固定签名的 async callable：
+
+```python
+def create_prepare():
+    async def prepare(input):
+        return {"context": {"request_id": input["request"]["request_id"]}}
+
+    return prepare
+```
+
+Shell 在所有 Agent 静态装配解析后执行 `prepare(input)`，严格接受 `{"context": {...}}`，再构造唯一最终
+`WorkflowRuntimeContext`。Router/Dispatcher 工厂、Agent/Middleware 和 StateGraph 都在此后物化；运行中可变数据仍属于
+Graph State。
 
 ## Condition Router
 
@@ -159,7 +180,7 @@ hook、state schema、tools 或 stream transformer。运行链使用
 Python 名称仍需显式 `import`。本地模块使用正常相对导入，例如 `from .helpers import build_route`。非核心直接依赖逐行写入配置扩展
 的可选 `requirements.txt`。
 
-启动器只从启用 Workflow 可达的 Condition Router、Task Dispatcher、Main Agent 和其 Subagent 引用中收集配置扩展 requirements。静态模板和
+启动器只从启用 Workflow 可达的 Workflow Prepare、Condition Router、Task Dispatcher、Main Agent 和其 Subagent 引用中收集配置扩展 requirements。静态模板和
 未被运行配置触达的扩展不进入依赖指纹，也不影响全局依赖。依赖层生成在
 `runtime/python_packages/site-packages/`；requirements 修改后重启生效，Python 源码在下一次请求重新加载。
 

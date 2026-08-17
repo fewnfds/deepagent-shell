@@ -201,8 +201,8 @@ export interface PythonPackageReference {
 export interface PythonPackageManifest {
   format_version: 1
   id: string
-  family: 'workflow-node' | 'middleware'
-  adapter: 'condition-router' | 'task-dispatcher' | 'agent-middleware'
+  family: 'workflow' | 'workflow-node' | 'middleware'
+  adapter: 'workflow-prepare' | 'condition-router' | 'task-dispatcher' | 'agent-middleware'
   folder: string
 }
 
@@ -222,8 +222,8 @@ export interface PythonPackageFiles {
 export interface PythonPackageTemplate {
   format_version: 1
   key: string
-  family: 'workflow-node' | 'middleware'
-  adapter: 'condition-router' | 'task-dispatcher' | 'agent-middleware'
+  family: 'workflow' | 'workflow-node' | 'middleware'
+  adapter: 'workflow-prepare' | 'condition-router' | 'task-dispatcher' | 'agent-middleware'
   name: string
   files: PythonPackageFile[]
   revision: string
@@ -412,6 +412,18 @@ export interface ApiServerSettingsUpdate {
   max_initial_messages?: number
 }
 
+export interface InterceptedMessageRequest {
+  sequence: number
+  intercepted_at: string
+  request_id: string
+  request_raw_json: string
+}
+
+export interface MessageInterception {
+  enabled: boolean
+  latest: InterceptedMessageRequest | null
+}
+
 export interface PaginationResponse<TItem> {
   items: TItem[]
   page: number
@@ -475,6 +487,8 @@ export type ManagementEvent =
   | { type: 'event_stream_connected' }
   | { type: 'settings_changed' }
   | { type: 'history_changed' }
+  | { type: 'message_interception_changed' }
+  | { type: 'message_intercepted'; sequence: number }
   | { type: 'runtime_diagnostic'; entry: RuntimeDiagnosticEntry }
   | { type: 'system_log'; entry: Record<string, unknown> }
   | ({ type: string } & Record<string, unknown>)

@@ -17,7 +17,6 @@ from agent_shell.contracts import (
     SKILL_PROMPT_FIELDS,
     SummarizationBlock,
 )
-from agent_shell.workflow_prepare import WorkflowPrepareBlock
 from agent_shell.workflow_event_output import (
     WORKFLOW_EVENT_FIELDS,
     WORKFLOW_EVENT_NAMES,
@@ -501,9 +500,7 @@ _EDITOR_DEFAULTS = {
         mode="json",
         exclude={"name"},
     ),
-    "workflow_prepare": WorkflowPrepareBlock(name="Workflow prepare").model_dump(
-        mode="json", exclude={"name"}
-    ),
+    "workflow_prepare": {},
     "workflow_event_output": _workflow_event_output_default(),
     "condition_router": {},
     "task_dispatcher": {},

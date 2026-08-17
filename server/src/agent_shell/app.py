@@ -14,7 +14,11 @@ from agent_shell.api.agent_configs import build_agent_config_router
 from agent_shell.api.python_packages import build_python_package_router
 from agent_shell.api.errors import localized_error_detail
 from agent_shell.api.system import build_system_router
-from agent_shell.api.api_server import ApiServerEventHub, build_api_server_router
+from agent_shell.api.api_server import (
+    ApiServerEventHub,
+    MessageInterceptionState,
+    build_api_server_router,
+)
 from agent_shell.api.event_feed import build_event_feed_router
 from agent_shell.api.runtime_diagnostics import build_runtime_diagnostics_router
 from agent_shell.api.file_manager import build_file_manager_router
@@ -155,6 +159,7 @@ def create_app(
             ("API Server API Key",), exc.safe_message
         ) from None
     api_server_events = ApiServerEventHub()
+    message_interception = MessageInterceptionState()
     event_logger.set_publisher(api_server_events.publish_nowait)
     runtime_diagnostics = RuntimeDiagnostics(
         api_server_events.publish_nowait,
@@ -413,6 +418,7 @@ def create_app(
     app.state.runtime_diagnostic_store = runtime_diagnostic_store
     app.state.runtime_debug_logs = runtime_debug_logs
     app.state.api_server_store = api_server_store
+    app.state.message_interception = message_interception
     app.state.media_outputs = media_outputs
     app.state.provider_http_clients = provider_http_clients
     app.state.event_feed = event_feed
@@ -452,7 +458,6 @@ def create_app(
             configuration_validation,
             provider_http_clients,
             workflow_store,
-            runtime_dir,
             python_package_authoring,
         )
     )
@@ -495,6 +500,7 @@ def create_app(
             agent_runtime,
             settings,
             api_server_events,
+            message_interception,
         )
     )
 

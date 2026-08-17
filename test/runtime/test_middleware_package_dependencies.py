@@ -39,6 +39,30 @@ def write_package(root: Path, owner_id: str, package_id: str) -> tuple[str, Path
     return folder_name, folder
 
 
+def write_prepare_package(root: Path, owner_id: str) -> tuple[str, Path]:
+    folder = root / "workflow-prepare" / owner_id
+    folder.mkdir(parents=True)
+    (folder / "package.json").write_text(
+        json.dumps(
+            {
+                "format_version": 1,
+                "id": owner_id,
+                "family": "workflow",
+                "adapter": "workflow-prepare",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (folder / "main.py").write_text(
+        "def create_prepare():\n"
+        "    async def prepare(input):\n"
+        "        return {'context': {}}\n"
+        "    return prepare\n",
+        encoding="utf-8",
+    )
+    return owner_id, folder
+
+
 def write_runtime_manifest(runtime_root: Path) -> None:
     manifest = runtime_root / "app" / "runtime-manifest.json"
     manifest.parent.mkdir(parents=True)
@@ -105,6 +129,11 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
         "idna==3.10\n", encoding="utf-8"
     )
     (folder / "requirements.txt").write_text("Pillow==12.0.0\n", encoding="utf-8")
+    prepare_id = "56565656-5656-4656-8656-565656565656"
+    prepare_folder_name, prepare_folder = write_prepare_package(packages, prepare_id)
+    (prepare_folder / "requirements.txt").write_text(
+        "rich==14.3.3\n", encoding="utf-8"
+    )
     invalid_owner_id = "12121212-1212-4212-8212-121212121212"
     invalid_package_id = "34343434-3434-4434-8434-343434343434"
     invalid_folder_name, invalid_folder = write_package(
@@ -151,7 +180,7 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
                 "name": "Enabled workflow",
                 "description": "Dependency reachability test.",
                 "filesystem_id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
-                "workflow_prepare_id": None,
+                "workflow_prepare_id": prepare_id,
                 "workflow_event_output_id": None,
                 "enabled": True,
                 "definition": {
@@ -168,17 +197,17 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
             }
         )
     )
-    for component_type, component_id, requirement in (
-        ("workflow-prepare", "prepare", "rich==14.3.3"),
-    ):
-        block_store.save_block(
-            component_type,
-            component_id,
-            {
-                "name": component_id,
-                "python_requirements": [requirement],
+    block_store.save_block(
+        "workflow-prepare",
+        prepare_id,
+        {
+            "name": "prepare",
+            "python_package": {
+                "folder": prepare_folder_name,
+                "editable_files": ["main.py"],
             },
-        )
+        },
+    )
     fake_uv = tmp_path / "uv.exe"
     fake_uv.write_bytes(b"fake")
     monkeypatch.setattr(dependencies, "_ensure_uv", lambda *_args: fake_uv)
@@ -202,7 +231,7 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
     assert state["status"] == "ready"
     assert set(state["records"]) == {
         f"python-package:{owner_id}",
-        "workflow-prepare:prepare",
+        f"python-package:{prepare_id}",
     }
     assert f"python-package:{unused_owner_id}" not in state["records"]
     assert f"python-package:{invalid_owner_id}" not in state["records"]

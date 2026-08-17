@@ -86,8 +86,10 @@ WIC 可以读取 `runtime.context.workflow_task`，把当前任务材料编排�
 ### 准备
 
 Workflow 可绑定零或一个准备组件。Shell 先解析所有 Agent node 的纯配置装配，再把请求事实、Workflow
-快照和按 node ID 组织的装配事实传给 `async def prepare(input)`。当前返回的 `context` 只从
-`runtime.context.prepare` 读取；mutable graph state 仍由 LangGraph state/reducer 管理。
+快照和按 node ID 组织的装配事实传给配置扩展中 `create_prepare()` 返回的 `async prepare(input)`。严格校验返回值后，
+Shell 构造唯一最终 `WorkflowRuntimeContext`，再物化 Router/Dispatcher、Agent/Middleware 和 StateGraph。当前返回的
+`context` 只从 `runtime.context.prepare` 读取；mutable graph state 仍由 LangGraph state/reducer 管理。Prepare 是外围能力，
+不是 middleware 或 Graph node。
 
 ### 事件输出
 

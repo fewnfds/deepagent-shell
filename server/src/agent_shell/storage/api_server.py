@@ -26,6 +26,9 @@ class ApiServerStore:
             "enabled": bool(values.get("enabled", True)),
             "api_key_configured": self.api_key() is not None,
             "max_initial_messages": int(values.get("max_initial_messages", 1000)),
+            "message_interception_enabled": bool(
+                values.get("message_interception_enabled", False)
+            ),
         }
 
     def api_key(self) -> str | None:
@@ -37,6 +40,16 @@ class ApiServerStore:
     def set_enabled(self, enabled: bool) -> None:
         self._config_repository.update_system(lambda system: system.setdefault("api_server", {}).__setitem__("enabled", bool(enabled)))
         self._emit_updated(state="running" if enabled else "stopped")
+
+    def set_message_interception_enabled(self, enabled: bool) -> None:
+        self._config_repository.update_system(
+            lambda system: system.setdefault("api_server", {}).__setitem__(
+                "message_interception_enabled", bool(enabled)
+            )
+        )
+        self._emit_updated(
+            state="intercepting" if enabled else "passing-through"
+        )
 
     def update_settings(
         self,

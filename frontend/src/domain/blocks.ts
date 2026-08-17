@@ -64,7 +64,11 @@ export type {
 } from './blocks/summarization'
 export type { SystemPromptDraft } from './blocks/systemPrompt'
 export type { TodoListDefaults, TodoListDraft } from './blocks/todoList'
-export type { WorkflowPrepareDefaults, WorkflowPrepareDraft } from './blocks/workflowPrepare'
+export type {
+  WorkflowPrepareCatalogItem,
+  WorkflowPrepareDefaults,
+  WorkflowPrepareDraft,
+} from './blocks/workflowPrepare'
 export type { WorkflowEventOutputDefaults, WorkflowEventOutputDraft } from './blocks/workflowEventOutput'
 export type {
   ConditionRouterCatalogItem,

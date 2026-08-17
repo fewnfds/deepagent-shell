@@ -134,7 +134,12 @@ def _specific_contract_identity(
     if (
         error_type == "string_pattern_mismatch"
         and owner_type
-        in {"custom-middleware", "condition-router", "task-dispatcher"}
+        in {
+            "workflow-prepare",
+            "custom-middleware",
+            "condition-router",
+            "task-dispatcher",
+        }
         and path == "python_package.folder"
     ):
         return (

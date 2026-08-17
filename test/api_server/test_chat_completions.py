@@ -231,6 +231,89 @@ def test_chat_completion_stream_runs_current_graph(
     assert chunks[-1]["choices"][0]["finish_reason"] == "unknown"
 
 
+def test_message_interception_captures_raw_request_before_workflow_resolution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw_request = (
+        '{"model":"not-a-workflow","messages":['
+        '{"role":"user","content":"preserve  spacing"}],"stream":false}'
+    )
+    with make_client(tmp_path, monkeypatch) as client:
+        monkeypatch.setattr(
+            client.app.state.agent_runtime,
+            "capture",
+            lambda: pytest.fail("Workflow configuration must not be captured"),
+        )
+        enabled = client.put(
+            "/api/message-interception",
+            json={"enabled": True},
+        )
+        response = client.post(
+            "/v1/chat/completions",
+            content=raw_request,
+            headers={"Content-Type": "application/json"},
+        )
+        snapshot = client.get("/api/message-interception")
+
+    with ScopedAuthTestClient(create_app()) as restarted:
+        after_restart = restarted.get("/api/message-interception")
+
+    assert enabled.status_code == 200
+    assert enabled.json() == {"enabled": True, "latest": None}
+    assert response.status_code == 200
+    assert response.json()["choices"][0] == {
+        "index": 0,
+        "message": {"role": "assistant", "content": "消息已拦截"},
+        "finish_reason": "stop",
+    }
+    assert response.json()["usage"] == {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+    }
+    latest = snapshot.json()["latest"]
+    assert snapshot.json()["enabled"] is True
+    assert latest["sequence"] == 1
+    assert latest["request_id"]
+    assert latest["request_raw_json"] == raw_request
+    assert after_restart.json() == {"enabled": True, "latest": None}
+
+
+def test_message_interception_returns_openai_stream_without_running_workflow(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        monkeypatch.setattr(
+            client.app.state.agent_runtime,
+            "capture",
+            lambda: pytest.fail("Workflow configuration must not be captured"),
+        )
+        client.put("/api/message-interception", json={"enabled": True})
+        with client.stream(
+            "POST",
+            "/v1/chat/completions",
+            headers={"Authorization": f"Bearer {API_KEY}"},
+            json={
+                "model": "not-a-workflow",
+                "messages": [{"role": "user", "content": "capture"}],
+                "stream": True,
+            },
+        ) as response:
+            lines = [line for line in response.iter_lines() if line]
+
+    assert response.status_code == 200
+    assert lines[-1] == "data: [DONE]"
+    chunks = [json.loads(line.removeprefix("data: ")) for line in lines[:-1]]
+    assert chunks[0]["choices"][0]["delta"] == {"role": "assistant"}
+    assert chunks[1]["choices"][0]["delta"] == {"content": "消息已拦截"}
+    assert chunks[-1]["choices"][0]["finish_reason"] == "stop"
+    assert chunks[-1]["usage"] == {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+    }
+
+
 def test_workflow_agent_middleware_injects_frozen_client_messages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

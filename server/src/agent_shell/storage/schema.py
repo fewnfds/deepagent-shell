@@ -10,7 +10,6 @@ DROP TABLE IF EXISTS agent_session_run_outputs;
 DROP TABLE IF EXISTS agent_session_runs;
 DROP TABLE IF EXISTS api_message_history_outputs;
 DROP TABLE IF EXISTS api_message_history;
-DROP TABLE IF EXISTS interception_test_records;
 
 CREATE TABLE IF NOT EXISTS runtime_diagnostics (
     sequence INTEGER PRIMARY KEY,

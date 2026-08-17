@@ -18,7 +18,7 @@ from agent_shell.task_dispatcher_packages import TaskDispatcherPackageRuntime
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.runtime.model_response import ModelResponse
-from agent_shell.runtime.input_messages import validate_client_messages
+from agent_shell.runtime.input_messages import client_messages_sha, validate_client_messages
 from agent_shell.runtime.limits import (
     GRAPH_RECURSION_LIMIT,
     WORKFLOW_MAX_CONCURRENCY,
@@ -40,7 +40,12 @@ from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
 from agent_shell.workflow.validation import validate_workflow_executable
 from agent_shell.validation import ValidationReport
 from agent_shell.validation.assembly import StaticAssembly
-from agent_shell.workflow_prepare import WorkflowPrepareError, run_workflow_prepare
+from agent_shell.workflow_prepare import (
+    WorkflowPrepareBlock,
+    WorkflowPrepareError,
+    run_workflow_prepare,
+)
+from agent_shell.workflow_prepare_packages import WorkflowPreparePackageRuntime
 from agent_shell.workflow_event_output import WorkflowEventOutputBlock
 from langgraph.errors import GraphRecursionError
 from langgraph.prebuilt import ToolCallTransformer
@@ -647,86 +652,20 @@ class AgentRuntime:
                     status_code=422,
                 ) from exc
 
-        condition_router_runtime: ConditionRouterPackageRuntime | None = None
-        task_dispatcher_runtime: TaskDispatcherPackageRuntime | None = None
-        condition_routers: dict[str, Any] = {}
-        task_dispatchers: dict[str, Any] = {}
-        if condition_router_blocks:
-            if self._python_packages_dir is None or self._runtime_dir is None:
-                raise AgentRuntimeError(
-                    "workflow.python_package_runtime_unavailable",
-                    "The Python package runtime is not configured.",
-                    status_code=500,
-                )
-            condition_router_runtime = ConditionRouterPackageRuntime(
-                request_id=request_id,
-                packages_dir=self._python_packages_dir,
-                runtime_root=self._runtime_dir,
-            )
-        if task_dispatcher_blocks:
-            if self._python_packages_dir is None or self._runtime_dir is None:
-                raise AgentRuntimeError(
-                    "workflow.python_package_runtime_unavailable",
-                    "The Python package runtime is not configured.",
-                    status_code=500,
-                )
-            task_dispatcher_runtime = TaskDispatcherPackageRuntime(
-                request_id=request_id,
-                packages_dir=self._python_packages_dir,
-                runtime_root=self._runtime_dir,
-            )
-        try:
-            if condition_router_runtime is None:
-                condition_routers = {}
-            else:
-                condition_routers = {
-                    node_id: condition_router_runtime.router_for(
-                        node_id,
-                        router_id,
-                        block.model_dump(mode="python")["python_package"],
-                    )
-                    for node_id, (router_id, block) in condition_router_blocks.items()
-                }
-            if task_dispatcher_runtime is None:
-                task_dispatchers = {}
-            else:
-                task_dispatchers = {
-                    node_id: task_dispatcher_runtime.dispatcher_for(
-                        node_id,
-                        dispatcher_id,
-                        block.model_dump(mode="python")["python_package"],
-                    )
-                    for node_id, (
-                        dispatcher_id,
-                        block,
-                    ) in task_dispatcher_blocks.items()
-                }
-        except Exception:
-            if condition_router_runtime is not None:
-                await condition_router_runtime.close()
-            if task_dispatcher_runtime is not None:
-                await task_dispatcher_runtime.close()
-            raise
-
-        async def close_workflow_package_runtimes() -> None:
-            if condition_router_runtime is not None:
-                await condition_router_runtime.close()
-            if task_dispatcher_runtime is not None:
-                await task_dispatcher_runtime.close()
-
-        try:
-            executable = validate_workflow_executable(
-                document,
-                validate_main_agent=validate_main_agent,
-                condition_routers=condition_routers,
-                task_dispatchers=task_dispatchers,
-            )
-        except Exception:
-            await close_workflow_package_runtimes()
-            raise
+        resolved_condition_router_nodes: dict[str, Any] = {
+            node_id: block for node_id, (_router_id, block) in condition_router_blocks.items()
+        }
+        resolved_task_dispatcher_nodes: dict[str, Any] = {
+            node_id: block for node_id, (_dispatcher_id, block) in task_dispatcher_blocks.items()
+        }
+        executable = validate_workflow_executable(
+            document,
+            validate_main_agent=validate_main_agent,
+            condition_routers=resolved_condition_router_nodes,
+            task_dispatchers=resolved_task_dispatcher_nodes,
+        )
         if not executable.valid:
             issue = executable.issues[0]
-            await close_workflow_package_runtimes()
             raise AgentRuntimeError(
                 issue.code,
                 issue.message,
@@ -738,11 +677,7 @@ class AgentRuntime:
             "filesystem_id": workflow_filesystem_id,
             "graph": document.model_dump(mode="json"),
         }
-        base_context = WorkflowRuntimeContext.from_request(
-            messages,
-            request_id=request_id,
-            workflow=workflow_context,
-        )
+        messages_sha = client_messages_sha(messages)
         workflow_debug = getattr(self, "_workflow_debug", None)
         runtime_diagnostics = getattr(self, "_runtime_diagnostics", None)
         workflow_identity = dict(workflow_snapshot or {})
@@ -753,7 +688,7 @@ class AgentRuntime:
                 workflow_name=str(
                     workflow_identity.get("name", public_model or "workflow")
                 ),
-                messages_sha=base_context.messages_sha,
+                messages_sha=messages_sha,
             )
             if workflow_debug is not None
             else None
@@ -772,8 +707,150 @@ class AgentRuntime:
                     )
         built_agents: list[tuple[str, BuiltAgent]] = []
         workflow_output_config: dict[str, object] | None = None
+        condition_router_runtime: ConditionRouterPackageRuntime | None = None
+        task_dispatcher_runtime: TaskDispatcherPackageRuntime | None = None
+        condition_routers: dict[str, Any] = {}
+        task_dispatchers: dict[str, Any] = {}
         workspace = None
+
+        async def close_workflow_package_runtimes() -> None:
+            if condition_router_runtime is not None:
+                await condition_router_runtime.close()
+            if task_dispatcher_runtime is not None:
+                await task_dispatcher_runtime.close()
+
         try:
+            resolved_agents: list[tuple[Any, StaticAssembly]] = []
+            for agent_node in agent_nodes:
+                main_agent_id = str(
+                    AgentNodeConfig.model_validate(agent_node.config).main_agent_id
+                )
+                resolved_agents.append(
+                    (
+                        agent_node,
+                        assemblies[main_agent_id],
+                    )
+                )
+            prepare_context: Mapping[str, Any] = {}
+            prepare_id = (workflow_snapshot or {}).get("workflow_prepare_id")
+            if prepare_id is not None:
+                prepare_id = str(prepare_id)
+                prepare_block = (
+                    self._blocks.get_block_internal(
+                        "workflow-prepare", prepare_id
+                    )
+                    if self._blocks is not None
+                    else None
+                )
+                if prepare_block is None:
+                    raise AgentRuntimeError(
+                        "workflow_prepare_not_found",
+                        "The selected Prepare component does not exist.",
+                        status_code=422,
+                    )
+                try:
+                    prepare_configuration = WorkflowPrepareBlock.model_validate(
+                        {
+                            key: value
+                            for key, value in prepare_block.items()
+                            if key != "id"
+                        }
+                    )
+                except Exception as exc:
+                    raise AgentRuntimeError(
+                        "workflow_prepare_invalid",
+                        "The selected Prepare component is invalid.",
+                        status_code=422,
+                    ) from exc
+                if self._python_packages_dir is None or self._runtime_dir is None:
+                    raise AgentRuntimeError(
+                        "workflow.python_package_runtime_unavailable",
+                        "The Python package runtime is not configured.",
+                        status_code=500,
+                    )
+                prepare_runtime = WorkflowPreparePackageRuntime(
+                    request_id=request_id,
+                    packages_dir=self._python_packages_dir,
+                    runtime_root=self._runtime_dir,
+                )
+                try:
+                    prepare = prepare_runtime.prepare_for(
+                        prepare_id,
+                        prepare_configuration.model_dump(mode="python")[
+                            "python_package"
+                        ],
+                    )
+                    try:
+                        prepare_result = await run_workflow_prepare(
+                            prepare,
+                            input_value={
+                                "request": {
+                                    "request_id": request_id,
+                                    "messages": messages,
+                                    "messages_sha": messages_sha,
+                                },
+                                "workflow": workflow_context,
+                                "agents": {
+                                    node.id: _resolved_agent_prepare_snapshot(assembly)
+                                    for node, assembly in resolved_agents
+                                },
+                            },
+                        )
+                    except WorkflowPrepareError as exc:
+                        raise AgentRuntimeError(
+                            "workflow_prepare_failed",
+                            "Workflow preparation failed.",
+                            status_code=422,
+                        ) from exc
+                finally:
+                    await prepare_runtime.close()
+                prepare_context = prepare_result.context
+            context = WorkflowRuntimeContext.from_request(
+                messages,
+                request_id=request_id,
+                workflow=workflow_context,
+                prepare=prepare_context,
+            )
+
+            if condition_router_blocks or task_dispatcher_blocks:
+                if self._python_packages_dir is None or self._runtime_dir is None:
+                    raise AgentRuntimeError(
+                        "workflow.python_package_runtime_unavailable",
+                        "The Python package runtime is not configured.",
+                        status_code=500,
+                    )
+            if condition_router_blocks:
+                condition_router_runtime = ConditionRouterPackageRuntime(
+                    request_id=request_id,
+                    packages_dir=self._python_packages_dir,
+                    runtime_root=self._runtime_dir,
+                )
+                condition_routers = {
+                    node_id: condition_router_runtime.router_for(
+                        node_id,
+                        router_id,
+                        block.model_dump(mode="python")["python_package"],
+                    )
+                    for node_id, (router_id, block) in condition_router_blocks.items()
+                }
+            if task_dispatcher_blocks:
+                task_dispatcher_runtime = TaskDispatcherPackageRuntime(
+                    request_id=request_id,
+                    packages_dir=self._python_packages_dir,
+                    runtime_root=self._runtime_dir,
+                )
+                task_dispatchers = {
+                    node_id: task_dispatcher_runtime.dispatcher_for(
+                        node_id,
+                        dispatcher_id,
+                        block.model_dump(mode="python")["python_package"],
+                    )
+                    for node_id, (
+                        dispatcher_id,
+                        block,
+                    ) in task_dispatcher_blocks.items()
+                }
+
             output_id = (workflow_snapshot or {}).get("workflow_event_output_id")
             if output_id is not None:
                 stored_output = (
@@ -792,77 +869,7 @@ class AgentRuntime:
                 workflow_output_config = WorkflowEventOutputBlock.model_validate(
                     {key: value for key, value in stored_output.items() if key != "id"}
                 ).model_dump(mode="python", exclude={"name"})
-            resolved_agents: list[tuple[Any, StaticAssembly]] = []
-            for agent_node in agent_nodes:
-                main_agent_id = str(
-                    AgentNodeConfig.model_validate(agent_node.config).main_agent_id
-                )
-                resolved_agents.append(
-                    (
-                        agent_node,
-                        assemblies[main_agent_id],
-                    )
-                )
-            prepare_context: Mapping[str, Any] = {}
-            prepare_id = (workflow_snapshot or {}).get("workflow_prepare_id")
-            if prepare_id is not None:
-                prepare_block = (
-                    self._blocks.get_block_internal(
-                        "workflow-prepare", str(prepare_id)
-                    )
-                    if self._blocks is not None
-                    else None
-                )
-                if prepare_block is None:
-                    raise AgentRuntimeError(
-                        "workflow_prepare_not_found",
-                        "The selected Prepare component does not exist.",
-                        status_code=422,
-                    )
-                if bool(prepare_block.get("enabled", True)):
-                    prepare_metadata = self._builder.script_dependency_metadata(
-                        "workflow-prepare",
-                        prepare_block,
-                    )
-                    if prepare_metadata["dependency_status"] != "ready":
-                        raise AgentRuntimeError(
-                            "workflow_prepare_dependencies_not_ready",
-                            "Restart Agent Shell to prepare the selected Prepare component dependencies.",
-                            status_code=409,
-                        )
-                try:
-                    prepare_result = await run_workflow_prepare(
-                        {
-                            key: value
-                            for key, value in prepare_block.items()
-                            if key != "id"
-                        },
-                        input_value={
-                            "request": {
-                                "request_id": request_id,
-                                "messages": messages,
-                                "messages_sha": base_context.messages_sha,
-                            },
-                            "workflow": workflow_context,
-                            "agents": {
-                                node.id: _resolved_agent_prepare_snapshot(assembly)
-                                for node, assembly in resolved_agents
-                            },
-                        },
-                    )
-                except WorkflowPrepareError as exc:
-                    raise AgentRuntimeError(
-                        "workflow_prepare_failed",
-                        "Workflow preparation failed.",
-                        status_code=422,
-                    ) from exc
-                prepare_context = prepare_result.context
-            context = WorkflowRuntimeContext.from_request(
-                messages,
-                request_id=request_id,
-                workflow=workflow_context,
-                prepare=prepare_context,
-            )
+
             for agent_node, assembly in resolved_agents:
                 built = await self.build_resolved_agent(
                     assembly,

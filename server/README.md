@@ -11,7 +11,8 @@
 - `/api/main-agents`、`/api/subagents`：Agent 配置；
 - `/api/tools/custom`、`/api/middlewares/custom`、`/api/skills`：用户资源发现；
 - `/api/file-manager/*`、`/api/system/settings`：数据与实例设置；
-- `/api/event-feed`：系统日志、请求级运行错误诊断与显式拦截测试记录；
+- `/api/message-interception`：管理入站消息拦截并读取进程内最新请求；
+- `/api/event-feed`：系统日志与请求级运行错误诊断；
 - `/v1/models`、`/v1/chat/completions`：OpenAI-compatible 推理接口。
 
 每个推理请求从单次 SQLite 快照解析配置，再通过 `deepagents.create_deep_agent()` 构造 Main Agent 和

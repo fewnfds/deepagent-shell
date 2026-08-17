@@ -6,6 +6,7 @@ const ConfigLibraryPage = () => import('@/pages/ConfigLibraryPage.vue')
 const EventFeedPage = () => import('@/pages/EventFeedPage.vue')
 const FileManagerPage = () => import('@/pages/FileManagerPage.vue')
 const MainAgentPage = () => import('@/pages/MainAgentPage.vue')
+const MessageInterceptionPage = () => import('@/pages/MessageInterceptionPage.vue')
 const StyleLabPage = () => import('@/pages/StyleLabPage.vue')
 const SystemSettingsPage = () => import('@/pages/SystemSettingsPage.vue')
 const SubagentPage = () => import('@/pages/SubagentPage.vue')
@@ -51,6 +52,11 @@ export const router = createRouter({
     {
       path: '/system/files',
       component: FileManagerPage,
+      meta: { titleKey: 'navigation.system' },
+    },
+    {
+      path: '/system/message-interception',
+      component: MessageInterceptionPage,
       meta: { titleKey: 'navigation.system' },
     },
     { path: '/system/events', component: EventFeedPage, meta: { titleKey: 'navigation.system' } },

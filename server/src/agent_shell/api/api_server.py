@@ -4,6 +4,8 @@ import asyncio
 import json
 import time
 from collections.abc import AsyncIterator
+from datetime import datetime, timezone
+from threading import Lock
 from typing import Literal
 from uuid import uuid4
 
@@ -71,6 +73,42 @@ class ApiServerSettingsUpdate(BaseModel):
 
     api_key: ApiKeyCommand = Field(default_factory=ApiKeyCommand)
     max_initial_messages: int | None = Field(default=None, ge=1, le=10_000)
+
+
+class MessageInterceptionUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+
+
+class MessageInterceptionState:
+    """Keep the latest intercepted OpenAI request in process memory."""
+
+    def __init__(self) -> None:
+        self._lock = Lock()
+        self._sequence = 0
+        self._latest: dict[str, object] | None = None
+
+    def capture(self, *, request_id: str, request_raw_json: str) -> dict[str, object]:
+        with self._lock:
+            self._sequence += 1
+            self._latest = {
+                "sequence": self._sequence,
+                "intercepted_at": datetime.now(timezone.utc).isoformat(
+                    timespec="milliseconds"
+                ),
+                "request_id": request_id,
+                "request_raw_json": request_raw_json,
+            }
+            return dict(self._latest)
+
+    def latest(self) -> dict[str, object] | None:
+        with self._lock:
+            return dict(self._latest) if self._latest is not None else None
+
+    def clear(self) -> None:
+        with self._lock:
+            self._latest = None
 
 
 class ApiServerEventHub:
@@ -180,6 +218,58 @@ def _completion_payload(
         ],
         "usage": _usage_payload(execution.usage),
     }
+
+
+def _intercepted_completion_payload(*, model: str) -> dict[str, object]:
+    return {
+        "id": f"chatcmpl_{uuid4().hex}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {"role": "assistant", "content": "消息已拦截"},
+                "finish_reason": "stop",
+            }
+        ],
+        "usage": _usage_payload({}),
+    }
+
+
+async def _intercepted_completion_stream(model: str) -> AsyncIterator[str]:
+    completion_id = f"chatcmpl_{uuid4().hex}"
+    created = int(time.time())
+
+    def encode(payload: dict[str, object]) -> str:
+        return "data: " + json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ) + "\n\n"
+
+    for delta, finish_reason, usage in (
+        ({"role": "assistant"}, None, None),
+        ({"content": "消息已拦截"}, None, None),
+        ({}, "stop", _usage_payload({})),
+    ):
+        payload: dict[str, object] = {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": delta,
+                    "finish_reason": finish_reason,
+                }
+            ],
+        }
+        if usage is not None:
+            payload["usage"] = usage
+        yield encode(payload)
+    yield "data: [DONE]\n\n"
 
 
 async def _completion_stream(
@@ -294,6 +384,7 @@ def build_api_server_router(
     runtime: RequestSnapshotRuntime,
     settings: Settings,
     events: ApiServerEventHub,
+    message_interception: MessageInterceptionState,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -353,6 +444,29 @@ def build_api_server_router(
         await events.publish({"type": "settings_changed"})
         return public_settings(request)
 
+    def interception_snapshot() -> dict[str, object]:
+        return {
+            "enabled": bool(store.settings()["message_interception_enabled"]),
+            "latest": message_interception.latest(),
+        }
+
+    @router.get("/api/message-interception")
+    async def get_message_interception() -> dict[str, object]:
+        return interception_snapshot()
+
+    @router.put("/api/message-interception")
+    async def update_message_interception(
+        payload: MessageInterceptionUpdate,
+    ) -> dict[str, object]:
+        currently_enabled = bool(
+            store.settings()["message_interception_enabled"]
+        )
+        if payload.enabled and not currently_enabled:
+            message_interception.clear()
+        store.set_message_interception_enabled(payload.enabled)
+        await events.publish({"type": "message_interception_changed"})
+        return interception_snapshot()
+
     @router.post("/api/api-server/stop")
     async def stop_api_server(request: Request) -> dict[str, object]:
         store.set_enabled(False)
@@ -403,22 +517,6 @@ def build_api_server_router(
         model = payload.get("model")
         if not isinstance(model, str) or not model:
             return _openai_error(422, "model_required", "A model is required.", param="model")
-        try:
-            request_snapshot = runtime.capture()
-        except Exception:
-            return _openai_error(
-                500,
-                "configuration_snapshot_failed",
-                "The current Workflow configuration could not be captured.",
-            )
-        workflow = request_snapshot.workflow_by_name(model)
-        if workflow is None or not workflow["enabled"]:
-            return _openai_error(
-                404,
-                "model_not_found",
-                "The requested model does not exist.",
-                param="model",
-            )
         stream = payload.get("stream", False)
         if not isinstance(stream, bool):
             return _openai_error(
@@ -435,6 +533,45 @@ def build_api_server_router(
                 "input_messages_too_many",
                 f"messages cannot contain more than {max_initial_messages} items.",
                 param="messages",
+            )
+        if server_settings["message_interception_enabled"]:
+            intercepted = message_interception.capture(
+                request_id=getattr(request.state, "request_id", ""),
+                request_raw_json=raw_json,
+            )
+            await events.publish(
+                {
+                    "type": "message_intercepted",
+                    "sequence": intercepted["sequence"],
+                }
+            )
+            if stream:
+                return StreamingResponse(
+                    _intercepted_completion_stream(model),
+                    media_type="text/event-stream",
+                    headers={
+                        "Cache-Control": "no-cache",
+                        "X-Accel-Buffering": "no",
+                    },
+                )
+            return JSONResponse(
+                content=_intercepted_completion_payload(model=model)
+            )
+        try:
+            request_snapshot = runtime.capture()
+        except Exception:
+            return _openai_error(
+                500,
+                "configuration_snapshot_failed",
+                "The current Workflow configuration could not be captured.",
+            )
+        workflow = request_snapshot.workflow_by_name(model)
+        if workflow is None or not workflow["enabled"]:
+            return _openai_error(
+                404,
+                "model_not_found",
+                "The requested model does not exist.",
+                param="model",
             )
         try:
             execution = await request_snapshot.start_workflow(

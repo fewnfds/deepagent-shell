@@ -31,6 +31,7 @@ import type {
   ManagedFileScopeCatalog,
   ManagedFileUploadResult,
   ManagedTextFile,
+  MessageInterception,
   FileManagerScope,
   ModelProviderCatalog,
   PaginationResponse,
@@ -108,6 +109,10 @@ export const managementApi = {
 
   listMiddlewareTemplates(): Promise<ResourceCatalog<PythonPackageTemplate>> {
     return managementRequest('/api/python-package-templates/middleware')
+  },
+
+  listWorkflowPrepareTemplates(): Promise<ResourceCatalog<PythonPackageTemplate>> {
+    return managementRequest('/api/python-package-templates/workflow-prepare')
   },
 
   listConditionRouterTemplates(): Promise<ResourceCatalog<PythonPackageTemplate>> {
@@ -413,6 +418,17 @@ export const managementApi = {
 
   stopApiServer(): Promise<ApiServerSettings> {
     return managementRequest('/api/api-server/stop', { method: 'POST' })
+  },
+
+  getMessageInterception(): Promise<MessageInterception> {
+    return managementRequest('/api/message-interception')
+  },
+
+  updateMessageInterception(enabled: boolean): Promise<MessageInterception> {
+    return managementRequest('/api/message-interception', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    })
   },
 
   watchApiServerEvents(

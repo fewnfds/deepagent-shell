@@ -22,6 +22,7 @@ export const en: MessageSchema = {
     sections: {
       systemSettings: 'System settings',
       fileManager: 'File manager',
+      messageInterception: 'Message interception',
       eventFeed: 'Log center',
       mainAgent: 'Main Agent',
       subagents: 'Subagent',
@@ -164,6 +165,17 @@ export const en: MessageSchema = {
     saved: 'System settings saved.',
     saveFailed: 'System settings operation failed',
     restartRequired: 'Saved. Restart to apply. Current address:',
+  },
+  messageInterception: {
+    title: 'Message interception',
+    cardTitle: 'Incoming OpenAI message',
+    enabled: 'Enable message interception',
+    enabledWarning: 'Interception is enabled. New Chat Completions requests will not enter a Workflow and will receive “Message intercepted” immediately.',
+    rawRequest: 'Latest raw request',
+    empty: 'No message has been intercepted yet.',
+    metadata: 'Intercepted at {time} · Request ID: {requestId}',
+    loadFailed: 'Could not load message interception',
+    updateFailed: 'Could not update message interception',
   },
   styleLab: {
     title: 'Style lab',
@@ -807,19 +819,9 @@ export const en: MessageSchema = {
     promptCaching: {
       cacheTypes: { ephemeral: 'Ephemeral cache' },
     },
-    workflowPrepare: {
-      sourceHint: 'Define async def prepare(input) and return an object with an optional context object.',
-    },
     conditionRouter: {
       packageTitle: 'Condition Router package',
       package: 'Python package',
-    },
-    scriptRequirements: {
-      hint: 'One PEP 508 requirement per line. Dependency changes require an application restart.',
-      status: {
-        restart_required: 'Restart Agent Shell to prepare the changed Python requirements.',
-        failed: 'The Python requirements could not be prepared. Check runtime diagnostics.',
-      },
     },
   },
   feedback: {

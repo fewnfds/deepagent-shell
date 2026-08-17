@@ -20,6 +20,7 @@ export const zhCN = {
     sections: {
       systemSettings: '系统配置',
       fileManager: '文件管理',
+      messageInterception: '拦截消息',
       eventFeed: '日志中心',
       mainAgent: 'Main Agent',
       subagents: 'Subagent',
@@ -162,6 +163,17 @@ export const zhCN = {
     saved: '系统配置已保存。',
     saveFailed: '系统配置操作失败',
     restartRequired: '已保存，重启后生效。当前地址：',
+  },
+  messageInterception: {
+    title: '拦截消息',
+    cardTitle: 'OpenAI 入站消息',
+    enabled: '启用消息拦截',
+    enabledWarning: '拦截已开启。新的 Chat Completions 请求不会进入 Workflow，并会直接收到“消息已拦截”。',
+    rawRequest: '最新请求原文',
+    empty: '尚未拦截到消息。',
+    metadata: '拦截时间：{time} · 请求 ID：{requestId}',
+    loadFailed: '无法载入消息拦截状态',
+    updateFailed: '无法更新消息拦截状态',
   },
   styleLab: {
     title: '样式实验室',
@@ -805,19 +817,9 @@ export const zhCN = {
     promptCaching: {
       cacheTypes: { ephemeral: '临时缓存（ephemeral）' },
     },
-    workflowPrepare: {
-      sourceHint: '定义 async def prepare(input)，返回可包含 context 对象的结果。',
-    },
     conditionRouter: {
       packageTitle: '条件路由 Python 包',
       package: 'Python 包',
-    },
-    scriptRequirements: {
-      hint: '每行一个 PEP 508 requirement；依赖变更需要重启软件。',
-      status: {
-        restart_required: 'Python requirements 已变化，重启软件后准备依赖。',
-        failed: 'Python requirements 准备失败，请查看运行诊断。',
-      },
     },
   },
   feedback: {
