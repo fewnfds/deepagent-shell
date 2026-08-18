@@ -20,4 +20,3 @@ class WorkflowDefinition(BaseModel):
     recursion_limit: Annotated[int, Field(ge=1, le=100_000)] = 100
     execution_timeout_seconds: Annotated[int, Field(ge=1, le=86_400)] = 600
     max_concurrency: Annotated[int, Field(ge=1, le=256)] = 16
-    enabled: bool = True

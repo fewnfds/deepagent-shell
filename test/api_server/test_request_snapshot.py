@@ -29,7 +29,6 @@ def test_snapshot_freezes_workflow_metadata(
                 "workflow_role": workflow["workflow_role"],
                 "description": workflow["description"],
                 "filesystem_id": second_filesystem["id"],
-                "enabled": True,
             },
         )
         assert changed.status_code == 200, changed.text

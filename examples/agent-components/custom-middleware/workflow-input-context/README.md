@@ -1,27 +1,32 @@
-# Workflow Input Context Middleware 示例
+# Workflow Input Context Middleware
 
-这是一个普通的 LangChain `AgentMiddleware` 示例，没有专用 WIC 组件或装配槽位。保存配置后，在 Main Agent
-或 Subagent 的 `middleware_refs` 中选择它；多个 Middleware 的顺序完全由该列表决定。
+这是 Workflow Agent 的可修改输入模板。默认实现三项常见策略：
 
-`main.py` 默认完成两件事：
+1. Main Agent 从当前 Lifecycle Store 读取本次请求的原始 `messages[]`；
+2. Subagent 保留父 Agent 通过 `task` 委派给它的私有消息；
+3. Task Dispatcher worker 把自己的 `workflow_task` 追加为一条 user 消息。
 
-- Main Agent 用 `runtime.context.lifecycle_id` 从 `runtime.store` 取得 Workflow 原始输入，Subagent 保留自己的委派消息；
-- 在 `build_workflow_input_context()` 中提供集中、可删除的附加文件和非顶部 system 转 user 功能。
+这三项是建议起点，不是强制策略。WIC 可以按当前 Agent 的职责从原始请求、私有 State、父图快照、Dispatcher task、
+Runtime Context、Store 或 Workflow Filesystem 中选择材料。模板通过官方 `AgentMiddleware.abefore_agent` 更新当前 Agent 的
+私有 `messages`，不把整包原始输入写入 Workflow root State。
 
-## 修改位置
+## 唯一业务修改点
 
-1. 在 `WIC_CONFIG["attachments"]` 中填写需要附加的 Workflow 虚拟文件。每项支持主路径、fallback、固定文本、
-   role、字符上限和缺失时停止。
-2. 需要把非顶部 system 消息转为 user 时，启用
-   `WIC_CONFIG["convert_non_leading_system_to_user"]`。
-3. 每个 WIC 对 Workflow 原始输入的选择、裁剪、重排和前序节点结果引用，都直接写在异步
-   `customize_context_messages(state, runtime, request_messages)` 的标记位置。先从
-   `state["workflow_state_snapshot"]["agent_invocations"]` 选择轻量引用，需要完整消息时调用示例的
-   `load_invocation_artifact(runtime, record)`；该函数按当前 Lifecycle/Run 从官方 Store 读取不可变产物。
-4. `build_workflow_input_context()` 集中保存附加文件和 system 转 user 两个通用功能区块；不需要时可以
-   直接删除对应区块。
+把当前 Workflow 特有的消息选择、裁剪、重排和前序结果加载写在
+`build_workflow_input_messages(state, runtime, request_messages, backend)` 中。默认先复制并校验原始消息，再加入当前 worker
+task；可以删除、替换或扩展这些步骤。
 
-示例只实现异步 `abefore_agent`，因为 Agent Shell 的运行链使用异步调用。它通过工厂收到共享 filesystem
-`backend`、Agent `scope` 和当前包 ID；运行时动态数据仍从 LangChain 官方 `state` 与 `runtime` 参数读取。
+读取前序 Agent 结果时：
 
-自定义 Middleware 是受信任的服务端 Python 代码，不在 sandbox 中运行。
+1. 从 `state["workflow_state_snapshot"]["agent_invocations"]` 中按明确的 Node 或 task 身份选择记录；
+2. 调用 `load_invocation_artifact(runtime, record)` 读取该记录指向的完整 artifact；
+3. 只把当前 Agent 真正需要的内容加入 `messages`。
+
+不要依赖 `agent_invocations` 的插入顺序，也不要自动加入所有前序 Agent 的完整消息。
+
+## Imports 与依赖
+
+`json` 和 `typing` 来自 Python 标准库；`langchain`、`langchain_core`、`langgraph` 与 `agent_shell` imports 是这个适配器的
+平台 contract。模板不需要第三方 `requirements.txt`。只有新增其他直接依赖时才填写 requirements，并在重启后确认依赖状态。
+
+这是受信任的服务端 Python 代码，不在 sandbox 中运行。

@@ -84,26 +84,22 @@ examples/agent-components/custom-middleware/workflow-input-context/
 它只是创建配置时的只读来源。保存后，系统会像其他 Custom Middleware 一样复制成配置独占的 Python 包；之后修改示例
 不会改变已经创建的 WIC。用户模板可以同样命名，页面使用 `内置示例-` 前缀区分两个来源。
 
-## 集中配置与变化函数
+## 集中变化函数
 
-示例把通用功能集中在两个位置：
+示例把当前 Workflow 的业务选择集中在
+`build_workflow_input_messages(state, runtime, request_messages, backend)`。默认实现只是建议起点：复制并校验原始请求消息，
+并在当前 State 存在 `workflow_task` 时追加一条 task 消息。可以删除、替换或扩展这些步骤。
 
-- `WIC_CONFIG`：配置附加文件和非顶部 system 转 user；
-- `customize_context_messages(state, context, request_messages)`：接收从 Lifecycle Store 复制出的可编辑消息，并集中放置当前
-  WIC 的选择、裁剪和重排逻辑；
-- `build_workflow_input_context()`：集中执行附加文件和 system 转 user 等可选通用功能。
+这个函数已经拿到选择上下文所需的入口：
 
-`WIC_CONFIG["attachments"]` 的每一项可以声明：
+- `request_messages`：Main Agent 的原始请求消息；
+- `state`：当前 Agent 私有 State 和父图快照；
+- `runtime.context` / `runtime.store`：当前身份、Lifecycle 数据和 invocation artifact；
+- `backend`：Workflow Filesystem backend，可按虚拟路径读取文件。
 
-- `path`：首选 Workflow 虚拟文件；
-- `fallback_paths`：按顺序尝试的备用文件；
-- `literal`：所有文件缺失时的固定文本；
-- `role`：追加消息的 `system`、`user` 或 `assistant` 身份；
-- `max_chars`：追加前的字符上限；
-- `stop_if_missing`：所有来源缺失时是否停止后续附件。
-
-启用 `convert_non_leading_system_to_user` 后，只有消息列表开头连续的 system 消息保持 system；其余 system 消息转换为
-user。附件和转换都位于同一个变化函数中，不需要时可以直接删除对应区块。
+示例保留 `load_invocation_artifact(runtime, record)` 帮助函数。需要前序结果时，先从父图快照选择明确的 invocation 记录，
+再加载完整 artifact；不要自动拼接所有前序输出。文件读取、消息 role 变换、裁剪和排序没有固定 schema，应按当前 Agent 的
+职责直接写在集中变化函数中。
 
 项目不定义更多 WIC 变种 schema。选择哪个前序 invocation、保留哪些原始消息、如何分配 role、是否加入文件以及如何截断，
 都由当前 Middleware 的 Python 代码决定。多个 WIC 变种也只是多个普通 Middleware 配置。

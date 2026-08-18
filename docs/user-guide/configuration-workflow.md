@@ -2,9 +2,10 @@
 
 ## Workflow
 
-【Workflow】按父图和子图两个子页面管理同一种实体。当前 CRUD 保存名称、角色、说明、启用状态、一个共享 Filesystem、
+【Workflow】按父图和子图两个子页面管理同一种实体。当前 metadata CRUD 保存名称、角色、说明、一个共享 Filesystem、
 可选事件输出组件引用、`recursion_limit`（最大 super-step 数）、`execution_timeout_seconds`（单个 Run 总执行超时）和 `max_concurrency`（并行节点最大并发数），
-以及一份当前 Graph definition/layout。
+以及一份当前 Graph definition/layout。`enabled` 是同一 Workflow 的草稿/正式状态，只由 Graph 草稿保存或正式保存切换，metadata
+表单不能直接切换。
 只有启用的父图出现在 `/v1/models`；子图不从 OpenAI-compatible 入口直接启动。两个页面复用同一配置表单和画布，
 编辑器工具栏显示当前角色并返回对应列表。
 
@@ -47,16 +48,25 @@ messages、task records、resolved mapping records 和 parent/child checkpoint �
 
 选中连线后，可以选择两端共同支持的 Edge 类型、具体 source/target endpoint，也可以删除连线。Normal、Branch 与 Dispatch Edge 都
 使用 Bezier 曲线；Branch/Dispatch key 在 Edge 属性中填写并保存，不显示在线段上，两种动态 Edge 仍以不同虚线、动画、箭头和端点名称区别。
-问题列表显示当前阻止保存的原因；点击问题可以选中对应 Node、Edge 或 Workflow，画布底部不承载问题 UI。一个 Graph 最多保存 100 个 nodes
-和 200 条 edges，同一个 Main Agent 可以被多个 Agent node 重复引用；normal 端点可以连接 `Start -> Agent`、
+问题列表显示当前候选 Graph 的全部正式问题；点击问题可以选中对应 Node、Edge 或 Workflow，画布底部不承载问题 UI。Graph 不设置 Node、Edge
+数量或 document 字节数的领域配额；实际可用规模取决于浏览器、请求、存储、LangGraph 和本机资源。同一个 Main Agent 可以被多个 Agent node 重复引用；normal 端点可以连接 `Start -> Agent`、
 `Agent -> Agent` 和 `Agent -> End`，并允许一个端点连接多个激活方向。保存直接覆盖当前图，重新打开时恢复节点、边、位置
-和 viewport；没有 draft/published revision、自动保存、并发编辑或恢复层。
+和 viewport；没有 draft/published revision、自动保存、并发编辑或恢复层。保存草稿不执行 Workflow 语义校验并原子设置
+`enabled=false`；正式保存执行完整静态校验，通过后原子写图并设置 `enabled=true`。当前画布 revision 的预校验请求失败时，正式保存保持禁用并显示重新校验操作；正式失败不落盘。
 
-保存入口允许不完整 draft。通过 `/v1/chat/completions` 运行时，Graph 必须至少包含一个 Start 和一个 End，Agent node 可以为零；
-当前纯脚本拓扑可由 Condition Router 承担实际工作，后续完成闭环的普通 Node 也可以加入，
-并且每个节点都必须可从某个 Start 到达且能够继续到达某个 End；不满足时在 Agent 装配和 Graph compile 前返回 422。
+保存入口允许不完整 draft。正式 Graph 必须恰有一个系统 Start 和一个系统 End，且 Start 至少有一条合法出边；`Start -> End`
+可以正式保存，End 可以没有入边。LangGraph runtime
+允许可达普通叶子在没有后继消息时自然结束。每个参与运行的节点都必须从某个 Start 可达；不满足结构事实、边范式或
+LangGraph 编译要求时，在 Agent 装配和 Graph compile 前返回 422。
 
-画布 Start/End 分别映射 LangGraph 官方虚拟 `START/END`，不编译成 Shell 函数节点。Agent 节点引用的
+普通可达叶子不需要到达 End。若业务需要等待多条都会激活的路径后再集中结束，应显式汇聚到实际执行的 Node（例如
+Condition Router），再由该 Node 连接 End，不把 End 当作隐式 join。互斥分支不能误接到 all-of fan-in；未满足的 waiting edge
+不会执行，其他路径耗尽后 Graph 仍自然结束。
+
+画布 Start/End 分别映射 LangGraph 官方虚拟 `START/END`，不编译成 Shell 函数节点；Start 的初始激活不参与普通 all-of fan-in，
+所以 `Start -> A` 与后续 `B -> A` 可以直接表达循环入口，无需占位节点。End 是系统提供的固定元素，不作为普通 Node
+供用户添加，只表达一个逻辑终点。
+Agent 节点引用的
 `main_agent_id` 只保存在 Graph definition 中，不是 Workflow metadata 外键。`normal` 是节点端点类型；从 normal 输出
 端点画到 normal 输入端点的线是一条具体连接，只表达后继节点的激活方向。Node 端点来自后端 Catalog 的 input/output
 arrays，保存时仍只记录 `source_handle`/`target_handle`。多条 normal 出边按 LangGraph 官方 Graph API 激活多个后继节点；
@@ -117,6 +127,6 @@ Workflow 可绑定零或一个事件输出组件。它处理 `values`、`updates
 
 ## 校验与生效
 
-Main Agent 与 Subagent 编辑页继续提交完整草稿给后端预校验，保存时再次校验。Workflow Graph PUT 接受当前画布
-草稿；真实 Chat 请求从一次文件配置快照读取 Workflow 当前图、共享 Filesystem、Main Agent、Subagent、组件和
-Provider secret view，完成 Agent 构造后关闭配置快照。图不能编译或装配失败时，本次请求直接失败。
+Main Agent 与 Subagent 编辑页继续提交完整草稿给后端预校验，保存时再次校验。Workflow `/draft` PUT 接受当前画布草稿并停用；
+`/validate` POST 返回正式静态问题；`/graph` PUT 重复完整校验并正式启用。真实 Chat 请求从一次文件配置快照读取 Workflow 当前图、
+共享 Filesystem、Main Agent、Subagent、组件和 Provider secret view，完成 Agent 构造后关闭配置快照。

@@ -134,7 +134,7 @@ describe('WorkflowLifecyclesPage', () => {
       artifacts: { item_count: 2 },
       diagnostics: [],
       next_event_sequence: 1,
-      event_has_more: false,
+      event_has_more: true,
     }
     vi.spyOn(managementApi, 'listWorkflowLifecycles').mockResolvedValue({
       items: [lifecycle],
@@ -146,15 +146,17 @@ describe('WorkflowLifecyclesPage', () => {
     const getDetail = vi.spyOn(managementApi, 'getWorkflowLifecycle').mockResolvedValue(detail)
     const runDetail: WorkflowRunDetail = {
       ...detail.runs[0]!,
-      events: detail.events,
-      checkpoints: detail.checkpoints['run-1']!,
-      diagnostics: [],
+      event_count: 1,
+      checkpoint_count: 7,
+      diagnostic_count: 0,
     }
     const getRun = vi.spyOn(managementApi, 'getWorkflowRun').mockResolvedValue(runDetail)
     const downloadLifecycle = vi.spyOn(managementApi, 'downloadWorkflowLifecycle')
       .mockResolvedValue(new Blob(['lifecycle']))
     const downloadRun = vi.spyOn(managementApi, 'downloadWorkflowRun')
       .mockResolvedValue(new Blob(['run']))
+    const listEvents = vi.spyOn(managementApi, 'listWorkflowLifecycleEvents')
+      .mockRejectedValue(new Error('event page unavailable'))
     vi.stubGlobal('URL', {
       createObjectURL: vi.fn(() => 'blob:test'),
       revokeObjectURL: vi.fn(),
@@ -179,7 +181,7 @@ describe('WorkflowLifecyclesPage', () => {
     expect(getRun).toHaveBeenCalledWith(lifecycle.lifecycle_id, 'run-1')
     expect(wrapper.text()).toContain('Thread ID')
     expect(wrapper.text()).toContain('thread-1')
-    expect(wrapper.text()).toContain('Run structural events')
+    expect(wrapper.text()).toContain('7')
 
     await wrapper.get('button[data-action="download"]').trigger('click')
     await flushPromises()
@@ -188,6 +190,24 @@ describe('WorkflowLifecyclesPage', () => {
     await wrapper.get('[title="Download Run diagnostics"]').trigger('click')
     await flushPromises()
     expect(downloadRun).toHaveBeenCalledWith(lifecycle.lifecycle_id, 'run-1')
+
+    downloadRun.mockRejectedValueOnce(new Error('run diagnostics unavailable'))
+    await wrapper.get('[title="Download Run diagnostics"]').trigger('click')
+    await flushPromises()
+    expect(useToasts().items.value.some(
+      (toast) => toast.title === 'Could not download run diagnostics',
+    )).toBe(true)
+
+    const loadMore = wrapper.findAll('button').find(
+      (button) => button.text().includes('Load more events'),
+    )
+    expect(loadMore).toBeDefined()
+    await loadMore!.trigger('click')
+    await flushPromises()
+    expect(listEvents).toHaveBeenCalledWith(lifecycle.lifecycle_id, 1)
+    expect(useToasts().items.value.some(
+      (toast) => toast.title === 'Could not load more events',
+    )).toBe(true)
     wrapper.unmount()
     vi.unstubAllGlobals()
   })

@@ -12,9 +12,6 @@ from agent_shell.task_dispatcher import DispatchKey
 
 WORKFLOW_SCHEMA_VERSION = 1
 WORKFLOW_STATE_CONTRACT = "agent-shell.workflow.agent-invocations.v1"
-MAX_WORKFLOW_NODES = 100
-MAX_WORKFLOW_EDGES = 200
-MAX_WORKFLOW_DOCUMENT_BYTES = 1_000_000
 
 NodeId = Annotated[
     str,
@@ -58,14 +55,8 @@ class WorkflowGraphDefinitionV1(BaseModel):
     state_contract: Literal["agent-shell.workflow.agent-invocations.v1"] = (
         WORKFLOW_STATE_CONTRACT
     )
-    nodes: list[WorkflowNodeV1] = Field(
-        default_factory=list,
-        max_length=MAX_WORKFLOW_NODES,
-    )
-    edges: list[WorkflowEdgeV1] = Field(
-        default_factory=list,
-        max_length=MAX_WORKFLOW_EDGES,
-    )
+    nodes: list[WorkflowNodeV1] = Field(default_factory=list)
+    edges: list[WorkflowEdgeV1] = Field(default_factory=list)
 
 
 class WorkflowNodePositionV1(BaseModel):
@@ -143,9 +134,6 @@ def workflow_executable_sha256(definition: WorkflowGraphDefinitionV1) -> str:
 
 
 __all__ = [
-    "MAX_WORKFLOW_DOCUMENT_BYTES",
-    "MAX_WORKFLOW_EDGES",
-    "MAX_WORKFLOW_NODES",
     "WORKFLOW_SCHEMA_VERSION",
     "WORKFLOW_STATE_CONTRACT",
     "NodeId",

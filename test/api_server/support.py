@@ -131,7 +131,6 @@ def create_workflow(
     client: TestClient,
     *,
     name: str | None = None,
-    enabled: bool = True,
     filesystem_id: str | None = None,
     workflow_role: str = "parent",
 ) -> dict:
@@ -150,7 +149,6 @@ def create_workflow(
             "workflow_role": workflow_role,
             "description": "Test Workflow.",
             "filesystem_id": filesystem_id,
-            "enabled": enabled,
         },
     )
     assert response.status_code == 200, response.text

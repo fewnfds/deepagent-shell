@@ -4,6 +4,9 @@ import asyncio
 import json
 from uuid import uuid4
 
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatGeneration, LLMResult
+
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.runtime.workflow_lifecycle import WorkflowLifecycleService
 from agent_shell.runtime.workflow_run_journal import WorkflowRunJournal
@@ -69,19 +72,22 @@ def test_run_history_distinguishes_repeated_node_spans_and_omits_payloads(
                 name="agent-node",
                 metadata={"langgraph_node": "agent-node", "langgraph_step": 2},
             )
-            journal.on_chain_end({}, run_id=second)
-
+            ignored_chain = uuid4()
+            journal.on_chain_start(
+                {},
+                {},
+                run_id=ignored_chain,
+                parent_run_id=second,
+                name="internal-sequence",
+            )
             agent_span = uuid4()
             journal.on_chain_start(
                 {},
                 {},
                 run_id=agent_span,
+                parent_run_id=ignored_chain,
                 name="Writer Agent",
             )
-            journal.on_chain_end({}, run_id=agent_span)
-            ignored_chain = uuid4()
-            journal.on_chain_start({}, {}, run_id=ignored_chain, name="internal-sequence")
-            journal.on_chain_end({}, run_id=ignored_chain)
             model_span = uuid4()
             journal.on_chat_model_start(
                 {"name": "provider-model"},
@@ -90,7 +96,22 @@ def test_run_history_distinguishes_repeated_node_spans_and_omits_payloads(
                 parent_run_id=agent_span,
             )
             journal.on_llm_end(
-                {"usage": {"input_tokens": 4, "output_tokens": 2}},
+                LLMResult(
+                    generations=[
+                        [
+                            ChatGeneration(
+                                message=AIMessage(
+                                    content="done",
+                                    usage_metadata={
+                                        "input_tokens": 4,
+                                        "output_tokens": 2,
+                                        "total_tokens": 6,
+                                    },
+                                )
+                            )
+                        ]
+                    ]
+                ),
                 run_id=model_span,
             )
             tool_span = uuid4()
@@ -101,6 +122,9 @@ def test_run_history_distinguishes_repeated_node_spans_and_omits_payloads(
                 parent_run_id=agent_span,
             )
             journal.on_tool_end("private-journal-sentinel", run_id=tool_span)
+            journal.on_chain_end({}, run_id=agent_span)
+            journal.on_chain_end({}, run_id=ignored_chain)
+            journal.on_chain_end({}, run_id=second)
 
             events = lifecycle.events(lifecycle_id)
             node_starts = [
@@ -121,6 +145,27 @@ def test_run_history_distinguishes_repeated_node_spans_and_omits_payloads(
                 "tool",
             }
             assert all(event["subject_name"] != "internal-sequence" for event in events)
+            agent_events = [
+                event for event in events if event["subject_kind"] == "agent"
+            ]
+            assert len(agent_events) == 4
+            span_ids = {event["span_id"] for event in events if event["span_id"]}
+            assert all(
+                not event["parent_span_id"]
+                or event["parent_span_id"] in span_ids
+                for event in events
+            )
+            model_completed = next(
+                event
+                for event in events
+                if event["subject_kind"] == "model"
+                and event["phase"] == "completed"
+            )
+            assert model_completed["usage"] == {
+                "input_tokens": 4,
+                "output_tokens": 2,
+                "total_tokens": 6,
+            }
             assert [event["sequence"] for event in events] == sorted(
                 event["sequence"] for event in events
             )

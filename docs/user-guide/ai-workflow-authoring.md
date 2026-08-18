@@ -87,7 +87,7 @@ catalog，不要靠模型记忆猜测。
 
 1. 先复用语义匹配的现有组件；不要仅因名称不同就复制。
 2. 新建依赖时由叶到根：组件 -> Subagent -> Main Agent -> Workflow -> Graph。
-3. 新 Workflow 先保存为 `enabled: false`，Graph 和校验通过后再启用。
+3. 新 Workflow 先保存为 `enabled: false` 草稿；只有正式保存通过完整校验后才启用。
 4. 保存每次 POST 返回的 UUID；引用永远使用 UUID，不使用显示名称。
 5. PUT 是完整可写对象更新，不是 PATCH。普通对象可从 GET 结果移除 `id` 后修改；模型必须把 GET 返回的脱敏
    `credential` metadata 改为 `null`（同 Provider/Base URL 时保留旧 Key）或新的 write-only Key；Python package 组件还要
@@ -188,8 +188,10 @@ GET /api/python-package-templates/middleware
 
 提交到 `POST /api/blocks/custom-middleware`。服务端生成独占 package folder；客户端不能自行填写 UUID folder。
 
-内置 WIC 已实现 Main Agent 读取本次 Lifecycle 原始消息、Subagent 保留委派消息。只有任务确实需要附件、消息裁剪、
-前序 Agent 结果或 Dispatcher payload 时才修改其集中变化函数。详细边界见
+内置 WIC 给出三项建议起点：Main Agent 读取本次 Lifecycle 原始消息、Subagent 保留委派消息、Dispatcher worker 把自己的
+私有 task 加入上下文。它们不是强制的业务策略。当前 Agent 可以在
+`build_workflow_input_messages(state, runtime, request_messages, backend)` 中按职责选择原始请求、私有 State、父图快照、
+Dispatcher task、Runtime Context、Store 或 Workflow Filesystem 材料；不需要的默认步骤可以删除。详细边界见
 [Workflow Input Context](workflow-input-context.md)。
 
 ## 5. 装配 Agent
@@ -246,7 +248,7 @@ Subagent 树，当前 contract 只支持 Main Agent 的一层直接 Subagent。
 
 ## 6. 创建 Workflow 和最小 Graph
 
-先创建禁用的 parent Workflow：
+先创建 parent Workflow。新建对象固定为草稿；请求中的 `enabled` 不能绕过正式保存：
 
 ```http
 POST /api/workflows
@@ -259,12 +261,11 @@ POST /api/workflows
   "workflow_event_output_id": null,
   "recursion_limit": 100,
   "execution_timeout_seconds": 600,
-  "max_concurrency": 16,
-  "enabled": false
+  "max_concurrency": 16
 }
 ```
 
-再把以下 document PUT 到 `/api/workflows/{workflow-id}/graph`：
+再构造 Graph document。下面是最小正式图：
 
 ```json
 {
@@ -309,14 +310,51 @@ POST /api/workflows
 }
 ```
 
-不要省略 `source_handle`、`target_handle`，也不要把 Vue Flow 自己的临时字段写进 document。Graph PUT 会校验 document
-wire、Node config、handle 和拓扑 admission；`GET /api/validation/repository` 另行校验组件、Subagent 和 Main Agent 仓库，
-当前不代替 Graph 运行校验。两处都通过后，GET Workflow，移除 `id`，把 `enabled` 改为 `true`，再 PUT
-`/api/workflows/{workflow-id}`。
+不要省略 `source_handle`、`target_handle`，也不要把 Vue Flow 自己的临时字段写进 document。
+
+同一个 Workflow 只保存这一份 Graph。草稿和正式对象在同一个列表中，以 `enabled=false/true` 区分；没有 revision、第二份
+Graph 或第二个调度器。
+
+保存 API：
+
+```text
+PUT  /api/workflows/{id}/draft     保存当前 document，并原子设置 enabled=false
+POST /api/workflows/{id}/validate  只读返回当前候选 document 的完整正式校验报告
+PUT  /api/workflows/{id}/graph     正式保存；完整校验通过后原子写入 document 和 enabled=true
+GET  /api/workflows/{id}/graph     读取当前唯一 document
+```
+
+【保存草稿】不执行 Node Catalog admission、拓扑、引用或 Agent 装配校验。只要请求仍是 Graph document 的基础
+`definition + layout` wire 且存储可写，就保存当前编辑状态；保存草稿也会把已正式发布的 Workflow 降回草稿，使它立即退出
+`/v1/models` 和 child target 可用集合。Workflow 领域不设置 Node 数量、Edge 数量或 document 字节数配额；基础 HTTP、内存、
+磁盘和 SQLite 仍可能按真实资源情况失败。
+
+【正式保存】执行静态全量校验：wire、Node type/version/config、角色、Handle、Edge、拓扑、Router/Dispatcher 引用和 Main Agent
+装配，以及 Router/Dispatcher 独占 Python package 的 folder、manifest、入口文件和静态 adapter contract。正式图必须恰有一个
+Start 和一个 End，且 Start 至少有一条合法出边；`Start -> End` 合法。编辑器通过 `/validate` 预先显示全部 issue，并在存在
+error、校验尚未完成或校验请求失败时禁用正式保存；请求失败会显示独立的重新校验操作。后端仍在正式 PUT 时重复相同校验，
+不能绕过。正式失败不写候选 Graph，也不改变原 `enabled` 状态。
+
+`admit_workflow_document()` 和 `validate_workflow_executable()` 都是静态校验；后者不是试运行，不会调用 Model、Router、Dispatcher
+或 Agent，不 import 或执行用户 package。它在 admission 之上增加拓扑、引用、package 资源和静态 Agent 装配检查。
+`GET /api/validation/repository` 校验整个配置仓库，也不代替
+一次真实 Workflow 调用。
+
+AI 通过 management FastAPI 调用 `/validate` 时能直接读取完整结构化问题，不需要打开 Vue Flow。响应包含 `valid`、`stage` 和
+`issues[]`；每个 issue 至少提供 `code`、`severity`、`path`、`owner_id`、`owner_type`、`message_key`、`message_args` 和可读
+`message`。读取全部 issue，不要只处理第一项；`severity=error` 阻止正式保存，warning 也应保留给操作者。请求本身失败不是一份
+“无问题”报告：保持候选 Graph 不变，修复连接或服务状态后显式重试 `/validate`。
+
+Workflow metadata PUT 只更新名称、角色、Filesystem 和运行限制，并保留当前 `enabled`；只有正式 Graph PUT 可以启用，草稿 PUT
+可以停用。
 
 ## 7. 当前每类 Node 的正式写法
 
 以 `GET /api/workflow-node-catalog` 为当前事实。现有节点如下：
+
+本节代码分成两类信息：函数签名、返回字段、Edge key 和校验边界是固定 contract；读取哪个 State/Runtime 来源、采用什么
+规则、是否更新 State、task 如何划分都只是建议示例。AI 应根据当前 Workflow 的真实数据流选择，不要把示例字段当成平台
+字段。
 
 | Node | `config` | 输入 -> 输出 | 是否写脚本 |
 | --- | --- | --- | --- |
@@ -326,7 +364,28 @@ wire、Node config、handle 和拓扑 admission；`GET /api/validation/repositor
 | `task-dispatcher` | `task_dispatcher_id` | `in` -> `dispatch` | 是；组件提供 `create_dispatcher()` |
 | `end` | `{}` | `in` -> 无 | 否；直接映射 LangGraph `END` |
 
+AI 画图时按以下顺序决定，不要从视觉布局反推运行语义：
+
+1. 从 Catalog 选择 Node type/version，并严格按 `config_schema` 填 config。正式 Graph 恰有一个系统 `start` 和一个系统 `end`；
+   不从组件库添加、复制或删除这两个系统节点。
+2. 给每个业务 Node 分配全图唯一、稳定的 `id`。Node ID 以字母开头，只使用字母、数字、`_`、`-`，最长 64 字符。
+3. 先画控制流，再写 layout。Start 至少连接一条合法出边；除系统 End 外，每个正式 Node 都必须从 Start 可达；End 自身允许没有入边。
+4. 每条 Edge 从来源 Catalog output handle 指向目标接受该类型的 input handle。Edge `id` 同样唯一；不要省略两端 handle。
+5. 来源 handle 决定协议：`next` 是 normal，`branch` 是 branch，`dispatch` 是 dispatch。不要在 wire 里另加 `edge_type`。
+6. 最后检查 fan-out、fan-in、动态 key、叶子和循环退出，再调用 `/validate`。不要通过移动 Node、改颜色或添加 Vue Flow
+   renderer 字段试图改变运行语义。
+
+Node 做工作和 State update；Edge 表达激活。Router/Dispatcher 脚本只返回业务 key、task 和 update，不读取 Edge ID、目标 Node ID、
+布局或全图拓扑。复杂业务优先拆成多个 Node + Edge，不创建同时拥有业务处理、路由、等待和终止语义的万能 Node。
+
+每个来源只使用一种路由机制。普通 Agent/Start 使用 normal 静态 Edge；Condition Router 的全部输出使用 branch Edge；Task
+Dispatcher 的全部输出使用 dispatch Edge。不要给 Router/Dispatcher 追加 normal 出边，也不要让脚本直接返回 LangGraph
+`Command`/`Send`；否则会把 Shell 的候选 Edge 映射与另一套动态路由混在一起。
+
 ### 7.1 Condition Router
+
+建议先从 `GET /api/python-package-templates/condition-router` 读取
+`内置示例-rule-based-router` 的当前 revision 和源码，再按业务改写；不要依赖文档中的代码副本。
 
 Graph Node 只引用组件 UUID：
 
@@ -339,7 +398,7 @@ Graph Node 只引用组件 UUID：
 }
 ```
 
-正式入口必须是同步工厂，返回固定的异步 callable：
+固定 contract 是同步工厂和返回结构；下面的字段、判断和 State 更新只是可替换示例：
 
 ```python
 def create_router():
@@ -348,7 +407,7 @@ def create_router():
         branch = "review" if shared_vars.get("requires_review") is True else "otherwise"
         return {
             "activate": [branch],
-            "update": {},
+            "update": {"shared_vars": {"last_route": branch}},
         }
 
     return route
@@ -367,11 +426,15 @@ Graph 中对应的候选边必须使用：
 }
 ```
 
-并显式连接唯一 `branch_key: "otherwise"`。`activate` 可以同时返回多个不同 key；空列表等价于 `otherwise`；
-`otherwise` 不能和其他 key 同时激活。脚本只返回 Agent Shell contract，不 import 或返回 LangGraph `Command`，不返回
-Node ID。`update` 只允许当前 Workflow State 已声明的顶层 channel。
+并显式连接唯一 `branch_key: "otherwise"`。`route` 可以按场景读取完整 `state`、`runtime.context` 和 `runtime.store`；
+示例中的 `shared_vars.requires_review` 不是固定输入。`activate` 可以同时返回多个不同 key；空列表等价于 `otherwise`；
+`otherwise` 不能和其他 key 同时激活。`update` 是正式能力，可以更新当前 Workflow State 已声明的任意顶层 channel，
+不需要更新时才返回 `{}`。脚本只返回 Agent Shell contract，不 import 或返回 LangGraph `Command`，不返回 Node ID。
 
 ### 7.2 Task Dispatcher
+
+建议先从 `GET /api/python-package-templates/task-dispatcher` 读取
+`内置示例-item-list-dispatcher` 的当前 revision 和源码，再按任务来源改写；`items` 只是示例，不是平台字段。
 
 Graph Node 同样只引用组件 UUID：
 
@@ -384,7 +447,7 @@ Graph Node 同样只引用组件 UUID：
 }
 ```
 
-正式入口同样是同步工厂，返回异步 callable：
+固定 contract 同样是同步工厂和返回结构。下面用 `shared_vars.items` 演示一种来源，不代表 Dispatcher 只能读取该字段：
 
 ```python
 def create_dispatcher():
@@ -413,29 +476,14 @@ def create_dispatcher():
     return dispatch
 ```
 
-Graph 中对应的边使用 `source_handle: "dispatch"` 和 `dispatch_key: "item"`。每次调用必须产生 1–1000 个任务；
-`task_id` 在本批唯一并来自稳定业务身份；`payload` 必须是严格 JSON object。脚本不 import 或返回 `Send`。空集合必须由
-上游 Condition Router 绕过 Dispatcher，而不是返回空 `tasks`。
+Graph 中对应的边使用 `source_handle: "dispatch"` 和 `dispatch_key: "item"`。`dispatch` 可以按业务需要从完整 `state`、
+`runtime.context` 或 `runtime.store` 选择任务；任务来源、粒度、目标 key、payload 和父 State `update` 都由当前 Workflow
+决定。每次调用必须产生 1–1000 个任务；`task_id` 在本批唯一并来自稳定业务身份；`payload` 必须是严格 JSON object；
+`update` 可以更新任意已声明的顶层 State channel。脚本不 import 或返回 `Send`。
 
-目标 worker 的 WIC 从私有 State 读取任务。基于内置 WIC 自定义时，保持原始消息复制逻辑，只在集中变化函数中加入：
-
-```python
-import json
-
-# 放入 customize_context_messages(...) 中，接在现有
-# user_messages = mutable_request_messages(request_messages) 之后。
-task = state.get("workflow_task")
-if isinstance(task, dict):
-    user_messages.append(
-        {
-            "role": "user",
-            "content": "Process this workflow task:\n"
-            + json.dumps(task.get("payload", {}), ensure_ascii=False),
-        }
-    )
-```
-
-不要让多个 worker 扫描共享列表自行“抢任务”；Dispatcher 的 `Send` 已经为每个 worker 注入独立 task。
+当前 contract 不接受空 `tasks`；如果数据可能为空，建议由上游 Condition Router 绕过 Dispatcher。Agent Shell 会为每个
+worker 注入独立 `workflow_task`，目标 Agent 是否读取、如何转换以及加入哪些 task 字段，仍由该 Agent 的 WIC 决定。内置
+WIC 只提供一个可删除的默认转换。
 
 ### 7.3 Agent Node
 
@@ -449,6 +497,96 @@ Agent 成功后，完整 reduced messages 写入 Lifecycle Store，父 State 只
 
 Start/End 没有脚本、配置或业务数据转换。Start 不把客户端消息注入 State；End 不负责自动取消后台任务、删除 Lifecycle
 或拼接最终 Agent 内容。输入由 WIC 负责，输出由 Main Agent Output Mode 和可选 Workflow Event Output 负责。
+
+Start 是图入口，正式 Graph 必须恰有一个 Start 且至少有一条合法出边。每条 `Start -> target` 独立映射为
+`add_edge(START, target)`；START 只在 Graph 启动时激活目标，不是普通业务 Node，也不参与 all-of。Vue Flow 画布始终提供恰好一个
+系统 End，End 不作为普通 Node 供 AI 从 Node 列表添加。End 是 LangGraph `END` 的显式投影，不是普通 Node，也不是全图取消或
+自动汇聚操作。End 可以没有任何入边。AI 可以让普通可达叶子自然结束；有循环时让退出路径连接 End，避免一直运行。
+
+### 7.5 悬空叶子、End 与 super-step
+
+LangGraph 按 super-step 执行。一个 super-step 中所有已调度 Node 读取同一边界 State snapshot；完成 update 在边界由 State reducer
+合并，再产生下一步任务。Graph 在没有可执行任务、没有待传递消息时自然结束。
+
+对当前 Agent Shell 图使用以下规则：
+
+- 可达普通 Node 可以没有出边。它完成 update 后成为该路径的叶子，不再激活后继；其他活跃分支继续执行。
+- 画布必须保留唯一系统 End，但 End 可以完全没有入边。没有 Node 需要证明自己能到达 End。
+- 某条路径到达 End 只终止该路径，不取消同一步或其他分支，也不取消后台 Run。
+- 全图仅在所有路径都不再产生任务时结束。叶子和 End 可以同时出现在同一张图中。
+- 有环不等于有退出条件。环若始终产生下一步任务，会一直运行到用户逻辑退出、Run timeout 或 `recursion_limit`；建议让
+  Condition Router 的退出分支连接 End。
+
+以下四种无循环连接方式在“何时全图没有剩余任务”上等价；每张画布仍有唯一 End，只是有些路径没有连接它。End 不会让尚在
+运行的另一条路径提前停止：
+
+```text
+Start +-> A -> End       Start +-> A
+      +-> B -> C -> End        +-> B -> C
+
+Start +-> A -> End       Start +-> A
+      +-> B -> C               +-> B -> C -> End
+```
+
+normal fan-out 与 fan-in 不是同一件事：
+
+```text
+fan-out:  A -> B       A 完成后同时激活 B、C
+          A -> C
+
+all-of:   B --+
+              +-> J   J 只在 B、C 都完成后激活一次
+          C --+
+```
+
+普通可执行目标 `J` 的多条非 START normal 入边会编译为 LangGraph 官方 `add_edge([B, C], J)` all-of waiting edge。若 B、C 来自互斥
+条件而本次只激活一边，J 不执行；当其他路径也都结束后 Graph 正常结束，不会因一个永远不满足的 waiting edge卡住。
+因此不要把互斥分支错误地汇聚到 all-of 目标。如果替代分支只需要结束，让它们分别成为叶子或分别指向 End。
+
+START 是明确例外：
+
+```text
+Start -> J
+Start -> A -> J
+```
+
+这里编译为 `add_edge(START, J)`、`add_edge(START, A)` 和 `add_edge(A, J)`；J 在启动时执行一次，A 完成后再执行一次，
+不是等待 START 与 A 的 join。同理，`Start -> A -> B -> A` 可以直接表达循环入口：START 初始激活 A，B 的回边以后再次激活 A，
+无需增加隔离 Start 的占位 Router。循环必须另有能停止继续激活的条件路径，通常由 Router 连接 End，并受 `recursion_limit` 兜底。
+
+End 是例外，不是可执行 join Node：
+
+```text
+A -> End    编译为 add_edge(A, END)
+B -> End    编译为 add_edge(B, END)
+```
+
+两条终止边互相独立；只要 A 到达就结束 A 路径，不等待 B。若业务确实要求 A、B 都完成后再作一次决策，应显式汇聚到实际
+可执行 Node，再由它进入 End：
+
+```text
+A --normal--+
+            +-> Condition Router --branch_key=otherwise--> End
+B --normal--+
+```
+
+这个 Router 的多 normal 入边就是明确的 all-of join；只有预期 A、B 在同一次运行都会激活时才这样画。Branch 只激活
+`activate` 返回的候选 key；Dispatch 只为返回的 task 创建 worker；未选择的候选 Edge 不产生任务。
+
+官方语义参考 [LangGraph Graph API](https://docs.langchain.com/oss/python/langgraph/graph-api) 和
+[LangGraph super-steps](https://docs.langchain.com/oss/python/langgraph/checkpointers#super-steps)。
+
+### 7.6 后续 Node type 的设计原则
+
+增加 Node type 前先确认它能映射到 LangGraph 公开的 Node/Runnable、subgraph、`Command`、`Send` 或虚拟哨兵语义。不要为方便画布
+实现第二套 super-step、Edge 触发、汇聚或终止规则。
+
+Node 负责一次清晰工作以及 State/Runtime 的读取和更新；Edge 负责 Node 之间的激活关系。用户 Python package 不读取 Edge ID、
+目标 Node ID、画布布局或完整拓扑，也不自行解释 Edge。Router/Dispatcher 只返回业务 key、update 或 task，Shell compiler 再机械
+映射到画布声明的候选目标。
+
+复杂逻辑优先拆成多个单一职责 Node，并通过 normal、branch 或 dispatch Edge 组合。只有无法用现有 Node + Edge 清楚表达、并且确实
+对应一个完整官方运行范式时，才增加新 Node type；不要把业务处理、条件路由、等待、循环和汇聚塞进一个万能 Node。
 
 ## 8. 不是 Node、但可能需要写的脚本
 
@@ -489,8 +627,39 @@ POST /api/blocks/condition-router
 }
 ```
 
-生产配置优先从经过审查的 template 创建；`__empty__` 只适合 AI 已经拥有完整、符合本文 contract 的源码时使用。
+建议从经过审查的 template 创建；AI 已经拥有完整、符合本文 contract 的源码时也可以使用 `__empty__`。
 这些代码在服务进程的受信任边界执行，没有 sandbox。源码修改在下一次请求加载；`requirements.txt` 修改后必须重启。
+
+### 8.3 Python 库与可用能力
+
+AI 能理解 Python 和常见库的用法，但不能仅凭模型知识判断当前 Agent Shell 实例实际安装了哪些包、版本是否兼容或某个
+传递依赖是否会一直存在。当前 Management API 也没有“枚举所有可 import 模块”的 endpoint。按以下层次选择即可：
+
+因此必须把“可用库”作为显式输入告诉 AI：先给它当前模板返回的 `python_requirements` 和文件内容；新增库时让它同时修改该
+配置独占的 `requirements.txt`。不要只说“环境里应该有某库”，也不要要求 AI 猜宿主 Python。AI 可以根据库的官方 API 写代码，
+但实例是否可 import 只能由 dependency status 和真实运行证明。
+
+| 来源 | 如何使用 |
+| --- | --- |
+| Python 3.12 标准库 | 可以直接 import；建议能用标准库完成时不增加依赖 |
+| 平台公开 contract | 模板所需的 `langchain`、`langchain_core`、`langgraph`、`deepagents` 及文档明确展示的 `agent_shell` helper 可以使用；只调用公开、已文档化的 API |
+| 当前 package 的本地模块 | 使用正常相对 import，例如 `from .helpers import build_tasks` |
+| 其他第三方库 | 在当前配置扩展的 `requirements.txt` 中声明直接依赖，再重启并验证 |
+
+不要因为某个库恰好是 FastAPI、Provider 或其他核心包的传递依赖就直接使用，也不要让 AI 根据训练数据猜版本。新增第三方
+能力前，建议让 AI 先确认该库支持 CPython 3.12、存在 Windows x64 wheel、与平台核心约束兼容，并在 `requirements.txt`
+逐行写入普通 PyPI requirement。URL、本地路径、`.pth` 和只有源码发行包的依赖会被拒绝。
+
+保存或 GET Python package 组件时，响应会投影：
+
+- `dependency_status: "ready"`：当前 requirements 已准备完成，或没有额外依赖；
+- `dependency_status: "restart_required"`：requirements 已变化，需要重启；
+- `dependency_status: "failed"`：依赖解析或准备失败，结合 `dependency_error_code` 修正；
+- `requirements_fingerprint`：当前依赖声明指纹，不是可用库清单。
+
+依赖只从已启用 Workflow 可达的 Router、Dispatcher、Main Agent 和 Subagent 配置收集。最可靠的闭环是：声明直接依赖 ->
+重启 -> GET 组件确认 `dependency_status` -> 调用一次真实 Workflow。AI 可以根据库的官方文档编写用法，但不能跳过这套实例
+验证。
 
 ## 9. 后台任务与多 Run 结构
 
@@ -566,8 +735,8 @@ management API 只提供生命周期摘要和显式清场，不提供后台任�
 配置完成后按有限清单验收：
 
 1. `GET /api/validation/repository`，确认本次创建的组件和 Agent 没有 error。
-2. `GET /api/workflows/{id}/graph`，核对 UUID、handle、branch/dispatch key 和布局节点键。
-3. 启用 parent Workflow。
+2. `POST /api/workflows/{id}/validate` 提交候选 Graph，修正返回的全部 error。
+3. `PUT /api/workflows/{id}/graph` 正式保存；返回成功后再用 GET 核对 UUID、handle、branch/dispatch key 和布局节点键。
 4. 通过 `PUT /api/api-server` 设置独立 API Key；不要复用 management token：
 
 ```json

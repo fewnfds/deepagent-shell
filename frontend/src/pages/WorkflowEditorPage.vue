@@ -76,7 +76,12 @@ const rightPanel = ref<WorkflowRightPanel | null>('inspector')
 const serverProblems = ref<WorkflowCanvasProblem[]>([])
 const loaded = ref(false)
 const saving = ref(false)
+const validating = ref(false)
+const validationReady = ref(false)
+const validationError = ref('')
 const loadError = ref('')
+let validationTimer: ReturnType<typeof setTimeout> | undefined
+let validationGeneration = 0
 const workflowId = computed(() => String(route.params.id ?? ''))
 const workflowListPath = computed(() => (
   workflow.value?.workflow_role === 'child'
@@ -111,10 +116,22 @@ const canAddTaskDispatcher = computed(() => (
   && taskDispatcherCatalogItem.value !== null
 ))
 const canvasProblems = computed(() => workflowCanvasProblems(nodes.value, edges.value))
-const problems = computed(() => [...canvasProblems.value, ...serverProblems.value])
-const canSave = computed(() => (
+const problems = computed(() => [
+  ...canvasProblems.value,
+  ...serverProblems.value.filter((serverProblem) => !canvasProblems.value.some((canvasProblem) => (
+    canvasProblem.owner_id === serverProblem.owner_id
+    && canvasProblem.path === serverProblem.path
+  ))),
+])
+const canSaveDraft = computed(() => (
   loaded.value
   && !saving.value
+))
+const canPublish = computed(() => (
+  loaded.value
+  && !saving.value
+  && !validating.value
+  && validationReady.value
   && !problems.value.some((problem) => problem.blocking)
 ))
 const graphRevision = computed(() => JSON.stringify({
@@ -171,7 +188,7 @@ const selectedEdgeTypeOptions = computed(() => workflowCanvasEdgeTypesBetween(
 ))
 
 watch(graphRevision, (current, previous) => {
-  if (previous !== undefined && current !== previous) serverProblems.value = []
+  if (previous !== undefined && current !== previous) scheduleValidation()
 })
 
 function nodeEndpoints(
@@ -550,17 +567,58 @@ async function initializeFlow(instance: VueFlowStore): Promise<void> {
   }
 }
 
-async function save(): Promise<void> {
-  if (!canSave.value || !flow.value) return
+function currentDocument(): ReturnType<typeof workflowCanvasToDocument> | null {
+  if (!flow.value) return null
+  return workflowCanvasToDocument(nodes.value, edges.value, flow.value.getViewport())
+}
+
+function scheduleValidation(delay = 350): void {
+  if (!loaded.value) return
+  validationGeneration += 1
+  const generation = validationGeneration
+  validating.value = true
+  validationReady.value = false
+  validationError.value = ''
+  serverProblems.value = []
+  if (validationTimer !== undefined) clearTimeout(validationTimer)
+  validationTimer = setTimeout(async () => {
+    const document = currentDocument()
+    if (!document) {
+      if (generation === validationGeneration) {
+        validating.value = false
+        validationError.value = t('workflows.editor.validationFailed')
+      }
+      return
+    }
+    try {
+      const report = await managementApi.validateWorkflow(workflowId.value, document)
+      if (generation === validationGeneration) {
+        serverProblems.value = workflowServerProblems(report.issues)
+        validationReady.value = true
+      }
+    } catch (error) {
+      if (generation === validationGeneration) {
+        validationError.value = managementError.describe(error).display
+      }
+    } finally {
+      if (generation === validationGeneration) validating.value = false
+    }
+  }, delay)
+}
+
+function retryValidation(): void {
+  scheduleValidation(0)
+}
+
+async function saveDraft(): Promise<void> {
+  if (!canSaveDraft.value) return
   saving.value = true
   try {
-    const document = workflowCanvasToDocument(
-      nodes.value,
-      edges.value,
-      flow.value.getViewport(),
-    )
-    await managementApi.updateWorkflowGraph(workflowId.value, document)
-    notify({ tone: 'success', title: t('workflows.editor.saved') })
+    const document = currentDocument()
+    if (!document) return
+    await managementApi.saveWorkflowDraft(workflowId.value, document)
+    if (workflow.value) workflow.value = { ...workflow.value, enabled: false }
+    notify({ tone: 'success', title: t('workflows.editor.draftSaved') })
   } catch (error) {
     const presentation = managementError.describe(error)
     if (error instanceof ManagementApiError && error.validation) {
@@ -569,6 +627,33 @@ async function save(): Promise<void> {
     notify({
       tone: 'danger',
       title: t('workflows.editor.saveFailed'),
+      message: error instanceof ManagementApiError && error.validation
+        ? presentation.message
+        : presentation.display,
+    })
+  } finally {
+    saving.value = false
+  }
+}
+
+async function publish(): Promise<void> {
+  if (!canPublish.value) return
+  saving.value = true
+  try {
+    const document = currentDocument()
+    if (!document) return
+    await managementApi.publishWorkflow(workflowId.value, document)
+    if (workflow.value) workflow.value = { ...workflow.value, enabled: true }
+    serverProblems.value = []
+    notify({ tone: 'success', title: t('workflows.editor.published') })
+  } catch (error) {
+    const presentation = managementError.describe(error)
+    if (error instanceof ManagementApiError && error.validation) {
+      serverProblems.value = workflowServerProblems(error.validation.issues)
+    }
+    notify({
+      tone: 'danger',
+      title: t('workflows.editor.publishFailed'),
       message: error instanceof ManagementApiError && error.validation
         ? presentation.message
         : presentation.display,
@@ -612,12 +697,14 @@ onMounted(async () => {
     loaded.value = true
     await nextTick()
     await flow.value?.setViewport(canvas.viewport)
+    scheduleValidation()
   } catch (error) {
     loadError.value = managementError.describe(error).display
   }
 })
 
 onUnmounted(() => {
+  if (validationTimer !== undefined) clearTimeout(validationTimer)
   document.documentElement.classList.remove('workflow-editor-active')
 })
 </script>
@@ -629,9 +716,15 @@ onUnmounted(() => {
         <i class="bi bi-chevron-left" aria-hidden="true" />
       </button>
       <h1>{{ workflow ? `${workflowRoleLabel} - ${workflow.name}` : t('workflows.editor.title') }}</h1>
-      <button :aria-label="t('common.save')" :disabled="!canSave" :title="t('common.save')" type="button" @click="save">
-        <i class="bi bi-floppy" aria-hidden="true" />
-      </button>
+      <div class="d-flex align-items-center gap-1">
+        <span class="badge text-bg-secondary">{{ workflow?.enabled ? t('workflows.status.published') : t('workflows.status.draft') }}</span>
+        <button :aria-label="t('workflows.editor.saveDraft')" :disabled="!canSaveDraft" :title="t('workflows.editor.saveDraft')" type="button" @click="saveDraft">
+          <i class="bi bi-file-earmark" aria-hidden="true" />
+        </button>
+        <button :aria-label="t('workflows.editor.publish')" :disabled="!canPublish" :title="t('workflows.editor.publish')" type="button" @click="publish">
+          <i class="bi bi-upload" aria-hidden="true" />
+        </button>
+      </div>
     </header>
 
     <div class="workflow-editor-workspace">
@@ -710,8 +803,20 @@ onUnmounted(() => {
         @drop="dropNode"
       >
         <p v-if="loadError" class="workflow-editor-error" role="alert">{{ loadError }}</p>
+        <div
+          v-else-if="validationError"
+          class="workflow-validation-error"
+          role="alert"
+        >
+          <span>{{ t('workflows.editor.validationFailed') }} {{ validationError }}</span>
+          <button
+            class="btn btn-sm btn-outline-danger"
+            type="button"
+            @click="retryValidation"
+          >{{ t('workflows.editor.retryValidation') }}</button>
+        </div>
         <VueFlow
-          v-else
+          v-if="!loadError"
           v-model:nodes="nodes"
           v-model:edges="edges"
           class="workflow-editor-flow"

@@ -130,7 +130,13 @@ class WorkflowStore:
                 return WorkflowGraphDocumentV1.model_validate({"definition": item.get("definition", {}), "layout": item.get("layout", {})})
         return None
 
-    def save_graph(self, item_id: str, document: WorkflowGraphDocumentV1) -> bool:
+    def save_graph_and_enabled(
+        self,
+        item_id: str,
+        document: WorkflowGraphDocumentV1,
+        *,
+        enabled: bool,
+    ) -> bool:
         changed = False
 
         def mutate(config: dict) -> None:
@@ -139,6 +145,7 @@ class WorkflowStore:
                 if item.get("id") == item_id:
                     item["definition"] = document.definition.model_dump(mode="json")
                     item["layout"] = document.layout.model_dump(mode="json")
+                    item["enabled"] = bool(enabled)
                     changed = True
                     break
 

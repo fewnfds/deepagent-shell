@@ -240,6 +240,13 @@ beforeEach(() => {
   vi.spyOn(managementApi, 'listBlocks').mockResolvedValue([])
   vi.spyOn(managementApi, 'listWorkflows').mockResolvedValue([childWorkflow])
   vi.spyOn(managementApi, 'listWorkflowNodeCatalog').mockResolvedValue(nodeCatalog)
+  vi.spyOn(managementApi, 'validateWorkflow').mockResolvedValue({
+    valid: true,
+    stage: 'workflow_publish',
+    issues: [],
+  })
+  vi.spyOn(managementApi, 'saveWorkflowDraft').mockResolvedValue(graph)
+  vi.spyOn(managementApi, 'publishWorkflow').mockResolvedValue(graph)
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
     callback(0)
     return 1
@@ -247,6 +254,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
@@ -326,6 +334,98 @@ describe('WorkflowEditorPage', () => {
     expect(rightDock.text()).toContain('Branch Edge')
     expect(rightDock.find('#workflow-edge-branch-key').exists()).toBe(true)
     expect(leftDock.get('.workflow-problems-item').text()).toContain('Enter a branch key.')
+    wrapper.unmount()
+  })
+
+  it('shows every publish issue while draft saving remains available', async () => {
+    vi.useFakeTimers()
+    vi.mocked(managementApi.validateWorkflow).mockResolvedValueOnce({
+      valid: false,
+      stage: 'workflow_publish',
+      issues: [
+        {
+          code: 'workflow.node_unreachable_from_start',
+          scope: 'workflow',
+          owner_id: 'agent-1',
+          owner_name: 'agent-1',
+          owner_type: 'agent',
+          path: 'definition.nodes[1]',
+          message: 'The Workflow node is not reachable from Start.',
+          message_key: 'validation.issue.workflow.nodeUnreachableFromStart',
+          message_args: {},
+          severity: 'error',
+        },
+        {
+          code: 'assembly.model_not_found',
+          scope: 'workflow',
+          owner_id: 'agent-1',
+          owner_name: 'agent-1',
+          owner_type: 'agent',
+          path: 'definition.nodes[1].config.main_agent_id',
+          message: 'The selected model does not exist.',
+          message_key: 'validation.issue.assembly.modelNotFound',
+          message_args: {},
+          severity: 'error',
+        },
+      ],
+    })
+    const wrapper = await mountEditor()
+    await vi.advanceTimersByTimeAsync(350)
+    await flushPromises()
+
+    const toolbar = wrapper.get('.workflow-editor-toolbar')
+    const saveDraft = toolbar.get('button[aria-label="Save draft"]')
+    const publish = toolbar.get('button[aria-label="Publish Workflow"]')
+    expect(saveDraft.attributes('disabled')).toBeUndefined()
+    expect(publish.attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.workflow-tool-badge').text()).toBe('2')
+
+    await wrapper.get('.workflow-tool-dock--left .workflow-tool-button:nth-child(3)').trigger('click')
+    expect(wrapper.findAll('.workflow-problems-item')).toHaveLength(2)
+
+    await saveDraft.trigger('click')
+    await flushPromises()
+    expect(managementApi.saveWorkflowDraft).toHaveBeenCalledOnce()
+    expect(toolbar.text()).toContain('Draft')
+    wrapper.unmount()
+  })
+
+  it('publishes only after the current graph passes validation', async () => {
+    vi.useFakeTimers()
+    const wrapper = await mountEditor()
+    await vi.advanceTimersByTimeAsync(350)
+    await flushPromises()
+
+    const publish = wrapper.get('.workflow-editor-toolbar button[aria-label="Publish Workflow"]')
+    expect(publish.attributes('disabled')).toBeUndefined()
+    await publish.trigger('click')
+    await flushPromises()
+
+    expect(managementApi.publishWorkflow).toHaveBeenCalledOnce()
+    expect(wrapper.get('.workflow-editor-toolbar').text()).toContain('Published')
+    wrapper.unmount()
+  })
+
+  it('keeps publish disabled when validation fails and retries explicitly', async () => {
+    vi.useFakeTimers()
+    vi.mocked(managementApi.validateWorkflow).mockRejectedValueOnce(
+      new Error('validation service offline'),
+    )
+    const wrapper = await mountEditor()
+    await vi.advanceTimersByTimeAsync(350)
+    await flushPromises()
+
+    const publish = wrapper.get('.workflow-editor-toolbar button[aria-label="Publish Workflow"]')
+    expect(publish.attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.workflow-validation-error').text()).toContain('Formal validation failed.')
+
+    await wrapper.get('.workflow-validation-error button').trigger('click')
+    await vi.advanceTimersByTimeAsync(0)
+    await flushPromises()
+
+    expect(managementApi.validateWorkflow).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('.workflow-validation-error').exists()).toBe(false)
+    expect(publish.attributes('disabled')).toBeUndefined()
     wrapper.unmount()
   })
 })

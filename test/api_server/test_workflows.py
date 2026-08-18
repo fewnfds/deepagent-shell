@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from copy import deepcopy
+import json
+import shutil
+
+from agent_shell.storage.workflows import WorkflowStore
 from .support import *
 
 
@@ -18,7 +23,6 @@ def test_workflow_runtime_boundaries_are_managed(
                 "recursion_limit": 250,
                 "execution_timeout_seconds": 900,
                 "max_concurrency": 32,
-                "enabled": True,
             },
         )
         assert updated.status_code == 200, updated.text
@@ -42,10 +46,10 @@ def test_workflow_event_output_is_a_reusable_component_reference(
             f"/api/workflows/{workflow['id']}",
             json={
                 **{key: workflow[key] for key in (
-                    "name", "workflow_role", "description", "filesystem_id",
-                    "recursion_limit",
-                    "execution_timeout_seconds", "max_concurrency", "enabled"
-                )},
+                        "name", "workflow_role", "description", "filesystem_id",
+                        "recursion_limit",
+                        "execution_timeout_seconds", "max_concurrency"
+                    )},
                 "workflow_event_output_id": output.json()["id"],
             },
         )
@@ -85,6 +89,9 @@ def test_workflow_roles_filter_management_and_public_model_entries(
         assert client.get(
             "/api/workflows?workflow_role=child"
         ).json() == [child]
+        assert client.get("/v1/models").json()["data"] == []
+        save_linear_workflow_graph(client, created, main_agent)
+        save_linear_workflow_graph(client, child, main_agent)
         assert [item["id"] for item in client.get("/v1/models").json()["data"]] == [
             "Research Workflow"
         ]
@@ -97,14 +104,8 @@ def test_workflow_roles_filter_management_and_public_model_entries(
         }
 
         disabled = client.put(
-            f"/api/workflows/{created['id']}",
-            json={
-                "name": "Research Workflow",
-                "workflow_role": "parent",
-                "description": "Disabled test Workflow.",
-                "filesystem_id": created["filesystem_id"],
-                "enabled": False,
-            },
+            f"/api/workflows/{created['id']}/draft",
+            json=client.get(f"/api/workflows/{created['id']}/graph").json(),
         )
         assert disabled.status_code == 200, disabled.text
         assert client.get("/v1/models").json()["data"] == []
@@ -125,7 +126,6 @@ def test_workflow_rejects_duplicate_names_and_removed_main_agent_field(
                 "workflow_role": "parent",
                 "description": "Duplicate.",
                 "filesystem_id": existing["filesystem_id"],
-                "enabled": True,
             },
         )
         removed_field = client.post(
@@ -136,6 +136,15 @@ def test_workflow_rejects_duplicate_names_and_removed_main_agent_field(
                 "description": "Rejected legacy shape.",
                 "main_agent_id": "missing-agent",
                 "filesystem_id": existing["filesystem_id"],
+            },
+        )
+        enabled_field = client.post(
+            "/api/workflows",
+            json={
+                "name": "Manual enable",
+                "workflow_role": "parent",
+                "description": "Rejected publication bypass.",
+                "filesystem_id": existing["filesystem_id"],
                 "enabled": True,
             },
         )
@@ -144,6 +153,8 @@ def test_workflow_rejects_duplicate_names_and_removed_main_agent_field(
     assert duplicate.json()["detail"]["code"] == "workflow_name_conflict"
     assert removed_field.status_code == 422
     assert removed_field.json()["detail"]["code"] == "workflow_invalid"
+    assert enabled_field.status_code == 422
+    assert enabled_field.json()["detail"]["code"] == "workflow_invalid"
 
 
 def test_workflow_requires_existing_filesystem_and_protects_its_reference(
@@ -157,7 +168,6 @@ def test_workflow_requires_existing_filesystem_and_protects_its_reference(
                 "workflow_role": "parent",
                 "description": "Rejected reference.",
                 "filesystem_id": "00000000-0000-0000-0000-000000000000",
-                "enabled": True,
             },
         )
         first = client.post(
@@ -179,7 +189,6 @@ def test_workflow_requires_existing_filesystem_and_protects_its_reference(
                 "workflow_role": workflow["workflow_role"],
                 "description": workflow["description"],
                 "filesystem_id": second["id"],
-                "enabled": workflow["enabled"],
             },
         )
         released = client.delete(f"/api/blocks/filesystem/{first['id']}")
@@ -194,6 +203,237 @@ def test_workflow_requires_existing_filesystem_and_protects_its_reference(
     assert changed.json()["filesystem_id"] == second["id"]
     assert released.json() == {"ok": True}
     assert final_delete.json() == {"ok": True}
+
+
+def test_workflow_draft_publish_and_validation_share_one_graph(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        main_agent = create_main_agent(client)
+        workflow = create_workflow(client, name="Draft and publish")
+        assert workflow["enabled"] is False
+
+        published = save_linear_workflow_graph(client, workflow, main_agent)
+        assert client.get(f"/api/workflows/{workflow['id']}").json()["enabled"] is True
+        metadata = client.put(
+            f"/api/workflows/{workflow['id']}",
+            json={
+                "name": workflow["name"],
+                "workflow_role": workflow["workflow_role"],
+                "description": "Metadata cannot demote a published graph.",
+                "filesystem_id": workflow["filesystem_id"],
+            },
+        )
+        assert metadata.status_code == 200, metadata.text
+        assert metadata.json()["enabled"] is True
+
+        invalid = deepcopy(published)
+        invalid["definition"]["nodes"].insert(
+            2,
+            {
+                "id": "agent-two",
+                "type": "agent",
+                "type_version": 1,
+                "config": {"main_agent_id": main_agent["id"]},
+            },
+        )
+        invalid["definition"]["edges"] = []
+        rejected = client.put(
+            f"/api/workflows/{workflow['id']}/graph",
+            json=invalid,
+        )
+        after_rejection = client.get(f"/api/workflows/{workflow['id']}/graph").json()
+        still_published = client.get(f"/api/workflows/{workflow['id']}").json()
+
+        report = client.post(
+            f"/api/workflows/{workflow['id']}/validate",
+            json=invalid,
+        )
+        draft = client.put(
+            f"/api/workflows/{workflow['id']}/draft",
+            json=invalid,
+        )
+        saved_draft = client.get(f"/api/workflows/{workflow['id']}").json()
+
+    assert rejected.status_code == 422
+    assert after_rejection == published
+    assert still_published["enabled"] is True
+    assert report.status_code == 200
+    assert report.json()["valid"] is False
+    assert [issue["code"] for issue in report.json()["issues"]] == [
+        "workflow.start_outgoing_required",
+        "workflow.node_unreachable_from_start",
+        "workflow.node_unreachable_from_start",
+    ]
+    assert draft.status_code == 200, draft.text
+    assert draft.json() == invalid
+    assert saved_draft["enabled"] is False
+
+
+def test_workflow_draft_accepts_graphs_beyond_removed_size_limits(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        workflow = create_workflow(client, name="Large draft")
+        nodes = [
+            {"id": "start", "type": "start", "type_version": 1, "config": {}},
+            {"id": "end", "type": "end", "type_version": 1, "config": {}},
+        ]
+        edges = []
+        for index in range(5000):
+            node_id = f"agent{index}"
+            nodes.append(
+                {
+                    "id": node_id,
+                    "type": "agent",
+                    "type_version": 1,
+                    "config": {"main_agent_id": "11111111-1111-4111-8111-111111111111"},
+                }
+            )
+            edges.append(
+                {
+                    "id": f"start-{node_id}",
+                    "source": "start",
+                    "source_handle": "next",
+                    "target": node_id,
+                    "target_handle": "in",
+                }
+            )
+        document = {
+            "definition": {
+                "schema_version": 1,
+                "state_contract": "agent-shell.workflow.agent-invocations.v1",
+                "nodes": nodes,
+                "edges": edges,
+            },
+            "layout": {"nodes": {}, "viewport": {"x": 0, "y": 0, "zoom": 1}},
+        }
+        assert len(nodes) > 100
+        assert len(edges) > 200
+        assert len(json.dumps(document).encode("utf-8")) > 1_000_000
+
+        saved = client.put(
+            f"/api/workflows/{workflow['id']}/draft",
+            json=document,
+        )
+
+    assert saved.status_code == 200, saved.text
+    assert len(saved.json()["definition"]["nodes"]) == len(nodes)
+
+
+def test_workflow_publish_reports_broken_router_package_without_missing_reference(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package_dir = (
+        tmp_path
+        / "data"
+        / "templates"
+        / "workflow"
+        / "condition_router"
+        / "test-router"
+    )
+    package_dir.mkdir(parents=True)
+    (package_dir / "main.py").write_text(
+        "def create_router():\n"
+        "    async def route(state, runtime):\n"
+        "        return {'activate': [], 'update': {}}\n"
+        "    return route\n",
+        encoding="utf-8",
+    )
+    with make_client(tmp_path, monkeypatch) as client:
+        selected = client.get(
+            "/api/python-package-templates/condition-router"
+        ).json()["catalog"][0]
+        router = client.post(
+            "/api/blocks/condition-router",
+            json={
+                "name": "Broken router package",
+                "python_package": {"folder": "", "editable_files": ["main.py"]},
+                "python_package_files": {
+                    "template_key": selected["key"],
+                    "revision": selected["revision"],
+                    "files": [
+                        file
+                        for file in selected["files"]
+                        if file["path"] == "main.py"
+                    ],
+                },
+            },
+        )
+        assert router.status_code == 200, router.text
+        folder = router.json()["python_package"]["folder"]
+        shutil.rmtree(
+            tmp_path
+            / "data"
+            / "config"
+            / "python_package_instances"
+            / "condition-router"
+            / folder
+        )
+        workflow = create_workflow(client, name="Broken package workflow")
+        document = {
+            "definition": {
+                "schema_version": 1,
+                "state_contract": "agent-shell.workflow.agent-invocations.v1",
+                "nodes": [
+                    {"id": "start", "type": "start", "type_version": 1, "config": {}},
+                    {
+                        "id": "router",
+                        "type": "condition-router",
+                        "type_version": 1,
+                        "config": {"condition_router_id": router.json()["id"]},
+                    },
+                    {"id": "end", "type": "end", "type_version": 1, "config": {}},
+                ],
+                "edges": [
+                    {"id": "start-router", "source": "start", "source_handle": "next", "target": "router", "target_handle": "in"},
+                    {"id": "router-end", "source": "router", "source_handle": "branch", "target": "end", "target_handle": "in", "branch_key": "otherwise"},
+                ],
+            },
+            "layout": {"nodes": {}, "viewport": {"x": 0, "y": 0, "zoom": 1}},
+        }
+
+        draft = client.put(f"/api/workflows/{workflow['id']}/draft", json=document)
+        report = client.post(f"/api/workflows/{workflow['id']}/validate", json=document)
+        published = client.put(f"/api/workflows/{workflow['id']}/graph", json=document)
+
+    assert draft.status_code == 200, draft.text
+    assert report.status_code == 200, report.text
+    codes = {issue["code"] for issue in report.json()["issues"]}
+    assert "python_package.not_found" in codes
+    assert "workflow.condition_router_not_found" not in codes
+    assert published.status_code == 422
+
+
+def test_workflow_save_failure_returns_controlled_not_found(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        main_agent = create_main_agent(client)
+        workflow = create_workflow(client, name="Missing during save")
+        document = save_linear_workflow_graph(client, workflow, main_agent)
+        monkeypatch.setattr(
+            WorkflowStore,
+            "save_graph_and_enabled",
+            lambda *_args, **_kwargs: False,
+        )
+
+        published = client.put(
+            f"/api/workflows/{workflow['id']}/graph",
+            json=document,
+        )
+        draft = client.put(
+            f"/api/workflows/{workflow['id']}/draft",
+            json=document,
+        )
+
+    assert published.status_code == 404
+    assert published.json()["detail"]["code"] == "workflow_not_found"
+    assert draft.status_code == 404
+    assert draft.json()["detail"]["code"] == "workflow_not_found"
 
 
 def test_workflow_graph_catalog_save_and_reload(
@@ -261,7 +501,6 @@ def test_workflow_graph_catalog_save_and_reload(
                 "workflow_role": workflow["workflow_role"],
                 "description": "Metadata changed without touching the graph.",
                 "filesystem_id": workflow["filesystem_id"],
-                "enabled": True,
             },
         )
         reloaded = client.get(graph_url)

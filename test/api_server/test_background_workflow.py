@@ -48,7 +48,6 @@ def test_frozen_snapshot_runs_child_workflow_silently_with_independent_checkpoin
                         "recursion_limit",
                         "execution_timeout_seconds",
                         "max_concurrency",
-                        "enabled",
                     )
                 },
                 "workflow_event_output_id": output_response.json()["id"],
@@ -60,15 +59,8 @@ def test_frozen_snapshot_runs_child_workflow_silently_with_independent_checkpoin
         parent = create_workflow(client, name="Not A Child Target")
         snapshot = client.app.state.agent_runtime.capture()
         disabled = client.put(
-            f"/api/workflows/{child['id']}",
-            json={
-                "name": child["name"],
-                "workflow_role": child["workflow_role"],
-                "description": child["description"],
-                "filesystem_id": child["filesystem_id"],
-                "workflow_event_output_id": child["workflow_event_output_id"],
-                "enabled": False,
-            },
+            f"/api/workflows/{child['id']}/draft",
+            json=client.get(f"/api/workflows/{child['id']}/graph").json(),
         )
         assert disabled.status_code == 200, disabled.text
         portal = client.portal

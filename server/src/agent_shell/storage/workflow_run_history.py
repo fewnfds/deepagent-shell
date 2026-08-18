@@ -255,6 +255,16 @@ class WorkflowRunHistoryStore:
             ).fetchall()
         return [self._event(row) for row in rows]
 
+    def count_events(self, lifecycle_id: str, *, run_id: str | None = None) -> int:
+        query = "SELECT COUNT(*) FROM workflow_run_events WHERE lifecycle_id = ?"
+        parameters: tuple[object, ...] = (lifecycle_id,)
+        if run_id is not None:
+            query += " AND run_id = ?"
+            parameters += (run_id,)
+        with self._database.transaction() as connection:
+            row = connection.execute(query, parameters).fetchone()
+        return int(row[0]) if row is not None else 0
+
     def summary(self, lifecycle_id: str) -> dict[str, object]:
         runs = self.list_runs(lifecycle_id)
         statuses = Counter(str(run["status"]) for run in runs)

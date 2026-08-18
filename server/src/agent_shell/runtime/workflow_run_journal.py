@@ -46,11 +46,22 @@ def _metadata(value: Mapping[str, Any] | None) -> dict[str, object]:
 def _usage(response: object) -> dict[str, int]:
     candidates: list[object] = []
     if isinstance(response, dict):
-        candidates.extend([response.get("usage"), response.get("response_metadata"), response.get("llm_output")])
+        candidates.extend(
+            [
+                response.get("usage"),
+                response.get("usage_metadata"),
+                response.get("response_metadata"),
+                response.get("llm_output"),
+            ]
+        )
     else:
         for attr in ("usage_metadata", "response_metadata", "llm_output"):
             candidates.append(getattr(response, attr, None))
-    result = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
+        for generation_group in getattr(response, "generations", ()) or ():
+            for generation in generation_group or ():
+                message = getattr(generation, "message", None)
+                candidates.append(getattr(message, "usage_metadata", None))
+
     aliases = {
         "input_tokens": "input_tokens",
         "prompt_tokens": "input_tokens",
@@ -61,13 +72,21 @@ def _usage(response: object) -> dict[str, int]:
     for candidate in candidates:
         if not isinstance(candidate, Mapping):
             continue
+        nested = candidate.get("token_usage")
+        if isinstance(nested, Mapping):
+            candidate = nested
+        result = {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
         for source, target in aliases.items():
             value = candidate.get(source)
             if isinstance(value, (int, float)):
                 result[target] = int(value)
-    if not result["total_tokens"]:
-        result["total_tokens"] = result["input_tokens"] + result["output_tokens"]
-    return result
+        if any(result.values()):
+            if not result["total_tokens"]:
+                result["total_tokens"] = (
+                    result["input_tokens"] + result["output_tokens"]
+                )
+            return result
+    return {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}
 
 
 class WorkflowRunJournal(BaseCallbackHandler):
@@ -90,6 +109,16 @@ class WorkflowRunJournal(BaseCallbackHandler):
             str(key): str(value) for key, value in (agent_names or {}).items()
         }
         self._spans: dict[str, dict[str, object]] = {}
+        self._child_parent_spans: dict[str, str] = {
+            context.run_id: context.run_id
+        }
+        self._synthetic_agent_spans: set[str] = set()
+
+    def _parent_span(self, parent_run_id: object | None) -> str:
+        if parent_run_id is None:
+            return self._context.run_id
+        parent_id = str(parent_run_id)
+        return self._child_parent_spans.get(parent_id, self._context.run_id)
 
     def _record(
         self,
@@ -166,22 +195,39 @@ class WorkflowRunJournal(BaseCallbackHandler):
             return "agent", name
         return None
 
-    def on_chain_start(self, serialized, inputs, *, run_id, parent_run_id=None, tags=None, metadata=None, **kwargs):
-        if str(run_id) == self._context.run_id:
+    def on_chain_start(
+        self,
+        serialized,
+        inputs,
+        *,
+        run_id,
+        parent_run_id=None,
+        tags=None,
+        metadata=None,
+        **kwargs,
+    ):
+        span_id = str(run_id)
+        if span_id == self._context.run_id:
+            self._child_parent_spans[span_id] = span_id
             return
         chain = self._chain_kind(metadata, _name(serialized, kwargs))
         if chain is None:
+            self._child_parent_spans[span_id] = self._parent_span(parent_run_id)
             return
         kind, label = chain
+        parent_span_id = self._parent_span(parent_run_id)
+        if kind == "agent" and parent_span_id in self._synthetic_agent_spans:
+            self._child_parent_spans[span_id] = parent_span_id
+            return
         span: dict[str, object] = {
             "kind": kind,
             "name": label,
-            "parent": parent_run_id,
+            "parent": parent_span_id,
             "metadata": metadata or {},
         }
         self._record(
             run_id=run_id,
-            parent_run_id=parent_run_id,
+            parent_run_id=parent_span_id,
             subject_kind=kind,
             subject_name=label,
             phase="started",
@@ -189,9 +235,15 @@ class WorkflowRunJournal(BaseCallbackHandler):
             metadata=metadata,
         )
         node_id = str((metadata or {}).get("langgraph_node", ""))
-        if kind == "workflow_node" and label == "agent" and node_id in self._agent_names:
+        if (
+            kind == "workflow_node"
+            and label == "agent"
+            and node_id in self._agent_names
+        ):
             agent_span_id = f"{run_id}:agent"
             span["agent_span_id"] = agent_span_id
+            self._synthetic_agent_spans.add(agent_span_id)
+            self._child_parent_spans[span_id] = agent_span_id
             self._record(
                 run_id=agent_span_id,
                 parent_run_id=run_id,
@@ -202,6 +254,8 @@ class WorkflowRunJournal(BaseCallbackHandler):
                 metadata=metadata,
                 node_invocation_id=str(run_id),
             )
+        else:
+            self._child_parent_spans[span_id] = span_id
         self._spans[str(run_id)] = span
 
     def on_chain_end(self, outputs, *, run_id, parent_run_id=None, **kwargs):
@@ -210,9 +264,34 @@ class WorkflowRunJournal(BaseCallbackHandler):
     def on_chain_error(self, error, *, run_id, parent_run_id=None, **kwargs):
         self._finish(run_id, "failed", error_code=type(error).__name__)
 
-    def on_chat_model_start(self, serialized, messages, *, run_id, parent_run_id=None, tags=None, metadata=None, **kwargs):
-        self._spans[str(run_id)] = {"kind": "model", "name": _name(serialized, kwargs), "parent": parent_run_id, "metadata": metadata or {}}
-        self._record(run_id=run_id, parent_run_id=parent_run_id, subject_kind="model", subject_name=str(self._spans[str(run_id)]["name"]), phase="started", event_type="model", metadata=metadata)
+    def on_chat_model_start(
+        self,
+        serialized,
+        messages,
+        *,
+        run_id,
+        parent_run_id=None,
+        tags=None,
+        metadata=None,
+        **kwargs,
+    ):
+        parent_span_id = self._parent_span(parent_run_id)
+        self._spans[str(run_id)] = {
+            "kind": "model",
+            "name": _name(serialized, kwargs),
+            "parent": parent_span_id,
+            "metadata": metadata or {},
+        }
+        self._child_parent_spans[str(run_id)] = str(run_id)
+        self._record(
+            run_id=run_id,
+            parent_run_id=parent_span_id,
+            subject_kind="model",
+            subject_name=str(self._spans[str(run_id)]["name"]),
+            phase="started",
+            event_type="model",
+            metadata=metadata,
+        )
 
     on_llm_start = on_chat_model_start
 
@@ -227,10 +306,35 @@ class WorkflowRunJournal(BaseCallbackHandler):
 
     on_chat_model_error = on_llm_error
 
-    def on_tool_start(self, serialized, input_str, *, run_id, parent_run_id=None, tags=None, metadata=None, **kwargs):
+    def on_tool_start(
+        self,
+        serialized,
+        input_str,
+        *,
+        run_id,
+        parent_run_id=None,
+        tags=None,
+        metadata=None,
+        **kwargs,
+    ):
         name = _name(serialized, kwargs)
-        self._spans[str(run_id)] = {"kind": "tool", "name": name, "parent": parent_run_id, "metadata": metadata or {}}
-        self._record(run_id=run_id, parent_run_id=parent_run_id, subject_kind="tool", subject_name=name, phase="started", event_type="tool", metadata=metadata)
+        parent_span_id = self._parent_span(parent_run_id)
+        self._spans[str(run_id)] = {
+            "kind": "tool",
+            "name": name,
+            "parent": parent_span_id,
+            "metadata": metadata or {},
+        }
+        self._child_parent_spans[str(run_id)] = str(run_id)
+        self._record(
+            run_id=run_id,
+            parent_run_id=parent_span_id,
+            subject_kind="tool",
+            subject_name=name,
+            phase="started",
+            event_type="tool",
+            metadata=metadata,
+        )
 
     def on_tool_end(self, output, *, run_id, parent_run_id=None, **kwargs):
         self._finish(run_id, "completed")
@@ -238,8 +342,17 @@ class WorkflowRunJournal(BaseCallbackHandler):
     def on_tool_error(self, error, *, run_id, parent_run_id=None, **kwargs):
         self._finish(run_id, "failed", error_code=type(error).__name__)
 
-    def _finish(self, run_id: object, phase: str, *, response: object = None, error_code: str = "") -> None:
-        span = self._spans.pop(str(run_id), None)
+    def _finish(
+        self,
+        run_id: object,
+        phase: str,
+        *,
+        response: object = None,
+        error_code: str = "",
+    ) -> None:
+        span_id = str(run_id)
+        span = self._spans.pop(span_id, None)
+        self._child_parent_spans.pop(span_id, None)
         if span is None:
             return
         agent_span_id = span.get("agent_span_id")
@@ -263,6 +376,7 @@ class WorkflowRunJournal(BaseCallbackHandler):
                 error_code=error_code,
                 node_invocation_id=str(run_id),
             )
+            self._synthetic_agent_spans.discard(str(agent_span_id))
         self._record(
             run_id=run_id,
             parent_run_id=span.get("parent"),
@@ -270,7 +384,11 @@ class WorkflowRunJournal(BaseCallbackHandler):
             subject_name=str(span["name"]),
             phase=phase,
             event_type=str(span["kind"]),
-            metadata=span.get("metadata") if isinstance(span.get("metadata"), Mapping) else {},
+            metadata=(
+                span.get("metadata")
+                if isinstance(span.get("metadata"), Mapping)
+                else {}
+            ),
             response=response,
             error_code=error_code,
         )

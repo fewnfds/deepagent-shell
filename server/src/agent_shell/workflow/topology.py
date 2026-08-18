@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from agent_shell.condition_router import ConditionRouterCallable
-from agent_shell.task_dispatcher import TaskDispatcherCallable
 from agent_shell.validation import ValidationIssue
 from agent_shell.workflow.catalog import NodeHandleSpec, NodeTypeSpec, node_type_spec
 from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
@@ -69,8 +67,8 @@ def _handle(
 def validate_workflow_topology(
     document: WorkflowGraphDocumentV1,
     *,
-    condition_routers: Mapping[str, ConditionRouterCallable] | None = None,
-    task_dispatchers: Mapping[str, TaskDispatcherCallable] | None = None,
+    condition_routers: Mapping[str, object] | None = None,
+    task_dispatchers: Mapping[str, object] | None = None,
 ) -> tuple[ValidationIssue, ...]:
     nodes = document.definition.nodes
     edges = document.definition.edges
@@ -88,6 +86,7 @@ def validate_workflow_topology(
     routed_branches: dict[str, dict[str, int]] = {}
     routed_dispatches: dict[str, dict[str, int]] = {}
     incoming_edge_types: dict[str, set[str]] = {}
+    endpoint_compatible_sources: set[str] = set()
 
     for index, edge in enumerate(edges):
         source = node_by_id.get(edge.source)
@@ -170,6 +169,13 @@ def validate_workflow_topology(
                     },
                 )
             )
+        elif (
+            source is not None
+            and target is not None
+            and source_handle is not None
+            and target_handle is not None
+        ):
+            endpoint_compatible_sources.add(source.id)
         connection = (
             edge.source,
             edge.source_handle,
@@ -305,8 +311,7 @@ def validate_workflow_topology(
             spec = specs[node.id]
             if spec.runtime_kind != "command_router":
                 continue
-            router = condition_routers.get(node.id)
-            if router is None:
+            if node.id not in condition_routers:
                 issues.append(
                     _issue(
                         "workflow.condition_router_not_found",
@@ -338,8 +343,7 @@ def validate_workflow_topology(
             spec = specs[node.id]
             if spec.runtime_kind != "send_dispatcher":
                 continue
-            dispatcher = task_dispatchers.get(node.id)
-            if dispatcher is None:
+            if node.id not in task_dispatchers:
                 issues.append(
                     _issue(
                         "workflow.task_dispatcher_not_found",
@@ -395,14 +399,37 @@ def validate_workflow_topology(
                     owner_type="graph",
                 )
             )
+        elif len(ids) > 1:
+            issues.append(
+                _issue(
+                    f"workflow.{node_type}_multiple",
+                    "definition.nodes",
+                    f"The Workflow requires exactly one {node_type.title()} node.",
+                    f"validation.issue.workflow.{node_type}Multiple",
+                    owner_type="graph",
+                    message_args={"count": len(ids)},
+                )
+            )
 
-    if start_ids and end_ids:
+    if len(start_ids) == 1:
+        start_id = next(iter(start_ids))
+        if start_id not in endpoint_compatible_sources:
+            issues.append(
+                _issue(
+                    "workflow.start_outgoing_required",
+                    f"definition.nodes[{node_indexes[start_id]}]",
+                    "The Workflow Start node requires at least one valid outgoing edge.",
+                    "validation.issue.workflow.startOutgoingRequired",
+                    owner_id=start_id,
+                    owner_type="start",
+                )
+            )
+
+    if start_ids:
         outgoing: dict[str, set[str]] = {node.id: set() for node in nodes}
-        incoming: dict[str, set[str]] = {node.id: set() for node in nodes}
         for edge in edges:
             if edge.source in node_by_id and edge.target in node_by_id:
                 outgoing[edge.source].add(edge.target)
-                incoming[edge.target].add(edge.source)
 
         reachable_from_start = set(start_ids)
         pending = list(start_ids)
@@ -412,16 +439,10 @@ def validate_workflow_topology(
                     reachable_from_start.add(target)
                     pending.append(target)
 
-        can_reach_end = set(end_ids)
-        pending = list(end_ids)
-        while pending:
-            for source in incoming[pending.pop()]:
-                if source not in can_reach_end:
-                    can_reach_end.add(source)
-                    pending.append(source)
-
         for node in nodes:
             index = node_indexes[node.id]
+            if node.type == "end":
+                continue
             if node.id not in reachable_from_start:
                 issues.append(
                     _issue(
@@ -429,17 +450,6 @@ def validate_workflow_topology(
                         f"definition.nodes[{index}]",
                         "The Workflow node is not reachable from a Start node.",
                         "validation.issue.workflow.nodeUnreachableFromStart",
-                        owner_id=node.id,
-                        owner_type=node.type,
-                    )
-                )
-            if node.id not in can_reach_end:
-                issues.append(
-                    _issue(
-                        "workflow.node_cannot_reach_end",
-                        f"definition.nodes[{index}]",
-                        "The Workflow node cannot reach an End node.",
-                        "validation.issue.workflow.nodeCannotReachEnd",
                         owner_id=node.id,
                         owner_type=node.type,
                     )

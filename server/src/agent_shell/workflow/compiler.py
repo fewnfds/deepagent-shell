@@ -389,7 +389,8 @@ def compile_workflow(
         )
 
     # Group normal incoming edges so LangGraph receives one explicit all-of
-    # waiting edge per target instead of several independent triggers.
+    # waiting edge per executable target. END is a terminal sentinel, not a
+    # join node: each normal source must be able to finish independently.
     incoming: dict[str, list[str]] = {}
     for edge in normalized.definition.edges:
         if edge_types[edge.id] != "normal":
@@ -400,8 +401,13 @@ def compile_workflow(
         if source not in sources:
             sources.append(source)
     for target, sources in incoming.items():
-        # START is a virtual sentinel and cannot participate in a list-source
-        # waiting edge. Keep entry activation explicit, then group real nodes.
+        if target == END:
+            for source in sources:
+                builder.add_edge(source, END)
+            continue
+        # START independently activates the target when the graph begins. It is
+        # never part of an all-of barrier; real predecessors may activate the
+        # same target again later, including through a loop.
         if START in sources:
             builder.add_edge(START, target)
             sources = [source for source in sources if source != START]

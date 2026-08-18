@@ -416,23 +416,23 @@ def test_builtin_dispatcher_example_creates_owned_python_package(
         / "examples"
         / "workflow-components"
         / "task-dispatcher"
-        / "rainfall-task-dispatcher",
+        / "item-list-dispatcher",
         tmp_path
         / "examples"
         / "workflow-components"
         / "task-dispatcher"
-        / "rainfall-task-dispatcher",
+        / "item-list-dispatcher",
     )
     client = make_client(tmp_path, monkeypatch)
     catalog_response = client.get("/api/python-package-templates/task-dispatcher")
     assert catalog_response.status_code == 200
     selected = catalog_response.json()["catalog"][0]
-    assert selected["key"] == "内置示例-rainfall-task-dispatcher"
+    assert selected["key"] == "内置示例-item-list-dispatcher"
 
     response = client.post(
         "/api/blocks/task-dispatcher",
         json={
-            "name": "Rainfall tasks",
+            "name": "Item tasks",
             "python_package": {"folder": "", "editable_files": ["main.py"]},
             "python_package_files": {
                 "template_key": selected["key"],

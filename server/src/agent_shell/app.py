@@ -495,6 +495,7 @@ def create_app(
         build_workflow_router(
             workflow_store,
             block_store,
+            configuration_validation,
         )
     )
     app.include_router(

@@ -44,7 +44,6 @@ function blankWorkflow(): WorkflowPayload {
     recursion_limit: 100,
     execution_timeout_seconds: 600,
     max_concurrency: 16,
-    enabled: true,
   }
 }
 
@@ -66,7 +65,6 @@ function openEdit(workflow: Workflow): void {
     recursion_limit: workflow.recursion_limit,
     execution_timeout_seconds: workflow.execution_timeout_seconds,
     max_concurrency: workflow.max_concurrency,
-    enabled: workflow.enabled,
   }
   formError.value = ''
   formOpen.value = true
@@ -91,7 +89,6 @@ async function save(): Promise<void> {
       recursion_limit: Number(form.value.recursion_limit),
       execution_timeout_seconds: Number(form.value.execution_timeout_seconds),
       max_concurrency: Number(form.value.max_concurrency),
-      enabled: form.value.enabled,
     }
     if (editingId.value) await managementApi.updateWorkflow(editingId.value, payload)
     else await managementApi.createWorkflow(payload)
@@ -148,9 +145,11 @@ const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
       value: (row) => filesystemName(row.filesystem_id),
     },
     {
-      key: 'enabled',
-      label: () => t('workflows.fields.enabled'),
-      value: (row) => row.enabled ? t('common.enabled') : t('common.disabled'),
+      key: 'status',
+      label: () => t('workflows.fields.status'),
+      value: (row) => row.enabled
+        ? t('workflows.status.published')
+        : t('workflows.status.draft'),
     },
   ],
   rowActions: [
@@ -244,10 +243,6 @@ const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
             <input v-model.number="form.max_concurrency" class="form-control" min="1" max="256" step="1" type="number" required>
           </FormField>
         </div>
-      </div>
-      <div class="form-check form-switch">
-        <input id="workflow-enabled" v-model="form.enabled" class="form-check-input" type="checkbox">
-        <label class="form-check-label" for="workflow-enabled">{{ t('workflows.fields.enabled') }}</label>
       </div>
       <LteAlert v-if="formError" class="mt-3" theme="danger">{{ formError }}</LteAlert>
     </form>

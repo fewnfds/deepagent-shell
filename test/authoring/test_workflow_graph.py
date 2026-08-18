@@ -197,10 +197,28 @@ def test_admission_accepts_incomplete_drafts_and_layout_does_not_change_executio
     assert executable.valid is False
     assert {
         issue.code for issue in executable.issues
-    } >= {
+    } == {
+        "workflow.start_outgoing_required",
         "workflow.node_unreachable_from_start",
-        "workflow.node_cannot_reach_end",
     }
+
+    leaf = graph_payload(AGENT_A)
+    leaf["definition"]["edges"] = [  # type: ignore[index]
+        {
+            "id": "start-agent-1",
+            "source": "start",
+            "source_handle": "next",
+            "target": "agent-1",
+            "target_handle": "in",
+        },
+    ]
+    leaf_report, leaf_document = admit_workflow_document(leaf)
+    assert leaf_report.valid is True
+    assert leaf_document is not None
+    assert validate_workflow_executable(
+        leaf_document,
+        validate_main_agent=valid_main_agent,
+    ).valid is True
 
     complete_report, complete = admit_workflow_document(graph_payload(AGENT_A))
     assert complete_report.valid is True
@@ -424,6 +442,53 @@ def test_executable_validation_requires_each_runtime_node_kind(
 
     assert report.valid is False
     assert expected_code in {issue.code for issue in report.issues}
+
+
+@pytest.mark.parametrize(
+    ("duplicate_type", "expected_code"),
+    [
+        ("start", "workflow.start_multiple"),
+        ("end", "workflow.end_multiple"),
+    ],
+)
+def test_executable_validation_requires_exactly_one_start_and_end(
+    duplicate_type: str,
+    expected_code: str,
+) -> None:
+    payload = graph_payload(AGENT_A)
+    payload["definition"]["nodes"].append(  # type: ignore[index]
+        {
+            "id": f"second-{duplicate_type}",
+            "type": duplicate_type,
+            "type_version": 1,
+            "config": {},
+        }
+    )
+    admission, document = admit_workflow_document(payload)
+    assert admission.valid is True
+    assert document is not None
+
+    report = validate_workflow_executable(
+        document,
+        validate_main_agent=valid_main_agent,
+    )
+
+    assert expected_code in {issue.code for issue in report.issues}
+
+
+def test_start_can_connect_directly_to_end() -> None:
+    payload = graph_payload()
+    admission, document = admit_workflow_document(payload)
+    assert admission.valid is True
+    assert document is not None
+    assert validate_workflow_executable(
+        document,
+        validate_main_agent=valid_main_agent,
+    ).valid is True
+
+    graph = compile_workflow(document, node_agents={})
+
+    assert (START, END) in graph.builder.edges
 
 
 def test_executable_validation_allows_agent_free_script_graph() -> None:
@@ -913,6 +978,151 @@ def test_normal_multi_in_compiles_as_one_all_of_barrier_and_runs_target_once() -
 
     assert calls.count("agent-3") == 1
     assert len(result["agent_invocations"]) == 3
+
+
+def test_start_and_normal_predecessor_activate_the_same_target_independently() -> None:
+    payload = graph_payload(AGENT_A, AGENT_B)
+    payload["definition"]["edges"] = [  # type: ignore[index]
+        {
+            "id": "start-agent-1",
+            "source": "start",
+            "source_handle": "next",
+            "target": "agent-1",
+            "target_handle": "in",
+        },
+        {
+            "id": "start-agent-2",
+            "source": "start",
+            "source_handle": "next",
+            "target": "agent-2",
+            "target_handle": "in",
+        },
+        {
+            "id": "agent-2-agent-1",
+            "source": "agent-2",
+            "source_handle": "next",
+            "target": "agent-1",
+            "target_handle": "in",
+        },
+        {
+            "id": "agent-1-end",
+            "source": "agent-1",
+            "source_handle": "next",
+            "target": "end",
+            "target_handle": "in",
+        },
+    ]
+    admission, document = admit_workflow_document(payload)
+    assert admission.valid is True
+    assert document is not None
+
+    calls: list[str] = []
+
+    def agent_graph(node_id: str):
+        def answer(_state: AgentShellState) -> dict[str, object]:
+            calls.append(node_id)
+            return {"messages": [AIMessage(content=node_id)]}
+
+        return (
+            StateGraph(AgentShellState)
+            .add_node("answer", answer)
+            .add_edge(START, "answer")
+            .add_edge("answer", END)
+            .compile()
+        )
+
+    graph = compile_workflow(
+        document,
+        node_agents={
+            "agent-1": _built_agent(
+                agent_graph("agent-1"), agent_id=AGENT_A, agent_name="Agent A"
+            ),
+            "agent-2": _built_agent(
+                agent_graph("agent-2"), agent_id=AGENT_B, agent_name="Agent B"
+            ),
+        },
+        store=InMemoryStore(),
+    )
+
+    asyncio.run(
+        graph.ainvoke(
+            {"shared_vars": {}, "agent_invocations": {}},
+            context=WorkflowRuntimeContext(
+                lifecycle_id="lifecycle-start-independent",
+                run_id="run-start-independent",
+                workflow={"id": "workflow-id"},
+            ),
+        )
+    )
+
+    assert calls.count("agent-1") == 2
+    assert calls.count("agent-2") == 1
+    assert (START, "agent-1") in graph.builder.edges
+    assert ("agent-2", "agent-1") in graph.builder.edges
+    assert ((START, "agent-2"), "agent-1") not in graph.builder.waiting_edges
+
+
+def test_normal_terminal_edges_are_independent_end_paths() -> None:
+    payload = graph_payload(AGENT_A, AGENT_B)
+    payload["definition"]["edges"] = [  # type: ignore[index]
+        {
+            "id": "start-agent-1",
+            "source": "start",
+            "source_handle": "next",
+            "target": "agent-1",
+            "target_handle": "in",
+        },
+        {
+            "id": "start-agent-2",
+            "source": "start",
+            "source_handle": "next",
+            "target": "agent-2",
+            "target_handle": "in",
+        },
+        {
+            "id": "agent-1-end",
+            "source": "agent-1",
+            "source_handle": "next",
+            "target": "end",
+            "target_handle": "in",
+        },
+        {
+            "id": "agent-2-end",
+            "source": "agent-2",
+            "source_handle": "next",
+            "target": "end",
+            "target_handle": "in",
+        },
+    ]
+    admission, document = admit_workflow_document(payload)
+    assert admission.valid is True
+    assert document is not None
+
+    def agent_graph():
+        return (
+            StateGraph(AgentShellState)
+            .add_node("answer", lambda _state: {"messages": []})
+            .add_edge(START, "answer")
+            .add_edge("answer", END)
+            .compile()
+        )
+
+    graph = compile_workflow(
+        document,
+        node_agents={
+            "agent-1": _built_agent(
+                agent_graph(), agent_id=AGENT_A, agent_name="Agent A"
+            ),
+            "agent-2": _built_agent(
+                agent_graph(), agent_id=AGENT_B, agent_name="Agent B"
+            ),
+        },
+        store=InMemoryStore(),
+    )
+
+    assert ("agent-1", "__end__") in graph.builder.edges
+    assert ("agent-2", "__end__") in graph.builder.edges
+    assert (("agent-1", "agent-2"), "__end__") not in graph.builder.waiting_edges
 
 
 def test_agent_defer_config_is_forwarded_to_langgraph_node(monkeypatch) -> None:

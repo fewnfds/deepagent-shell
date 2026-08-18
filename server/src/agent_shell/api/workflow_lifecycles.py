@@ -227,15 +227,19 @@ def build_workflow_lifecycle_router(
     async def get_workflow_run(lifecycle_id: str, run_id: str) -> dict[str, object]:
         await require_lifecycle(lifecycle_id)
         run = require_run(lifecycle_id, run_id)
+        diagnostics = diagnostics_for(lifecycle_id, run_id=run_id)
         return {
             **run,
-            "events": lifecycle_service.events(lifecycle_id, run_id=run_id, limit=5000),
-            "checkpoints": (
-                await workflow_checkpoints.checkpoint_history(str(run["thread_id"]))
-                if run["checkpoint_available"]
-                else []
+            "event_count": lifecycle_service.event_count(
+                lifecycle_id,
+                run_id=run_id,
             ),
-            "diagnostics": diagnostics_for(lifecycle_id, run_id=run_id),
+            "checkpoint_count": (
+                await workflow_checkpoints.checkpoint_count(str(run["thread_id"]))
+                if run["checkpoint_available"]
+                else 0
+            ),
+            "diagnostic_count": len(diagnostics),
         }
 
     @router.get("/api/workflow-lifecycles/{lifecycle_id}/download")

@@ -180,6 +180,7 @@ class WorkflowLifecycleService:
                     "occurred_at": created_at,
                     "event_type": "run",
                     "phase": "created",
+                    "span_id": run_id,
                     "subject_kind": "run",
                     "subject_id": run_id,
                     "subject_name": workflow_name,
@@ -209,6 +210,8 @@ class WorkflowLifecycleService:
                 "occurred_at": created_at,
                 "event_type": "run",
                 "phase": "created",
+                "span_id": record["run_id"],
+                "parent_span_id": record.get("parent_run_id"),
                 "subject_kind": "run",
                 "subject_id": record["run_id"],
                 "subject_name": record["target_name"],
@@ -229,6 +232,8 @@ class WorkflowLifecycleService:
                 "occurred_at": occurred_at,
                 "event_type": "run",
                 "phase": "started",
+                "span_id": run_id,
+                "parent_span_id": record.get("parent_run_id"),
                 "subject_kind": "run",
                 "subject_id": run_id,
                 "status": status,
@@ -262,6 +267,8 @@ class WorkflowLifecycleService:
                 "occurred_at": finished_at,
                 "event_type": "run",
                 "phase": phase,
+                "span_id": run_id,
+                "parent_span_id": record.get("parent_run_id"),
                 "subject_kind": "run",
                 "subject_id": run_id,
                 "subject_name": record["target_name"],
@@ -301,6 +308,9 @@ class WorkflowLifecycleService:
 
     def run_summary(self, lifecycle_id: str) -> dict[str, object]:
         return self._history.summary(lifecycle_id)
+
+    def event_count(self, lifecycle_id: str, *, run_id: str | None = None) -> int:
+        return self._history.count_events(lifecycle_id, run_id=run_id)
 
     @asynccontextmanager
     async def exclusive_mutation(self, lifecycle_id: str) -> AsyncIterator[None]:

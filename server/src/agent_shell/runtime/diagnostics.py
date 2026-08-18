@@ -200,6 +200,9 @@ class RuntimeDiagnostics:
                         ).format(chain=True),
                     ),
                 )
+            except Exception:
+                self._logger.error(prefix + "\nruntime diagnostic detail persistence failed")
+            try:
                 entry = self._store.add(
                     diagnostic_id=diagnostic_id,
                     occurred_at=occurred_at,
@@ -212,7 +215,7 @@ class RuntimeDiagnostics:
                     **safe_context,
                 )
             except Exception:
-                self._logger.error(prefix + "\nruntime diagnostic persistence failed")
+                self._logger.error(prefix + "\nruntime diagnostic index persistence failed")
                 try:
                     self._reconcile_details()
                 except Exception:

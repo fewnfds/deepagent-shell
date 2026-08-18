@@ -1,33 +1,25 @@
+MATCHED_BRANCH = "matched"
+FALLBACK_BRANCH = "otherwise"
+SCORE_THRESHOLD = 60
+
+
 def create_router():
-    # 直接在扩展代码中声明规则；组件页面可以编辑这个文件。
-    state_key = "score"
-    threshold = 60
-    matched_branch = "matched"
-    fallback_branch = "otherwise"
-
     async def route(state, runtime):
-        # 在这里读取上游节点写入的 Workflow State。
-        # 本示例约定分数位于 state["shared_vars"][state_key]。
+        # Example only: replace this selection and rule with the Workflow's
+        # actual State and Runtime Context inputs.
         shared_vars = state.get("shared_vars", {})
-        raw_score = shared_vars.get(state_key)
-
-        # 在这里填写自己的条件判断。
-        # bool 在 Python 中也是 int 的子类，所以这里明确排除 True 和 False。
-        score_is_number = isinstance(raw_score, (int, float)) and not isinstance(
-            raw_score, bool
+        score = shared_vars.get("score") if isinstance(shared_vars, dict) else None
+        is_number = isinstance(score, (int, float)) and not isinstance(score, bool)
+        branch = (
+            MATCHED_BRANCH
+            if is_number and score >= SCORE_THRESHOLD
+            else FALLBACK_BRANCH
         )
-        if score_is_number and raw_score >= threshold:
-            branch = matched_branch
-        else:
-            branch = fallback_branch
-
-        # activate 中的字符串必须与画布上的 Branch Edge key 完全一致。
-        # 可以返回多个不同的 key 来并行激活多条分支，例如 ["audit", "notify"]。
-        # update 是可选的 Workflow State 局部更新；不需要更新时保持空字典。
-        # runtime.context 包含本次 Run 的静态身份、Workflow 配置和后台 Run 命令。
         return {
             "activate": [branch],
-            "update": {},
+            # Router may update any top-level channel declared by WorkflowState.
+            # Remove this update when the route decision does not need persistence.
+            "update": {"shared_vars": {"last_route": branch}},
         }
 
     return route

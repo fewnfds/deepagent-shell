@@ -14,9 +14,13 @@ import {
 import DataTableWorkbench from '@/components/data-table/DataTableWorkbench.vue'
 import type { DataTableConfig } from '@/components/data-table/types'
 import PageShell from '@/components/PageShell.vue'
+import { useManagementError } from '@/composables/useManagementError'
+import { useToasts } from '@/composables/useToasts'
 import { triggerBrowserDownload } from '@/utils/download'
 
 const { t } = useI18n()
+const managementError = useManagementError()
+const { notify } = useToasts()
 
 const details = reactive<Record<string, WorkflowLifecycleDetail | undefined>>({})
 const detailLoading = reactive<Record<string, boolean>>({})
@@ -93,6 +97,12 @@ async function downloadRun(run: WorkflowRunRecord): Promise<void> {
   try {
     const blob = await managementApi.downloadWorkflowRun(run.lifecycle_id, run.run_id)
     triggerBrowserDownload(blob, `agent-shell-run-${run.run_id}.zip`)
+  } catch (error) {
+    notify({
+      tone: 'danger',
+      title: t('workflowLifecycles.downloadFailed'),
+      message: managementError.describe(error).display,
+    })
   } finally {
     downloadingRuns[run.run_id] = false
   }
@@ -109,6 +119,12 @@ async function loadMoreEvents(detail: WorkflowLifecycleDetail): Promise<void> {
     detail.events.push(...page.items)
     detail.next_event_sequence = page.next_after_sequence
     detail.event_has_more = page.has_more
+  } catch (error) {
+    notify({
+      tone: 'danger',
+      title: t('workflowLifecycles.detail.loadMoreEventsFailed'),
+      message: managementError.describe(error).display,
+    })
   } finally {
     loadingMoreEvents[detail.lifecycle_id] = false
   }
@@ -327,17 +343,17 @@ const tableConfig: DataTableConfig<WorkflowLifecycleSummary> = {
                           <dt class="small text-body-secondary">{{ t('workflowLifecycles.detail.checkpoints') }}</dt>
                           <dd class="mb-0">
                             {{ run.checkpoint_available
-                              ? (runDetails[run.run_id]?.checkpoints.length ?? t('common.loading'))
+                              ? (runDetails[run.run_id]?.checkpoint_count ?? t('common.loading'))
                               : t('workflowLifecycles.run.notAvailable') }}
                           </dd>
                         </div>
                         <div class="col-12 col-md-6 col-lg-3">
                           <dt class="small text-body-secondary">{{ t('workflowLifecycles.detail.timeline') }}</dt>
-                          <dd class="mb-0">{{ runDetails[run.run_id]?.events.length ?? t('common.loading') }}</dd>
+                          <dd class="mb-0">{{ runDetails[run.run_id]?.event_count ?? t('common.loading') }}</dd>
                         </div>
                         <div class="col-12 col-md-6 col-lg-3">
                           <dt class="small text-body-secondary">{{ t('workflowLifecycles.detail.diagnostics') }}</dt>
-                          <dd class="mb-0">{{ runDetails[run.run_id]?.diagnostics.length ?? t('common.loading') }}</dd>
+                          <dd class="mb-0">{{ runDetails[run.run_id]?.diagnostic_count ?? t('common.loading') }}</dd>
                         </div>
                         <div class="col-12 col-md-6 col-lg-3">
                           <dt class="small text-body-secondary">{{ t('workflowLifecycles.columns.observation') }}</dt>
@@ -353,40 +369,6 @@ const tableConfig: DataTableConfig<WorkflowLifecycleSummary> = {
                         :title="t('workflowLifecycles.run.detailLoadFailed')"
                         theme="danger"
                       />
-                      <section
-                        v-else-if="runDetails[run.run_id]"
-                        class="mt-3"
-                        :aria-label="t('workflowLifecycles.run.events')"
-                      >
-                        <h3 class="h5 mb-2">{{ t('workflowLifecycles.run.events') }}</h3>
-                        <p v-if="runDetails[run.run_id]!.events.length === 0" class="text-body-secondary mb-0">
-                          {{ t('workflowLifecycles.detail.noEvents') }}
-                        </p>
-                        <div v-else class="table-responsive">
-                          <table class="table align-middle mb-0">
-                            <thead>
-                              <tr>
-                                <th scope="col">#</th>
-                                <th scope="col">{{ t('workflowLifecycles.event.time') }}</th>
-                                <th scope="col">{{ t('workflowLifecycles.event.kind') }}</th>
-                                <th scope="col">{{ t('workflowLifecycles.event.subject') }}</th>
-                                <th scope="col">{{ t('workflowLifecycles.event.phase') }}</th>
-                                <th scope="col">{{ t('workflowLifecycles.event.node') }}</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr v-for="event in runDetails[run.run_id]!.events" :key="event.sequence">
-                                <td>{{ event.sequence }}</td>
-                                <td>{{ localTime(event.occurred_at) }}</td>
-                                <td>{{ t(`workflowLifecycles.subjectKinds.${event.subject_kind}`) }}</td>
-                                <td>{{ eventSubject(event) }}</td>
-                                <td>{{ t(`workflowLifecycles.eventPhases.${event.phase}`) }}</td>
-                                <td><code>{{ event.workflow_node_id || t('common.none') }}</code></td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      </section>
                     </td>
                   </tr>
                   </template>

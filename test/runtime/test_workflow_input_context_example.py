@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import importlib.util
+import json
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
-from deepagents.backends.utils import create_file_data
 from langgraph.store.memory import InMemoryStore
 
 from agent_shell.runtime.context import WorkflowRuntimeContext
@@ -31,30 +31,16 @@ def _load_example() -> ModuleType:
     return module
 
 
-def test_workflow_input_context_example_applies_central_file_and_system_settings() -> None:
+def test_workflow_input_context_example_adds_private_dispatch_task() -> None:
     module = _load_example()
-
-    class Backend:
-        async def aread(self, path, *, offset, limit):
-            assert (path, offset, limit) == ("/task.md", 0, 1_000_000)
-            return SimpleNamespace(
-                file_data=create_file_data("attached task"),
-                error=None,
-            )
-
-    module.WIC_CONFIG["attachments"] = [
-        {"role": "system", "path": "/task.md", "max_chars": 8}
-    ]
-    module.WIC_CONFIG["convert_non_leading_system_to_user"] = True
     middleware = module.create_middleware(
-        backend=Backend(),
+        backend=object(),
         scope="main_agent",
         package_id="example-id",
     )
     messages = [
-            {"role": "system", "content": "leading"},
-            {"role": "assistant", "content": "prior"},
-            {"role": "system", "content": "late"},
+        {"role": "system", "content": "leading"},
+        {"role": "user", "content": "request"},
     ]
     context = WorkflowRuntimeContext.for_run(
         request_id="request-id",
@@ -71,15 +57,28 @@ def test_workflow_input_context_example_applies_central_file_and_system_settings
 
     update = asyncio.run(
         middleware.abefore_agent(
-            {"messages": []},
+            {
+                "messages": [],
+                "workflow_task": {
+                    "task_id": "item:42",
+                    "dispatch_key": "item",
+                    "payload": {"id": "42"},
+                },
+            },
             SimpleNamespace(context=context, store=store),
         )
     )
 
     assert middleware.name == "WorkflowInputContextMiddleware_example-id"
-    assert [(message.type, message.content) for message in update["messages"].value] == [
+    prepared = update["messages"].value
+    assert [(message.type, message.content) for message in prepared[:2]] == [
         ("system", "leading"),
-        ("ai", "prior"),
-        ("human", "late"),
-        ("human", "attached"),
+        ("human", "request"),
     ]
+    assert prepared[2].type == "human"
+    task = json.loads(prepared[2].content.removeprefix("Process this workflow task:\n"))
+    assert task == {
+        "task_id": "item:42",
+        "dispatch_key": "item",
+        "payload": {"id": "42"},
+    }

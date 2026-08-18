@@ -45,7 +45,7 @@ def test_models_publish_only_enabled_workflows_and_chat_runs_current_graph(
             workflow_role="child",
         )
         save_linear_workflow_graph(client, child, main_agent)
-        create_workflow(client, name="Disabled Workflow", enabled=False)
+        create_workflow(client, name="Disabled Workflow")
 
         models = client.get("/v1/models")
         workflow_reply = client.post(
@@ -122,7 +122,6 @@ def test_workflow_runtime_limits_reach_the_graph_execution(
                 "recursion_limit": 321,
                 "execution_timeout_seconds": 42,
                 "max_concurrency": 7,
-                "enabled": True,
             },
         )
         assert updated.status_code == 200, updated.text
@@ -140,14 +139,14 @@ def test_workflow_runtime_limits_reach_the_graph_execution(
     assert captured["run_config"]["max_concurrency"] == 7
 
 
-def test_chat_rejects_an_incomplete_saved_workflow_draft(
+def test_incomplete_saved_workflow_draft_is_not_a_public_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
         main_agent = create_main_agent(client)
         workflow = create_workflow(client, name="Incomplete Workflow")
         saved = client.put(
-            f"/api/workflows/{workflow['id']}/graph",
+            f"/api/workflows/{workflow['id']}/draft",
             json={
                 "definition": {
                     "schema_version": 1,
@@ -176,8 +175,8 @@ def test_chat_rejects_an_incomplete_saved_workflow_draft(
         )
 
     assert saved.status_code == 200, saved.text
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "workflow.node_cannot_reach_end"
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "model_not_found"
 
 
 def test_chat_materializes_condition_router_package_before_compiling_workflow(

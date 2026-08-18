@@ -32,8 +32,9 @@ Run Registry 是 Run 身份与终态的权威记录；append-only Event Journal 
 的结构边界。Node 每次执行使用独立 `node_invocation_id/span_id`，同一 Node 的循环、重试和 fan-out 不会合并。
 
 每个 Workflow Run 使用独立 thread，并由 LangGraph `AsyncSqliteSaver` 写入 checkpoint；background Agent 明确标记为
-不具备 checkpoint。Checkpoint 当前只服务 Debug，不提供 Resume。页面可查看 Run 父子关系、结构 Timeline、Checkpoint/
-Store 摘要和关联诊断，也可下载单 Run 或整个 Lifecycle 的 management-only 诊断包。
+不具备 checkpoint。Checkpoint 当前只服务 Debug，不提供 Resume。页面可查看 Run 父子关系、结构 Timeline，以及
+Checkpoint、结构事件和关联诊断的精确计数；单 Run 详情不展开大量原始条目。需要完整条目时下载单 Run 或整个
+Lifecycle 的 management-only 诊断包。
 
 诊断包标注 `captured_at`、当前终态/活动状态、最后事件 sequence 和观测完整性。它不包含 Lifecycle 输入、`messages[]`、
 模型正文、Tool/Script payload、Provider 原始响应或 Checkpoint State，也不承诺字节级重放。运行历史没有自动 retention；

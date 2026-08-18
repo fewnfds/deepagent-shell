@@ -106,15 +106,16 @@ Task Dispatcher 使用 `family: workflow-node`、`adapter: task-dispatcher`。�
 ```python
 def create_dispatcher():
     async def dispatch(state, runtime):
-        cities = state.get("shared_vars", {}).get("cities", [])
+        # Example source only; select any relevant State/Runtime/Store data.
+        items = state.get("shared_vars", {}).get("items", [])
         return {
             "tasks": [
                 {
-                    "task_id": f"city:{city['id']}",
-                    "dispatch_key": "city",
-                    "payload": {"kind": "city", "record": city},
+                    "task_id": f"item:{item['id']}",
+                    "dispatch_key": "item",
+                    "payload": {"item": item},
                 }
-                for city in cities
+                for item in items
             ],
             "update": {},
         }
@@ -149,10 +150,10 @@ Main Agent/Subagent 的有序 `middleware_refs` 决定多个实例进入列表�
 hook、state schema、tools 或 stream transformer。运行链使用
 异步执行；自定义类覆盖同步 hook 时也必须提供对应 async hook。
 
-内置 `workflow-input-context` 示例把 Workflow 原始输入选择、文件附加和非顶部 system 转 user 都实现为普通
-`AgentMiddleware.abefore_agent`。它没有专用 capability、继承规则或装配槽位；复制示例后直接修改其中集中的
-`WIC_CONFIG` 与 `build_workflow_input_context()`，并通过 Agent 的有序 `middleware_refs` 决定位置。完整说明见
-[Workflow Input Context](workflow-input-context.md)。
+内置 `workflow-input-context` 示例通过普通 `AgentMiddleware.abefore_agent` 选择 Workflow 原始输入、Subagent 委派消息和
+Dispatcher task。它没有专用 capability、继承规则或装配槽位；复制示例后在
+`build_workflow_input_messages(state, runtime, request_messages, backend)` 中按当前 Agent 的职责选择、裁剪和转换材料，并通过
+Agent 的有序 `middleware_refs` 决定位置。完整说明见 [Workflow Input Context](workflow-input-context.md)。
 
 ## Imports 与依赖
 

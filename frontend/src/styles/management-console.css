@@ -436,7 +436,7 @@ pre code {
 .workflow-editor-toolbar {
   z-index: 3;
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   padding: 6px 10px;
@@ -911,6 +911,31 @@ pre code {
   border-radius: 4px;
   color: var(--bs-danger-text-emphasis);
   background: var(--bs-danger-bg-subtle);
+}
+
+.workflow-validation-error {
+  position: absolute;
+  z-index: 5;
+  top: 16px;
+  right: 16px;
+  left: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  max-width: 720px;
+  margin-left: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--bs-danger-border-subtle);
+  border-radius: 4px;
+  color: var(--bs-danger-text-emphasis);
+  background: var(--bs-danger-bg-subtle);
+}
+
+.workflow-validation-error > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .workflow-node-tracker-list,

@@ -194,3 +194,29 @@ def test_runtime_diagnostic_detail_keeps_full_exception_out_of_summary(
     assert deleted.json() == {"deleted": 1}
     assert missing.status_code == 404
     assert list((tmp_path / "data" / "logs" / "diagnostics").glob("*.log")) == []
+
+
+def test_runtime_diagnostic_keeps_structured_entry_when_detail_write_fails(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+
+        def fail_detail_write(*_args, **_kwargs):
+            raise OSError("diagnostic attachment unavailable")
+
+        monkeypatch.setattr(
+            client.app.state.runtime_diagnostic_details,
+            "write",
+            fail_detail_write,
+        )
+        client.app.state.runtime_diagnostics.observation_error(
+            OSError("journal unavailable"),
+            code="workflow_run_event_record_failed",
+            component="observability",
+            context=RuntimeDiagnosticContext(run_id="run-without-detail"),
+        )
+        entries = client.app.state.runtime_diagnostics.snapshot()["entries"]
+
+    assert len(entries) == 1
+    assert entries[0]["run_id"] == "run-without-detail"
+    assert entries[0]["detail_available"] is False

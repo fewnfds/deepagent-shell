@@ -4,8 +4,6 @@ from collections.abc import Callable, Mapping
 
 from pydantic import ValidationError
 
-from agent_shell.condition_router import ConditionRouterCallable
-from agent_shell.task_dispatcher import TaskDispatcherCallable
 from agent_shell.validation import (
     ValidationIssue,
     ValidationReport,
@@ -13,10 +11,8 @@ from agent_shell.validation import (
 )
 from agent_shell.workflow.catalog import node_type_spec, supported_node_versions
 from agent_shell.workflow.contracts import (
-    MAX_WORKFLOW_DOCUMENT_BYTES,
     WorkflowGraphDocumentV1,
     WorkflowNodeV1,
-    canonical_workflow_document_json,
 )
 from agent_shell.workflow.topology import validate_workflow_topology
 from agent_shell.workflow_contracts import WorkflowRole
@@ -236,20 +232,6 @@ def _admission_issues(
                 )
             )
 
-    if (
-        len(canonical_workflow_document_json(normalized).encode("utf-8"))
-        > MAX_WORKFLOW_DOCUMENT_BYTES
-    ):
-        issues.append(
-            _issue(
-                code="workflow.document_too_large",
-                path="",
-                message="The Workflow graph document is too large.",
-                message_key="validation.issue.workflow.documentTooLarge",
-                owner_type="graph",
-                message_args={"max_bytes": MAX_WORKFLOW_DOCUMENT_BYTES},
-            )
-        )
     return issues, normalized
 
 
@@ -283,8 +265,8 @@ def validate_workflow_executable(
     document: WorkflowGraphDocumentV1,
     *,
     validate_main_agent: MainAgentValidator,
-    condition_routers: Mapping[str, ConditionRouterCallable] | None = None,
-    task_dispatchers: Mapping[str, TaskDispatcherCallable] | None = None,
+    condition_routers: Mapping[str, object] | None = None,
+    task_dispatchers: Mapping[str, object] | None = None,
     workflow_role: WorkflowRole | None = None,
 ) -> ValidationReport:
     admission, normalized = admit_workflow_document(

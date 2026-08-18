@@ -249,11 +249,11 @@ export interface WorkflowPayload {
   recursion_limit: number
   execution_timeout_seconds: number
   max_concurrency: number
-  enabled: boolean
 }
 
 export interface Workflow extends WorkflowPayload {
   id: string
+  enabled: boolean
 }
 
 export interface WorkflowLifecycleSummary {
@@ -340,9 +340,9 @@ export interface WorkflowLifecycleDetail extends WorkflowLifecycleSummary {
 }
 
 export interface WorkflowRunDetail extends WorkflowRunRecord {
-  events: WorkflowRunEvent[]
-  checkpoints: Array<Record<string, unknown>>
-  diagnostics: RuntimeDiagnosticEntry[]
+  event_count: number
+  checkpoint_count: number
+  diagnostic_count: number
 }
 
 export interface WorkflowRunEventPage {

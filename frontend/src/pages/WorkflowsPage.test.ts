@@ -111,7 +111,6 @@ describe('WorkflowsPage', () => {
       recursion_limit: 250,
       execution_timeout_seconds: 900,
       max_concurrency: 32,
-      enabled: true,
     })
 
     await wrapper.findAll('button').find((button) => button.text() === 'Delete')!.trigger('click')
@@ -153,7 +152,6 @@ describe('WorkflowsPage', () => {
       recursion_limit: 100,
       execution_timeout_seconds: 600,
       max_concurrency: 16,
-      enabled: true,
     })
     wrapper.unmount()
   })
@@ -193,7 +191,6 @@ describe('WorkflowsPage', () => {
       recursion_limit: 100,
       execution_timeout_seconds: 600,
       max_concurrency: 16,
-      enabled: true,
     })
     wrapper.unmount()
   })

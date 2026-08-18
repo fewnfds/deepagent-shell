@@ -174,6 +174,31 @@ def test_lifecycle_management_summarizes_and_deletes_dynamic_workspace(
         ]
         assert node_events
         assert all(event["node_invocation_id"] for event in node_events)
+        span_ids = {
+            event["span_id"] for event in payload["events"] if event["span_id"]
+        }
+        assert all(
+            not event["parent_span_id"] or event["parent_span_id"] in span_ids
+            for event in payload["events"]
+        )
+        agent_starts = [
+            event
+            for event in payload["events"]
+            if event["subject_kind"] == "agent" and event["phase"] == "started"
+        ]
+        assert len(agent_starts) == len(node_events)
+
+        run_detail = client.get(
+            f"/api/workflow-lifecycles/{summary['lifecycle_id']}"
+            f"/runs/{root_run['run_id']}"
+        )
+        assert run_detail.status_code == 200, run_detail.text
+        run_payload = run_detail.json()
+        assert run_payload["event_count"] == len(payload["events"])
+        assert run_payload["checkpoint_count"] == summary["checkpoint_count"]
+        assert run_payload["diagnostic_count"] == 0
+        assert "events" not in run_payload
+        assert "checkpoints" not in run_payload
 
         downloaded = client.get(
             f"/api/workflow-lifecycles/{summary['lifecycle_id']}/download"

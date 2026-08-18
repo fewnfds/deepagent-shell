@@ -212,12 +212,32 @@ export const managementApi = {
     return managementRequest(`/api/workflows/${encodeURIComponent(id)}/graph`)
   },
 
-  updateWorkflowGraph(
+  saveWorkflowDraft(
+    id: string,
+    document: WorkflowGraphDocument,
+  ): Promise<WorkflowGraphDocument> {
+    return managementRequest(`/api/workflows/${encodeURIComponent(id)}/draft`, {
+      method: 'PUT',
+      body: JSON.stringify(document),
+    })
+  },
+
+  publishWorkflow(
     id: string,
     document: WorkflowGraphDocument,
   ): Promise<WorkflowGraphDocument> {
     return managementRequest(`/api/workflows/${encodeURIComponent(id)}/graph`, {
       method: 'PUT',
+      body: JSON.stringify(document),
+    })
+  },
+
+  validateWorkflow(
+    id: string,
+    document: WorkflowGraphDocument,
+  ): Promise<ValidationReport> {
+    return managementRequest(`/api/workflows/${encodeURIComponent(id)}/validate`, {
+      method: 'POST',
       body: JSON.stringify(document),
     })
   },

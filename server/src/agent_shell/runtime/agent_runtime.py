@@ -216,6 +216,12 @@ class RunExecution:
             try:
                 await self.lifecycle_service.finish_parent(self.lifecycle_id, status)
             except Exception as exc:
+                try:
+                    self.lifecycle_service.mark_run_observation_partial(
+                        self.context.run_id
+                    )
+                except Exception:
+                    pass
                 if self.runtime_diagnostics is not None:
                     self.runtime_diagnostics.observation_error(
                         exc,
