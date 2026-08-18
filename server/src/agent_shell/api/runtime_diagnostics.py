@@ -13,12 +13,6 @@ class RuntimeDiagnosticsRetentionUpdate(BaseModel):
     retention_limit: int = Field(ge=1, le=MAX_HISTORY_RETENTION_LIMIT)
 
 
-class RuntimeDebugUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    enabled: bool
-
-
 def build_runtime_diagnostics_router(
     diagnostics: RuntimeDiagnostics,
 ) -> APIRouter:
@@ -33,11 +27,5 @@ def build_runtime_diagnostics_router(
         payload: RuntimeDiagnosticsRetentionUpdate,
     ) -> dict[str, object]:
         return diagnostics.set_retention_limit(payload.retention_limit)
-
-    @router.put("/api/runtime-diagnostics/debug")
-    async def update_runtime_debug(
-        payload: RuntimeDebugUpdate,
-    ) -> dict[str, object]:
-        return diagnostics.set_debug_enabled(payload.enabled)
 
     return router

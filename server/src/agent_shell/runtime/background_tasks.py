@@ -9,7 +9,10 @@ from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from agent_shell.runtime.diagnostics import RuntimeDiagnostics
+from agent_shell.runtime.diagnostics import (
+    RuntimeDiagnosticContext,
+    RuntimeDiagnostics,
+)
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.workflow_lifecycle import (
     WorkflowLifecycleService,
@@ -293,6 +296,26 @@ class BackgroundTaskManager:
                 created_at=_now(),
             )
             await self._put(record)
+            try:
+                self._lifecycle.register_run(
+                    {
+                        "run_id": record.child_run_id,
+                        "lifecycle_id": record.lifecycle_id,
+                        "request_id": record.request_id,
+                        "thread_id": record.child_thread_id,
+                        "run_kind": record.target_kind,
+                        "target_id": record.target_id,
+                        "target_name": record.target_name,
+                        "parent_run_id": record.launcher_run_id,
+                        "launcher_id": record.launcher_id,
+                        "background_task_id": record.task_id,
+                        "run_depth": record.run_depth,
+                        "checkpoint_available": record.target_kind == "workflow",
+                        "created_at": record.created_at,
+                    }
+                )
+            except Exception as exc:
+                self._report_run_history_error(exc, record)
             task = asyncio.create_task(
                 self._run(record, identity, execution_factory),
                 name=f"background-{target_kind}:{task_id}",
@@ -444,6 +467,14 @@ class BackgroundTaskManager:
             await self._put(record)
         except Exception as exc:
             self._report_store_error(exc, record)
+        try:
+            self._lifecycle.finish_run(
+                record.child_run_id,
+                status="interrupted",
+                error_code="background_runtime_lost",
+            )
+        except Exception as exc:
+            self._report_run_history_error(exc, record)
         return record
 
     async def _run(
@@ -509,6 +540,18 @@ class BackgroundTaskManager:
                 await self._put(terminal)
         except Exception as exc:
             self._report_store_error(exc, record)
+        run_status = "completed" if status == "succeeded" else status
+        usage = (result or {}).get("usage", {})
+        try:
+            self._lifecycle.finish_run(
+                record.child_run_id,
+                status=run_status,
+                error_code=error_code,
+                finish_reason=str((result or {}).get("finish_reason", "")),
+                usage=usage if isinstance(usage, dict) else {},
+            )
+        except Exception as exc:
+            self._report_run_history_error(exc, record)
 
     async def _put(self, record: BackgroundTaskRecord) -> None:
         await self._lifecycle.store.aput(
@@ -580,10 +623,9 @@ class BackgroundTaskManager:
         if self._runtime_diagnostics is not None:
             self._runtime_diagnostics.runtime_error(
                 exc,
-                request_id=record.request_id,
-                model=record.target_name,
-                agent_name="",
                 code="background_task_failed",
+                component="background_runtime",
+                context=self._diagnostic_context(record),
             )
 
     def _report_store_error(
@@ -594,11 +636,40 @@ class BackgroundTaskManager:
         if self._runtime_diagnostics is not None:
             self._runtime_diagnostics.observation_error(
                 exc,
-                request_id=record.request_id,
-                model=record.target_name,
-                agent_name="",
                 code="background_task_record_failed",
+                component="persistence",
+                context=self._diagnostic_context(record),
             )
+
+    def _report_run_history_error(
+        self,
+        exc: BaseException,
+        record: BackgroundTaskRecord,
+    ) -> None:
+        try:
+            self._lifecycle.mark_run_observation_partial(record.child_run_id)
+        except Exception:
+            pass
+        if self._runtime_diagnostics is not None:
+            self._runtime_diagnostics.observation_error(
+                exc,
+                code="workflow_run_record_failed",
+                component="observability",
+                context=self._diagnostic_context(record),
+            )
+
+    @staticmethod
+    def _diagnostic_context(record: BackgroundTaskRecord) -> RuntimeDiagnosticContext:
+        return RuntimeDiagnosticContext(
+            request_id=record.request_id,
+            lifecycle_id=record.lifecycle_id,
+            run_id=record.child_run_id,
+            thread_id=record.child_thread_id,
+            subject_kind=record.target_kind,
+            subject_id=record.target_id,
+            subject_name=record.target_name,
+            node_invocation_id=record.task_id,
+        )
 
 
 __all__ = [

@@ -3,7 +3,7 @@ from __future__ import annotations
 from .support import *
 
 
-def test_workflow_runtime_boundaries_and_debug_retention_are_managed(
+def test_workflow_runtime_boundaries_are_managed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
@@ -23,22 +23,6 @@ def test_workflow_runtime_boundaries_and_debug_retention_are_managed(
         )
         assert updated.status_code == 200, updated.text
         assert updated.json()["max_concurrency"] == 32
-
-        current = client.get("/api/history-retention/workflow-debug")
-        assert current.status_code == 200, current.text
-        assert current.json()["retention_limit"] == 50
-        saved = client.put(
-            "/api/history-retention/workflow-debug",
-            json={"retention_limit": 25},
-        )
-        assert saved.status_code == 200, saved.text
-        assert saved.json()["retention_limit"] == 25
-
-        invalid = client.put(
-            "/api/history-retention/workflow-debug",
-            json={"retention_limit": 0},
-        )
-        assert invalid.status_code == 422
 
 
 def test_workflow_event_output_is_a_reusable_component_reference(

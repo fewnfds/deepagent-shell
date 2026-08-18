@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from io import BytesIO
+import json
 from pathlib import Path
+import zipfile
 
 from agent_shell.app import create_app
 from agent_shell.runtime.errors import AgentRuntimeError
@@ -119,7 +122,9 @@ def test_lifecycle_management_summarizes_and_deletes_dynamic_workspace(
             "/v1/chat/completions",
             json={
                 "model": workflow["name"],
-                "messages": [{"role": "user", "content": "run"}],
+                "messages": [
+                    {"role": "user", "content": "private-run-history-sentinel"}
+                ],
             },
         )
         assert reply.status_code == 200, reply.text
@@ -135,11 +140,60 @@ def test_lifecycle_management_summarizes_and_deletes_dynamic_workspace(
         assert summary["message_count"] == 1
         assert summary["parent_status"] == "completed"
         assert summary["task_count"] == 0
+        assert summary["run_count"] == 1
+        assert summary["active_run_count"] == 0
+        assert summary["failed_run_count"] == 0
+        assert summary["observation_status"] == "available"
         assert summary["checkpoint_count"] > 0
         assert summary["dynamic_directory_count"] == 1
         # Lifecycle Store owns the request input, filesystem mapping, and
         # the immutable invocation artifact separately.
         assert summary["store_item_count"] == 3
+        detail = client.get(
+            f"/api/workflow-lifecycles/{summary['lifecycle_id']}"
+        )
+        assert detail.status_code == 200, detail.text
+        payload = detail.json()
+        assert len(payload["runs"]) == 1
+        root_run = payload["runs"][0]
+        assert root_run["run_id"] == summary["parent_run_id"]
+        assert root_run["run_kind"] == "workflow"
+        assert root_run["status"] == "completed"
+        assert root_run["checkpoint_available"] is True
+        assert {event["subject_kind"] for event in payload["events"]} >= {
+            "run",
+            "workflow_node",
+            "agent",
+            "model",
+        }
+        node_events = [
+            event
+            for event in payload["events"]
+            if event["subject_kind"] == "workflow_node"
+            and event["phase"] == "started"
+        ]
+        assert node_events
+        assert all(event["node_invocation_id"] for event in node_events)
+
+        downloaded = client.get(
+            f"/api/workflow-lifecycles/{summary['lifecycle_id']}/download"
+        )
+        assert downloaded.status_code == 200, downloaded.text
+        assert downloaded.headers["cache-control"] == "no-store"
+        with zipfile.ZipFile(BytesIO(downloaded.content)) as archive:
+            assert {
+                "manifest.json",
+                "lifecycle.json",
+                "runs.json",
+                "events.jsonl",
+                "store-summary.json",
+                "diagnostics.jsonl",
+                f"checkpoints/{root_run['run_id']}.jsonl",
+            } <= set(archive.namelist())
+            manifest = json.loads(archive.read("manifest.json"))
+            assert manifest["captured_at"]
+            assert manifest["includes"]["runtime_payloads"] is False
+            assert b"private-run-history-sentinel" not in downloaded.content
         dynamic_directories = list(dynamic_parent.iterdir())
         assert len(dynamic_directories) == 1
         assert dynamic_directories[0].is_dir()
@@ -152,9 +206,9 @@ def test_lifecycle_management_summarizes_and_deletes_dynamic_workspace(
         assert deleted.json()["deleted_dynamic_directories"] is True
         assert list(dynamic_parent.iterdir()) == []
         assert client.get("/api/workflow-lifecycles").json()["items"] == []
-        assert client.get(
-            f"/api/workflow-debug/runs/{summary['parent_thread_id']}"
-        ).status_code == 404
+        assert client.app.state.workflow_lifecycle.history.get_run(
+            summary["parent_run_id"]
+        ) is None
 
 
 def test_lifecycle_restart_cancels_interrupted_parent_and_allows_cleanup(
@@ -165,20 +219,18 @@ def test_lifecycle_restart_cancels_interrupted_parent_and_allows_cleanup(
     with first_client as client:
         portal = client.portal
         assert portal is not None
-        debug_run = client.app.state.workflow_debug.create_run(
+        checkpoint_context = client.app.state.workflow_checkpoints.create_context(
             request_id="interrupted-request",
             workflow_id="interrupted-workflow",
             workflow_name="Interrupted Workflow",
             messages_sha="a" * 64,
         )
-        debug_run.begin()
-
         async def create_lifecycle() -> str:
             return await client.app.state.workflow_lifecycle.create(
                 [{"role": "user", "content": "input"}],
                 request_id="interrupted-request",
-                run_id=str(debug_run.run_id),
-                thread_id=debug_run.thread_id,
+                run_id=str(checkpoint_context.run_id),
+                thread_id=checkpoint_context.thread_id,
                 workflow_id="interrupted-workflow",
                 workflow_name="Interrupted Workflow",
             )
@@ -196,12 +248,7 @@ def test_lifecycle_restart_cancels_interrupted_parent_and_allows_cleanup(
         )
         assert after_restart.status_code == 200, after_restart.text
         assert after_restart.json()["parent_status"] == "cancelled"
-
-        debug = client.get(
-            f"/api/workflow-debug/runs/{debug_run.thread_id}"
-        )
-        assert debug.status_code == 200, debug.text
-        assert debug.json()["status"] == "cancelled"
+        assert after_restart.json()["runs"][0]["status"] == "interrupted"
 
         deleted = client.delete(f"/api/workflow-lifecycles/{lifecycle_id}")
         assert deleted.status_code == 200, deleted.text
@@ -275,6 +322,17 @@ def test_lifecycle_delete_rejects_active_background_task(
             raise AssertionError("background task did not finish")
 
         portal.call(finish_task)
+        detail = client.get(f"/api/workflow-lifecycles/{lifecycle_id}")
+        assert detail.status_code == 200, detail.text
+        runs = detail.json()["runs"]
+        assert len(runs) == 2
+        child = next(run for run in runs if run["run_kind"] == "agent")
+        assert child["parent_run_id"] == "parent-run"
+        assert child["launcher_id"] == "launcher"
+        assert child["background_task_id"] == task_id
+        assert child["run_depth"] == 1
+        assert child["status"] == "completed"
+        assert child["checkpoint_available"] is False
         still_active = client.delete(f"/api/workflow-lifecycles/{lifecycle_id}")
         assert still_active.status_code == 409, still_active.text
 

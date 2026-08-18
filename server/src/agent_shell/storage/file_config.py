@@ -45,11 +45,7 @@ def _default_system() -> dict[str, Any]:
             "message_interception_enabled": False,
         },
         "history_retention": {
-            "runtime_log": 20,
-            "workflow_debug_history": 50,
-        },
-        "runtime_control": {
-            "debug_logging_enabled": False,
+            "runtime_diagnostics": 20,
         },
         "configuration_validation": {"debounce_ms": 1000},
         "system_log": {"max_size_mib": 5},
@@ -192,6 +188,12 @@ class FileConfigRepository:
             if isinstance(current, dict) and isinstance(value, dict):
                 for key, default in value.items():
                     current.setdefault(key, deepcopy(default))
+        self._system.pop("runtime_control", None)
+        self._system.pop("runtime_diagnostics", None)
+        history_retention = self._system.get("history_retention")
+        if isinstance(history_retention, dict):
+            history_retention.pop("runtime_log", None)
+            history_retention.pop("workflow_debug_history", None)
         components = self._config["components"]
         if not isinstance(components, dict):
             raise ValueError("config components must be a mapping")

@@ -18,7 +18,10 @@ from agent_shell.middleware_packages.runtime import MiddlewarePackageRuntime
 from agent_shell.condition_router_packages import ConditionRouterPackageRuntime
 from agent_shell.task_dispatcher_packages import TaskDispatcherPackageRuntime
 from agent_shell.runtime.errors import AgentRuntimeError
-from agent_shell.runtime.diagnostics import RuntimeDiagnostics
+from agent_shell.runtime.diagnostics import (
+    RuntimeDiagnosticContext,
+    RuntimeDiagnostics,
+)
 from agent_shell.runtime.model_response import ModelResponse
 from agent_shell.runtime.input_messages import client_messages_sha, validate_client_messages
 from agent_shell.runtime.limits import (
@@ -37,8 +40,9 @@ from agent_shell.runtime.output_stream import (
 from agent_shell.runtime.stream_transformers import RawCustomEventTransformer
 from agent_shell.storage.media_outputs import MediaOutputStore
 from agent_shell.storage.blocks import BlockStore
-from agent_shell.runtime.workflow_debug import WorkflowDebugRun, WorkflowDebugService
+from agent_shell.runtime.workflow_checkpoints import WorkflowCheckpointService
 from agent_shell.runtime.workflow_lifecycle import WorkflowLifecycleService
+from agent_shell.runtime.workflow_run_journal import WorkflowRunJournal
 from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
 from agent_shell.workflow.validation import validate_workflow_executable
 from agent_shell.validation import ValidationReport
@@ -65,7 +69,6 @@ class RunExecution:
     context: WorkflowRuntimeContext | None = None
     run_config: dict[str, Any] | None = None
     durability: str | None = None
-    debug_run: WorkflowDebugRun | None = None
     lifecycle_service: WorkflowLifecycleService | None = None
     lifecycle_id: str = ""
     owns_lifecycle: bool = False
@@ -76,6 +79,8 @@ class RunExecution:
     include_tool_call_transformer: bool = True
     public_output: bool = True
     run_kind: Literal["agent", "workflow"] = "agent"
+    journal_node_kinds: dict[str, str] | None = None
+    journal_agent_names: dict[str, str] | None = None
     execution_timeout_seconds: int = EXECUTION_TIMEOUT_SECONDS
     final_state: dict[str, Any] | None = None
     _started: bool = False
@@ -96,6 +101,42 @@ class RunExecution:
         if self.run_kind == "workflow":
             return None
         return self.normalizer.finish_reason_source
+
+    def diagnostic_context(self) -> RuntimeDiagnosticContext:
+        context = self.context
+        if context is None:
+            return RuntimeDiagnosticContext(
+                request_id=self.request_id,
+                subject_kind="workflow" if self.run_kind == "workflow" else "agent",
+                subject_name=self.public_model or self.agent_name,
+            )
+        workflow_id = str(context.workflow.get("id", ""))
+        workflow_name = str(
+            context.workflow.get(
+                "name",
+                self.public_model if self.run_kind == "workflow" else "",
+            )
+        )
+        is_workflow = self.run_kind == "workflow"
+        return RuntimeDiagnosticContext(
+            request_id=context.request_id or self.request_id,
+            lifecycle_id=context.lifecycle_id,
+            run_id=context.run_id,
+            thread_id=context.thread_id,
+            parent_workflow_id=(
+                workflow_id if self.owns_lifecycle or not is_workflow else ""
+            ),
+            parent_workflow_name=(
+                workflow_name if self.owns_lifecycle or not is_workflow else ""
+            ),
+            subject_kind="workflow" if is_workflow else "agent",
+            subject_id=workflow_id if is_workflow else context.agent_id,
+            subject_name=(
+                workflow_name if is_workflow else self.agent_name or self.public_model
+            ),
+            workflow_node_id=context.workflow_node_id,
+            node_invocation_id=context.invocation_id,
+        )
 
     async def stream_text(self) -> AsyncIterator[str]:
         if self._started:
@@ -119,6 +160,50 @@ class RunExecution:
 
     async def _stream_text_inner(self) -> AsyncIterator[str]:
 
+        def observation_error(exc: BaseException, code: str) -> None:
+            if self.lifecycle_service is not None and self.context is not None:
+                try:
+                    self.lifecycle_service.mark_run_observation_partial(
+                        self.context.run_id
+                    )
+                except Exception:
+                    pass
+            if self.runtime_diagnostics is not None:
+                self.runtime_diagnostics.observation_error(
+                    exc,
+                    code=code,
+                    component="observability",
+                    context=self.diagnostic_context(),
+                )
+
+        def start_run() -> None:
+            if self.lifecycle_service is None or self.context is None:
+                return
+            try:
+                if not self.lifecycle_service.start_run(self.context.run_id):
+                    record = self.lifecycle_service.history.get_run(self.context.run_id)
+                    if record is None:
+                        raise RuntimeError("the Run registry record is unavailable")
+            except Exception as exc:
+                observation_error(exc, "workflow_run_record_failed")
+
+        def finish_run(status: str, *, error_code: str = "") -> None:
+            if self.lifecycle_service is None or self.context is None:
+                return
+            try:
+                if not self.lifecycle_service.finish_run(
+                    self.context.run_id,
+                    status=status,
+                    error_code=error_code,
+                    finish_reason=self.finish_reason if status == "completed" else "",
+                    usage=self.usage,
+                ):
+                    record = self.lifecycle_service.history.get_run(self.context.run_id)
+                    if record is None:
+                        raise RuntimeError("the Run registry record is unavailable")
+            except Exception as exc:
+                observation_error(exc, "workflow_run_record_failed")
+
         async def finish_lifecycle(status: str) -> None:
             if (
                 not self.owns_lifecycle
@@ -134,50 +219,24 @@ class RunExecution:
                 if self.runtime_diagnostics is not None:
                     self.runtime_diagnostics.observation_error(
                         exc,
-                        request_id=self.request_id,
-                        model=self.public_model,
-                        agent_name=self.agent_name,
                         code="workflow_lifecycle_record_failed",
-                    )
-
-        async def finish_debug(
-            status: str,
-            *,
-            error_code: str = "",
-            error: BaseException | None = None,
-        ) -> None:
-            if self.debug_run is None:
-                return
-            try:
-                await self.debug_run.finish(
-                    status,
-                    error_code=error_code,
-                    error=error,
-                )
-            except Exception as exc:
-                if self.runtime_diagnostics is not None:
-                    self.runtime_diagnostics.observation_error(
-                        exc,
-                        request_id=self.request_id,
-                        model=self.public_model,
-                        agent_name=self.agent_name,
-                        code="workflow_debug_record_failed",
+                        component="persistence",
+                        context=self.diagnostic_context(),
                     )
 
         def record_runtime_error(
             exc: BaseException,
             code: str,
             *,
-            debug_exception: BaseException | None = None,
+            detail_exception: BaseException | None = None,
         ) -> None:
             if self.runtime_diagnostics is not None:
                 self.runtime_diagnostics.runtime_error(
                     exc,
-                    request_id=self.request_id,
-                    model=self.public_model,
-                    agent_name=self.agent_name,
                     code=code,
-                    debug_exception=debug_exception,
+                    component="workflow_runtime",
+                    context=self.diagnostic_context(),
+                    detail_exception=detail_exception,
                 )
 
         def project_event(event: OutputEvent) -> list[str]:
@@ -207,6 +266,7 @@ class RunExecution:
                 self.rectifier.discard()
             return parts
 
+        start_run()
         try:
             for rendered in project_event(
                 self.normalizer.lifecycle("start", status="running")
@@ -225,6 +285,18 @@ class RunExecution:
                         "recursion_limit": GRAPH_RECURSION_LIMIT,
                         **(self.run_config or {}),
                     }
+                    if self.context is not None and self.lifecycle_service is not None:
+                        callbacks = list(config.get("callbacks", ()))
+                        callbacks.append(
+                            WorkflowRunJournal(
+                                self.lifecycle_service,
+                                self.runtime_diagnostics,
+                                self.context,
+                                workflow_node_kinds=self.journal_node_kinds or {},
+                                agent_names=self.journal_agent_names or {},
+                            )
+                        )
+                        config["callbacks"] = callbacks
                     stream_kwargs: dict[str, Any] = {
                         "config": config,
                         "version": "v3",
@@ -320,7 +392,7 @@ class RunExecution:
         except asyncio.CancelledError:
             self.normalizer.abort_main_agent_messages()
             self.rectifier.discard()
-            await finish_debug("cancelled", error_code="request_cancelled")
+            finish_run("cancelled", error_code="request_cancelled")
             await finish_lifecycle("cancelled")
             raise
         except TimeoutError as exc:
@@ -331,15 +403,15 @@ class RunExecution:
             )
             for rendered in failure_output(error.code):
                 yield rendered
-            record_runtime_error(error, error.code, debug_exception=exc)
-            await finish_debug("failed", error_code=error.code, error=error)
+            record_runtime_error(error, error.code, detail_exception=exc)
+            finish_run("failed", error_code=error.code)
             await finish_lifecycle("failed")
             raise error from exc
         except AgentRuntimeError as exc:
             for rendered in failure_output(exc.code):
                 yield rendered
             record_runtime_error(exc, exc.code)
-            await finish_debug("failed", error_code=exc.code, error=exc)
+            finish_run("failed", error_code=exc.code)
             await finish_lifecycle("failed")
             raise
         except Exception as exc:
@@ -357,20 +429,12 @@ class RunExecution:
                 )
             for rendered in failure_output(error.code):
                 yield rendered
-            record_runtime_error(error, error.code, debug_exception=exc)
-            await finish_debug("failed", error_code=error.code, error=error)
+            record_runtime_error(error, error.code, detail_exception=exc)
+            finish_run("failed", error_code=error.code)
             await finish_lifecycle("failed")
             raise error from exc
-        await finish_debug("completed")
+        finish_run("completed")
         await finish_lifecycle("completed")
-        if self.runtime_diagnostics is not None:
-            self.runtime_diagnostics.runtime_completed(
-                request_id=self.request_id,
-                model=self.public_model,
-                agent_name=self.agent_name,
-                finish_reason=self.finish_reason,
-                usage=self.usage,
-            )
 
     async def run(self) -> tuple[str, dict[str, int]]:
         parts = [part async for part in self.stream_text()]
@@ -392,7 +456,7 @@ class AgentRuntime:
         blocks: BlockStore | None = None,
         python_packages_dir: Path | None = None,
         runtime_dir: Path | None = None,
-        workflow_debug: WorkflowDebugService | None = None,
+        workflow_checkpoints: WorkflowCheckpointService | None = None,
         workflow_lifecycle: WorkflowLifecycleService,
         runtime_diagnostics: RuntimeDiagnostics | None = None,
     ) -> None:
@@ -401,7 +465,7 @@ class AgentRuntime:
         self._blocks = blocks
         self._python_packages_dir = python_packages_dir
         self._runtime_dir = runtime_dir
-        self._workflow_debug = workflow_debug
+        self._workflow_checkpoints = workflow_checkpoints
         self._workflow_lifecycle = workflow_lifecycle
         self._runtime_diagnostics = runtime_diagnostics
 
@@ -410,19 +474,66 @@ class AgentRuntime:
         lifecycle_id: str,
         status: str,
         *,
-        request_id: str,
-        public_model: str,
+        context: RuntimeDiagnosticContext,
     ) -> None:
         try:
             await self._workflow_lifecycle.finish_parent(lifecycle_id, status)
         except Exception as exc:
+            try:
+                self._workflow_lifecycle.mark_run_observation_partial(context.run_id)
+            except Exception:
+                pass
             if self._runtime_diagnostics is not None:
                 self._runtime_diagnostics.observation_error(
                     exc,
-                    request_id=request_id,
-                    model=public_model,
-                    agent_name="",
                     code="workflow_lifecycle_record_failed",
+                    component="persistence",
+                    context=context,
+                )
+
+    def _register_run_observation(
+        self,
+        record: dict[str, object],
+        *,
+        context: RuntimeDiagnosticContext,
+    ) -> None:
+        try:
+            self._workflow_lifecycle.register_run(record)
+        except Exception as exc:
+            if self._runtime_diagnostics is not None:
+                self._runtime_diagnostics.observation_error(
+                    exc,
+                    code="workflow_run_record_failed",
+                    component="observability",
+                    context=context,
+                )
+
+    def _finish_run_observation(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        error_code: str,
+        context: RuntimeDiagnosticContext,
+    ) -> None:
+        try:
+            if not self._workflow_lifecycle.finish_run(
+                run_id,
+                status=status,
+                error_code=error_code,
+            ) and self._workflow_lifecycle.history.get_run(run_id) is None:
+                raise RuntimeError("the Run registry record is unavailable")
+        except Exception as exc:
+            try:
+                self._workflow_lifecycle.mark_run_observation_partial(run_id)
+            except Exception:
+                pass
+            if self._runtime_diagnostics is not None:
+                self._runtime_diagnostics.observation_error(
+                    exc,
+                    code="workflow_run_record_failed",
+                    component="observability",
+                    context=context,
                 )
 
     async def build_agent(
@@ -513,7 +624,6 @@ class AgentRuntime:
         context: WorkflowRuntimeContext | None = None,
         run_config: dict[str, Any] | None = None,
         durability: str | None = None,
-        debug_run: WorkflowDebugRun | None = None,
         owns_lifecycle: bool = False,
         include_tool_call_transformer: bool = True,
         public_output: bool = True,
@@ -561,6 +671,20 @@ class AgentRuntime:
         else:
             assert built is not None
             projector = OutputProjector(built.output_config)
+        journal_node_kinds: dict[str, str] = {}
+        if context is not None:
+            graph_document = context.workflow.get("graph")
+            definition = (
+                graph_document.get("definition")
+                if isinstance(graph_document, Mapping)
+                else None
+            )
+            nodes = definition.get("nodes", ()) if isinstance(definition, Mapping) else ()
+            journal_node_kinds = {
+                str(node.get("id", "")): str(node.get("type", ""))
+                for node in nodes
+                if isinstance(node, Mapping)
+            }
         return RunExecution(
             graph=effective_graph,
             input_state=effective_input_state,
@@ -597,7 +721,6 @@ class AgentRuntime:
             context=context,
             run_config=run_config,
             durability=durability,
-            debug_run=debug_run,
             lifecycle_service=self._workflow_lifecycle,
             lifecycle_id=context.lifecycle_id if context is not None else "",
             owns_lifecycle=owns_lifecycle,
@@ -612,6 +735,10 @@ class AgentRuntime:
             include_tool_call_transformer=include_tool_call_transformer,
             public_output=public_output,
             run_kind=run_kind,
+            journal_node_kinds=journal_node_kinds,
+            journal_agent_names={
+                node_id: agent.agent_name for node_id, agent in workflow_agents
+            },
             execution_timeout_seconds=execution_timeout_seconds,
         )
 
@@ -846,11 +973,11 @@ class AgentRuntime:
             "filesystem_id": workflow_filesystem_id,
             "graph": document.model_dump(mode="json"),
         }
-        workflow_debug = getattr(self, "_workflow_debug", None)
+        workflow_checkpoints = getattr(self, "_workflow_checkpoints", None)
         runtime_diagnostics = getattr(self, "_runtime_diagnostics", None)
         workflow_identity = dict(workflow_snapshot or {})
-        debug_run = (
-            workflow_debug.create_run(
+        checkpoint_context = (
+            workflow_checkpoints.create_context(
                 request_id=request_id,
                 workflow_id=str(workflow_identity.get("id", "")),
                 workflow_name=str(
@@ -860,17 +987,17 @@ class AgentRuntime:
                 run_id=UUID(run_id) if run_id else None,
                 thread_id=thread_id,
             )
-            if workflow_debug is not None
+            if workflow_checkpoints is not None
             else None
         )
         resolved_run_id = (
-            str(debug_run.run_id)
-            if debug_run is not None
+            str(checkpoint_context.run_id)
+            if checkpoint_context is not None
             else run_id or str(uuid4())
         )
         resolved_thread_id = (
-            debug_run.thread_id
-            if debug_run is not None
+            checkpoint_context.thread_id
+            if checkpoint_context is not None
             else thread_id or str(uuid4())
         )
         owns_lifecycle = lifecycle_id is None
@@ -893,18 +1020,44 @@ class AgentRuntime:
                     status_code=409,
                 )
             resolved_lifecycle_id = lifecycle_id
-        if debug_run is not None:
-            try:
-                debug_run.begin()
-            except Exception as exc:
-                if runtime_diagnostics is not None:
-                    runtime_diagnostics.observation_error(
-                        exc,
-                        request_id=request_id,
-                        model=public_model,
-                        agent_name="",
-                        code="workflow_debug_record_failed",
-                    )
+        assembly_diagnostic_context = RuntimeDiagnosticContext(
+            request_id=request_id,
+            lifecycle_id=resolved_lifecycle_id,
+            run_id=resolved_run_id,
+            thread_id=resolved_thread_id,
+            parent_workflow_id=(
+                str(workflow_identity.get("id", "")) if owns_lifecycle else ""
+            ),
+            parent_workflow_name=(
+                str(workflow_identity.get("name", public_model or "workflow"))
+                if owns_lifecycle
+                else ""
+            ),
+            subject_kind="workflow",
+            subject_id=str(workflow_identity.get("id", "")),
+            subject_name=str(
+                workflow_identity.get("name", public_model or "workflow")
+            ),
+        )
+        self._register_run_observation(
+            {
+                "run_id": resolved_run_id,
+                "lifecycle_id": resolved_lifecycle_id,
+                "request_id": request_id,
+                "thread_id": resolved_thread_id,
+                "run_kind": "workflow",
+                "target_id": str(workflow_identity.get("id", "")),
+                "target_name": str(
+                    workflow_identity.get("name", public_model or "workflow")
+                ),
+                "parent_run_id": parent_run_id,
+                "launcher_id": launcher_id,
+                "background_task_id": background_task_id,
+                "run_depth": run_depth,
+                "checkpoint_available": True,
+            },
+            context=assembly_diagnostic_context,
+        )
         built_agents: list[tuple[str, BuiltAgent]] = []
         workflow_output_config: dict[str, object] | None = None
         condition_router_runtime: ConditionRouterPackageRuntime | None = None
@@ -1031,8 +1184,8 @@ class AgentRuntime:
                 task_dispatchers=task_dispatchers,
                 workflow_role=(workflow_snapshot or {}).get("workflow_role"),
                 checkpointer=(
-                    workflow_debug.checkpointer
-                    if workflow_debug is not None
+                    workflow_checkpoints.checkpointer
+                    if workflow_checkpoints is not None
                     else None
                 ),
                 store=self._workflow_lifecycle.store,
@@ -1041,14 +1194,17 @@ class AgentRuntime:
             for _, agent in built_agents:
                 await agent.middleware_runtime.close()
             await close_workflow_package_runtimes()
-            if debug_run is not None:
-                await debug_run.finish("cancelled", error_code="request_cancelled")
+            self._finish_run_observation(
+                resolved_run_id,
+                status="cancelled",
+                error_code="request_cancelled",
+                context=assembly_diagnostic_context,
+            )
             if owns_lifecycle:
                 await self._finish_parent_lifecycle(
                     resolved_lifecycle_id,
                     "cancelled",
-                    request_id=request_id,
-                    public_model=public_model,
+                    context=assembly_diagnostic_context,
                 )
             raise
         except Exception as exc:
@@ -1063,31 +1219,21 @@ class AgentRuntime:
             if runtime_diagnostics is not None:
                 runtime_diagnostics.runtime_error(
                     exc,
-                    request_id=request_id,
-                    model=public_model,
-                    agent_name="",
                     code=error_code,
+                    component="workflow_runtime",
+                    context=assembly_diagnostic_context,
                 )
-            if debug_run is not None:
-                try:
-                    await debug_run.finish(
-                        "failed", error_code=error_code, error=exc
-                    )
-                except Exception as observation_error:
-                    if runtime_diagnostics is not None:
-                        runtime_diagnostics.observation_error(
-                            observation_error,
-                            request_id=request_id,
-                            model=public_model,
-                            agent_name="",
-                            code="workflow_debug_record_failed",
-                        )
+            self._finish_run_observation(
+                resolved_run_id,
+                status="failed",
+                error_code=error_code,
+                context=assembly_diagnostic_context,
+            )
             if owns_lifecycle:
                 await self._finish_parent_lifecycle(
                     resolved_lifecycle_id,
                     "failed",
-                    request_id=request_id,
-                    public_model=public_model,
+                    context=assembly_diagnostic_context,
                 )
             raise
         first_node_id = built_agents[0][0] if built_agents else ""
@@ -1114,7 +1260,7 @@ class AgentRuntime:
             workflow_output_config=workflow_output_config,
             context=context,
             run_config={
-                **(debug_run.config() if debug_run is not None else {}),
+                **(checkpoint_context.config() if checkpoint_context is not None else {}),
                 "recursion_limit": int(
                     (workflow_snapshot or {}).get(
                         "recursion_limit",
@@ -1133,8 +1279,7 @@ class AgentRuntime:
                     EXECUTION_TIMEOUT_SECONDS,
                 )
             ),
-            durability="sync" if debug_run is not None else None,
-            debug_run=debug_run,
+            durability="sync" if checkpoint_context is not None else None,
             owns_lifecycle=owns_lifecycle,
             public_output=public_output,
             run_kind="workflow",

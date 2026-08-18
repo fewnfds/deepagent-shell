@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-import hashlib
-import json
 import sqlite3
 
 from agent_shell.storage.database import SQLiteDatabase
@@ -12,18 +10,25 @@ from agent_shell.storage.history_retention import (
 )
 
 
-def runtime_diagnostic_id(entry: dict[str, object]) -> str:
-    payload = json.dumps(
-        entry,
-        ensure_ascii=False,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return hashlib.sha256(payload).hexdigest()
+_TABLE = "runtime_diagnostic_events"
+_OPTIONAL_FIELDS = (
+    "request_id",
+    "lifecycle_id",
+    "run_id",
+    "thread_id",
+    "parent_workflow_id",
+    "parent_workflow_name",
+    "subject_kind",
+    "subject_id",
+    "subject_name",
+    "workflow_node_id",
+    "node_invocation_id",
+    "exception_type",
+)
 
 
 class RuntimeDiagnosticStore:
-    """Persist the structured, already-sanitized Agent runtime log."""
+    """Persist bounded, structured runtime failure diagnostics."""
 
     def __init__(
         self,
@@ -35,76 +40,116 @@ class RuntimeDiagnosticStore:
         with self._database.transaction() as connection:
             self._prune(
                 connection,
-                self._history_retention.get_limit_in(connection, "runtime_log"),
+                self._history_retention.get_limit_in(
+                    connection, "runtime_diagnostics"
+                ),
             )
-            connection.commit()
 
     @staticmethod
     def _prune(connection: sqlite3.Connection, retention_limit: int) -> None:
         connection.execute(
-            "DELETE FROM runtime_diagnostics WHERE sequence NOT IN ("
-            "SELECT sequence FROM runtime_diagnostics "
-            "ORDER BY sequence DESC LIMIT ?)",
+            f"DELETE FROM {_TABLE} WHERE sequence NOT IN ("
+            f"SELECT sequence FROM {_TABLE} ORDER BY sequence DESC LIMIT ?)",
             (retention_limit,),
         )
 
     @staticmethod
     def _entry(row: sqlite3.Row) -> dict[str, object]:
-        return {
+        entry: dict[str, object] = {
             "sequence": int(row["sequence"]),
-            "timestamp": row["timestamp"],
-            "level": row["level"],
-            "request_id": row["request_id"],
-            "model": row["model"],
-            "agent_name": row["agent_name"],
+            "diagnostic_id": row["diagnostic_id"],
+            "occurred_at": row["occurred_at"],
+            "severity": row["severity"],
             "code": row["code"],
-            "exception_type": row["exception_type"],
-            "message": row["message"],
+            "summary": row["summary"],
+            "component": row["component"],
+            "detail_available": bool(row["detail_available"]),
         }
+        entry.update(
+            {
+                field: row[field]
+                for field in _OPTIONAL_FIELDS
+                if row[field] is not None
+            }
+        )
+        return entry
 
     def add(
         self,
         *,
-        timestamp: str,
-        level: str,
-        request_id: str,
-        model: str,
-        agent_name: str,
+        diagnostic_id: str,
+        occurred_at: str,
+        severity: str,
         code: str,
-        exception_type: str,
-        message: str,
+        summary: str,
+        component: str,
+        detail_available: bool,
+        request_id: str | None = None,
+        lifecycle_id: str | None = None,
+        run_id: str | None = None,
+        thread_id: str | None = None,
+        parent_workflow_id: str | None = None,
+        parent_workflow_name: str | None = None,
+        subject_kind: str | None = None,
+        subject_id: str | None = None,
+        subject_name: str | None = None,
+        workflow_node_id: str | None = None,
+        node_invocation_id: str | None = None,
+        exception_type: str | None = None,
     ) -> dict[str, object]:
+        optional_values = (
+            request_id,
+            lifecycle_id,
+            run_id,
+            thread_id,
+            parent_workflow_id,
+            parent_workflow_name,
+            subject_kind,
+            subject_id,
+            subject_name,
+            workflow_node_id,
+            node_invocation_id,
+            exception_type,
+        )
         with self._database.transaction() as connection:
             cursor = connection.execute(
-                "INSERT INTO runtime_diagnostics "
-                "(timestamp, level, request_id, model, agent_name, code, "
-                "exception_type, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                f"INSERT INTO {_TABLE} ("
+                "diagnostic_id, occurred_at, severity, code, summary, component, "
+                "detail_available, " + ", ".join(_OPTIONAL_FIELDS) + ") "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, "
+                + ", ".join("?" for _ in _OPTIONAL_FIELDS)
+                + ")",
                 (
-                    timestamp,
-                    level,
-                    request_id,
-                    model,
-                    agent_name,
+                    diagnostic_id,
+                    occurred_at,
+                    severity,
                     code,
-                    exception_type,
-                    message,
+                    summary,
+                    component,
+                    int(detail_available),
+                    *optional_values,
                 ),
             )
             self._prune(
                 connection,
-                self._history_retention.get_limit_in(connection, "runtime_log"),
+                self._history_retention.get_limit_in(
+                    connection, "runtime_diagnostics"
+                ),
             )
-            connection.commit()
         return {
             "sequence": int(cursor.lastrowid),
-            "timestamp": timestamp,
-            "level": level,
-            "request_id": request_id,
-            "model": model,
-            "agent_name": agent_name,
+            "diagnostic_id": diagnostic_id,
+            "occurred_at": occurred_at,
+            "severity": severity,
             "code": code,
-            "exception_type": exception_type,
-            "message": message,
+            "summary": summary,
+            "component": component,
+            "detail_available": detail_available,
+            **{
+                field: value
+                for field, value in zip(_OPTIONAL_FIELDS, optional_values, strict=True)
+                if value is not None
+            },
         }
 
     def entries(self, *, request_id: str | None = None) -> list[dict[str, object]]:
@@ -112,10 +157,7 @@ class RuntimeDiagnosticStore:
         parameters = (request_id,) if request_id is not None else ()
         with self._database.transaction() as connection:
             rows = connection.execute(
-                "SELECT sequence, timestamp, level, request_id, model, agent_name, "
-                "code, exception_type, message FROM runtime_diagnostics"
-                + where
-                + " ORDER BY sequence ASC",
+                f"SELECT * FROM {_TABLE}{where} ORDER BY sequence ASC",
                 parameters,
             ).fetchall()
         return [self._entry(row) for row in rows]
@@ -125,10 +167,7 @@ class RuntimeDiagnosticStore:
         predicate: Callable[[dict[str, object]], bool],
     ) -> int:
         with self._database.transaction() as connection:
-            rows = connection.execute(
-                "SELECT sequence, timestamp, level, request_id, model, agent_name, "
-                "code, exception_type, message FROM runtime_diagnostics"
-            ).fetchall()
+            rows = connection.execute(f"SELECT * FROM {_TABLE}").fetchall()
             sequences = [
                 int(row["sequence"])
                 for row in rows
@@ -136,29 +175,29 @@ class RuntimeDiagnosticStore:
             ]
             if sequences:
                 connection.executemany(
-                    "DELETE FROM runtime_diagnostics WHERE sequence = ?",
+                    f"DELETE FROM {_TABLE} WHERE sequence = ?",
                     ((sequence,) for sequence in sequences),
                 )
-                connection.commit()
         return len(sequences)
 
     def retention(self) -> dict[str, int]:
         return {
-            "retention_limit": self._history_retention.get_limit("runtime_log"),
+            "retention_limit": self._history_retention.get_limit(
+                "runtime_diagnostics"
+            ),
             "max_retention_limit": MAX_HISTORY_RETENTION_LIMIT,
         }
 
     def set_retention(self, retention_limit: int) -> dict[str, int]:
         with self._database.transaction() as connection:
             self._history_retention.set_limit_in(
-                connection, "runtime_log", retention_limit
+                connection, "runtime_diagnostics", retention_limit
             )
             self._prune(connection, retention_limit)
-            connection.commit()
         return {
             "retention_limit": retention_limit,
             "max_retention_limit": MAX_HISTORY_RETENTION_LIMIT,
         }
 
 
-__all__ = ["RuntimeDiagnosticStore", "runtime_diagnostic_id"]
+__all__ = ["RuntimeDiagnosticStore"]

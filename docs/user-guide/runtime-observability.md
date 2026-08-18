@@ -2,38 +2,44 @@
 
 ## 日志中心
 
-【系统 / 日志中心】合并两类记录：
+【系统 / 日志中心】只合并两类运维记录：
 
-- 系统日志：服务、配置和管理请求事件；
-- Agent 运行日志：请求级错误摘要，以及 DEBUG 开启期间正常完成的请求摘要。
+- 系统日志：服务、配置、安全和管理请求事件；
+- 运行诊断：Workflow、Agent、后台任务、持久化或观测链路的失败摘要。
 
-页面显示时间、来源、级别和摘要，并提供时间、来源、级别、关键词筛选以及批量删除。较大的条目和 DEBUG
-异常日志通过操作列下载，不在页面正文展开。
+运行诊断使用 `diagnostic_id`，并按可用范围关联 request、Lifecycle、Run、thread、parent Workflow、
+当前 subject、Workflow node 和 node invocation。正常完成的 Run 不生成运行诊断。
 
-系统日志按文件大小保留；运行日志按条数保留。删除运行日志或降低其保留条数时，对应的 DEBUG
-文件一起删除。
+页面提供时间、来源、级别和全文筛选、摘要查看、按筛选条件批量删除，以及超大 JSON 条目下载。系统日志按
+文件大小保留，运行诊断按条数保留；两者只清理自己拥有的日志数据。
 
-## DEBUG 完整日志
+日志中心不保存 Workflow Lifecycle、Run 历史、Graph State、checkpoint 或 Store 数据，也不负责这些核心运行数据的
+保留与删除。一次 Lifecycle 的完整输入、多 Run 结构和节点执行历史不能从日志中心还原。
 
-DEBUG 开关位于日志中心，默认关闭，修改后立即生效。
+## 异常详情
 
-开启后，每个正常完成的 Workflow Run 会新增一条 `INFO` 运行日志，并把完成状态、finish reason 和 token usage 写入
-`data/logs/debug/`。运行异常仍在包装之前保存完整 Python exception chain 和 traceback。对应的 Agent 运行日志行会显示
-下载按钮；关闭开关后正常请求不再生成运行日志或 DEBUG 文件，错误摘要仍会保留。已有文件仍可下载和删除。
+运行异常产生诊断时，系统同时尝试把完整 Python exception chain 和 traceback 保存到
+`data/logs/diagnostics/`，并从对应诊断行下载；正常完成不会产生附件。附件写入失败不会阻塞原运行失败边界，
+对应诊断以 `detail_available=false` 表示没有可下载详情。
 
-DEBUG 文件可能包含请求内容、Provider 返回、凭据、宿主路径和自定义代码信息，大小也没有单文件上限。
+异常详情可能包含请求内容、Provider 返回、凭据、宿主路径和自定义代码信息。删除诊断或降低诊断保留数时，
+对应附件一起删除；附件不具有独立于诊断记录的生命周期。
 
-## Workflow Debug
+## 运行历史
 
-每次 Workflow 请求建立独立 thread，并由 LangGraph `AsyncSqliteSaver` 写入
-`data/state/agent-shell.sqlite3`。当前 management API 提供有界运行索引、结构运行树和 checkpoint 摘要，用于定位失败的
-Workflow、Agent、model 或 tool 节点；当前管理台没有 Workflow Debug 详情页面。日志中心的保留设置可以调整
-Workflow Debug 运行索引上限，但它不替代 DEBUG traceback。
+【Workflow / 运行历史】以一次顶层请求的 Lifecycle 聚合 root Workflow、background Workflow 和 background Agent Run。
+Run Registry 是 Run 身份与终态的权威记录；append-only Event Journal 保存 Run、Workflow Node、Agent、Model 和 Tool
+的结构边界。Node 每次执行使用独立 `node_invocation_id/span_id`，同一 Node 的循环、重试和 fan-out 不会合并。
 
-当前 checkpoint 尚未提供 Resume，但作为 Workflow Lifecycle 资源保留到用户显式清场；Workflow Debug retention 只影响运行索引和结构运行树，
-不会隐式删除仍由 Lifecycle 引用的 parent/child thread checkpoint。
+每个 Workflow Run 使用独立 thread，并由 LangGraph `AsyncSqliteSaver` 写入 checkpoint；background Agent 明确标记为
+不具备 checkpoint。Checkpoint 当前只服务 Debug，不提供 Resume。页面可查看 Run 父子关系、结构 Timeline、Checkpoint/
+Store 摘要和关联诊断，也可下载单 Run 或整个 Lifecycle 的 management-only 诊断包。
+
+诊断包标注 `captured_at`、当前终态/活动状态、最后事件 sequence 和观测完整性。它不包含 Lifecycle 输入、`messages[]`、
+模型正文、Tool/Script payload、Provider 原始响应或 Checkpoint State，也不承诺字节级重放。运行历史没有自动 retention；
+只有 Lifecycle 显式删除会清理 Run/Event、Store、Checkpoint 和选择的受管动态目录。
 
 ## LangSmith
 
-LangSmith 是可选的外部 trace 服务，可查看 prompt、模型输出、工具调用和更完整的 LangChain/LangGraph 运行结构。
-本地 DEBUG 日志不依赖 LangSmith；两者可以分别开启。
+LangSmith 是可选的外部 trace 服务，可查看 prompt、模型输出、工具调用和 LangChain/LangGraph Run/Trace 层级。
+应用日志与 trace 是不同的观测面，可通过 request、Lifecycle、Run 或 trace identity 关联，但不互相替代。

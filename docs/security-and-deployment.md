@@ -28,10 +28,11 @@ Provider credential、API Key、管理密码和 LangSmith API Key 保存在实�
 Provider 原始错误正文。以下 management-only 功能会按产品用途保存完整内容：
 
 - 拦截消息页在进程内暂存并展示最新一条 OpenAI 请求原文，服务重启后清空；
-- 日志中心显式开启后写入 `data/logs/debug/` 的正常完成元数据和完整异常日志；
+- 运行诊断异常自动写入 `data/logs/diagnostics/` 的完整异常详情；
 - 用户创建的组件、文件和 Python 资源。
 
-运行诊断列表仍只保存固定摘要字段。DEBUG 文件不经过摘要白名单或脱敏，并可从对应运行日志行下载。
+运行诊断列表只保存固定结构化身份和安全摘要字段。异常详情附件不经过摘要白名单或脱敏，并只从对应诊断行下载；
+正常完成不会产生诊断或附件。
 
 ## 用户代码与文件系统
 
@@ -54,8 +55,9 @@ Middleware 包没有 sandbox，以 Agent Shell 服务进程权限运行。它可
 
 部署者负责磁盘、内存、上传大小、外部映射和并发限制。文件管理文本编辑限制为 2 MiB；其他文件传输
 采用流式处理，但不构成实例配额。运行诊断使用可配置保存条数，系统日志使用文件大小上限。
-降低上限会永久裁剪旧数据；裁剪 runtime 诊断时同步删除对应 DEBUG 文件。Workflow Debug 运行索引上限可在日志中心调整；官方 checkpoint 与索引共用实例 SQLite，
-但由 Workflow Lifecycle 显式清场负责删除对应 thread，Debug retention 或单独删除 Debug 记录不会删除 checkpoint。
+降低上限会永久裁剪旧数据；裁剪 runtime 诊断时同步删除对应异常详情附件。运行历史、官方 checkpoint 和 Lifecycle
+Store 与日志中心分离；Lifecycle 的显式清场负责删除对应 Run/Event 和 thread，删除日志或运行诊断不会删除 checkpoint。
+运行历史诊断包属于 management-only 敏感出口，但只导出结构记录、Checkpoint/Store 摘要和关联诊断，不复制运行正文。
 
 ## 系统配置与变量
 

@@ -24,11 +24,13 @@ import type {
   ManagementEvent,
   Workflow,
   WorkflowLifecyclePage,
+  WorkflowLifecycleDetail,
+  WorkflowRunDetail,
+  WorkflowRunEventPage,
   WorkflowGraphDocument,
   WorkflowNodeCatalogItem,
   WorkflowPayload,
   WorkflowRole,
-  WorkflowDebugRetention,
   ManagedArchivePreview,
   ManagedDirectory,
   ManagedFileScopeCatalog,
@@ -169,6 +171,40 @@ export const managementApi = {
     return managementRequest(
       `/api/workflow-lifecycles/${encodeURIComponent(id)}?delete_dynamic_directories=true`,
       { method: 'DELETE' },
+    )
+  },
+
+  getWorkflowLifecycle(id: string): Promise<WorkflowLifecycleDetail> {
+    return managementRequest(`/api/workflow-lifecycles/${encodeURIComponent(id)}`)
+  },
+
+  getWorkflowRun(lifecycleId: string, runId: string): Promise<WorkflowRunDetail> {
+    return managementRequest(
+      `/api/workflow-lifecycles/${encodeURIComponent(lifecycleId)}`
+      + `/runs/${encodeURIComponent(runId)}`,
+    )
+  },
+
+  listWorkflowLifecycleEvents(
+    id: string,
+    afterSequence: number,
+  ): Promise<WorkflowRunEventPage> {
+    return managementRequest(
+      `/api/workflow-lifecycles/${encodeURIComponent(id)}/events`
+      + `?after_sequence=${afterSequence}&limit=1000`,
+    )
+  },
+
+  downloadWorkflowLifecycle(id: string): Promise<Blob> {
+    return managementDownload(
+      `/api/workflow-lifecycles/${encodeURIComponent(id)}/download`,
+    )
+  },
+
+  downloadWorkflowRun(lifecycleId: string, runId: string): Promise<Blob> {
+    return managementDownload(
+      `/api/workflow-lifecycles/${encodeURIComponent(lifecycleId)}`
+      + `/runs/${encodeURIComponent(runId)}/download`,
     )
   },
 
@@ -502,26 +538,8 @@ export const managementApi = {
     return managementRequest('/api/runtime-diagnostics')
   },
 
-  updateRuntimeLogRetention(retentionLimit: number): Promise<RuntimeDiagnostics> {
+  updateRuntimeDiagnosticRetention(retentionLimit: number): Promise<RuntimeDiagnostics> {
     return managementRequest('/api/runtime-diagnostics/retention', {
-      method: 'PUT',
-      body: JSON.stringify({ retention_limit: retentionLimit }),
-    })
-  },
-
-  updateRuntimeDebug(enabled: boolean): Promise<RuntimeDiagnostics> {
-    return managementRequest('/api/runtime-diagnostics/debug', {
-      method: 'PUT',
-      body: JSON.stringify({ enabled }),
-    })
-  },
-
-  getWorkflowDebugRetention(): Promise<WorkflowDebugRetention> {
-    return managementRequest('/api/history-retention/workflow-debug')
-  },
-
-  updateWorkflowDebugRetention(retentionLimit: number): Promise<WorkflowDebugRetention> {
-    return managementRequest('/api/history-retention/workflow-debug', {
       method: 'PUT',
       body: JSON.stringify({ retention_limit: retentionLimit }),
     })

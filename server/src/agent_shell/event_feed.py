@@ -9,7 +9,6 @@ from typing import Literal
 
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
 from agent_shell.security_events import SecurityEventLogger
-from agent_shell.storage.runtime_diagnostics import runtime_diagnostic_id
 from agent_shell.storage.system_log_settings import MIB_BYTES, SystemLogSettingsStore
 
 
@@ -106,30 +105,30 @@ class EventFeedService:
             "summary": _summary(record["event"]),
             "inline_content": content if size <= EVENT_DOWNLOAD_THRESHOLD_BYTES else None,
             "matched_in_content": False,
-            "download_available": size > EVENT_DOWNLOAD_THRESHOLD_BYTES,
+            "download_kind": "entry" if size > EVENT_DOWNLOAD_THRESHOLD_BYTES else None,
         }
 
     def _runtime_item(self, record: dict[str, object]) -> dict[str, object]:
-        item_id = runtime_diagnostic_id(record)
+        item_id = str(record["diagnostic_id"])
         content = _detail_json("runtime", record)
         size = len(content.encode("utf-8"))
-        detail = (
-            _summary(record.get("message", ""))
-            or _summary(record.get("code", ""))
-            or "runtime diagnostic"
-        )
+        detail_available = self._diagnostics.detail_path(item_id) is not None
         return {
             "id": item_id,
             "source": "runtime",
-            "occurred_at": record["timestamp"],
-            "level": record["level"],
+            "occurred_at": record["occurred_at"],
+            "level": record["severity"],
             "request_id": record.get("request_id", ""),
-            "summary": _summary(record.get("agent_name", ""), detail),
+            "summary": _summary(
+                record.get("subject_name", ""),
+                record.get("summary", "") or record.get("code", ""),
+            ),
             "inline_content": content if size <= EVENT_DOWNLOAD_THRESHOLD_BYTES else None,
             "matched_in_content": False,
-            "download_available": (
-                size > EVENT_DOWNLOAD_THRESHOLD_BYTES
-                or self._diagnostics.debug_log_path(item_id) is not None
+            "download_kind": (
+                "diagnostic_detail"
+                if detail_available
+                else "entry" if size > EVENT_DOWNLOAD_THRESHOLD_BYTES else None
             ),
         }
 
@@ -146,14 +145,14 @@ class EventFeedService:
     ) -> list[dict[str, object]]:
         selected: list[dict[str, object]] = []
         for record in records:
-            timestamp = cls._timestamp(record["timestamp"])
+            item = make_item(record)
+            timestamp = cls._timestamp(item["occurred_at"])
             if timestamp < started_at or timestamp > ended_at:
                 continue
-            if levels and record.get("level") not in levels:
+            if levels and item.get("level") not in levels:
                 continue
             if needle and needle not in _json_text(record).casefold():
                 continue
-            item = make_item(record)
             if needle and item["inline_content"] is None:
                 visible = {
                     key: value
@@ -219,15 +218,17 @@ class EventFeedService:
     def _public_record_matches(
         record: dict[str, object],
         *,
+        occurred_at_key: str,
+        level_key: str,
         levels: set[EventLevel],
         needle: str,
         started_at: datetime,
         ended_at: datetime,
     ) -> bool:
-        timestamp = EventFeedService._timestamp(record["timestamp"])
+        timestamp = EventFeedService._timestamp(record[occurred_at_key])
         if timestamp < started_at or timestamp > ended_at:
             return False
-        if levels and record.get("level") not in levels:
+        if levels and record.get(level_key) not in levels:
             return False
         return not needle or needle in _json_text(record).casefold()
 
@@ -246,18 +247,31 @@ class EventFeedService:
         deleted = 0
         needle = query.casefold()
 
-        def matches(record: dict[str, object]) -> bool:
+        def matches_system(record: dict[str, object]) -> bool:
             return self._public_record_matches(
                 record,
+                occurred_at_key="timestamp",
+                level_key="level",
                 levels=levels,
                 needle=needle,
                 started_at=started_at,
                 ended_at=ended_at,
             )
+        def matches_runtime(record: dict[str, object]) -> bool:
+            return self._public_record_matches(
+                record,
+                occurred_at_key="occurred_at",
+                level_key="severity",
+                levels=levels,
+                needle=needle,
+                started_at=started_at,
+                ended_at=ended_at,
+            )
+
         if "system" in selected_sources:
-            deleted += self._system_events.delete_public_records(matches)
+            deleted += self._system_events.delete_public_records(matches_system)
         if "runtime" in selected_sources:
-            deleted += self._diagnostics.delete_entries(matches)
+            deleted += self._diagnostics.delete_entries(matches_runtime)
         return {"deleted": deleted}
 
     def _system_record(self, item_id: str) -> dict[str, object] | None:
@@ -275,7 +289,7 @@ class EventFeedService:
             (
                 dict(record)
                 for record in self._diagnostics.snapshot()["entries"]
-                if runtime_diagnostic_id(record) == item_id
+                if record.get("diagnostic_id") == item_id
             ),
             None,
         )
@@ -290,16 +304,16 @@ class EventFeedService:
             timestamp_key = "timestamp"
         else:
             entry = self._runtime_record(item_id)
-            timestamp_key = "timestamp"
+            timestamp_key = "occurred_at"
         if entry is None:
             return None
         timestamp = datetime.fromisoformat(str(entry[timestamp_key])).astimezone(timezone.utc)
         stamp = timestamp.strftime("%Y%m%dT%H%M%S%f")[:-3] + "Z"
         if source == "runtime":
-            debug_path = self._diagnostics.debug_log_path(item_id)
-            if debug_path is not None:
-                filename = f"agent-shell-debug-{stamp}-{item_id[:8]}.log"
-                return debug_path, filename, "text/plain; charset=utf-8"
+            detail_path = self._diagnostics.detail_path(item_id)
+            if detail_path is not None:
+                filename = f"agent-shell-diagnostic-detail-{stamp}-{item_id[:8]}.log"
+                return detail_path, filename, "text/plain; charset=utf-8"
         content = (_detail_json(source, entry) + "\n").encode("utf-8")
         filename = f"agent-shell-event-{source}-{stamp}-{item_id[:8]}.json"
         return content, filename, "application/json; charset=utf-8"

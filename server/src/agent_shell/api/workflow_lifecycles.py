@@ -1,39 +1,106 @@
 from __future__ import annotations
 
 from collections import Counter
+from datetime import datetime, timezone
+from io import BytesIO
+import json
 import math
+import zipfile
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Response
 
 from agent_shell.api.errors import management_error
 from agent_shell.runtime.background_tasks import (
     ACTIVE_BACKGROUND_STATUSES,
     BackgroundTaskManager,
 )
-from agent_shell.runtime.workflow_debug import WorkflowDebugService
+from agent_shell.runtime.diagnostics import RuntimeDiagnostics
+from agent_shell.runtime.workflow_checkpoints import WorkflowCheckpointService
 from agent_shell.runtime.workflow_lifecycle import WorkflowLifecycleService
+
+
+def _json(value: object) -> str:
+    return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+
+
+def _jsonl(values: list[dict[str, object]]) -> str:
+    return "".join(
+        json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        + "\n"
+        for value in values
+    )
 
 
 def build_workflow_lifecycle_router(
     lifecycle_service: WorkflowLifecycleService,
     background_tasks: BackgroundTaskManager,
-    workflow_debug: WorkflowDebugService,
+    workflow_checkpoints: WorkflowCheckpointService,
+    runtime_diagnostics: RuntimeDiagnostics,
 ) -> APIRouter:
     router = APIRouter()
+
+    def diagnostics_for(
+        lifecycle_id: str,
+        *,
+        run_id: str | None = None,
+    ) -> list[dict[str, object]]:
+        return [
+            dict(entry)
+            for entry in runtime_diagnostics.snapshot()["entries"]
+            if entry.get("lifecycle_id") == lifecycle_id
+            and (run_id is None or entry.get("run_id") == run_id)
+        ]
+
+    async def checkpoint_summaries(
+        runs: list[dict[str, object]],
+        *,
+        limit: int | None = 100,
+    ) -> dict[str, list[dict[str, object]]]:
+        result: dict[str, list[dict[str, object]]] = {}
+        for run in runs:
+            if not run["checkpoint_available"]:
+                continue
+            result[str(run["run_id"])] = await workflow_checkpoints.checkpoint_history(
+                str(run["thread_id"]),
+                limit=limit,
+            )
+        return result
+
+    def all_events(
+        lifecycle_id: str,
+        *,
+        run_id: str | None = None,
+    ) -> list[dict[str, object]]:
+        events: list[dict[str, object]] = []
+        after_sequence = 0
+        while True:
+            page = lifecycle_service.events(
+                lifecycle_id,
+                run_id=run_id,
+                after_sequence=after_sequence,
+                limit=5000,
+            )
+            events.extend(page)
+            if len(page) < 5000:
+                return events
+            after_sequence = int(page[-1]["sequence"])
 
     async def summary(record: dict[str, object]) -> dict[str, object]:
         lifecycle_id = str(record["lifecycle_id"])
         tasks = await background_tasks.list(lifecycle_id)
         task_counts = Counter(task.runtime_status for task in tasks)
-        thread_ids = {str(record.get("parent_thread_id", ""))}
-        thread_ids.update(task.child_thread_id for task in tasks)
-        thread_ids.discard("")
+        runs = lifecycle_service.runs(lifecycle_id)
+        run_summary = lifecycle_service.run_summary(lifecycle_id)
+        if len(runs) < 1 + len(tasks):
+            run_summary["observation_status"] = (
+                "unavailable" if not runs else "partial"
+            )
         checkpoint_count = 0
-        debug_run_count = 0
-        for thread_id in thread_ids:
-            if workflow_debug.store.get(thread_id) is not None:
-                debug_run_count += 1
-            checkpoint_count += await workflow_debug.checkpoint_count(thread_id)
+        for run in runs:
+            if run["checkpoint_available"]:
+                checkpoint_count += await workflow_checkpoints.checkpoint_count(
+                    str(run["thread_id"])
+                )
         filesystem = await lifecycle_service.filesystem_summary(lifecycle_id)
         return {
             **record,
@@ -43,13 +110,53 @@ def build_workflow_lifecycle_router(
                 task_counts.get(status, 0) for status in ACTIVE_BACKGROUND_STATUSES
             ),
             "task_status_counts": dict(sorted(task_counts.items())),
-            "debug_run_count": debug_run_count,
             "checkpoint_count": checkpoint_count,
-            "store_item_count": await lifecycle_service.store_item_count(
-                lifecycle_id
-            ),
+            "store_item_count": await lifecycle_service.store_item_count(lifecycle_id),
+            **run_summary,
             **filesystem,
         }
+
+    async def require_lifecycle(lifecycle_id: str) -> dict[str, object]:
+        record = await lifecycle_service.record(lifecycle_id)
+        if record is None:
+            raise management_error(
+                404,
+                code="workflow_lifecycle_not_found",
+                message_key="errors.workflowLifecycleNotFound",
+                message="The Workflow lifecycle does not exist.",
+            )
+        return record
+
+    def require_run(lifecycle_id: str, run_id: str) -> dict[str, object]:
+        run = lifecycle_service.history.get_run(run_id)
+        if run is None or run["lifecycle_id"] != lifecycle_id:
+            raise management_error(
+                404,
+                code="workflow_run_not_found",
+                message_key="errors.workflowRunNotFound",
+                message="The Workflow Run does not exist in this lifecycle.",
+            )
+        return run
+
+    def zip_response(buffer: BytesIO, filename: str) -> Response:
+        return Response(
+            content=buffer.getvalue(),
+            media_type="application/zip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Cache-Control": "no-store",
+            },
+        )
+
+    def write_diagnostic_details(
+        archive: zipfile.ZipFile,
+        diagnostics: list[dict[str, object]],
+    ) -> None:
+        for entry in diagnostics:
+            diagnostic_id = str(entry["diagnostic_id"])
+            path = runtime_diagnostics.detail_path(diagnostic_id)
+            if path is not None:
+                archive.write(path, f"diagnostics/{diagnostic_id}.log")
 
     @router.get("/api/workflow-lifecycles")
     async def list_workflow_lifecycles(
@@ -63,10 +170,7 @@ def build_workflow_lifecycle_router(
             query=query,
         )
         return {
-            "items": [
-                await summary(record)
-                for record in records
-            ],
+            "items": [await summary(record) for record in records],
             "page": page,
             "page_size": page_size,
             "total": total,
@@ -74,18 +178,154 @@ def build_workflow_lifecycle_router(
         }
 
     @router.get("/api/workflow-lifecycles/{lifecycle_id}")
-    async def get_workflow_lifecycle(
+    async def get_workflow_lifecycle(lifecycle_id: str) -> dict[str, object]:
+        record = await require_lifecycle(lifecycle_id)
+        runs = lifecycle_service.runs(lifecycle_id)
+        event_page = lifecycle_service.events(lifecycle_id, limit=1001)
+        visible_events = event_page[:1000]
+        return {
+            **await summary(record),
+            "runs": runs,
+            "events": visible_events,
+            "next_event_sequence": (
+                int(visible_events[-1]["sequence"]) if visible_events else 0
+            ),
+            "event_has_more": len(event_page) > 1000,
+            "artifacts": await lifecycle_service.artifact_summary(lifecycle_id),
+            "checkpoints": await checkpoint_summaries(runs),
+            "diagnostics": diagnostics_for(lifecycle_id),
+        }
+
+    @router.get("/api/workflow-lifecycles/{lifecycle_id}/events")
+    async def list_workflow_lifecycle_events(
         lifecycle_id: str,
+        run_id: str | None = Query(default=None, max_length=64),
+        node_invocation_id: str | None = Query(default=None, max_length=320),
+        event_type: str | None = Query(default=None, max_length=64),
+        after_sequence: int = Query(default=0, ge=0),
+        limit: int = Query(default=1000, ge=1, le=5000),
     ) -> dict[str, object]:
-        record = await lifecycle_service.record(lifecycle_id)
-        if record is None:
-            raise management_error(
-                404,
-                code="workflow_lifecycle_not_found",
-                message_key="errors.workflowLifecycleNotFound",
-                message="The Workflow lifecycle does not exist.",
+        await require_lifecycle(lifecycle_id)
+        if run_id is not None:
+            require_run(lifecycle_id, run_id)
+        page = lifecycle_service.events(
+            lifecycle_id,
+            run_id=run_id,
+            node_invocation_id=node_invocation_id,
+            event_type=event_type,
+            after_sequence=after_sequence,
+            limit=limit + 1,
+        )
+        items = page[:limit]
+        return {
+            "items": items,
+            "next_after_sequence": int(items[-1]["sequence"]) if items else after_sequence,
+            "has_more": len(page) > limit,
+        }
+
+    @router.get("/api/workflow-lifecycles/{lifecycle_id}/runs/{run_id}")
+    async def get_workflow_run(lifecycle_id: str, run_id: str) -> dict[str, object]:
+        await require_lifecycle(lifecycle_id)
+        run = require_run(lifecycle_id, run_id)
+        return {
+            **run,
+            "events": lifecycle_service.events(lifecycle_id, run_id=run_id, limit=5000),
+            "checkpoints": (
+                await workflow_checkpoints.checkpoint_history(str(run["thread_id"]))
+                if run["checkpoint_available"]
+                else []
+            ),
+            "diagnostics": diagnostics_for(lifecycle_id, run_id=run_id),
+        }
+
+    @router.get("/api/workflow-lifecycles/{lifecycle_id}/download")
+    async def download_workflow_lifecycle(lifecycle_id: str) -> Response:
+        record = await require_lifecycle(lifecycle_id)
+        captured_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+        runs = lifecycle_service.runs(lifecycle_id)
+        events = all_events(lifecycle_id)
+        checkpoints = await checkpoint_summaries(runs, limit=None)
+        diagnostics = diagnostics_for(lifecycle_id)
+        summary_payload = await summary(record)
+        manifest = {
+            "format": "agent-shell-run-history-v1",
+            "scope": "lifecycle",
+            "captured_at": captured_at,
+            "lifecycle_id": lifecycle_id,
+            "lifecycle_status": record.get("lifecycle_status", "active"),
+            "observation_status": summary_payload["observation_status"],
+            "last_event_sequence": events[-1]["sequence"] if events else 0,
+            "includes": {
+                "run_registry": True,
+                "structural_events": True,
+                "checkpoint_summaries": True,
+                "store_summary": True,
+                "diagnostics": True,
+                "diagnostic_details": True,
+                "runtime_payloads": False,
+            },
+            "limitations": [
+                "This is a captured diagnostic snapshot, not a byte-exact replay.",
+                "Lifecycle input, messages, model text, tool payloads, provider responses, and checkpoint state are omitted.",
+                "Diagnostic detail attachments may contain sensitive exception context.",
+            ],
+        }
+        buffer = BytesIO()
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("manifest.json", _json(manifest))
+            archive.writestr("lifecycle.json", _json(summary_payload))
+            archive.writestr("runs.json", _json(runs))
+            archive.writestr("events.jsonl", _jsonl(events))
+            archive.writestr(
+                "store-summary.json",
+                _json(await lifecycle_service.artifact_summary(lifecycle_id)),
             )
-        return await summary(record)
+            archive.writestr("diagnostics.jsonl", _jsonl(diagnostics))
+            for run_id, values in checkpoints.items():
+                archive.writestr(f"checkpoints/{run_id}.jsonl", _jsonl(values))
+            write_diagnostic_details(archive, diagnostics)
+        return zip_response(buffer, f"agent-shell-lifecycle-{lifecycle_id}.zip")
+
+    @router.get("/api/workflow-lifecycles/{lifecycle_id}/runs/{run_id}/download")
+    async def download_workflow_run(lifecycle_id: str, run_id: str) -> Response:
+        await require_lifecycle(lifecycle_id)
+        run = require_run(lifecycle_id, run_id)
+        events = all_events(lifecycle_id, run_id=run_id)
+        diagnostics = diagnostics_for(lifecycle_id, run_id=run_id)
+        checkpoints = (
+            await workflow_checkpoints.checkpoint_history(
+                str(run["thread_id"]),
+                limit=None,
+            )
+            if run["checkpoint_available"]
+            else []
+        )
+        manifest = {
+            "format": "agent-shell-run-history-v1",
+            "scope": "run",
+            "captured_at": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+            "lifecycle_id": lifecycle_id,
+            "run_id": run_id,
+            "run_status": run["status"],
+            "observation_status": run["observation_status"],
+            "last_event_sequence": events[-1]["sequence"] if events else 0,
+            "checkpoint_available": run["checkpoint_available"],
+            "runtime_payloads_included": False,
+            "diagnostic_details_included": True,
+            "limitations": [
+                "This is a captured diagnostic snapshot, not a byte-exact replay.",
+                "Diagnostic detail attachments may contain sensitive exception context.",
+            ],
+        }
+        buffer = BytesIO()
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("manifest.json", _json(manifest))
+            archive.writestr("run.json", _json(run))
+            archive.writestr("events.jsonl", _jsonl(events))
+            archive.writestr("checkpoints.jsonl", _jsonl(checkpoints))
+            archive.writestr("diagnostics.jsonl", _jsonl(diagnostics))
+            write_diagnostic_details(archive, diagnostics)
+        return zip_response(buffer, f"agent-shell-run-{run_id}.zip")
 
     @router.delete("/api/workflow-lifecycles/{lifecycle_id}")
     async def delete_workflow_lifecycle(
@@ -93,15 +333,9 @@ def build_workflow_lifecycle_router(
         delete_dynamic_directories: bool = Query(default=False),
     ) -> dict[str, object]:
         async with lifecycle_service.exclusive_mutation(lifecycle_id):
-            record = await lifecycle_service.record(lifecycle_id)
-            if record is None:
-                raise management_error(
-                    404,
-                    code="workflow_lifecycle_not_found",
-                    message_key="errors.workflowLifecycleNotFound",
-                    message="The Workflow lifecycle does not exist.",
-                )
+            record = await require_lifecycle(lifecycle_id)
             tasks = await background_tasks.list_for_cleanup(lifecycle_id)
+            runs = lifecycle_service.runs(lifecycle_id)
             if record.get("parent_status") == "running" or any(
                 task.runtime_status in ACTIVE_BACKGROUND_STATUSES for task in tasks
             ):
@@ -112,11 +346,15 @@ def build_workflow_lifecycle_router(
                     message="A Workflow lifecycle with an active run cannot be deleted.",
                 )
             await lifecycle_service.mark_deleting(lifecycle_id)
-            thread_ids = {str(record.get("parent_thread_id", ""))}
-            thread_ids.update(task.child_thread_id for task in tasks)
+            thread_ids = {
+                str(run["thread_id"])
+                for run in runs
+                if run["checkpoint_available"]
+            }
+            thread_ids.add(str(record.get("parent_thread_id", "")))
             thread_ids.discard("")
             for thread_id in thread_ids:
-                await workflow_debug.purge_thread(thread_id)
+                await workflow_checkpoints.purge_thread(thread_id)
             await lifecycle_service.delete(
                 lifecycle_id,
                 delete_dynamic_directories=delete_dynamic_directories,

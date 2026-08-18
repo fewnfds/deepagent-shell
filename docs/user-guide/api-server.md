@@ -58,17 +58,13 @@ Lifecycle Store；Runtime Context 只携带定位输入所需的 lifecycle/run/i
 
 - Workflow 只有一份当前图，没有 draft/published revision、发布审核或历史回滚；
 - parent/child 是同一 Workflow 实体的使用角色；子图不通过 `/v1` 直接启动；
-- 每次请求是一次新的完整运行，并建立独立 Debug thread；外层 Workflow 使用官方持久 checkpointer，但不提供 resume；
+- 每次请求是一次新的完整运行；每个 Workflow Run 建立独立 thread 并使用官方持久 checkpointer，但不提供 resume；
 - 当前不支持通用 conditional edge、Interrupt 或跨进程任务队列；单进程后台 Agent/Workflow Run 通过 Runtime Context 的 `background_runs` 命令启动和查询，不属于 Graph Node；Task Dispatcher 已支持请求内动态 worker，多个 normal 出边、一次激活的多个 branch 目标和多个 Send task 按 LangGraph super-step 语义执行；
 - 图不完整、引用失效、Agent 装配失败或 Provider 失败时，本次请求直接返回错误；
-- Workflow Debug 管理 API 提供有界运行索引、结构运行树和 checkpoint 摘要；日志中心展示系统事件、请求级
-  错误诊断，并在 DEBUG 开启期间保存正常完成记录、完成元数据文件和完整异常文件。当前不提供 Resume 或旧 Main Agent
-  直连兼容。
-- management-only `/api/history-retention/workflow-debug` 读写 Workflow Debug 运行索引上限；降低上限只裁剪
-  已终止 Debug index，不删除 Lifecycle 所有的 checkpoint。
-- management-only `/api/workflow-lifecycles` 提供 Lifecycle 摘要和显式删除；摘要不返回 messages 或宿主路径，删除在仍有
-  active 后台任务时拒绝，并可显式清理受管动态目录。列表使用 `page/page_size/query` 的后端分页，默认按创建时间倒序每页
-  10 条，并只为当前页生成 task/checkpoint/Store/filesystem 摘要。没有定时 retention、End 自动清场或后台清理调度器。
+- 日志中心只展示系统事件和结构化运行失败诊断。正常完成不写诊断；新异常自动尝试保存 traceback 附件，不提供采集开关。
+- management-only `/api/workflow-lifecycles` 提供运行历史列表、Lifecycle/Run 详情、结构事件分页、诊断包下载和显式删除。
+  列表使用 `page/page_size/query` 后端分页；详情和导出不返回 messages、运行正文、Checkpoint State 或宿主映射正文。
+  删除在 parent 或后台任务仍 active 时拒绝，并可显式清理受管动态目录。没有定时 retention、End 自动清场或后台清理调度器。
 
 ## API Key 与状态
 
@@ -77,4 +73,4 @@ API Server 启停不扫描未被 Workflow 引用的 Main Agent；完整 reposito
 只解析所选 Workflow 的当前图和可达装配。
 
 普通 API、DOM 和日志摘要不返回 Provider secret、Bearer token、宿主敏感路径、traceback 或 Provider 原始响应；
-显式开启的本地 DEBUG 文件除外。
+management-only 的本地异常详情附件除外。

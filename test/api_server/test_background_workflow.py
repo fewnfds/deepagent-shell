@@ -116,12 +116,15 @@ def test_frozen_snapshot_runs_child_workflow_silently_with_independent_checkpoin
                 if terminal.runtime_status not in {"pending", "running"}:
                     break
                 await asyncio.sleep(0.01)
-            detail = await client.app.state.workflow_debug.detail(
+            run = client.app.state.workflow_lifecycle.history.get_run(
+                handle.child_run_id
+            )
+            checkpoint_count = await client.app.state.workflow_checkpoints.checkpoint_count(
                 handle.child_thread_id
             )
-            return handle, terminal, detail
+            return handle, terminal, run, checkpoint_count
 
-        handle, terminal, detail = portal.call(scenario)
+        handle, terminal, run, checkpoint_count = portal.call(scenario)
 
     assert handle.status == "pending"
     assert handle.run_depth == 1
@@ -129,11 +132,13 @@ def test_frozen_snapshot_runs_child_workflow_silently_with_independent_checkpoin
     assert terminal.runtime_status == "succeeded"
     assert isinstance(terminal.result["finish_reason"], str)
     assert isinstance(terminal.result["usage"], dict)
-    assert detail is not None
-    assert detail["thread_id"] == handle.child_thread_id
-    assert detail["run_id"] == handle.child_run_id
-    assert detail["status"] == "completed"
-    assert detail["checkpoints"]
+    assert run is not None
+    assert run["thread_id"] == handle.child_thread_id
+    assert run["run_id"] == handle.child_run_id
+    assert run["run_kind"] == "workflow"
+    assert run["status"] == "completed"
+    assert run["checkpoint_available"] is True
+    assert checkpoint_count > 0
 
 
 def test_frozen_snapshot_runs_background_agent_without_parent_stream_or_checkpoint(
@@ -204,18 +209,26 @@ def test_frozen_snapshot_runs_background_agent_without_parent_stream_or_checkpoi
                 if terminal.runtime_status not in {"pending", "running"}:
                     break
                 await asyncio.sleep(0.01)
-            detail = await client.app.state.workflow_debug.detail(
-                handle.child_thread_id
+            run = client.app.state.workflow_lifecycle.history.get_run(
+                handle.child_run_id
             )
-            return handle, terminal, detail
+            events = client.app.state.workflow_lifecycle.events(
+                lifecycle_id,
+                run_id=handle.child_run_id,
+            )
+            return handle, terminal, run, events
 
-        handle, terminal, detail = portal.call(scenario)
+        handle, terminal, run, events = portal.call(scenario)
 
     assert handle.target_kind == "agent"
     assert handle.run_depth == 1
     assert terminal is not None
     assert terminal.runtime_status == "succeeded"
-    assert detail is None
+    assert run is not None
+    assert run["run_kind"] == "agent"
+    assert run["status"] == "completed"
+    assert run["checkpoint_available"] is False
+    assert {event["subject_kind"] for event in events} >= {"run", "agent", "model"}
     assert captured_context is not None
     assert captured_context.launcher_id == "router-launcher"
     assert captured_context.workflow_node_id == ""

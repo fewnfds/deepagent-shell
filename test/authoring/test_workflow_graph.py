@@ -1141,7 +1141,7 @@ def test_runtime_builds_repeated_main_agent_references_per_workflow_node() -> No
             self.built_ids: list[str] = []
             self.built_nodes: list[str] = []
             self._blocks = None
-            self._workflow_debug = None
+            self._workflow_checkpoints = None
             self._runtime_diagnostics = None
             lifecycle_store = InMemoryStore()
 

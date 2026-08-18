@@ -14,7 +14,6 @@ import {
   type ManagementEvent,
   type RuntimeDiagnostics,
   type SystemLogSettings,
-  type WorkflowDebugRetention,
 } from '@/api'
 import DataTableWorkbench from '@/components/data-table/DataTableWorkbench.vue'
 import { formattingLocale } from '@/locales'
@@ -37,10 +36,7 @@ interface EventFeedApi {
   listEventFeed(filters: EventFeedFilters): Promise<EventFeedResponse>
   downloadEvent(source: EventSource, id: string): Promise<Blob>
   getRuntimeDiagnostics(): Promise<RuntimeDiagnostics>
-  updateRuntimeLogRetention(value: number): Promise<RuntimeDiagnostics>
-  updateRuntimeDebug(enabled: boolean): Promise<RuntimeDiagnostics>
-  getWorkflowDebugRetention(): Promise<WorkflowDebugRetention>
-  updateWorkflowDebugRetention(value: number): Promise<WorkflowDebugRetention>
+  updateRuntimeDiagnosticRetention(value: number): Promise<RuntimeDiagnostics>
   getSystemLogSettings(): Promise<SystemLogSettings>
   updateSystemLogSettings(value: number): Promise<SystemLogSettings>
   deleteMatchingEventFeed(filters: EventFeedFilters): Promise<{ deleted: number }>
@@ -91,10 +87,6 @@ const stale = ref(false)
 const retentionDrafts = ref({ runtime: 20 })
 const savedRetentions = ref({ runtime: 20 })
 const maxRetention = ref(1)
-const workflowDebugRetentionDraft = ref(50)
-const savedWorkflowDebugRetention = ref(50)
-const maxWorkflowDebugRetention = ref(1)
-const runtimeDebugEnabled = ref(false)
 const systemLogSizeDraft = ref(5)
 const savedSystemLogSize = ref(5)
 const systemLogSizeMin = ref(1)
@@ -150,7 +142,10 @@ function downloadFilename(item: EventFeedItem, blob: Blob): string {
   const extension = item.source === 'runtime' && blob.type.startsWith('text/plain')
     ? 'log'
     : 'json'
-  return `agent-shell-event-${item.source}-${stamp}-${item.id.slice(0, 8)}.${extension}`
+  const kind = item.download_kind === 'diagnostic_detail'
+    ? 'diagnostic-detail'
+    : `event-${item.source}`
+  return `agent-shell-${kind}-${stamp}-${item.id.slice(0, 8)}.${extension}`
 }
 
 async function download(item: EventFeedItem): Promise<void> {
@@ -234,10 +229,12 @@ const eventTableConfig: DataTableConfig<EventFeedItem> = {
   rowActions: [
     {
       key: 'download-event',
-      label: () => t('eventFeed.download'),
+      label: (item) => t(item.download_kind === 'diagnostic_detail'
+        ? 'eventFeed.downloadDetail'
+        : 'eventFeed.downloadEntry'),
       tone: 'primary',
       icon: 'download',
-      visible: (item) => item.download_available,
+      visible: (item) => item.download_kind !== null,
       run: (item) => download(item),
       failureTitle: () => t('eventFeed.feedback.downloadFailed'),
     },
@@ -273,10 +270,9 @@ async function loadControls(): Promise<void> {
   controlsLoading.value = true
   controlsError.value = ''
   try {
-    const [diagnostics, systemLog, workflowDebugRetention] = await Promise.all([
+    const [diagnostics, systemLog] = await Promise.all([
       api.getRuntimeDiagnostics(),
       api.getSystemLogSettings(),
-      api.getWorkflowDebugRetention(),
     ])
     const loadedRetentions = {
       runtime: diagnostics.retention_limit,
@@ -284,10 +280,6 @@ async function loadControls(): Promise<void> {
     retentionDrafts.value = loadedRetentions
     savedRetentions.value = { ...loadedRetentions }
     maxRetention.value = diagnostics.max_retention_limit
-    workflowDebugRetentionDraft.value = workflowDebugRetention.retention_limit
-    savedWorkflowDebugRetention.value = workflowDebugRetention.retention_limit
-    maxWorkflowDebugRetention.value = workflowDebugRetention.max_retention_limit
-    runtimeDebugEnabled.value = diagnostics.debug_enabled
     systemLogSizeDraft.value = systemLog.max_size_mib
     savedSystemLogSize.value = systemLog.max_size_mib
     systemLogSizeMin.value = systemLog.min_size_mib
@@ -297,55 +289,6 @@ async function loadControls(): Promise<void> {
     controlsError.value = describeFailure(error)
   } finally {
     controlsLoading.value = false
-  }
-}
-
-async function saveWorkflowDebugRetention(): Promise<void> {
-  const value = workflowDebugRetentionDraft.value
-  if (value < savedWorkflowDebugRetention.value) {
-    const accepted = await confirmation.confirm({
-      title: t('eventFeed.retention.confirmTitle'),
-      description: t('eventFeed.retention.workflowDebugConfirmDescription', { count: value }),
-      confirmLabel: t('common.save'),
-      cancelLabel: t('common.cancel'),
-      dangerous: true,
-    })
-    if (!accepted) return
-  }
-  savingControl.value = 'workflow-debug-retention'
-  try {
-    const result = await api.updateWorkflowDebugRetention(value)
-    workflowDebugRetentionDraft.value = result.retention_limit
-    savedWorkflowDebugRetention.value = result.retention_limit
-    maxWorkflowDebugRetention.value = result.max_retention_limit
-    notify({
-      tone: 'success',
-      title: t('eventFeed.feedback.workflowDebugRetentionSaved', { count: result.retention_limit }),
-    })
-  } catch (error) {
-    notifyFailure(t('eventFeed.feedback.retentionFailed'), error)
-  } finally {
-    savingControl.value = ''
-  }
-}
-
-async function saveRuntimeDebug(): Promise<void> {
-  const enabled = runtimeDebugEnabled.value
-  savingControl.value = 'runtime-debug'
-  try {
-    const result = await api.updateRuntimeDebug(enabled)
-    runtimeDebugEnabled.value = result.debug_enabled
-    notify({
-      tone: 'success',
-      title: t(result.debug_enabled
-        ? 'eventFeed.feedback.debugEnabled'
-        : 'eventFeed.feedback.debugDisabled'),
-    })
-  } catch (error) {
-    runtimeDebugEnabled.value = !enabled
-    notifyFailure(t('eventFeed.feedback.debugFailed'), error)
-  } finally {
-    savingControl.value = ''
   }
 }
 
@@ -374,7 +317,7 @@ async function saveRetention(source: 'runtime'): Promise<void> {
   }
   savingControl.value = `${source}-retention`
   try {
-    const result = await api.updateRuntimeLogRetention(value)
+    const result = await api.updateRuntimeDiagnosticRetention(value)
     retentionDrafts.value[source] = result.retention_limit
     savedRetentions.value[source] = result.retention_limit
     maxRetention.value = result.max_retention_limit
@@ -447,7 +390,6 @@ onMounted(() => { void loadControls() })
       <LteAlert v-if="controlsError" theme="danger" :title="t('eventFeed.feedback.loadFailed')">
         {{ controlsError }}
       </LteAlert>
-      <LteAlert v-if="runtimeDebugEnabled" theme="warning" :title="t('eventFeed.debug.active')" />
     </template>
 
     <LteCard class="mb-3" :title="t('eventFeed.retention.title')">
@@ -501,41 +443,6 @@ onMounted(() => { void loadControls() })
               </LteButton>
             </div>
           </form>
-          <form class="col-lg-3" data-testid="retention-workflow-debug" @submit.prevent="saveWorkflowDebugRetention">
-            <label class="form-label" for="retention-workflow-debug-input">{{ t('eventFeed.retention.workflowDebug') }}</label>
-            <div class="input-group">
-              <input
-                id="retention-workflow-debug-input"
-                v-model.number="workflowDebugRetentionDraft"
-                class="form-control"
-                :max="maxWorkflowDebugRetention"
-                min="1"
-                required
-                step="1"
-                type="number"
-              >
-              <LteButton :disabled="savingControl === 'workflow-debug-retention'" theme="primary" type="submit">
-                {{ t('common.save') }}
-              </LteButton>
-            </div>
-          </form>
-          <div class="col-lg-3" data-testid="runtime-debug">
-            <span class="form-label d-block">{{ t('eventFeed.debug.label') }}</span>
-            <div class="form-check form-switch">
-              <input
-                id="runtime-debug-enabled"
-                v-model="runtimeDebugEnabled"
-                class="form-check-input"
-                :disabled="savingControl === 'runtime-debug'"
-                role="switch"
-                type="checkbox"
-                @change="saveRuntimeDebug"
-              >
-              <label class="visually-hidden" for="runtime-debug-enabled">
-                {{ t('eventFeed.debug.label') }}
-              </label>
-            </div>
-          </div>
         </div>
       </div>
     </LteCard>

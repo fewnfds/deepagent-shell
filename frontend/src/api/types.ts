@@ -271,15 +271,85 @@ export interface WorkflowLifecycleSummary {
   task_count: number
   active_task_count: number
   task_status_counts: Record<string, number>
-  debug_run_count: number
   checkpoint_count: number
   store_item_count: number
   filesystem_count: number
   route_count: number
   dynamic_directory_count: number
+  run_count: number
+  active_run_count: number
+  failed_run_count: number
+  run_status_counts: Record<string, number>
+  usage: { input_tokens: number; output_tokens: number; total_tokens: number }
+  observation_status: 'available' | 'partial' | 'unavailable'
 }
 
 export type WorkflowLifecyclePage = PaginationResponse<WorkflowLifecycleSummary>
+
+export interface WorkflowRunRecord {
+  run_id: string
+  lifecycle_id: string
+  request_id: string
+  thread_id: string
+  run_kind: 'workflow' | 'agent'
+  target_id: string
+  target_name: string
+  parent_run_id: string | null
+  launcher_id: string | null
+  background_task_id: string | null
+  run_depth: number
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted'
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+  finish_reason: string
+  error_code: string
+  usage: { input_tokens: number; output_tokens: number; total_tokens: number }
+  checkpoint_available: boolean
+  observation_status: 'available' | 'partial'
+}
+
+export interface WorkflowRunEvent {
+  sequence: number
+  lifecycle_id: string
+  run_id: string
+  occurred_at: string
+  event_type: string
+  phase: 'created' | 'started' | 'completed' | 'failed' | 'cancelled'
+  span_id: string | null
+  parent_span_id: string | null
+  subject_kind: 'run' | 'workflow_node' | 'agent' | 'model' | 'tool'
+  subject_id: string | null
+  subject_name: string | null
+  workflow_node_id: string | null
+  node_invocation_id: string | null
+  status: string
+  error_code: string
+  usage: { input_tokens: number; output_tokens: number; total_tokens: number }
+  metadata: Record<string, unknown>
+}
+
+export interface WorkflowLifecycleDetail extends WorkflowLifecycleSummary {
+  runs: WorkflowRunRecord[]
+  events: WorkflowRunEvent[]
+  checkpoints: Record<string, Array<Record<string, unknown>>>
+  artifacts: Record<string, unknown>
+  diagnostics: RuntimeDiagnosticEntry[]
+  next_event_sequence: number
+  event_has_more: boolean
+}
+
+export interface WorkflowRunDetail extends WorkflowRunRecord {
+  events: WorkflowRunEvent[]
+  checkpoints: Array<Record<string, unknown>>
+  diagnostics: RuntimeDiagnosticEntry[]
+}
+
+export interface WorkflowRunEventPage {
+  items: WorkflowRunEvent[]
+  next_after_sequence: number
+  has_more: boolean
+}
 
 export type WorkflowNodeType =
   | 'start'
@@ -479,7 +549,7 @@ export interface EventFeedItem {
   summary: string
   inline_content: string | null
   matched_in_content: boolean
-  download_available: boolean
+  download_kind: 'entry' | 'diagnostic_detail' | null
 }
 
 export type EventFeedResponse = PaginationResponse<EventFeedItem>
@@ -500,25 +570,30 @@ export interface SystemLogSettings {
   max_size_mib_limit: number
 }
 
-interface RuntimeDiagnosticEntry {
+export interface RuntimeDiagnosticEntry {
   sequence: number
-  timestamp: string
-  level: string
-  request_id: string
-  model: string
-  agent_name: string
+  diagnostic_id: string
+  occurred_at: string
+  severity: 'warning' | 'error'
   code: string
-  exception_type: string
-  message: string
+  summary: string
+  component: string
+  detail_available: boolean
+  request_id?: string
+  lifecycle_id?: string
+  run_id?: string
+  thread_id?: string
+  parent_workflow_id?: string
+  parent_workflow_name?: string
+  subject_kind?: string
+  subject_id?: string
+  subject_name?: string
+  workflow_node_id?: string
+  node_invocation_id?: string
+  exception_type?: string
 }
 
 export interface RuntimeDiagnostics {
-  retention_limit: number
-  max_retention_limit: number
-  debug_enabled: boolean
-}
-
-export interface WorkflowDebugRetention {
   retention_limit: number
   max_retention_limit: number
 }

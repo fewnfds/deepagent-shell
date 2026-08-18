@@ -18,6 +18,7 @@ from agent_shell.contracts import FilesystemBlock
 from agent_shell.runtime.input_messages import client_messages_sha
 from agent_shell.storage.database import SQLiteDatabase
 from agent_shell.storage.workflow_lifecycles import WorkflowLifecycleStore
+from agent_shell.storage.workflow_run_history import WorkflowRunHistoryStore
 
 
 LIFECYCLE_NAMESPACE_ROOT = "workflow-lifecycle"
@@ -68,6 +69,7 @@ class WorkflowLifecycleService:
         )
         self._database_path = database_instance.path
         self._index = WorkflowLifecycleStore(database_instance)
+        self._history = WorkflowRunHistoryStore(database_instance)
         self._data_root = (
             data_root.resolve()
             if data_root is not None
@@ -103,6 +105,7 @@ class WorkflowLifecycleService:
 
     async def _cancel_interrupted_parent_runs(self) -> int:
         finished_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+        self._history.interrupt_active(finished_at=finished_at)
         return self._index.cancel_running(finished_at=finished_at)
 
     async def close(self) -> None:
@@ -157,7 +160,147 @@ class WorkflowLifecycleService:
                 LIFECYCLE_INPUT_KEY,
             )
             raise
+        try:
+            self._history.create_run(
+                {
+                    "run_id": run_id,
+                    "lifecycle_id": lifecycle_id,
+                    "request_id": request_id,
+                    "thread_id": thread_id,
+                    "run_kind": "workflow",
+                    "target_id": workflow_id,
+                    "target_name": workflow_name,
+                    "run_depth": 0,
+                    "checkpoint_available": True,
+                    "created_at": created_at,
+                },
+                {
+                    "lifecycle_id": lifecycle_id,
+                    "run_id": run_id,
+                    "occurred_at": created_at,
+                    "event_type": "run",
+                    "phase": "created",
+                    "subject_kind": "run",
+                    "subject_id": run_id,
+                    "subject_name": workflow_name,
+                    "status": "pending",
+                },
+            )
+        except Exception:
+            # Run history is an observation surface. The lifecycle itself remains
+            # usable when its diagnostic index is temporarily unavailable.
+            pass
         return lifecycle_id
+
+    @property
+    def history(self) -> WorkflowRunHistoryStore:
+        return self._history
+
+    def register_run(self, record: dict[str, object]) -> None:
+        existing = self._history.get_run(str(record["run_id"]))
+        if existing is not None:
+            return
+        created_at = str(record.get("created_at") or datetime.now(timezone.utc).isoformat(timespec="milliseconds"))
+        self._history.create_run(
+            {**record, "created_at": created_at},
+            {
+                "lifecycle_id": record["lifecycle_id"],
+                "run_id": record["run_id"],
+                "occurred_at": created_at,
+                "event_type": "run",
+                "phase": "created",
+                "subject_kind": "run",
+                "subject_id": record["run_id"],
+                "subject_name": record["target_name"],
+                "status": "pending",
+            },
+        )
+
+    def start_run(self, run_id: str, *, status: str = "running") -> bool:
+        record = self._history.get_run(run_id)
+        if record is None:
+            return False
+        occurred_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+        return self._history.start_run(
+            run_id,
+            {
+                "lifecycle_id": str(record["lifecycle_id"]),
+                "run_id": run_id,
+                "occurred_at": occurred_at,
+                "event_type": "run",
+                "phase": "started",
+                "subject_kind": "run",
+                "subject_id": run_id,
+                "status": status,
+            },
+        )
+
+    def finish_run(
+        self,
+        run_id: str,
+        *,
+        status: str,
+        error_code: str = "",
+        finish_reason: str = "",
+        usage: dict[str, int] | None = None,
+    ) -> bool:
+        record = self._history.get_run(run_id)
+        if record is None:
+            return False
+        finished_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+        phase = "cancelled" if status == "cancelled" else "failed" if status in {"failed", "interrupted"} else "completed"
+        return self._history.finish_run(
+            run_id,
+            status=status,
+            finished_at=finished_at,
+            finish_reason=finish_reason,
+            error_code=error_code,
+            usage=usage or {},
+            event={
+                "lifecycle_id": record["lifecycle_id"],
+                "run_id": run_id,
+                "occurred_at": finished_at,
+                "event_type": "run",
+                "phase": phase,
+                "subject_kind": "run",
+                "subject_id": run_id,
+                "subject_name": record["target_name"],
+                "status": status,
+                "error_code": error_code,
+                "usage": usage or {},
+            },
+        )
+
+    def append_run_event(self, event: dict[str, object]) -> int:
+        return self._history.append_event(event)
+
+    def mark_run_observation_partial(self, run_id: str) -> None:
+        self._history.mark_partial(run_id)
+
+    def runs(self, lifecycle_id: str) -> list[dict[str, object]]:
+        return self._history.list_runs(lifecycle_id)
+
+    def events(
+        self,
+        lifecycle_id: str,
+        *,
+        run_id: str | None = None,
+        node_invocation_id: str | None = None,
+        event_type: str | None = None,
+        after_sequence: int = 0,
+        limit: int = 1000,
+    ) -> list[dict[str, object]]:
+        return self._history.list_events(
+            lifecycle_id,
+            run_id=run_id,
+            node_invocation_id=node_invocation_id,
+            event_type=event_type,
+            after_sequence=after_sequence,
+            limit=limit,
+        )
+
+    def run_summary(self, lifecycle_id: str) -> dict[str, object]:
+        return self._history.summary(lifecycle_id)
 
     @asynccontextmanager
     async def exclusive_mutation(self, lifecycle_id: str) -> AsyncIterator[None]:
@@ -259,6 +402,19 @@ class WorkflowLifecycleService:
             await self._search_all((LIFECYCLE_NAMESPACE_ROOT, lifecycle_id))
         )
 
+    async def artifact_summary(self, lifecycle_id: str) -> dict[str, object]:
+        items = await self._search_all((LIFECYCLE_NAMESPACE_ROOT, lifecycle_id))
+        namespaces: dict[str, int] = {}
+        for item in items:
+            parts = tuple(str(part) for part in item.namespace)
+            kind = parts[2] if len(parts) > 2 else "unknown"
+            namespaces[kind] = namespaces.get(kind, 0) + 1
+        return {
+            "item_count": len(items),
+            "namespace_counts": dict(sorted(namespaces.items())),
+            "payloads_included": False,
+        }
+
     async def filesystem_summary(self, lifecycle_id: str) -> dict[str, int]:
         items = await self._search_all(lifecycle_filesystem_namespace(lifecycle_id))
         route_count = 0
@@ -329,6 +485,7 @@ class WorkflowLifecycleService:
         await self.store.abatch(
             [PutOp(tuple(item.namespace), item.key, None) for item in lifecycle_items]
         )
+        # Run records/events are owned by this Lifecycle and are deleted with it.
         self._index.delete(lifecycle_id)
         return True
 

@@ -1,20 +1,21 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from itertools import chain
 import logging
 from pathlib import Path
 import threading
 import traceback
+from uuid import uuid4
 
 from agent_shell.redaction import redact_for_boundary
 from agent_shell.runtime.errors import AgentRuntimeError
-from agent_shell.storage.runtime_debug_logs import RuntimeDebugLogStore
-from agent_shell.storage.runtime_diagnostics import (
-    RuntimeDiagnosticStore,
-    runtime_diagnostic_id,
+from agent_shell.storage.runtime_diagnostic_details import (
+    RuntimeDiagnosticDetailStore,
 )
+from agent_shell.storage.runtime_diagnostics import RuntimeDiagnosticStore
 
 
 def _safe_text(value: object) -> str:
@@ -22,19 +23,45 @@ def _safe_text(value: object) -> str:
     return safe if isinstance(safe, str) else "[UNAVAILABLE]"
 
 
+def _optional_safe_text(value: object) -> str | None:
+    text = _safe_text(value)
+    return text or None
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeDiagnosticContext:
+    request_id: str = ""
+    lifecycle_id: str = ""
+    run_id: str = ""
+    thread_id: str = ""
+    parent_workflow_id: str = ""
+    parent_workflow_name: str = ""
+    subject_kind: str = ""
+    subject_id: str = ""
+    subject_name: str = ""
+    workflow_node_id: str = ""
+    node_invocation_id: str = ""
+
+    def safe_values(self) -> dict[str, str | None]:
+        return {
+            key: _optional_safe_text(value)
+            for key, value in asdict(self).items()
+        }
+
+
 class RuntimeDiagnostics:
-    """Persist bounded request-level diagnostics without Workflow internals."""
+    """Persist bounded operational failures without owning Run history."""
 
     def __init__(
         self,
         publish: Callable[[dict[str, object]], None],
         *,
         store: RuntimeDiagnosticStore,
-        debug_logs: RuntimeDebugLogStore,
+        details: RuntimeDiagnosticDetailStore,
     ) -> None:
         self._lock = threading.Lock()
         self._store = store
-        self._debug_logs = debug_logs
+        self._details = details
         self._publish = publish
         self._logger = logging.getLogger(f"agent_shell.runtime.{id(self)}")
         self._logger.setLevel(logging.DEBUG)
@@ -43,7 +70,7 @@ class RuntimeDiagnostics:
         console = logging.StreamHandler()
         console.setFormatter(formatter)
         self._logger.addHandler(console)
-        self._reconcile_debug_logs()
+        self._reconcile_details()
 
     def close(self) -> None:
         for handler in tuple(self._logger.handlers):
@@ -55,7 +82,7 @@ class RuntimeDiagnostics:
             return self._settings() | {"entries": self._store.entries()}
 
     def _settings(self) -> dict[str, object]:
-        return self._store.retention() | self._debug_logs.settings()
+        return self._store.retention()
 
     def settings(self) -> dict[str, object]:
         with self._lock:
@@ -64,12 +91,7 @@ class RuntimeDiagnostics:
     def set_retention_limit(self, retention_limit: int) -> dict[str, object]:
         with self._lock:
             self._store.set_retention(retention_limit)
-            self._reconcile_debug_logs()
-            return self._settings()
-
-    def set_debug_enabled(self, enabled: bool) -> dict[str, object]:
-        with self._lock:
-            self._debug_logs.set_enabled(enabled)
+            self._reconcile_details()
             return self._settings()
 
     def delete_entries(
@@ -78,184 +100,129 @@ class RuntimeDiagnostics:
     ) -> int:
         with self._lock:
             deleted = self._store.delete_entries(predicate)
-            self._reconcile_debug_logs()
+            self._reconcile_details()
             return deleted
 
-    def debug_log_path(self, item_id: str) -> Path | None:
+    def detail_path(self, diagnostic_id: str) -> Path | None:
         with self._lock:
-            return self._debug_logs.download_path(item_id)
+            return self._details.download_path(diagnostic_id)
 
-    def _reconcile_debug_logs(self) -> None:
-        self._debug_logs.retain(
-            {runtime_diagnostic_id(entry) for entry in self._store.entries()}
+    def _reconcile_details(self) -> None:
+        self._details.retain(
+            {
+                str(entry["diagnostic_id"])
+                for entry in self._store.entries()
+                if entry.get("detail_available") is True
+            }
         )
 
     def runtime_error(
         self,
         exc: BaseException,
         *,
-        request_id: str,
-        model: str,
-        agent_name: str,
         code: str,
-        debug_exception: BaseException | None = None,
+        component: str,
+        context: RuntimeDiagnosticContext | None = None,
+        detail_exception: BaseException | None = None,
     ) -> None:
-        message = (
-            f"request failed code={_safe_text(code)} "
-            f"message={_safe_text(exc.safe_message)}"
+        summary = (
+            _safe_text(exc.safe_message)
             if isinstance(exc, AgentRuntimeError)
-            else f"request failed code={_safe_text(code)}"
+            else "A runtime operation failed."
         )
         self._emit_exception(
             exc,
-            request_id=request_id,
-            model=model,
-            agent_name=agent_name,
             code=code,
-            message=message,
-            debug_exception=exc if debug_exception is None else debug_exception,
+            component=component,
+            summary=summary,
+            context=context,
+            detail_exception=exc if detail_exception is None else detail_exception,
         )
 
     def observation_error(
         self,
         exc: BaseException,
         *,
-        request_id: str,
-        model: str,
-        agent_name: str,
         code: str,
+        component: str,
+        context: RuntimeDiagnosticContext | None = None,
     ) -> None:
         self._emit_exception(
             exc,
-            request_id=request_id,
-            model=model,
-            agent_name=agent_name,
             code=code,
-            message=f"observation record failed code={_safe_text(code)}",
-            debug_exception=exc,
-        )
-
-    def runtime_completed(
-        self,
-        *,
-        request_id: str,
-        model: str,
-        agent_name: str,
-        finish_reason: str,
-        usage: Mapping[str, int],
-    ) -> None:
-        if not self._debug_logs.settings()["debug_enabled"]:
-            return
-        self._emit(
-            "info",
-            request_id=request_id,
-            model=model,
-            agent_name=agent_name,
-            code="request_completed",
-            message="request completed",
-            debug_lines=(
-                "status=completed\n",
-                f"finish_reason={finish_reason}\n",
-                f"usage={dict(usage)!r}\n",
-            ),
+            component=component,
+            summary="Observation data could not be recorded.",
+            context=context,
+            detail_exception=exc,
         )
 
     def _emit_exception(
         self,
         exc: BaseException,
         *,
-        request_id: str,
-        model: str,
-        agent_name: str,
         code: str,
-        message: str,
-        debug_exception: BaseException,
+        component: str,
+        summary: str,
+        context: RuntimeDiagnosticContext | None,
+        detail_exception: BaseException,
     ) -> None:
-        self._emit(
-            "error",
-            request_id=request_id,
-            model=model,
-            agent_name=agent_name,
-            code=code,
-            exception_type=type(exc).__name__,
-            message=message,
-            debug_exception=debug_exception,
-        )
-
-    def _emit(
-        self,
-        level: str,
-        *,
-        request_id: str,
-        model: str,
-        agent_name: str,
-        message: str,
-        code: str = "",
-        exception_type: str = "",
-        debug_exception: BaseException | None = None,
-        debug_lines: Iterable[str] | None = None,
-    ) -> None:
-        now = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
-        safe_model = _safe_text(model)
-        safe_agent = _safe_text(agent_name)
-        safe_request = _safe_text(request_id)
+        diagnostic_id = uuid4().hex
+        occurred_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
         safe_code = _safe_text(code)
-        safe_exception_type = _safe_text(exception_type)
+        safe_component = _safe_text(component)
+        safe_summary = _safe_text(summary)
+        safe_context = (context or RuntimeDiagnosticContext()).safe_values()
+        safe_exception_type = _optional_safe_text(type(exc).__name__)
         prefix = (
-            f"{now} [{level.upper()}] request_id={safe_request or '-'} "
-            f"model={safe_model or '-'} agent={safe_agent or '-'}"
+            f"{occurred_at} [ERROR] component={safe_component} code={safe_code} "
+            f"request_id={safe_context['request_id'] or '-'} "
+            f"lifecycle_id={safe_context['lifecycle_id'] or '-'} "
+            f"run_id={safe_context['run_id'] or '-'}"
         )
-        self._logger.log(
-            {"debug": logging.DEBUG, "info": logging.INFO, "error": logging.ERROR}[level],
-            prefix + "\n" + message,
-        )
+        self._logger.error(prefix + "\n" + safe_summary)
+
         with self._lock:
+            detail_available = False
             try:
+                detail_available = self._details.write(
+                    diagnostic_id,
+                    chain(
+                        (
+                            f"diagnostic_id={diagnostic_id}\n",
+                            f"occurred_at={occurred_at}\n",
+                            f"component={safe_component}\n",
+                            f"code={safe_code}\n",
+                            *(f"{key}={value}\n" for key, value in safe_context.items() if value),
+                            f"exception_type={type(exc).__name__}\n\n",
+                        ),
+                        traceback.TracebackException.from_exception(
+                            detail_exception
+                        ).format(chain=True),
+                    ),
+                )
                 entry = self._store.add(
-                    timestamp=now,
-                    level=level,
-                    request_id=safe_request,
-                    model=safe_model,
-                    agent_name=safe_agent,
+                    diagnostic_id=diagnostic_id,
+                    occurred_at=occurred_at,
+                    severity="error",
                     code=safe_code,
+                    summary=safe_summary,
+                    component=safe_component,
                     exception_type=safe_exception_type,
-                    message=message,
+                    detail_available=detail_available,
+                    **safe_context,
                 )
             except Exception:
                 self._logger.error(prefix + "\nruntime diagnostic persistence failed")
-                return
-            if debug_exception is not None or debug_lines is not None:
                 try:
-                    if debug_exception is not None:
-                        details = traceback.TracebackException.from_exception(
-                            debug_exception,
-                        ).format(chain=True)
-                    else:
-                        details = debug_lines or ()
-                    self._debug_logs.write(
-                        runtime_diagnostic_id(entry),
-                        chain(
-                            (
-                                f"timestamp={now}\n",
-                                f"request_id={request_id}\n",
-                                f"model={model}\n",
-                                f"agent={agent_name}\n",
-                                f"code={code}\n",
-                                "exception_type="
-                                + (
-                                    type(debug_exception).__name__
-                                    if debug_exception is not None
-                                    else ""
-                                )
-                                + "\n\n",
-                            ),
-                            details,
-                        ),
-                    )
+                    self._reconcile_details()
                 except Exception:
-                    self._logger.error(prefix + "\nruntime debug log persistence failed")
+                    self._logger.error(prefix + "\nruntime diagnostic cleanup failed")
+                return
             try:
-                self._reconcile_debug_logs()
+                self._reconcile_details()
             except Exception:
-                self._logger.error(prefix + "\nruntime debug log cleanup failed")
+                self._logger.error(prefix + "\nruntime diagnostic cleanup failed")
         self._publish({"type": "runtime_diagnostic", "entry": entry})
+
+
+__all__ = ["RuntimeDiagnosticContext", "RuntimeDiagnostics"]

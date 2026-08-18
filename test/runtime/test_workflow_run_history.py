@@ -1,0 +1,154 @@
+from __future__ import annotations
+
+import asyncio
+import json
+from uuid import uuid4
+
+from agent_shell.runtime.context import WorkflowRuntimeContext
+from agent_shell.runtime.workflow_lifecycle import WorkflowLifecycleService
+from agent_shell.runtime.workflow_run_journal import WorkflowRunJournal
+from agent_shell.storage.database import SQLiteDatabase
+
+
+class _Diagnostics:
+    def __init__(self) -> None:
+        self.errors: list[dict[str, object]] = []
+
+    def observation_error(self, exc, **kwargs) -> None:
+        self.errors.append({"error": exc, **kwargs})
+
+
+def test_run_history_distinguishes_repeated_node_spans_and_omits_payloads(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    async def scenario() -> None:
+        database = SQLiteDatabase(tmp_path / "data" / "state" / "agent-shell.sqlite3")
+        lifecycle = WorkflowLifecycleService(database)
+        await lifecycle.start()
+        try:
+            lifecycle_id = await lifecycle.create(
+                [{"role": "user", "content": "private-journal-sentinel"}],
+                request_id="request-1",
+                run_id="root-run",
+                thread_id="root-thread",
+                workflow_id="workflow-1",
+                workflow_name="Parent Workflow",
+            )
+            assert lifecycle.start_run("root-run") is True
+            context = WorkflowRuntimeContext.for_run(
+                request_id="request-1",
+                lifecycle_id=lifecycle_id,
+                run_id="root-run",
+                thread_id="root-thread",
+                workflow={"id": "workflow-1", "name": "Parent Workflow"},
+            )
+            diagnostics = _Diagnostics()
+            journal = WorkflowRunJournal(
+                lifecycle,
+                diagnostics,  # type: ignore[arg-type]
+                context,
+                workflow_node_kinds={"agent-node": "agent"},
+                agent_names={"agent-node": "Writer Agent"},
+            )
+
+            first = uuid4()
+            second = uuid4()
+            journal.on_chain_start(
+                {},
+                {"secret": "private-journal-sentinel"},
+                run_id=first,
+                name="agent-node",
+                metadata={"langgraph_node": "agent-node", "langgraph_step": 1},
+            )
+            journal.on_chain_end({}, run_id=first)
+            journal.on_chain_start(
+                {},
+                {"secret": "private-journal-sentinel"},
+                run_id=second,
+                name="agent-node",
+                metadata={"langgraph_node": "agent-node", "langgraph_step": 2},
+            )
+            journal.on_chain_end({}, run_id=second)
+
+            agent_span = uuid4()
+            journal.on_chain_start(
+                {},
+                {},
+                run_id=agent_span,
+                name="Writer Agent",
+            )
+            journal.on_chain_end({}, run_id=agent_span)
+            ignored_chain = uuid4()
+            journal.on_chain_start({}, {}, run_id=ignored_chain, name="internal-sequence")
+            journal.on_chain_end({}, run_id=ignored_chain)
+            model_span = uuid4()
+            journal.on_chat_model_start(
+                {"name": "provider-model"},
+                [["private-journal-sentinel"]],
+                run_id=model_span,
+                parent_run_id=agent_span,
+            )
+            journal.on_llm_end(
+                {"usage": {"input_tokens": 4, "output_tokens": 2}},
+                run_id=model_span,
+            )
+            tool_span = uuid4()
+            journal.on_tool_start(
+                {"name": "search"},
+                "private-journal-sentinel",
+                run_id=tool_span,
+                parent_run_id=agent_span,
+            )
+            journal.on_tool_end("private-journal-sentinel", run_id=tool_span)
+
+            events = lifecycle.events(lifecycle_id)
+            node_starts = [
+                event
+                for event in events
+                if event["subject_kind"] == "workflow_node"
+                and event["phase"] == "started"
+            ]
+            assert [event["node_invocation_id"] for event in node_starts] == [
+                str(first),
+                str(second),
+            ]
+            assert {event["subject_kind"] for event in events} >= {
+                "run",
+                "workflow_node",
+                "agent",
+                "model",
+                "tool",
+            }
+            assert all(event["subject_name"] != "internal-sequence" for event in events)
+            assert [event["sequence"] for event in events] == sorted(
+                event["sequence"] for event in events
+            )
+            first_invocation_events = lifecycle.events(
+                lifecycle_id,
+                node_invocation_id=str(first),
+            )
+            assert {event["event_type"] for event in first_invocation_events} == {
+                "workflow_node",
+                "agent",
+            }
+            assert lifecycle.events(lifecycle_id, event_type="model") == [
+                event for event in events if event["event_type"] == "model"
+            ]
+            assert "private-journal-sentinel" not in json.dumps(events)
+            assert diagnostics.errors == []
+
+            original = lifecycle.append_run_event
+
+            def fail_event(_event):
+                raise OSError("journal unavailable")
+
+            monkeypatch.setattr(lifecycle, "append_run_event", fail_event)
+            journal.on_tool_start({}, "ignored", run_id=uuid4())
+            monkeypatch.setattr(lifecycle, "append_run_event", original)
+            assert lifecycle.history.get_run("root-run")["observation_status"] == "partial"
+            assert diagnostics.errors[0]["code"] == "workflow_run_event_record_failed"
+        finally:
+            await lifecycle.close()
+
+    asyncio.run(scenario())

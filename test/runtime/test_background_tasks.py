@@ -152,6 +152,10 @@ def test_background_manager_checks_independent_terminal_failure_and_unknown_stat
             )
             failed = (await manager.check(lifecycle_id, [second.task_id]))[0]
             assert failed.error_code == "child_expected_failure"
+            failed_run = lifecycle.history.get_run(second.child_run_id)
+            assert failed_run is not None
+            assert failed_run["status"] == "failed"
+            assert failed_run["error_code"] == "child_expected_failure"
 
             old = BackgroundTaskRecord(
                 task_id="old-task",
@@ -223,6 +227,10 @@ def test_background_manager_shutdown_cancels_active_task(tmp_path: Path) -> None
         snapshot = (await manager.check(lifecycle_id, [handle.task_id]))[0]
         assert snapshot.runtime_status == "cancelled"
         assert snapshot.error_code == "background_task_cancelled"
+        run = lifecycle.history.get_run(handle.child_run_id)
+        assert run is not None
+        assert run["status"] == "cancelled"
+        assert run["error_code"] == "background_task_cancelled"
         await lifecycle.close()
 
     asyncio.run(scenario())
@@ -289,6 +297,9 @@ def test_background_manager_lists_filters_and_cancels_agent_task_idempotently(
                 statuses=frozenset({"cancelled"}),
             )
             assert [item.task_id for item in cancelled] == [handle.task_id]
+            run = lifecycle.history.get_run(handle.child_run_id)
+            assert run is not None
+            assert run["status"] == "cancelled"
         finally:
             await manager.close()
             await lifecycle.close()

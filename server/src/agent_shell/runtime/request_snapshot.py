@@ -19,7 +19,7 @@ from agent_shell.runtime.background_tasks import (
     BackgroundTaskStatus,
 )
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
-from agent_shell.runtime.workflow_debug import WorkflowDebugService
+from agent_shell.runtime.workflow_checkpoints import WorkflowCheckpointService
 from agent_shell.runtime.workflow_lifecycle import WorkflowLifecycleService
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.agent_configs import AgentConfigStore
@@ -261,7 +261,7 @@ class RequestSnapshotRuntime:
         skills_dir: Path,
         provider_http_clients: ProviderHttpClients,
         media_outputs: MediaOutputStore,
-        workflow_debug: WorkflowDebugService,
+        workflow_checkpoints: WorkflowCheckpointService,
         workflow_lifecycle: WorkflowLifecycleService,
         background_tasks: BackgroundTaskManager,
         runtime_diagnostics: RuntimeDiagnostics,
@@ -273,7 +273,7 @@ class RequestSnapshotRuntime:
         self._skills_dir = skills_dir
         self._provider_http_clients = provider_http_clients
         self._media_outputs = media_outputs
-        self._workflow_debug = workflow_debug
+        self._workflow_checkpoints = workflow_checkpoints
         self._workflow_lifecycle = workflow_lifecycle
         self._background_tasks = background_tasks
         self._runtime_diagnostics = runtime_diagnostics
@@ -310,7 +310,7 @@ class RequestSnapshotRuntime:
                 python_packages_dir=self._python_packages_dir,
                 runtime_dir=self._runtime_dir,
                 blocks=blocks,
-                workflow_debug=self._workflow_debug,
+                workflow_checkpoints=self._workflow_checkpoints,
                 workflow_lifecycle=self._workflow_lifecycle,
                 runtime_diagnostics=self._runtime_diagnostics,
             )

@@ -27,7 +27,9 @@ Custom Tool、Middleware 或普通 Node 可以在自己的 invocation 内调用 
 该保证不跨 caller Run 或尚未实现的 Resume 边界；业务上确实需要重派时使用新的 operation ID。Workflow target 仍只允许已启用子图，后台 Agent 继承 caller Workflow Filesystem；后台输出不会自动混入
 parent 响应。
 
-【运行生命周期】页面按一次顶层请求列出 Lifecycle，显示后台任务、Checkpoint、Store 条目和动态目录计数。Lifecycle 的
+【运行历史】页面按一次顶层请求列出 Lifecycle，并展示 root/background Run 父子关系、结构 Timeline、Checkpoint/Store
+摘要、关联诊断以及单 Run/Lifecycle 诊断包下载。Event Journal 只保存结构身份、状态、时间和 usage，不复制运行正文。
+Lifecycle 的
 messages、task records、resolved mapping records 和 parent/child checkpoint 默认持续保留，直到用户显式删除；删除时同时清理
 受管的生命周期动态目录。父 Run 尚未终止，或仍有 `pending`、`running`、`cancel_requested` 后台任务时，删除返回冲突；必须等待
 父 Run 终止，并先由 Workflow 代码、Tool/Middleware 或管理操作显式取消后台任务并使其进入终态。父图到达 End 不会隐式取消后台任务，也不会删除 Lifecycle。

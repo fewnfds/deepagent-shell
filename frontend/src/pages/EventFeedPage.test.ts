@@ -21,23 +21,8 @@ function api() {
     getRuntimeDiagnostics: vi.fn(async () => ({
       retention_limit: 20,
       max_retention_limit: 10_000,
-      debug_enabled: false,
     })),
-    updateRuntimeLogRetention: vi.fn(async (retentionLimit: number) => ({
-      retention_limit: retentionLimit,
-      max_retention_limit: 10_000,
-      debug_enabled: false,
-    })),
-    updateRuntimeDebug: vi.fn(async (enabled: boolean) => ({
-      retention_limit: 20,
-      max_retention_limit: 10_000,
-      debug_enabled: enabled,
-    })),
-    getWorkflowDebugRetention: vi.fn(async () => ({
-      retention_limit: 50,
-      max_retention_limit: 10_000,
-    })),
-    updateWorkflowDebugRetention: vi.fn(async (retentionLimit: number) => ({
+    updateRuntimeDiagnosticRetention: vi.fn(async (retentionLimit: number) => ({
       retention_limit: retentionLimit,
       max_retention_limit: 10_000,
     })),
@@ -77,21 +62,14 @@ async function mountPage(mockApi: ReturnType<typeof api>) {
 }
 
 describe('EventFeedPage', () => {
-  it('shows the supported log controls and saves the debug switch', async () => {
+  it('shows only log-owned retention controls', async () => {
     const mockApi = api()
     const wrapper = await mountPage(mockApi)
 
     expect(wrapper.find('[data-testid="retention-runtime"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="retention-workflow-debug"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="retention-workflow-debug"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="retention-api_call"]').exists()).toBe(false)
-    const debugControl = wrapper.get('[data-testid="runtime-debug"]')
-    expect(debugControl.get('.form-label').text()).toBe('Full DEBUG logs')
-    expect(debugControl.get('label[for="runtime-debug-enabled"]').classes()).toContain('visually-hidden')
-    const debugSwitch = wrapper.get<HTMLInputElement>('#runtime-debug-enabled')
-    expect(debugSwitch.element.checked).toBe(false)
-    await debugSwitch.setValue(true)
-    await flushPromises()
-    expect(mockApi.updateRuntimeDebug).toHaveBeenCalledWith(true)
+    expect(wrapper.find('[data-testid="runtime-detail"]').exists()).toBe(false)
     expect(mockApi.listEventFeed).toHaveBeenCalledWith(expect.objectContaining({
       source: ['runtime'],
     }))

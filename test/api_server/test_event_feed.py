@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+from agent_shell.runtime.diagnostics import RuntimeDiagnosticContext
 from agent_shell.runtime.errors import AgentRuntimeError
 
 from .support import *
@@ -16,14 +17,20 @@ def test_event_feed_exposes_only_supported_sources(
             {"action": "updated", "entity": "test", "entity_id": "one"},
         )
         client.app.state.runtime_diagnostic_store.add(
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            level="error",
+            diagnostic_id="1" * 32,
+            occurred_at=datetime.now(timezone.utc).isoformat(),
+            severity="error",
             request_id="request-runtime",
-            model="published-model",
-            agent_name="Published Main Agent",
             code="runtime_failed",
+            summary="request failed",
+            component="workflow_runtime",
+            detail_available=False,
+            parent_workflow_id="workflow-parent",
+            parent_workflow_name="Published Workflow",
+            subject_kind="agent",
+            subject_id="agent-one",
+            subject_name="Published Main Agent",
             exception_type="AgentRuntimeError",
-            message="request failed",
         )
         response = client.get(
             "/api/event-feed", params=event_feed_params(page_size=100)
@@ -47,7 +54,7 @@ def test_event_feed_exposes_only_supported_sources(
             "summary",
             "inline_content",
             "matched_in_content",
-            "download_available",
+            "download_kind",
         }
         for item in items
     )
@@ -62,19 +69,21 @@ def test_event_feed_deletes_filtered_runtime_records_across_pages(
         store = client.app.state.runtime_diagnostic_store
         for index in range(3):
             store.add(
-                timestamp=(datetime.now(timezone.utc) + timedelta(seconds=index)).isoformat(),
-                level="info",
+                diagnostic_id=f"{index + 1:032x}",
+                occurred_at=(
+                    datetime.now(timezone.utc) + timedelta(seconds=index)
+                ).isoformat(),
+                severity="error",
                 request_id=f"request-{index}",
-                model="published-model",
-                agent_name="Published Main Agent",
-                code="",
-                exception_type="",
-                message=marker,
+                code="runtime_failed",
+                summary=marker,
+                component="workflow_runtime",
+                detail_available=False,
             )
         window = {
             **EVENT_FEED_TEST_WINDOW,
             "source": ["runtime"],
-            "level": ["info"],
+            "level": ["error"],
             "query": marker,
         }
         listed = client.get(
@@ -90,67 +99,34 @@ def test_event_feed_deletes_filtered_runtime_records_across_pages(
     assert remaining["items"] == []
 
 
-def test_successful_runtime_debug_is_recorded_only_while_enabled(
+def test_runtime_diagnostic_settings_have_no_capture_switch(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    request_id = "request-success-debug"
     with make_client(tmp_path, monkeypatch) as client:
-        diagnostics = client.app.state.runtime_diagnostics
-        diagnostics.runtime_completed(
-            request_id=request_id,
-            model="published-model",
-            agent_name="Published Main Agent",
-            finish_reason="stop",
-            usage={"input_tokens": 12, "output_tokens": 4, "total_tokens": 16},
-        )
-        disabled_listing = client.get(
-            "/api/event-feed",
-            params=event_feed_params(source="runtime", query=request_id),
-        ).json()
-
-        client.put(
-            "/api/runtime-diagnostics/debug",
+        settings = client.get("/api/runtime-diagnostics")
+        removed = client.put(
+            "/api/runtime-diagnostics/detail",
             json={"enabled": True},
         )
-        diagnostics.runtime_completed(
-            request_id=request_id,
-            model="published-model",
-            agent_name="Published Main Agent",
-            finish_reason="stop",
-            usage={"input_tokens": 12, "output_tokens": 4, "total_tokens": 16},
-        )
-        enabled_listing = client.get(
+        listing = client.get(
             "/api/event-feed",
-            params=event_feed_params(source="runtime", query=request_id),
+            params=event_feed_params(source="runtime"),
         ).json()
-        item = enabled_listing["items"][0]
-        download = client.get(
-            f"/api/event-feed/runtime/{item['id']}/download"
-        )
 
-    assert disabled_listing["items"] == []
-    assert enabled_listing["total"] == 1
-    assert item["level"] == "info"
-    assert item["summary"] == "Published Main Agent · request completed"
-    assert item["download_available"] is True
-    debug_text = download.content.decode("utf-8")
-    assert "status=completed" in debug_text
-    assert "finish_reason=stop" in debug_text
-    assert "'total_tokens': 16" in debug_text
+    assert settings.json() == {
+        "retention_limit": 20,
+        "max_retention_limit": 10_000,
+    }
+    assert removed.status_code == 404
+    assert listing["items"] == []
 
 
-def test_runtime_debug_download_keeps_full_exception_out_of_summary(
+def test_runtime_diagnostic_detail_keeps_full_exception_out_of_summary(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     request_id = "request-full-debug"
     private_detail = "private-debug-detail"
     with make_client(tmp_path, monkeypatch) as client:
-        initial = client.get("/api/runtime-diagnostics")
-        enabled = client.put(
-            "/api/runtime-diagnostics/debug",
-            json={"enabled": True},
-        )
-
         try:
             try:
                 raise TypeError(private_detail)
@@ -163,11 +139,22 @@ def test_runtime_debug_download_keeps_full_exception_out_of_summary(
                     "The Agent failed during graph execution.",
                     status_code=502,
                 ),
-                request_id=request_id,
-                model="published-model",
-                agent_name="Published Main Agent",
                 code="agent_execution_failed",
-                debug_exception=full_exception,
+                component="workflow_runtime",
+                context=RuntimeDiagnosticContext(
+                    request_id=request_id,
+                    lifecycle_id="lifecycle-one",
+                    run_id="run-one",
+                    thread_id="thread-one",
+                    parent_workflow_id="workflow-parent",
+                    parent_workflow_name="Published Workflow",
+                    subject_kind="agent",
+                    subject_id="agent-one",
+                    subject_name="Published Main Agent",
+                    workflow_node_id="node-one",
+                    node_invocation_id="invocation-one",
+                ),
+                detail_exception=full_exception,
             )
 
         listing = client.get(
@@ -191,16 +178,19 @@ def test_runtime_debug_download_keeps_full_exception_out_of_summary(
             f"/api/event-feed/runtime/{item['id']}/download"
         )
 
-    assert initial.json()["debug_enabled"] is False
-    assert enabled.json()["debug_enabled"] is True
-    assert item["download_available"] is True
+    assert item["download_kind"] == "diagnostic_detail"
+    assert item["summary"] == (
+        "Published Main Agent · The Agent failed during graph execution."
+    )
     assert private_detail not in item["inline_content"]
     assert download.status_code == 200
     assert download.headers["content-type"].startswith("text/plain")
     assert download.headers["content-disposition"].endswith('.log"')
-    debug_text = download.content.decode("utf-8")
-    assert "TypeError: private-debug-detail" in debug_text
-    assert "RuntimeError: outer debug failure" in debug_text
+    detail_text = download.content.decode("utf-8")
+    assert "parent_workflow_name=Published Workflow" in detail_text
+    assert "run_id=run-one" in detail_text
+    assert "TypeError: private-debug-detail" in detail_text
+    assert "RuntimeError: outer debug failure" in detail_text
     assert deleted.json() == {"deleted": 1}
     assert missing.status_code == 404
-    assert list((tmp_path / "data" / "logs" / "debug").glob("*.log")) == []
+    assert list((tmp_path / "data" / "logs" / "diagnostics").glob("*.log")) == []

@@ -11,8 +11,11 @@ from agent_shell.model_provider_contracts import _SETTINGS_BY_PROVIDER
 from agent_shell.provider_http import PROVIDER_HTTP_TIMEOUT
 from agent_shell.provider_integrations import bundled_provider_integrations
 from agent_shell.runtime import agent_builder
+from agent_shell.runtime.context import WorkflowRuntimeContext
+from agent_shell.runtime.diagnostics import RuntimeDiagnosticContext
 from agent_shell.runtime.model_response import ModelResponse, finish_reason_category
 from agent_shell.runtime.output_stream import MainAgentMediaBlock, OutputEvent
+from agent_shell.runtime.workflow_lifecycle import WorkflowLifecycleService
 
 @pytest.mark.parametrize(
     ("reason", "category"),
@@ -60,6 +63,50 @@ def test_workflow_run_completion_does_not_inherit_an_agent_finish_reason() -> No
     assert workflow.finish_reason_source is None
     assert agent.finish_reason == "length"
     assert agent.finish_reason_source == "response_metadata.finish_reason"
+
+
+def test_runtime_diagnostic_context_keeps_parent_workflow_and_agent_subject() -> None:
+    normalizer = SimpleNamespace(
+        usage={},
+        finish_reason="stop",
+        finish_reason_source=None,
+    )
+    context = WorkflowRuntimeContext.for_run(
+        request_id="request-one",
+        lifecycle_id="lifecycle-one",
+        run_id="run-one",
+        thread_id="thread-one",
+        workflow={"id": "workflow-parent", "name": "Parent Workflow"},
+    ).for_background_agent(
+        agent_id="agent-one",
+        invocation_id="invocation-one",
+    )
+    execution = RunExecution(
+        graph=None,
+        input_state={},
+        rectifier=None,
+        normalizer=normalizer,
+        middleware_runtime=noop_middleware_runtime(),
+        media_response=noop_media_response(),
+        context=context,
+        public_model="Agent One",
+        agent_name="Agent One",
+        run_kind="agent",
+    )
+
+    assert execution.diagnostic_context() == RuntimeDiagnosticContext(
+        request_id="request-one",
+        lifecycle_id="lifecycle-one",
+        run_id="run-one",
+        thread_id="thread-one",
+        parent_workflow_id="workflow-parent",
+        parent_workflow_name="Parent Workflow",
+        subject_kind="agent",
+        subject_id="agent-one",
+        subject_name="Agent One",
+        node_invocation_id="invocation-one",
+    )
+
 
 def test_agent_execution_closes_v3_stream_when_consumer_is_cancelled() -> None:
     async def scenario() -> bool:
@@ -125,8 +172,8 @@ def test_agent_execution_closes_v3_stream_when_consumer_is_cancelled() -> None:
 
     assert asyncio.run(scenario()) is True
 
-def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch) -> None:
-    async def scenario() -> bool:
+def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch, tmp_path) -> None:
+    async def scenario() -> tuple[bool, dict[str, object]]:
         class BlockingRun:
             def __init__(self) -> None:
                 self.exited = False
@@ -152,9 +199,17 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch) -> None:
                 self.run = run
 
             async def astream_events(
-                self, _input, *, config: dict, version: str, transformers: tuple = ()
+                self,
+                _input,
+                *,
+                config: dict,
+                version: str,
+                transformers: tuple = (),
+                context=None,
             ):
-                assert config == {"recursion_limit": 100}
+                assert config["recursion_limit"] == 100
+                assert len(config["callbacks"]) == 1
+                assert context is not None
                 assert version == "v3"
                 assert transformers
                 return self.run
@@ -166,27 +221,56 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch) -> None:
             "output_source": output_source(),
         }
         run = BlockingRun()
-        execution = RunExecution(
-            graph=Graph(run),
-            input_state={"messages": [{"role": "user", "content": "wait"}]},
-            rectifier=OutputEventRectifier(OutputProjector(settings)),
-            normalizer=V3EventNormalizer("Main Agent"),
-            middleware_runtime=noop_middleware_runtime(),
-            media_response=noop_media_response(),
-            execution_timeout_seconds=0.01,
-        )
-        stream = execution.stream_text()
-        assert await anext(stream) == "running"
-        assert await anext(stream) == "failed"
-        with pytest.raises(AgentRuntimeError) as captured:
-            await anext(stream)
-        assert captured.value.code == "execution_timeout"
-        return run.exited
+        lifecycle = WorkflowLifecycleService(tmp_path / "timeout.sqlite3")
+        await lifecycle.start()
+        try:
+            lifecycle_id = await lifecycle.create(
+                [{"role": "user", "content": "wait"}],
+                request_id="timeout-request",
+                run_id="timeout-run",
+                thread_id="timeout-thread",
+                workflow_id="timeout-workflow",
+                workflow_name="Timeout Workflow",
+            )
+            context = WorkflowRuntimeContext.for_run(
+                request_id="timeout-request",
+                lifecycle_id=lifecycle_id,
+                run_id="timeout-run",
+                thread_id="timeout-thread",
+                workflow={"id": "timeout-workflow", "name": "Timeout Workflow"},
+            )
+            execution = RunExecution(
+                graph=Graph(run),
+                input_state={"messages": [{"role": "user", "content": "wait"}]},
+                rectifier=OutputEventRectifier(OutputProjector(settings)),
+                normalizer=V3EventNormalizer("Main Agent"),
+                middleware_runtime=noop_middleware_runtime(),
+                media_response=noop_media_response(),
+                execution_timeout_seconds=0.01,
+                lifecycle_service=lifecycle,
+                lifecycle_id=lifecycle_id,
+                owns_lifecycle=True,
+                context=context,
+            )
+            stream = execution.stream_text()
+            assert await anext(stream) == "running"
+            assert await anext(stream) == "failed"
+            with pytest.raises(AgentRuntimeError) as captured:
+                await anext(stream)
+            assert captured.value.code == "execution_timeout"
+            record = lifecycle.history.get_run("timeout-run")
+            assert record is not None
+            return run.exited, record
+        finally:
+            await lifecycle.close()
 
-    assert asyncio.run(scenario()) is True
+    closed, record = asyncio.run(scenario())
+    assert closed is True
+    assert record["status"] == "failed"
+    assert record["error_code"] == "execution_timeout"
 
 
-def test_successful_execution_reports_completion_after_workflow_debug_failure() -> None:
+def test_successful_execution_does_not_add_a_runtime_diagnostic() -> None:
     async def scenario() -> list[str]:
         class EmptyRun:
             async def __aenter__(self):
@@ -212,10 +296,6 @@ def test_successful_execution_reports_completion_after_workflow_debug_failure() 
                 assert transformers
                 return EmptyRun()
 
-        class FailingDebugRun:
-            async def finish(self, *_args, **_kwargs) -> None:
-                raise RuntimeError("private debug storage failure")
-
         class RecordingDiagnostics:
             def __init__(self) -> None:
                 self.codes: list[str] = []
@@ -226,9 +306,6 @@ def test_successful_execution_reports_completion_after_workflow_debug_failure() 
             def runtime_error(self, _exc, *, code: str, **_kwargs) -> None:
                 self.codes.append(code)
 
-            def runtime_completed(self, **_kwargs) -> None:
-                self.codes.append("request_completed")
-
         diagnostics = RecordingDiagnostics()
         execution = RunExecution(
             graph=Graph(),
@@ -237,7 +314,6 @@ def test_successful_execution_reports_completion_after_workflow_debug_failure() 
             normalizer=V3EventNormalizer("Main Agent"),
             middleware_runtime=noop_middleware_runtime(),
             media_response=noop_media_response(),
-            debug_run=FailingDebugRun(),  # type: ignore[arg-type]
             runtime_diagnostics=diagnostics,  # type: ignore[arg-type]
         )
 
@@ -248,10 +324,7 @@ def test_successful_execution_reports_completion_after_workflow_debug_failure() 
         }
         return diagnostics.codes
 
-    assert asyncio.run(scenario()) == [
-        "workflow_debug_record_failed",
-        "request_completed",
-    ]
+    assert asyncio.run(scenario()) == []
 
 
 def test_silent_execution_skips_public_projectors_observers_and_media() -> None:
@@ -416,16 +489,16 @@ def test_tool_error_boundary_preserves_successful_result() -> None:
 def test_unclassified_graph_failure_is_not_mislabeled_as_provider() -> None:
     async def scenario() -> tuple[str, str]:
         class RecordingDiagnostics:
-            debug_exception: BaseException | None = None
+            detail_exception: BaseException | None = None
 
             def runtime_error(
                 self,
                 _exc,
                 *,
-                debug_exception: BaseException | None = None,
+                detail_exception: BaseException | None = None,
                 **_kwargs,
             ) -> None:
-                self.debug_exception = debug_exception
+                self.detail_exception = detail_exception
 
         class Graph:
             async def astream_events(
@@ -456,7 +529,7 @@ def test_unclassified_graph_failure_is_not_mislabeled_as_provider() -> None:
         with pytest.raises(AgentRuntimeError) as captured:
             await anext(stream)
         assert "private middleware or graph details" not in captured.value.safe_message
-        return captured.value.code, str(diagnostics.debug_exception)
+        return captured.value.code, str(diagnostics.detail_exception)
 
     assert asyncio.run(scenario()) == (
         "agent_execution_failed",

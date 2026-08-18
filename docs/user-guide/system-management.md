@@ -19,12 +19,12 @@ data/
   resources/{skills,custom_tools}/
   templates/{workflow/condition_router,workflow/task_dispatcher,agent/custom_middleware}/
   logs/security-events.jsonl
-  logs/debug/*.log
+  logs/diagnostics/*.log
 ```
 
 它包含管理密码、API Key、Provider credential、Workflow、Agent/组件配置、用户文件和历史，应作为敏感数据
-整体备份。配置文件位于 `data/config/`；SQLite 保存官方 LangGraph checkpoint、Workflow Debug 运行索引、
-请求级 runtime 诊断和媒体元数据。迁移时先完全停止服务，
+整体备份。配置文件位于 `data/config/`；SQLite 保存官方 LangGraph checkpoint、Lifecycle Run Registry/Event Journal、
+结构化 runtime 失败诊断和媒体元数据。迁移时先完全停止服务，
 再复制完整 `data/`，包括 SQLite WAL/SHM。外部 filesystem 映射需要单独迁移并更新路径。
 
 静态 Python 模板保存在 `data/templates/`，配置独占的 Python 扩展及其可选 `requirements.txt` 保存在
@@ -66,6 +66,6 @@ API Key 和消息上限立即生效；host、端口、远程访问、管理密�
 系统日志或运行诊断，服务重启后清空。
 远程部署要求见[安全与部署](../security-and-deployment.md)。
 
-【系统 / 日志中心】的 DEBUG 开关立即生效。开启后，正常完成的 Agent 请求会生成 `INFO` 运行记录和完成元数据文件，
-异常请求会写入完整 traceback；文件位于 `data/logs/debug/`，并从对应运行日志行下载。关闭后正常请求不再生成运行
-记录或 DEBUG 文件，错误摘要仍会保留。
+【系统 / 日志中心】展示系统日志和运行失败诊断，不承载 Lifecycle、Run、checkpoint 或 Store 数据。运行诊断按可用范围
+关联 request、Lifecycle、Run、parent Workflow 和当前 subject。正常完成不生成诊断。新异常的完整 exception chain
+和 traceback 自动写入 `data/logs/diagnostics/`，写入成功时可从对应诊断行下载；日志中心不提供采集开关。
