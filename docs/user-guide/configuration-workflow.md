@@ -50,7 +50,8 @@ messages、task records、resolved mapping records 和 parent/child checkpoint �
 `Agent -> Agent` 和 `Agent -> End`，并允许一个端点连接多个激活方向。保存直接覆盖当前图，重新打开时恢复节点、边、位置
 和 viewport；没有 draft/published revision、自动保存、并发编辑或恢复层。
 
-保存入口允许不完整 draft。通过 `/v1/chat/completions` 运行时，Graph 必须至少包含一个 Start、一个 Agent 和一个 End，
+保存入口允许不完整 draft。通过 `/v1/chat/completions` 运行时，Graph 必须至少包含一个 Start 和一个 End，Agent node 可以为零；
+当前纯脚本拓扑可由 Condition Router 承担实际工作，后续完成闭环的普通 Node 也可以加入，
 并且每个节点都必须可从某个 Start 到达且能够继续到达某个 End；不满足时在 Agent 装配和 Graph compile 前返回 422。
 
 画布 Start/End 分别映射 LangGraph 官方虚拟 `START/END`，不编译成 Shell 函数节点。Agent 节点引用的

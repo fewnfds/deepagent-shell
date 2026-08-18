@@ -385,7 +385,6 @@ def test_topology_does_not_forbid_langgraph_cycles() -> None:
     ("remove_type", "expected_code"),
     [
         ("start", "workflow.start_required"),
-        ("agent", "workflow.agent_required"),
         ("end", "workflow.end_required"),
     ],
 )
@@ -425,6 +424,100 @@ def test_executable_validation_requires_each_runtime_node_kind(
 
     assert report.valid is False
     assert expected_code in {issue.code for issue in report.issues}
+
+
+def test_executable_validation_allows_agent_free_script_graph() -> None:
+    payload = {
+        "definition": {
+            "schema_version": 1,
+            "state_contract": "agent-shell.workflow.agent-invocations.v1",
+            "nodes": [
+                {"id": "start", "type": "start", "type_version": 1, "config": {}},
+                {
+                    "id": "router",
+                    "type": "condition-router",
+                    "type_version": 1,
+                    "config": {
+                        "condition_router_id": "11111111-1111-4111-8111-111111111111"
+                    },
+                },
+                {"id": "end", "type": "end", "type_version": 1, "config": {}},
+            ],
+            "edges": [
+                {
+                    "id": "start-router",
+                    "source": "start",
+                    "source_handle": "next",
+                    "target": "router",
+                    "target_handle": "in",
+                },
+                {
+                    "id": "router-end",
+                    "source": "router",
+                    "source_handle": "branch",
+                    "target": "end",
+                    "target_handle": "in",
+                    "branch_key": "otherwise",
+                },
+            ],
+        },
+        "layout": {},
+    }
+    admission, document = admit_workflow_document(payload)
+    assert admission.valid is True
+    assert document is not None
+
+    async def router(state, runtime):
+        return {
+            "activate": ["otherwise"],
+            "update": {"shared_vars": {"script_ran": True}},
+        }
+
+    report = validate_workflow_executable(
+        document,
+        validate_main_agent=valid_main_agent,
+        condition_routers={"router": router},
+    )
+
+    assert report.valid is True
+
+    graph = compile_workflow(
+        document,
+        node_agents={},
+        condition_routers={"router": router},
+    )
+    runtime = AgentRuntime(
+        object(),  # type: ignore[arg-type]
+        object(),  # type: ignore[arg-type]
+        workflow_lifecycle=object(),  # type: ignore[arg-type]
+    )
+    execution = runtime._execution(
+        None,
+        graph=graph,
+        input_state={
+            "shared_vars": {},
+            "agent_invocations": {},
+            "background_tasks": {},
+        },
+        context=WorkflowRuntimeContext(
+            lifecycle_id="lifecycle-1",
+            run_id="run-1",
+            workflow={"id": "workflow-1"},
+        ),
+        include_tool_call_transformer=False,
+        public_output=False,
+        run_kind="workflow",
+    )
+
+    lifecycle_event = execution.normalizer.lifecycle("start", status="running")
+    assert lifecycle_event.source_type == "non_agent"
+    assert lifecycle_event.workflow_event_kind == "lifecycle"
+
+    asyncio.run(execution.execute())
+
+    assert execution.middleware_runtime is None
+    assert execution.final_state is not None
+    assert execution.final_state["shared_vars"] == {"script_ran": True}
 
 
 def test_executable_validation_attaches_main_agent_issues_to_the_agent_node() -> None:

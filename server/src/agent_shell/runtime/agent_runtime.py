@@ -84,7 +84,7 @@ class RunExecution:
     input_state: dict[str, Any]
     rectifier: OutputEventRectifier
     normalizer: V3EventNormalizer
-    middleware_runtime: MiddlewarePackageRuntime
+    middleware_runtime: MiddlewarePackageRuntime | None
     media_response: MainAgentMediaResponse
     middleware_runtimes: tuple[MiddlewarePackageRuntime, ...] = ()
     condition_router_runtime: ConditionRouterPackageRuntime | None = None
@@ -133,7 +133,11 @@ class RunExecution:
             async for part in self._stream_text_inner():
                 yield part
         finally:
-            runtimes = (self.middleware_runtime, *self.middleware_runtimes)
+            runtimes = tuple(
+                runtime
+                for runtime in (self.middleware_runtime, *self.middleware_runtimes)
+                if runtime is not None
+            )
             for runtime in runtimes:
                 await runtime.close()
             if self.condition_router_runtime is not None:
@@ -521,7 +525,7 @@ class AgentRuntime:
 
     def _execution(
         self,
-        built: BuiltAgent,
+        built: BuiltAgent | None,
         *,
         graph: Any | None = None,
         input_state: dict[str, Any] | None = None,
@@ -544,11 +548,25 @@ class AgentRuntime:
         execution_timeout_seconds: int = EXECUTION_TIMEOUT_SECONDS,
         run_kind: Literal["agent", "workflow"] = "agent",
     ) -> RunExecution:
+        if built is None:
+            if graph is None or input_state is None or run_kind != "workflow":
+                raise ValueError(
+                    "an Agent-free execution requires a Workflow graph and input state"
+                )
+            effective_graph = graph
+            effective_input_state = input_state
+        else:
+            effective_graph = graph if graph is not None else built.graph
+            effective_input_state = (
+                input_state if input_state is not None else built.input_state
+            )
         observers = []
         if event_observer is not None:
             observers.append(event_observer)
-        workflow_agents = workflow_built or ((workflow_node_id, built),)
-        if workflow_node_id:
+        workflow_agents = workflow_built or (
+            ((workflow_node_id, built),) if built is not None else ()
+        )
+        if run_kind == "workflow":
             from agent_shell.workflow.events import WorkflowEventSourceV1
 
             workflow_sources = {
@@ -563,35 +581,39 @@ class AgentRuntime:
             workflow_sources = None
         if not public_output:
             projector = OutputProjector({})
-        elif workflow_node_id:
+        elif run_kind == "workflow":
             projector = WorkflowOutputProjector(
                 {node_id: agent.output_config for node_id, agent in workflow_agents},
                 workflow_output_config=workflow_output_config,
             )
         else:
+            assert built is not None
             projector = OutputProjector(built.output_config)
         return RunExecution(
-            graph=graph if graph is not None else built.graph,
-            input_state=input_state if input_state is not None else built.input_state,
-            middleware_runtime=built.middleware_runtime,
+            graph=effective_graph,
+            input_state=effective_input_state,
+            middleware_runtime=(built.middleware_runtime if built is not None else None),
             media_response=MainAgentMediaResponse(self._media_outputs, request_id),
             rectifier=OutputEventRectifier(projector),
             normalizer=V3EventNormalizer(
-                built.agent_name,
+                built.agent_name if built is not None else "",
                 model_response_observers=(model_response_observer,)
                 if model_response_observer is not None
                 else (),
+                workflow_mode=run_kind == "workflow",
                 workflow_sources=workflow_sources,
-                subagent_profile_ids=built.subagent_profile_ids,
+                subagent_profile_ids=(
+                    built.subagent_profile_ids if built is not None else {}
+                ),
                 main_agent_names=tuple(agent.agent_name for _, agent in workflow_agents),
                 workflow_subagent_profile_ids={
                     node_id: agent.subagent_profile_ids
                     for node_id, agent in workflow_agents
-                } if workflow_node_id else None,
+                } if run_kind == "workflow" else None,
                 workflow_agent_names={
                     node_id: agent.agent_name
                     for node_id, agent in workflow_agents
-                } if workflow_node_id else None,
+                } if run_kind == "workflow" else None,
             ),
             event_observers=tuple(observers),
             middleware_runtimes=tuple(
@@ -610,7 +632,11 @@ class AgentRuntime:
             runtime_diagnostics=self._runtime_diagnostics,
             request_id=request_id,
             public_model=public_model,
-            agent_name=built.agent_name if run_kind == "agent" else "",
+            agent_name=(
+                built.agent_name
+                if run_kind == "agent" and built is not None
+                else ""
+            ),
             include_tool_call_transformer=include_tool_call_transformer,
             public_output=public_output,
             run_kind=run_kind,
@@ -1103,12 +1129,6 @@ class AgentRuntime:
                 built_agents.append((agent_node.id, built))
                 if workspace is None:
                     workspace = built.workspace
-            if not built_agents:
-                raise AgentRuntimeError(
-                    "workflow.node_runtime_missing",
-                    "The Workflow has no materialized runtime node.",
-                    status_code=422,
-                )
             graph = compile_workflow(
                 document,
                 node_agents=dict(built_agents),
@@ -1175,7 +1195,8 @@ class AgentRuntime:
                     public_model=public_model,
                 )
             raise
-        first_node_id, built = built_agents[0]
+        first_node_id = built_agents[0][0] if built_agents else ""
+        built = built_agents[0][1] if built_agents else None
         input_state: dict[str, Any] = {
             "shared_vars": deepcopy(dict(initial_shared_vars or {})),
             "agent_invocations": {},
@@ -1183,7 +1204,7 @@ class AgentRuntime:
         }
         if initial_workflow_task is not None:
             input_state["workflow_task"] = deepcopy(dict(initial_workflow_task))
-        if "files" in built.input_state:
+        if built is not None and "files" in built.input_state:
             input_state["files"] = built.input_state["files"]
         return self._execution(
             built,

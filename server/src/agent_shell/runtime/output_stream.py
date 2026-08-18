@@ -205,6 +205,7 @@ class V3EventNormalizer:
         main_agent_name: str,
         model_response_observers: tuple[Callable[[ModelResponse], None], ...] = (),
         *,
+        workflow_mode: bool = False,
         workflow_sources: Mapping[str, WorkflowEventSourceV1] | None = None,
         subagent_profile_ids: Mapping[str, str] | None = None,
         main_agent_names: tuple[str, ...] | None = None,
@@ -216,6 +217,7 @@ class V3EventNormalizer:
         self._main_agent_name = main_agent_name
         self._main_agent_names = frozenset(main_agent_names or (main_agent_name,))
         self._workflow_sources = dict(workflow_sources or {})
+        self._workflow_mode = workflow_mode or bool(self._workflow_sources)
         self._workflow_agent_names = dict(workflow_agent_names or {})
         self._subagent_profile_ids = dict(subagent_profile_ids or {})
         self._workflow_subagent_profile_ids = {
@@ -273,8 +275,8 @@ class V3EventNormalizer:
             finish_reason=finish_reason,
             error_code=error_code,
             data=data,
-            source_type_override=("non_agent" if self._workflow_sources else ""),
-            workflow_event_kind=("lifecycle" if self._workflow_sources else ""),
+            source_type_override=("non_agent" if self._workflow_mode else ""),
+            workflow_event_kind=("lifecycle" if self._workflow_mode else ""),
         )
 
     def feed(
@@ -323,7 +325,7 @@ class V3EventNormalizer:
                             method, data, timestamp=timestamp, namespace=namespace
                         )
                     ]
-                    if self._workflow_sources
+                    if self._workflow_mode
                     and not self._known_agent_scope(namespace)
                     else []
                 )
@@ -333,7 +335,7 @@ class V3EventNormalizer:
                         method, data, timestamp=timestamp, namespace=namespace
                     )
                 ]
-                if self._workflow_sources
+                if self._workflow_mode
                 and not self._known_agent_scope(namespace)
                 else []
             )
@@ -369,7 +371,7 @@ class V3EventNormalizer:
                 node="",
                 agent_name=source_agent_name,
             )
-        if self._workflow_sources and isinstance(data, dict) and data.get(
+        if self._workflow_mode and isinstance(data, dict) and data.get(
             "schema_name"
         ) == WORKFLOW_CUSTOM_EVENT_SCHEMA:
             registered = self._source_for(
@@ -545,7 +547,7 @@ class V3EventNormalizer:
             ]
 
         is_subagent = bool(graph_name) and (
-            not self._workflow_sources
+            not self._workflow_mode
             or (
                 workflow_source is not None
                 and graph_name != workflow_agent_name
@@ -577,7 +579,7 @@ class V3EventNormalizer:
                     namespace=lifecycle_namespace,
                 )
             ]
-            if self._workflow_sources and workflow_source is None
+            if self._workflow_mode and workflow_source is None
             else []
         )
 
@@ -598,7 +600,7 @@ class V3EventNormalizer:
             metadata_agent_name
             or subagent_name
             or workflow_agent_name
-            or ("" if self._workflow_sources else self._main_agent_name)
+            or ("" if self._workflow_mode else self._main_agent_name)
         )
         source = self._source_for(
             namespace=namespace,
@@ -608,7 +610,7 @@ class V3EventNormalizer:
         run_id = str(metadata.get("run_id") or "")
         source_key = self._source_key(source, namespace, agent_name)
         cycle_key = self._cycle_key(namespace)
-        if self._workflow_sources and source is None:
+        if self._workflow_mode and source is None:
             return [
                 self._non_agent_event(
                     "messages", data, timestamp=timestamp, namespace=namespace
@@ -1160,7 +1162,7 @@ class V3EventNormalizer:
             node="tools",
             agent_name=agent_name,
         )
-        if self._workflow_sources and source is None:
+        if self._workflow_mode and source is None:
             return [
                 self._non_agent_event(
                     "tools", data, timestamp=timestamp, namespace=namespace
@@ -1301,7 +1303,7 @@ class V3EventNormalizer:
             return False
         if source is not None:
             return source.source_type == "agent"
-        if self._workflow_sources:
+        if self._workflow_mode:
             return False
         return agent_name in self._main_agent_names
 
@@ -1314,7 +1316,7 @@ class V3EventNormalizer:
         )
         if source is not None:
             return source.source_type in {"agent", "subagent"}
-        return not self._workflow_sources and namespace == "root"
+        return not self._workflow_mode and namespace == "root"
 
     @staticmethod
     def _cycle_key(namespace: str) -> str:

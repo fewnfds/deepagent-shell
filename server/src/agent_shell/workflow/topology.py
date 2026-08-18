@@ -381,11 +381,9 @@ def validate_workflow_topology(
 
     start_ids = {node.id for node in nodes if node.type == "start"}
     end_ids = {node.id for node in nodes if node.type == "end"}
-    agent_ids = {node.id for node in nodes if node.type == "agent"}
     for node_type, ids in (
         ("start", start_ids),
         ("end", end_ids),
-        ("agent", agent_ids),
     ):
         if not ids:
             issues.append(
