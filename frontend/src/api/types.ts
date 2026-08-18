@@ -17,7 +17,6 @@ export type BlockType =
   | 'prompt-caching'
 
 export type WorkflowComponentType =
-  | 'workflow-prepare'
   | 'workflow-event-output'
   | 'condition-router'
   | 'task-dispatcher'
@@ -201,8 +200,8 @@ export interface PythonPackageReference {
 export interface PythonPackageManifest {
   format_version: 1
   id: string
-  family: 'workflow' | 'workflow-node' | 'middleware'
-  adapter: 'workflow-prepare' | 'condition-router' | 'task-dispatcher' | 'agent-middleware'
+  family: 'workflow-node' | 'middleware'
+  adapter: 'condition-router' | 'task-dispatcher' | 'agent-middleware'
   folder: string
 }
 
@@ -222,8 +221,8 @@ export interface PythonPackageFiles {
 export interface PythonPackageTemplate {
   format_version: 1
   key: string
-  family: 'workflow' | 'workflow-node' | 'middleware'
-  adapter: 'workflow-prepare' | 'condition-router' | 'task-dispatcher' | 'agent-middleware'
+  family: 'workflow-node' | 'middleware'
+  adapter: 'condition-router' | 'task-dispatcher' | 'agent-middleware'
   name: string
   files: PythonPackageFile[]
   revision: string
@@ -246,7 +245,6 @@ export interface WorkflowPayload {
   workflow_role: WorkflowRole
   description: string
   filesystem_id: string
-  workflow_prepare_id: string | null
   workflow_event_output_id: string | null
   recursion_limit: number
   execution_timeout_seconds: number

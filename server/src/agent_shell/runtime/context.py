@@ -38,7 +38,6 @@ class WorkflowRuntimeContext:
     launcher_id: str = ""
     run_depth: int = 0
     workflow: Mapping[str, Any] = field(default_factory=dict)
-    prepare: Mapping[str, Any] = field(default_factory=dict)
     workflow_node_id: str = ""
     agent_id: str = ""
     invocation_id: str = ""
@@ -57,7 +56,6 @@ class WorkflowRuntimeContext:
         launcher_id: str = "",
         run_depth: int = 0,
         workflow: Mapping[str, Any] | None = None,
-        prepare: Mapping[str, Any] | None = None,
         background_runtime: BackgroundRunRuntime | None = None,
     ) -> "WorkflowRuntimeContext":
         context = cls(
@@ -70,7 +68,6 @@ class WorkflowRuntimeContext:
             launcher_id=launcher_id,
             run_depth=run_depth,
             workflow=_detached(deepcopy(dict(workflow or {}))),
-            prepare=_detached(deepcopy(dict(prepare or {}))),
         )
         if background_runtime is None:
             return context
@@ -84,7 +81,6 @@ class WorkflowRuntimeContext:
                     run_id=run_id,
                     run_depth=run_depth,
                     workflow=context.workflow,
-                    prepare=context.prepare,
                 ),
             ),
         )

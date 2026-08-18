@@ -17,7 +17,6 @@
 | 委派能力 | 同步 Subagent 的提示与 `task` 说明 | 可选 | 只用于顶层 Main Agent |
 | 上下文摘要 | `SummarizationMiddleware` 阈值、保留和工具参数截断 | 可选 | 继承、替换或关闭 |
 | Prompt 缓存 | Anthropic prompt caching TTL 与最少消息数 | 可选 | 继承、替换或关闭 |
-| 准备 | 在 LangChain 构造前准备本次 Workflow 的静态 runtime context | Workflow 可选绑定 | 不属于 Agent capability |
 | 事件输出 | 用 Python 把 Workflow-owned v3 事件投影为响应字符串 | Workflow 可选绑定 | 不属于 Agent capability |
 | 条件路由 | 读取完整 Workflow State/Context，更新 State 并激活具名 Branch Edge | 画布 Node 引用 | 不属于 Agent capability |
 | 任务分发 | 从 Workflow State/Context 生成任务，并通过 Dispatch Edge 动态 Send 到 worker | 画布 Node 引用 | 不属于 Agent capability |
@@ -41,11 +40,6 @@ Lifecycle/Run Store；父 Workflow State 的 `agent_invocations` 只保存身份
 保留最新引用。同步 Subagent 仍由 Deep Agents 官方 Middleware 在 Main Agent 内部调度，不建立隐藏归档 wrapper。
 这条父子 State 输出映射不需要额外的结束 Hook 或 Recorder 组件。
 
-准备是 Workflow-owned 外围组件。它从模板创建 `workflow/workflow-prepare` 配置独占 Python 扩展；无参数
-`create_prepare()` 工厂返回 `async prepare(input)`。Shell 在所有 Agent 配置解析完成后、最终 Context 以及任何
-Router/Dispatcher/模型/Middleware/Agent/StateGraph 物化前执行一次；当前只允许返回 `{"context": {...}}`，结果冻结到
-`runtime.context.prepare`。它不属于 Main Agent/Subagent capability，不是 LangChain middleware、LangGraph node 或通用生命周期 Hook。
-
 事件输出也是 Workflow-owned 组件。Workflow 通过 UUID 可选绑定一份配置；各事件的同步 `output(event)` 读取稳定
 dict，返回值必须是字符串。它只控制 Workflow-owned 非 Agent 事件的 OpenAI 响应投影，不改变 checkpoint、Debug、
 最终 State 或 Agent 自己的输出模式。字段和 Python 对象类型见[事件输出](../wizard-pages/workflow-event-output-config.md)。
@@ -61,6 +55,6 @@ dict，返回值必须是字符串。它只控制 Workflow-owned 非 Agent 事�
 Runtime Context 和完成 invocation 都带 task identity。
 完整规则和城市/乡镇示例见[任务分发](../wizard-pages/task-dispatcher-config.md)。
 
-这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。Workflow Prepare、自定义 Middleware、Condition Router 和 Task Dispatcher 从用户模板或内置示例
+这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。自定义 Middleware、Condition Router 和 Task Dispatcher 从用户模板或内置示例
 创建配置独占的 Python 扩展，并在扩展目录可选的 `requirements.txt` 声明外部包；模板和示例本身不运行也不参与依赖。
 requirements 修改后重启生效；文件化扩展源码在下一次请求重新加载。仍为内联形式的事件输出等组件源码按各自组件说明生效。

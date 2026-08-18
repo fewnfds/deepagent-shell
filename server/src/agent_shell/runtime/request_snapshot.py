@@ -178,7 +178,6 @@ class RequestRuntimeSnapshot:
             deepcopy(dict(workflow_task)) if workflow_task is not None else None
         )
         workflow_snapshot = _detached_context_value(caller.workflow)
-        prepare_snapshot = _detached_context_value(caller.prepare)
         target_name = str(frozen_assembly.main_agent["name"])
 
         async def build_execution(identity):
@@ -190,7 +189,6 @@ class RequestRuntimeSnapshot:
                 frozen_assembly,
                 messages,
                 workflow_snapshot=workflow_snapshot,
-                prepare_snapshot=prepare_snapshot,
                 launcher_id=caller.caller_id or operation_id,
                 request_id=caller.request_id,
                 lifecycle_id=caller.lifecycle_id,

@@ -59,7 +59,7 @@ def test_workflow_event_output_is_a_reusable_component_reference(
             json={
                 **{key: workflow[key] for key in (
                     "name", "workflow_role", "description", "filesystem_id",
-                    "workflow_prepare_id", "recursion_limit",
+                    "recursion_limit",
                     "execution_timeout_seconds", "max_concurrency", "enabled"
                 )},
                 "workflow_event_output_id": output.json()["id"],

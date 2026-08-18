@@ -11,7 +11,6 @@ import { subagentAdapter } from './blocks/subagent'
 import { summarizationAdapter } from './blocks/summarization'
 import { systemPromptAdapter } from './blocks/systemPrompt'
 import { todoListAdapter } from './blocks/todoList'
-import { workflowPrepareAdapter } from './blocks/workflowPrepare'
 import { workflowEventOutputAdapter } from './blocks/workflowEventOutput'
 import { conditionRouterAdapter } from './blocks/conditionRouter'
 import { taskDispatcherAdapter } from './blocks/taskDispatcher'
@@ -64,11 +63,6 @@ export type {
 } from './blocks/summarization'
 export type { SystemPromptDraft } from './blocks/systemPrompt'
 export type { TodoListDefaults, TodoListDraft } from './blocks/todoList'
-export type {
-  WorkflowPrepareCatalogItem,
-  WorkflowPrepareDefaults,
-  WorkflowPrepareDraft,
-} from './blocks/workflowPrepare'
 export type { WorkflowEventOutputDefaults, WorkflowEventOutputDraft } from './blocks/workflowEventOutput'
 export type {
   ConditionRouterCatalogItem,
@@ -95,7 +89,6 @@ export {
   summarizationAdapter,
   systemPromptAdapter,
   todoListAdapter,
-  workflowPrepareAdapter,
   workflowEventOutputAdapter,
   conditionRouterAdapter,
   taskDispatcherAdapter,
@@ -119,7 +112,6 @@ export const blockTypes = [
 
 export const managedComponentTypes = [
   ...blockTypes,
-  'workflow-prepare',
   'workflow-event-output',
   'condition-router',
   'task-dispatcher',
@@ -139,7 +131,6 @@ export const blockAdapters = {
   'todo-list': todoListAdapter,
   summarization: summarizationAdapter,
   'prompt-caching': promptCachingAdapter,
-  'workflow-prepare': workflowPrepareAdapter,
   'workflow-event-output': workflowEventOutputAdapter,
   'condition-router': conditionRouterAdapter,
   'task-dispatcher': taskDispatcherAdapter,

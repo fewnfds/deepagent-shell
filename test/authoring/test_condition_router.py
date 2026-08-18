@@ -57,7 +57,7 @@ def _built_agent(agent_id: str, content: str) -> BuiltAgent:
 
 def test_condition_router_receives_complete_values_and_converts_state_mutation() -> None:
     async def router(state, runtime):
-        state.setdefault("shared_vars", {})["approved"] = runtime.context.prepare["approved"]
+        state.setdefault("shared_vars", {})["workflow_id"] = runtime.context.workflow["id"]
         return {"activate": ["review", "audit"], "update": {}}
 
     result = asyncio.run(
@@ -67,14 +67,13 @@ def test_condition_router_receives_complete_values_and_converts_state_mutation()
             runtime=_runtime(
                 request_id="request-1",
                 workflow={"id": "workflow-1"},
-                prepare={"approved": True},
             ),
             allowed_branches={"review", "audit", "otherwise"},
         )
     )
 
     assert result.activate == ["review", "audit"]
-    assert result.update == {"shared_vars": {"risk": 90, "approved": True}}
+    assert result.update == {"shared_vars": {"risk": 90, "workflow_id": "workflow-1"}}
 
 
 def test_condition_router_uses_otherwise_for_empty_result_and_rejects_unmapped_keys() -> None:

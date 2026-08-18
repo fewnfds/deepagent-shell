@@ -80,7 +80,7 @@ token；不要尝试从页面、普通 API、DOM 或日志中找回 secret。
 | `GET /api/python-package-templates/{kind}` | 当前脚本模板和只读内置示例 |
 | `GET /api/validation/repository` | 当前完整配置仓库诊断 |
 
-`{kind}` 当前为 `middleware`、`workflow-prepare`、`condition-router` 或 `task-dispatcher`。节点和组件类型必须来自
+`{kind}` 当前为 `middleware`、`condition-router` 或 `task-dispatcher`。节点和组件类型必须来自
 catalog，不要靠模型记忆猜测。
 
 执行写操作时遵守以下顺序：
@@ -256,7 +256,6 @@ POST /api/workflows
   "workflow_role": "parent",
   "description": "Processes a request with one configured Main Agent.",
   "filesystem_id": "<filesystem UUID>",
-  "workflow_prepare_id": null,
   "workflow_event_output_id": null,
   "recursion_limit": 100,
   "execution_timeout_seconds": 600,
@@ -453,27 +452,7 @@ Start/End 没有脚本、配置或业务数据转换。Start 不把客户端消�
 
 ## 8. 不是 Node、但可能需要写的脚本
 
-### 8.1 Workflow Prepare
-
-Prepare 是 Workflow-owned 外围组件，在 Graph 和 Agent 物化前运行一次，不是 Node 或 Middleware：
-
-```python
-def create_prepare():
-    async def prepare(input):
-        request = input["request"]
-        return {
-            "context": {
-                "initial_message_count": len(request.get("messages", [])),
-            }
-        }
-
-    return prepare
-```
-
-输入只有 JSON-compatible 的 `request`、`workflow`、`agents`；输出只能有 JSON-compatible `context`。运行时脚本通过
-`runtime.context.prepare` 读取结果。Prepare 不返回 State update，不创建 LangGraph Node。
-
-### 8.2 Agent Output Mode 与 Workflow Event Output
+### 8.1 Agent Output Mode 与 Workflow Event Output
 
 两者都是内联同步脚本，签名必须恰好为：
 
@@ -486,9 +465,9 @@ Agent Output Mode 处理 Agent 事件；Workflow Event Output 只处理 Workflow
 做路由或隐藏顶层 HTTP error。应优先使用稳定的 `message`、`output`、`arguments`、`data_json` 字段；只有确实需要结构化
 对象时才读取 `event["data"]`。
 
-### 8.3 创建 Python package 脚本组件
+### 8.2 创建 Python package 脚本组件
 
-Workflow Prepare、Condition Router、Task Dispatcher 和 Custom Middleware 都是配置独占 Python package。创建自定义
+Condition Router、Task Dispatcher 和 Custom Middleware 都是配置独占 Python package。创建自定义
 Router 的最小 body 形状如下；其他 package 类型只替换 endpoint 和 `main.py` contract：
 
 ```http

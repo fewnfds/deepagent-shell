@@ -135,7 +135,6 @@ def _specific_contract_identity(
         error_type == "string_pattern_mismatch"
         and owner_type
         in {
-            "workflow-prepare",
             "custom-middleware",
             "condition-router",
             "task-dispatcher",

@@ -47,14 +47,6 @@ def _save(
             message_key="errors.workflowFilesystemNotFound",
             message="The selected Workflow filesystem does not exist.",
         )
-    prepare_id = validated["workflow_prepare_id"]
-    if prepare_id is not None and blocks.get_block("workflow-prepare", prepare_id) is None:
-        raise management_error(
-            422,
-            code="workflow_prepare_not_found",
-            message_key="errors.workflowPrepareNotFound",
-            message="The selected Prepare component does not exist.",
-        )
     event_output_id = validated["workflow_event_output_id"]
     if (
         event_output_id is not None

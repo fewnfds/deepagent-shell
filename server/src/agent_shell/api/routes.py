@@ -31,11 +31,38 @@ from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.validation.models import validation_failure_detail
 from agent_shell.validation.service import ConfigurationValidationService
-from agent_shell.workflow_prepare import WORKFLOW_COMPONENT_CATALOG
 from agent_shell.python_packages.authoring import (
     PackageChange,
     PythonPackageAuthoringError,
     PythonPackageAuthoringService,
+)
+
+
+WORKFLOW_COMPONENT_CATALOG = (
+    {
+        "type": "workflow-event-output",
+        "terminology_key": "workflow-event-output",
+        "label": "Event Output",
+        "order": 1,
+        "icon_key": "braces",
+        "editor_key": "workflow_event_output",
+    },
+    {
+        "type": "condition-router",
+        "terminology_key": "condition-router",
+        "label": "Condition Router",
+        "order": 2,
+        "icon_key": "circle-half",
+        "editor_key": "condition_router",
+    },
+    {
+        "type": "task-dispatcher",
+        "terminology_key": "task-dispatcher",
+        "label": "Task Dispatcher",
+        "order": 3,
+        "icon_key": "boxes",
+        "editor_key": "task_dispatcher",
+    },
 )
 
 
@@ -174,20 +201,6 @@ def build_router(
         if block_type != "filesystem":
             return
         owner = workflow_store.get_item_by_filesystem(block_id)
-        if owner is None:
-            return
-        raise management_error(
-            409,
-            code="configuration_referenced",
-            message_key="errors.configurationReferencedByWorkflow",
-            message="The configuration is still referenced by a Workflow.",
-            message_args={"owner": owner["name"]},
-        )
-
-    def reject_workflow_prepare_reference(block_type: str, block_id: str) -> None:
-        if block_type != "workflow-prepare":
-            return
-        owner = workflow_store.get_item_by_prepare(block_id)
         if owner is None:
             return
         raise management_error(
@@ -436,7 +449,6 @@ def build_router(
                     message="A component configuration does not exist.",
                 )
             reject_workflow_filesystem_reference(block_type, block_id)
-            reject_workflow_prepare_reference(block_type, block_id)
             reject_workflow_event_output_reference(block_type, block_id)
             reject_condition_router_reference(block_type, block_id)
             reject_task_dispatcher_reference(block_type, block_id)
@@ -721,7 +733,6 @@ def build_router(
     async def delete_block(block_type: str, block_id: str) -> dict[str, bool]:
         check_type(block_type)
         reject_workflow_filesystem_reference(block_type, block_id)
-        reject_workflow_prepare_reference(block_type, block_id)
         reject_workflow_event_output_reference(block_type, block_id)
         reject_condition_router_reference(block_type, block_id)
         reject_task_dispatcher_reference(block_type, block_id)

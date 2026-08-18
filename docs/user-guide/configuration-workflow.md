@@ -3,7 +3,7 @@
 ## Workflow
 
 【Workflow】按父图和子图两个子页面管理同一种实体。当前 CRUD 保存名称、角色、说明、启用状态、一个共享 Filesystem、
-可选准备与事件输出组件引用、`recursion_limit`（最大 super-step 数）、`execution_timeout_seconds`（单个 Run 总执行超时）和 `max_concurrency`（并行节点最大并发数），
+可选事件输出组件引用、`recursion_limit`（最大 super-step 数）、`execution_timeout_seconds`（单个 Run 总执行超时）和 `max_concurrency`（并行节点最大并发数），
 以及一份当前 Graph definition/layout。
 只有启用的父图出现在 `/v1/models`；子图不从 OpenAI-compatible 入口直接启动。两个页面复用同一配置表单和画布，
 编辑器工具栏显示当前角色并返回对应列表。
@@ -105,14 +105,6 @@ WIC 代码显式选择。完整约定见[Workflow Input Context](workflow-input-
 
 WIC 可以读取 `state["workflow_task"]`，把当前任务材料编排进 worker 的私有 `messages`；它不负责认领任务、写入
 `counting` 锁或调度其他 Agent。动态任务集合由 Task Dispatcher 在一个确定的 LangGraph Node invocation 中生成。
-
-### 准备
-
-Workflow 可绑定零或一个准备组件。Shell 先解析所有 Agent node 的纯配置装配，再把请求事实、Workflow
-快照和按 node ID 组织的装配事实传给配置扩展中 `create_prepare()` 返回的 `async prepare(input)`。严格校验返回值后，
-Shell 构造唯一最终 `WorkflowRuntimeContext`，再物化 Router/Dispatcher、Agent/Middleware 和 StateGraph。当前返回的
-`context` 只从 `runtime.context.prepare` 读取；mutable graph state 仍由 LangGraph state/reducer 管理。Prepare 是外围能力，
-不是 middleware 或 Graph node。
 
 ### 事件输出
 

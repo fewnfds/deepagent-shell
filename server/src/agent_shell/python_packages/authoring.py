@@ -40,14 +40,6 @@ class PackageAdapterSpec:
 
 
 PACKAGE_COMPONENT_SPECS: dict[str, PackageAdapterSpec] = {
-    "workflow-prepare": PackageAdapterSpec(
-        template_parts=("workflow", "prepare"),
-        example_parts=("workflow-components", "prepare"),
-        family="workflow",
-        adapter="workflow-prepare",
-        factory_name="create_prepare",
-        factory_parameters=(),
-    ),
     "condition-router": PackageAdapterSpec(
         template_parts=("workflow", "condition_router"),
         example_parts=("workflow-components", "condition-router"),

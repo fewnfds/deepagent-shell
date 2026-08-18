@@ -45,7 +45,6 @@ def test_frozen_snapshot_runs_child_workflow_silently_with_independent_checkpoin
                         "workflow_role",
                         "description",
                         "filesystem_id",
-                        "workflow_prepare_id",
                         "recursion_limit",
                         "execution_timeout_seconds",
                         "max_concurrency",
@@ -67,7 +66,6 @@ def test_frozen_snapshot_runs_child_workflow_silently_with_independent_checkpoin
                 "workflow_role": child["workflow_role"],
                 "description": child["description"],
                 "filesystem_id": child["filesystem_id"],
-                "workflow_prepare_id": child["workflow_prepare_id"],
                 "workflow_event_output_id": child["workflow_event_output_id"],
                 "enabled": False,
             },
@@ -180,7 +178,6 @@ def test_frozen_snapshot_runs_background_agent_without_parent_stream_or_checkpoi
                 thread_id="parent-thread",
                 run_depth=0,
                 workflow=parent,
-                prepare={"prepared_for": "parent-workflow"},
                 background_runtime=snapshot,
             ).for_workflow_node(
                 workflow_node_id="router-launcher",
@@ -220,7 +217,6 @@ def test_frozen_snapshot_runs_background_agent_without_parent_stream_or_checkpoi
     assert terminal.runtime_status == "succeeded"
     assert detail is None
     assert captured_context is not None
-    assert captured_context.prepare == {"prepared_for": "parent-workflow"}
     assert captured_context.launcher_id == "router-launcher"
     assert captured_context.workflow_node_id == ""
     assert captured_context.agent_id == main_agent["id"]

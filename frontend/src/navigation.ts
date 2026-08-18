@@ -62,10 +62,6 @@ const sectionNavigationGroups: SectionNavigationGroup[] = [
     prefix: '/workflow-components',
     items: [
       {
-        path: '/workflow-components/workflow-prepare',
-        labelKey: 'navigation.sections.workflowPrepare',
-      },
-      {
         path: '/workflow-components/workflow-event-output',
         labelKey: 'navigation.sections.workflowEventOutput',
       },

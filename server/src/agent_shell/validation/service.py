@@ -250,11 +250,6 @@ class ConfigurationValidationService:
         reference = payload.get("python_package", {})
         if not isinstance(reference, dict):
             reference = {}
-        if block_type == "workflow-prepare":
-            return self._python_package_validation.workflow_prepare_issues(
-                reference,
-                **arguments,
-            )
         if block_type == "custom-middleware":
             return self._python_package_validation.middleware_issues(
                 reference,

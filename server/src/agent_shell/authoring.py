@@ -500,7 +500,6 @@ _EDITOR_DEFAULTS = {
         mode="json",
         exclude={"name"},
     ),
-    "workflow_prepare": {},
     "workflow_event_output": _workflow_event_output_default(),
     "condition_router": {},
     "task_dispatcher": {},

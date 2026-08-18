@@ -475,8 +475,7 @@
         "callers": [
           "src/editors/ConditionRouterEditor.vue",
           "src/editors/CustomMiddlewareEditor.vue",
-          "src/editors/TaskDispatcherEditor.vue",
-          "src/editors/WorkflowPrepareEditor.vue"
+          "src/editors/TaskDispatcherEditor.vue"
         ]
       },
       {

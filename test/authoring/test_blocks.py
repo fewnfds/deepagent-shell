@@ -44,7 +44,6 @@ def test_health_catalog_and_readiness_are_small_and_current(
         "exception_retry",
         "summarization",
         "prompt_caching",
-        "workflow_prepare",
         "workflow_event_output",
         "condition_router",
         "task_dispatcher",
@@ -52,7 +51,6 @@ def test_health_catalog_and_readiness_are_small_and_current(
     assert [item["type"] for item in catalog["block_types"]] == list(PUBLIC_TYPES)
     assert [item["order"] for item in catalog["block_types"]] == list(range(1, 14))
     assert [item["type"] for item in catalog["workflow_component_types"]] == [
-        "workflow-prepare",
         "workflow-event-output",
         "condition-router",
         "task-dispatcher",

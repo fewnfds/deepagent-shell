@@ -7,7 +7,6 @@ from typing import Any
 from agent_shell.condition_router_packages import resolve_condition_router_package
 from agent_shell.middleware_packages.packages import resolve_middleware_package
 from agent_shell.task_dispatcher_packages import resolve_task_dispatcher_package
-from agent_shell.workflow_prepare_packages import resolve_workflow_prepare_package
 from agent_shell.registries.errors import ResourceScanError
 from agent_shell.validation.models import ValidationIssue
 
@@ -40,17 +39,6 @@ class PythonPackageValidationService:
             owner_name=owner_name,
             path_prefix=path_prefix,
             check_dependencies=check_dependencies,
-        )
-
-    def workflow_prepare_issues(
-        self,
-        reference: dict[str, Any],
-        **arguments: Any,
-    ) -> list[ValidationIssue]:
-        return self._reference_issues(
-            reference,
-            resolver=resolve_workflow_prepare_package,
-            **arguments,
         )
 
     def condition_router_issues(

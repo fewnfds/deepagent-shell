@@ -29,7 +29,6 @@ const workflow: Workflow = {
   workflow_role: 'parent',
   description: 'Runs the research agent.',
   filesystem_id: 'filesystem-1',
-  workflow_prepare_id: null,
   workflow_event_output_id: null,
   recursion_limit: 100,
   execution_timeout_seconds: 600,
@@ -40,13 +39,11 @@ const filesystem: SavedBlock = {
   id: 'filesystem-1',
   name: 'Shared Filesystem',
 }
-const prepare: SavedBlock = { id: 'prepare-1', name: 'Prepare input' }
 const eventOutput: SavedBlock = { id: 'event-output-1', name: 'Public events' }
 
 function mockComponentLists(): void {
   vi.spyOn(managementApi, 'listBlocks').mockImplementation(async (type) => {
     if (type === 'filesystem') return [filesystem]
-    if (type === 'workflow-prepare') return [prepare]
     if (type === 'workflow-event-output') return [eventOutput]
     return []
   })
@@ -96,8 +93,7 @@ describe('WorkflowsPage', () => {
     await wrapper.get('#workflow-form input[type="text"]').setValue('New Workflow')
     await wrapper.get('#workflow-form textarea').setValue('New description')
     const componentSelects = wrapper.findAll('#workflow-form select:not([required])')
-    await componentSelects[0]!.setValue(prepare.id)
-    await componentSelects[1]!.setValue(eventOutput.id)
+    await componentSelects[0]!.setValue(eventOutput.id)
     await wrapper.get('#workflow-form select[required]').setValue(filesystem.id)
     const runtimeLimits = wrapper.findAll('#workflow-form input[type="number"]')
     await runtimeLimits[0]!.setValue(250)
@@ -111,7 +107,6 @@ describe('WorkflowsPage', () => {
       workflow_role: 'parent',
       description: 'New description',
       filesystem_id: filesystem.id,
-      workflow_prepare_id: prepare.id,
       workflow_event_output_id: eventOutput.id,
       recursion_limit: 250,
       execution_timeout_seconds: 900,
@@ -154,7 +149,6 @@ describe('WorkflowsPage', () => {
       workflow_role: 'child',
       description: '',
       filesystem_id: filesystem.id,
-      workflow_prepare_id: null,
       workflow_event_output_id: null,
       recursion_limit: 100,
       execution_timeout_seconds: 600,
@@ -164,10 +158,9 @@ describe('WorkflowsPage', () => {
     wrapper.unmount()
   })
 
-  it('round-trips reusable Prepare and event output component references', async () => {
+  it('round-trips the reusable event output component reference', async () => {
     const configured = {
       ...workflow,
-      workflow_prepare_id: prepare.id,
       workflow_event_output_id: eventOutput.id,
     }
     vi.spyOn(managementApi, 'listWorkflows').mockResolvedValue([configured])
@@ -187,8 +180,7 @@ describe('WorkflowsPage', () => {
     await flushPromises()
 
     const componentSelects = wrapper.findAll('#workflow-form select:not([required])')
-    expect((componentSelects[0]!.element as HTMLSelectElement).value).toBe(prepare.id)
-    expect((componentSelects[1]!.element as HTMLSelectElement).value).toBe(eventOutput.id)
+    expect((componentSelects[0]!.element as HTMLSelectElement).value).toBe(eventOutput.id)
     await wrapper.get('#workflow-form').trigger('submit')
     await flushPromises()
 
@@ -197,7 +189,6 @@ describe('WorkflowsPage', () => {
       workflow_role: 'parent',
       description: workflow.description,
       filesystem_id: filesystem.id,
-      workflow_prepare_id: prepare.id,
       workflow_event_output_id: eventOutput.id,
       recursion_limit: 100,
       execution_timeout_seconds: 600,

@@ -31,7 +31,6 @@ const formOpen = ref(false)
 const saving = ref(false)
 const formError = ref('')
 const filesystems = ref<SavedBlock[]>([])
-const workflowPrepares = ref<SavedBlock[]>([])
 const workflowEventOutputs = ref<SavedBlock[]>([])
 const form = ref<WorkflowPayload>(blankWorkflow())
 
@@ -41,7 +40,6 @@ function blankWorkflow(): WorkflowPayload {
     workflow_role: props.workflowRole,
     description: '',
     filesystem_id: '',
-    workflow_prepare_id: null,
     workflow_event_output_id: null,
     recursion_limit: 100,
     execution_timeout_seconds: 600,
@@ -64,7 +62,6 @@ function openEdit(workflow: Workflow): void {
     workflow_role: workflow.workflow_role,
     description: workflow.description,
     filesystem_id: workflow.filesystem_id,
-    workflow_prepare_id: workflow.workflow_prepare_id,
     workflow_event_output_id: workflow.workflow_event_output_id,
     recursion_limit: workflow.recursion_limit,
     execution_timeout_seconds: workflow.execution_timeout_seconds,
@@ -90,7 +87,6 @@ async function save(): Promise<void> {
       workflow_role: props.workflowRole,
       description: form.value.description.trim(),
       filesystem_id: form.value.filesystem_id,
-      workflow_prepare_id: form.value.workflow_prepare_id || null,
       workflow_event_output_id: form.value.workflow_event_output_id || null,
       recursion_limit: Number(form.value.recursion_limit),
       execution_timeout_seconds: Number(form.value.execution_timeout_seconds),
@@ -117,12 +113,11 @@ onMounted(async () => {
   const [blocksResult] = await Promise.allSettled([
     Promise.all([
       managementApi.listBlocks('filesystem'),
-      managementApi.listBlocks('workflow-prepare'),
       managementApi.listBlocks('workflow-event-output'),
     ]),
   ])
   if (blocksResult.status === 'fulfilled') {
-    ;[filesystems.value, workflowPrepares.value, workflowEventOutputs.value] = blocksResult.value
+    ;[filesystems.value, workflowEventOutputs.value] = blocksResult.value
   } else {
     notify({
       tone: 'danger',
@@ -210,14 +205,6 @@ const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
     <form id="workflow-form" @submit.prevent="save">
       <FormField field-path="name" label-key="workflows.fields.name">
         <LteInput v-model="form.name" maxlength="120" required />
-      </FormField>
-      <FormField field-path="workflow_prepare_id" label-key="workflows.fields.prepare">
-        <select v-model="form.workflow_prepare_id" class="form-select">
-          <option :value="null">{{ t('common.none') }}</option>
-          <option v-for="prepare in workflowPrepares" :key="prepare.id" :value="prepare.id">
-            {{ prepare.name }}
-          </option>
-        </select>
       </FormField>
       <FormField field-path="workflow_event_output_id" label-key="workflows.fields.eventOutput">
         <select v-model="form.workflow_event_output_id" class="form-select">

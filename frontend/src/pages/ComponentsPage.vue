@@ -34,7 +34,6 @@ import {
   blockAdapters,
   type ConditionRouterCatalogItem,
   type TaskDispatcherCatalogItem,
-  type WorkflowPrepareCatalogItem,
   type BlockDraftBase,
   type CustomMiddlewareCatalogItem,
   type CustomToolCatalogItem,
@@ -57,7 +56,6 @@ import {
   SummarizationEditor,
   SystemPromptEditor,
   TodoListEditor,
-  WorkflowPrepareEditor,
   WorkflowEventOutputEditor,
   ConditionRouterEditor,
   TaskDispatcherEditor,
@@ -89,7 +87,6 @@ const editorComponents: Record<ManagedComponentType, Component> = {
   subagent: SubagentCapabilityEditor,
   summarization: SummarizationEditor,
   'prompt-caching': PromptCachingEditor,
-  'workflow-prepare': WorkflowPrepareEditor,
   'workflow-event-output': WorkflowEventOutputEditor,
   'condition-router': ConditionRouterEditor,
   'task-dispatcher': TaskDispatcherEditor,
@@ -138,8 +135,6 @@ const customTools = ref<CustomToolCatalogItem[]>([])
 const customToolErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const customMiddlewares = ref<CustomMiddlewareCatalogItem[]>([])
 const customMiddlewareErrors = ref<Record<string, LocalizedMessagePayload>>({})
-const workflowPreparePackages = ref<WorkflowPrepareCatalogItem[]>([])
-const workflowPreparePackageErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const conditionRouterPackages = ref<ConditionRouterCatalogItem[]>([])
 const conditionRouterPackageErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const taskDispatcherPackages = ref<TaskDispatcherCatalogItem[]>([])
@@ -190,13 +185,6 @@ const editorProps = computed<Record<string, unknown>>(() => {
       return {
         catalog: customMiddlewares.value,
         errors: customMiddlewareErrors.value,
-        loading: loadingResource.value,
-      }
-    case 'workflow-prepare':
-      return {
-        defaults: activeDefaults.value,
-        catalog: workflowPreparePackages.value,
-        errors: workflowPreparePackageErrors.value,
         loading: loadingResource.value,
       }
     case 'condition-router':
@@ -259,7 +247,6 @@ function payloadFromDraft(type: ManagedComponentType, value: BlockDraftBase): Bl
 function usesPythonExtension(type: ManagedComponentType): boolean {
   return (
     type === 'custom-middleware'
-    || type === 'workflow-prepare'
     || type === 'condition-router'
     || type === 'task-dispatcher'
   )
@@ -402,7 +389,6 @@ async function loadRoute(): Promise<void> {
     if (manifest.type === 'model') await loadProviderCatalog(sequence)
     if (!id && (
       manifest.type === 'custom-middleware'
-      || manifest.type === 'workflow-prepare'
       || manifest.type === 'condition-router'
       || manifest.type === 'task-dispatcher'
     )) await refreshResource()
@@ -622,10 +608,6 @@ async function refreshResource(): Promise<void> {
       const result = await managementApi.listMiddlewareTemplates()
       customMiddlewares.value = result.catalog
       customMiddlewareErrors.value = result.errors
-    } else if (activeType.value === 'workflow-prepare') {
-      const result = await managementApi.listWorkflowPrepareTemplates()
-      workflowPreparePackages.value = result.catalog
-      workflowPreparePackageErrors.value = result.errors
     } else if (activeType.value === 'condition-router') {
       const result = await managementApi.listConditionRouterTemplates()
       conditionRouterPackages.value = result.catalog

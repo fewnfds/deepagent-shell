@@ -21,7 +21,6 @@ class BackgroundRunCaller:
     run_id: str
     run_depth: int
     workflow: Mapping[str, Any]
-    prepare: Mapping[str, Any]
     caller_id: str = ""
 
 

@@ -43,39 +43,11 @@ from agent_shell.workflow.contracts import WorkflowGraphDocumentV1
 from agent_shell.workflow.validation import validate_workflow_executable
 from agent_shell.validation import ValidationReport
 from agent_shell.validation.assembly import StaticAssembly
-from agent_shell.workflow_prepare import (
-    WorkflowPrepareBlock,
-    WorkflowPrepareError,
-    run_workflow_prepare,
-)
-from agent_shell.workflow_prepare_packages import WorkflowPreparePackageRuntime
 from agent_shell.workflow_event_output import WorkflowEventOutputBlock
 from langgraph.errors import GraphRecursionError
 from langgraph.prebuilt import ToolCallTransformer
 
 EXECUTION_TIMEOUT_SECONDS = 600
-
-
-def _resolved_agent_prepare_snapshot(assembly: StaticAssembly) -> dict[str, Any]:
-    return {
-        "main_agent": deepcopy(assembly.main_agent),
-        "capability_refs": deepcopy(assembly.references),
-        "blocks": deepcopy(assembly.blocks),
-        "filesystem_mode": assembly.filesystem_mode,
-        "disabled_capabilities": sorted(assembly.disabled_capabilities),
-        "subagents": {
-            key: {
-                "component_name": node.component_name,
-                "name": node.name,
-                "description": node.description,
-                "capability_refs": deepcopy(node.references),
-                "blocks": deepcopy(node.blocks),
-                "filesystem_mode": node.filesystem_mode,
-                "disabled_capabilities": sorted(node.disabled_capabilities),
-            }
-            for key, node in assembly.subagent_nodes.items()
-        },
-    }
 
 
 @dataclass(slots=True)
@@ -649,7 +621,6 @@ class AgentRuntime:
         raw_messages: object,
         *,
         workflow_snapshot: Mapping[str, Any],
-        prepare_snapshot: Mapping[str, Any],
         launcher_id: str,
         request_id: str,
         lifecycle_id: str,
@@ -684,7 +655,6 @@ class AgentRuntime:
             launcher_id=launcher_id,
             run_depth=run_depth,
             workflow=workflow_snapshot,
-            prepare=prepare_snapshot,
             background_runtime=background_runtime,
         ).for_background_agent(
             agent_id=built.agent_id,
@@ -961,80 +931,6 @@ class AgentRuntime:
                         assemblies[main_agent_id],
                     )
                 )
-            prepare_context: Mapping[str, Any] = {}
-            prepare_id = (workflow_snapshot or {}).get("workflow_prepare_id")
-            if prepare_id is not None:
-                prepare_id = str(prepare_id)
-                prepare_block = (
-                    self._blocks.get_block_internal(
-                        "workflow-prepare", prepare_id
-                    )
-                    if self._blocks is not None
-                    else None
-                )
-                if prepare_block is None:
-                    raise AgentRuntimeError(
-                        "workflow_prepare_not_found",
-                        "The selected Prepare component does not exist.",
-                        status_code=422,
-                    )
-                try:
-                    prepare_configuration = WorkflowPrepareBlock.model_validate(
-                        {
-                            key: value
-                            for key, value in prepare_block.items()
-                            if key != "id"
-                        }
-                    )
-                except Exception as exc:
-                    raise AgentRuntimeError(
-                        "workflow_prepare_invalid",
-                        "The selected Prepare component is invalid.",
-                        status_code=422,
-                    ) from exc
-                if self._python_packages_dir is None or self._runtime_dir is None:
-                    raise AgentRuntimeError(
-                        "workflow.python_package_runtime_unavailable",
-                        "The Python package runtime is not configured.",
-                        status_code=500,
-                    )
-                prepare_runtime = WorkflowPreparePackageRuntime(
-                    request_id=request_id,
-                    packages_dir=self._python_packages_dir,
-                    runtime_root=self._runtime_dir,
-                )
-                try:
-                    prepare = prepare_runtime.prepare_for(
-                        prepare_id,
-                        prepare_configuration.model_dump(mode="python")[
-                            "python_package"
-                        ],
-                    )
-                    try:
-                        prepare_result = await run_workflow_prepare(
-                            prepare,
-                            input_value={
-                                "request": {
-                                    "request_id": request_id,
-                                    "messages": messages,
-                                    "messages_sha": messages_sha,
-                                },
-                                "workflow": workflow_context,
-                                "agents": {
-                                    node.id: _resolved_agent_prepare_snapshot(assembly)
-                                    for node, assembly in resolved_agents
-                                },
-                            },
-                        )
-                    except WorkflowPrepareError as exc:
-                        raise AgentRuntimeError(
-                            "workflow_prepare_failed",
-                            "Workflow preparation failed.",
-                            status_code=422,
-                        ) from exc
-                finally:
-                    await prepare_runtime.close()
-                prepare_context = prepare_result.context
             context = WorkflowRuntimeContext.for_run(
                 request_id=request_id,
                 lifecycle_id=resolved_lifecycle_id,
@@ -1045,7 +941,6 @@ class AgentRuntime:
                 launcher_id=launcher_id,
                 run_depth=run_depth,
                 workflow=workflow_context,
-                prepare=prepare_context,
                 background_runtime=background_runtime,
             )
 

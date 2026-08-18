@@ -23,7 +23,6 @@ const api = vi.hoisted(() => ({
   validateRepository: vi.fn(),
   listCustomTools: vi.fn(),
   listMiddlewareTemplates: vi.fn(),
-  listWorkflowPrepareTemplates: vi.fn(),
   listConditionRouterTemplates: vi.fn(),
   listTaskDispatcherTemplates: vi.fn(),
   listSkills: vi.fn(),
@@ -73,25 +72,17 @@ const skillManifest: CapabilityManifest = {
   required: false,
 }
 
-const workflowPrepareManifest: WorkflowComponentManifest = {
-  type: 'workflow-prepare',
-  terminology_key: 'workflow_prepare',
-  label: 'Prepare',
-  order: 1,
-  icon_key: 'workflow',
-  editor_key: 'workflow-prepare',
-}
-
 const conditionRouterManifest: WorkflowComponentManifest = {
-  ...workflowPrepareManifest,
   type: 'condition-router',
   terminology_key: 'condition_router',
   label: 'Condition router',
+  order: 1,
+  icon_key: 'workflow',
   editor_key: 'condition-router',
 }
 
 const taskDispatcherManifest: WorkflowComponentManifest = {
-  ...workflowPrepareManifest,
+  ...conditionRouterManifest,
   type: 'task-dispatcher',
   terminology_key: 'task_dispatcher',
   label: 'Task dispatcher',
@@ -186,7 +177,6 @@ beforeEach(() => {
   api.validateRepository.mockResolvedValue({ valid: true, stage: 'repository_load', issues: [] })
   api.listCustomTools.mockResolvedValue({ catalog: [], errors: {} })
   api.listMiddlewareTemplates.mockResolvedValue({ catalog: [], errors: {} })
-  api.listWorkflowPrepareTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listConditionRouterTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listTaskDispatcherTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listSkills.mockResolvedValue({
@@ -213,8 +203,8 @@ describe('ComponentsPage', () => {
   it('uses the Workflow Components section navigation without a duplicate type navigation', async () => {
     api.getCatalog.mockResolvedValueOnce({
       block_types: [skillManifest, modelManifest],
-      workflow_component_types: [workflowPrepareManifest],
-      editor_defaults: { 'workflow-prepare': {} },
+      workflow_component_types: [conditionRouterManifest],
+      editor_defaults: { condition_router: {} },
     })
     const router = createRouter({
       history: createMemoryHistory(),
@@ -224,7 +214,7 @@ describe('ComponentsPage', () => {
         props: { scope: 'workflow' },
       }],
     })
-    await router.push('/workflow-components/workflow-prepare')
+    await router.push('/workflow-components/condition-router')
     await router.isReady()
     const wrapper = mount(ComponentsPage, {
       props: { scope: 'workflow' },
@@ -232,10 +222,9 @@ describe('ComponentsPage', () => {
     })
     await flushPromises()
 
-    expect(api.listWorkflowPrepareTemplates).toHaveBeenCalledOnce()
+    expect(api.listConditionRouterTemplates).toHaveBeenCalledOnce()
 
     expect(wrapper.findAll('[data-testid="section-nav"] button').map((item) => item.text())).toEqual([
-      'navigation.sections.workflowPrepare',
       'navigation.sections.workflowEventOutput',
       'navigation.sections.conditionRouter',
       'navigation.sections.taskDispatcher',

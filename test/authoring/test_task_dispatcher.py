@@ -136,7 +136,7 @@ def _graph_payload() -> dict:
 
 def test_dispatcher_validates_task_identity_routes_and_state_updates() -> None:
     async def dispatch(state, runtime):
-        state.setdefault("shared_vars", {})["planned"] = runtime.context.prepare["count"]
+        state.setdefault("shared_vars", {})["workflow_id"] = runtime.context.workflow["id"]
         return {
             "tasks": [
                 {
@@ -152,13 +152,13 @@ def test_dispatcher_validates_task_identity_routes_and_state_updates() -> None:
         run_task_dispatcher(
             dispatch,
             state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
-            runtime=_runtime(prepare={"count": 1}),
+            runtime=_runtime(workflow={"id": "workflow-1"}),
             allowed_dispatch_keys={"city"},
         )
     )
 
     assert result.tasks[0].payload == {"value": 1}
-    assert result.update == {"shared_vars": {"planned": 1}}
+    assert result.update == {"shared_vars": {"workflow_id": "workflow-1"}}
 
     async def duplicate(state, runtime):
         return {

@@ -24,7 +24,7 @@ def create_router():
         # activate 中的字符串必须与画布上的 Branch Edge key 完全一致。
         # 可以返回多个不同的 key 来并行激活多条分支，例如 ["audit", "notify"]。
         # update 是可选的 Workflow State 局部更新；不需要更新时保持空字典。
-        # runtime.context 包含请求、Workflow、Prepare 和后台 Run 命令。
+        # runtime.context 包含本次 Run 的静态身份、Workflow 配置和后台 Run 命令。
         return {
             "activate": [branch],
             "update": {},

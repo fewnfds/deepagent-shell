@@ -27,7 +27,6 @@ export const zhCN = {
       parentWorkflows: '父图',
       childWorkflows: '子图',
       workflowLifecycles: '运行生命周期',
-      workflowPrepare: '准备',
       workflowEventOutput: '事件输出',
       conditionRouter: '条件路由',
       taskDispatcher: '任务分发',
@@ -143,7 +142,6 @@ export const zhCN = {
       name: '名称',
       description: '说明',
       filesystem: '共享文件系统',
-      prepare: '准备',
       eventOutput: '事件输出',
       recursionLimit: 'Super-step 上限',
       executionTimeoutSeconds: 'Run 总执行超时',
@@ -488,10 +486,6 @@ export const zhCN = {
     'prompt-caching': {
       label: 'Prompt 缓存',
       description: '独立装配 Anthropic Prompt caching Middleware',
-    },
-    'workflow-prepare': {
-      label: '准备',
-      description: '在 LangChain 构造前准备不可变的 Workflow 运行上下文',
     },
     'workflow-event-output': {
       label: '事件输出',
@@ -1099,7 +1093,6 @@ export const zhCN = {
   errors: {
     workflowInvalid: 'Workflow 配置无效。',
     workflowFilesystemNotFound: '所选 Workflow 文件系统不存在。',
-    workflowPrepareNotFound: '所选准备组件不存在。',
     workflowEventOutputNotFound: '所选事件输出组件不存在。',
     workflowNameConflict: '已有同名 Workflow。',
     workflowNotFound: 'Workflow 不存在。',

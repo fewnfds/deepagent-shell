@@ -29,7 +29,6 @@ export const en: MessageSchema = {
       parentWorkflows: 'Parent workflows',
       childWorkflows: 'Child workflows',
       workflowLifecycles: 'Run lifecycles',
-      workflowPrepare: 'Prepare',
       workflowEventOutput: 'Event output',
       conditionRouter: 'Condition Router',
       taskDispatcher: 'Task Dispatcher',
@@ -145,7 +144,6 @@ export const en: MessageSchema = {
       name: 'Name',
       description: 'Description',
       filesystem: 'Shared filesystem',
-      prepare: 'Prepare',
       eventOutput: 'Event output',
       recursionLimit: 'Super-step limit',
       executionTimeoutSeconds: 'Total Run timeout',
@@ -490,10 +488,6 @@ export const en: MessageSchema = {
     'prompt-caching': {
       label: 'Prompt caching',
       description: 'Configure Anthropic prompt-caching Middleware independently',
-    },
-    'workflow-prepare': {
-      label: 'Prepare',
-      description: 'Prepare immutable Workflow runtime context before LangChain construction',
     },
     'workflow-event-output': {
       label: 'Event output',
@@ -1101,7 +1095,6 @@ export const en: MessageSchema = {
   errors: {
     workflowInvalid: 'The Workflow configuration is invalid.',
     workflowFilesystemNotFound: 'The selected Workflow filesystem does not exist.',
-    workflowPrepareNotFound: 'The selected Prepare component does not exist.',
     workflowEventOutputNotFound: 'The selected event output component does not exist.',
     workflowNameConflict: 'A Workflow with this name already exists.',
     workflowNotFound: 'The Workflow does not exist.',

@@ -345,7 +345,6 @@ def prepare_windows_dependencies(
     from agent_shell.condition_router_packages import resolve_condition_router_package
     from agent_shell.middleware_packages.packages import resolve_middleware_package
     from agent_shell.task_dispatcher_packages import resolve_task_dispatcher_package
-    from agent_shell.workflow_prepare_packages import resolve_workflow_prepare_package
     from agent_shell.storage.file_config import FileConfigRepository
 
     manifest = _runtime_manifest(runtime_root)
@@ -358,13 +357,11 @@ def prepare_windows_dependencies(
     components = config.get("components", {})
 
     active_main_agent_ids: set[str] = set()
-    active_workflow_prepare_ids: set[str] = set()
     active_condition_router_ids: set[str] = set()
     active_task_dispatcher_ids: set[str] = set()
     for workflow in config.get("workflows", []):
         if not isinstance(workflow, dict) or workflow.get("enabled") is not True:
             continue
-        active_workflow_prepare_ids.add(str(workflow.get("workflow_prepare_id", "")))
         definition = workflow.get("definition", {})
         for node in definition.get("nodes", []) if isinstance(definition, dict) else []:
             if not isinstance(node, dict):
@@ -383,7 +380,6 @@ def prepare_windows_dependencies(
                     str(node_config.get("task_dispatcher_id", ""))
                 )
     active_main_agent_ids.discard("")
-    active_workflow_prepare_ids.discard("")
     active_condition_router_ids.discard("")
     active_task_dispatcher_ids.discard("")
 
@@ -399,8 +395,6 @@ def prepare_windows_dependencies(
     }
 
     def referenced_ids(component_type: str) -> set[str]:
-        if component_type == "workflow-prepare":
-            return set(active_workflow_prepare_ids)
         if component_type == "condition-router":
             return set(active_condition_router_ids)
         if component_type == "task-dispatcher":
@@ -444,11 +438,6 @@ def prepare_windows_dependencies(
 
     records: list[dict[str, object]] = []
     resolver_specs = {
-        "workflow-prepare": (
-            resolve_workflow_prepare_package,
-            "workflow",
-            "workflow-prepare",
-        ),
         "custom-middleware": (
             resolve_middleware_package,
             "middleware",

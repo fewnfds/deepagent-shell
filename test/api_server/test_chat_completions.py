@@ -116,7 +116,6 @@ def test_workflow_runtime_limits_reach_the_graph_execution(
                 "workflow_role": workflow["workflow_role"],
                 "description": workflow["description"],
                 "filesystem_id": workflow["filesystem_id"],
-                "workflow_prepare_id": workflow["workflow_prepare_id"],
                 "workflow_event_output_id": workflow[
                     "workflow_event_output_id"
                 ],
