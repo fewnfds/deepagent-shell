@@ -116,8 +116,8 @@ export const managementApi = {
     return managementRequest('/api/python-package-templates/middleware')
   },
 
-  listConditionRouterTemplates(): Promise<ResourceCatalog<PythonPackageTemplate>> {
-    return managementRequest('/api/python-package-templates/condition-router')
+  listCommandTemplates(): Promise<ResourceCatalog<PythonPackageTemplate>> {
+    return managementRequest('/api/python-package-templates/command')
   },
 
   listTaskDispatcherTemplates(): Promise<ResourceCatalog<PythonPackageTemplate>> {

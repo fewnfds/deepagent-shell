@@ -89,9 +89,9 @@ const graphWithBranchProblem: WorkflowGraphDocument = {
       { id: 'start', type: 'start', type_version: 1, config: {} },
       {
         id: 'router-1',
-        type: 'condition-router',
+        type: 'command',
         type_version: 1,
-        config: { condition_router_id: 'router-config-1' },
+        config: { command_id: 'router-config-1' },
       },
       { id: 'end', type: 'end', type_version: 1, config: {} },
     ],
@@ -137,9 +137,9 @@ const nodeCatalog: WorkflowNodeCatalogItem[] = [
     output_handles: [{ id: 'next', kind: 'control', edge_type: 'normal', max_connections: null }],
   },
   {
-    type: 'condition-router',
+    type: 'command',
     type_version: 1,
-    runtime_kind: 'command_router',
+    runtime_kind: 'command_node',
     title_key: '',
     description_key: '',
     config_schema: {},

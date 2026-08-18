@@ -22,7 +22,7 @@
 - `update` 可以更新当前 Workflow State 已声明的任意顶层 channel，也可以返回空对象；
 - package 不 import 或返回 LangGraph `Send` 或 `Command`。
 
-当前 contract 不接受空任务集合；建议在可能为空时由上游 Condition Router 绕过 Dispatcher。如何读取任务、划分粒度、
+当前 contract 不接受空任务集合；建议在可能为空时由上游 Command Node 绕过 Dispatcher。如何读取任务、划分粒度、
 生成 ID、选择目标和更新父 State，都由当前 Workflow 决定。
 
 模板只使用 Python 标准库，`requirements.txt` 不声明第三方依赖。

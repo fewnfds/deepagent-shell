@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { MainAgent, WorkflowGraphDocument, WorkflowNodeCatalogItem } from '@/api'
 import {
   newAgentCanvasNode,
-  newConditionRouterCanvasNode,
+  newCommandCanvasNode,
   newTaskDispatcherCanvasNode,
   nextWorkflowCanvasEdgeId,
   WORKFLOW_NODE_DRAG_MIME,
@@ -65,12 +65,12 @@ const endCatalog: WorkflowNodeCatalogItem = {
   output_handles: [],
 }
 
-const conditionRouterCatalog: WorkflowNodeCatalogItem = {
-  type: 'condition-router',
+const commandCatalog: WorkflowNodeCatalogItem = {
+  type: 'command',
   type_version: 1,
-  runtime_kind: 'command_router',
-  title_key: 'workflow.nodes.conditionRouter.title',
-  description_key: 'workflow.nodes.conditionRouter.description',
+  runtime_kind: 'command_node',
+  title_key: 'workflow.nodes.command.title',
+  description_key: 'workflow.nodes.command.description',
   config_schema: {},
   workflow_roles: ['parent', 'child'],
   input_handles: [{ id: 'in', kind: 'control', edge_type: 'normal', accepted_edge_types: ['normal', 'branch'], max_connections: null }],
@@ -99,10 +99,10 @@ describe('Workflow canvas panels', () => {
     const wrapper = mount(WorkflowNodeLibrary, {
       props: {
         agent: agentCatalog,
-        conditionRouter: null,
+        command: null,
         taskDispatcher: null,
         agentDisabled: false,
-        conditionRouterDisabled: true,
+        commandDisabled: true,
         taskDispatcherDisabled: true,
       },
       global: { plugins: [i18n()] },
@@ -129,7 +129,7 @@ describe('Workflow canvas panels', () => {
         edgeTypeOptions: [],
         inputEndpoints: agentCatalog.input_handles,
         mainAgents: agents,
-        conditionRouters: [],
+        commands: [],
         taskDispatchers: [],
         node,
         nodeIds: [node.id],
@@ -168,7 +168,7 @@ describe('Workflow canvas panels', () => {
         edgeTypeOptions: ['normal'],
         inputEndpoints: [],
         mainAgents: agents,
-        conditionRouters: [],
+        commands: [],
         taskDispatchers: [],
         node: null,
         nodeIds: ['agent-1', 'end'],
@@ -245,7 +245,7 @@ describe('Workflow canvas panels', () => {
   })
 
   it('uses one output endpoint and stores the explicit key on a Branch Edge', async () => {
-    const router = newConditionRouterCanvasNode('router-1', 'router-config-1')
+    const router = newCommandCanvasNode('router-1', 'router-config-1')
     const end: WorkflowCanvasNode = {
       id: 'end',
       type: 'end',
@@ -265,23 +265,23 @@ describe('Workflow canvas panels', () => {
       ...endCatalog,
       input_handles: [{ ...endCatalog.input_handles[0]!, accepted_edge_types: ['normal', 'branch'] }],
     }
-    expect(conditionRouterCatalog.output_handles).toHaveLength(1)
+    expect(commandCatalog.output_handles).toHaveLength(1)
     expect(workflowConnectionEdgeType({
       source: router.id,
       sourceHandle: 'branch',
       target: end.id,
       targetHandle: 'in',
-    }, [router, end], [], [conditionRouterCatalog, endWithBranchInput])).toBe('branch')
+    }, [router, end], [], [commandCatalog, endWithBranchInput])).toBe('branch')
 
     const wrapper = mount(WorkflowInspector, {
       props: {
         edge: branchEdge,
-        edgeSourceEndpoints: conditionRouterCatalog.output_handles,
+        edgeSourceEndpoints: commandCatalog.output_handles,
         edgeTargetEndpoints: endWithBranchInput.input_handles,
         edgeTypeOptions: ['branch'],
         inputEndpoints: [],
         mainAgents: agents,
-        conditionRouters: [],
+        commands: [],
         taskDispatchers: [],
         node: null,
         nodeIds: [router.id, end.id],
@@ -303,7 +303,7 @@ describe('Workflow canvas panels', () => {
       data: { nodeType: 'start', mainAgentId: '' },
     }
     const agent = { ...newAgentCanvasNode('agent-1', agents[0]!.id), selected: true }
-    const router = newConditionRouterCanvasNode('router-1', 'router-config-1')
+    const router = newCommandCanvasNode('router-1', 'router-config-1')
     const wrapper = mount(WorkflowNodeTracker, {
       props: { nodes: [start, agent, router] },
       global: { plugins: [i18n()] },
@@ -312,7 +312,7 @@ describe('Workflow canvas panels', () => {
     const items = wrapper.findAll('.workflow-node-tracker-item')
     expect(items).toHaveLength(3)
     expect(items[1]!.attributes('data-active')).toBe('true')
-    expect(items[2]!.text()).toContain('Condition Router')
+    expect(items[2]!.text()).toContain('Command Node')
     await items[0]!.trigger('click')
     expect(wrapper.emitted('locateNode')).toEqual([[start.id]])
   })
@@ -364,7 +364,7 @@ describe('Workflow canvas panels', () => {
         edgeTypeOptions: ['dispatch'],
         inputEndpoints: [],
         mainAgents: agents,
-        conditionRouters: [],
+        commands: [],
         taskDispatchers: [],
         node: null,
         nodeIds: [dispatcher.id, worker.id],
@@ -408,9 +408,9 @@ describe('Workflow canvas panels', () => {
         nodes: [
           {
             id: 'router-1',
-            type: 'condition-router',
+            type: 'command',
             type_version: 1,
-            config: { condition_router_id: 'router-config-1' },
+            config: { command_id: 'router-config-1' },
           },
           { id: 'end', type: 'end', type_version: 1, config: {} },
         ],
@@ -435,7 +435,7 @@ describe('Workflow canvas panels', () => {
 
     const canvas = workflowDocumentToCanvas(
       document,
-      [conditionRouterCatalog, endWithBranchInput],
+      [commandCatalog, endWithBranchInput],
     )
     expect(canvas.edges[0]).toMatchObject({
       type: 'default',

@@ -501,7 +501,7 @@ _EDITOR_DEFAULTS = {
         exclude={"name"},
     ),
     "workflow_event_output": _workflow_event_output_default(),
-    "condition_router": {},
+    "command": {},
     "task_dispatcher": {},
 }
 

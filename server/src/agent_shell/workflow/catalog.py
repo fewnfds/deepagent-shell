@@ -21,10 +21,10 @@ class AgentNodeConfig(BaseModel):
     defer: bool = False
 
 
-class ConditionRouterNodeConfig(BaseModel):
+class CommandNodeConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    condition_router_id: UUID
+    command_id: UUID
 
 
 class TaskDispatcherNodeConfig(BaseModel):
@@ -62,7 +62,7 @@ class NodeTypeSpec:
         "graph_entry",
         "graph_exit",
         "agent_wrapper",
-        "command_router",
+        "command_node",
         "send_dispatcher",
     ]
     title_key: str
@@ -123,12 +123,12 @@ NODE_CATALOG: tuple[NodeTypeSpec, ...] = (
         workflow_roles=("parent", "child"),
     ),
     NodeTypeSpec(
-        type="condition-router",
+        type="command",
         type_version=1,
-        runtime_kind="command_router",
-        title_key="workflow.nodes.conditionRouter.title",
-        description_key="workflow.nodes.conditionRouter.description",
-        config_model=ConditionRouterNodeConfig,
+        runtime_kind="command_node",
+        title_key="workflow.nodes.command.title",
+        description_key="workflow.nodes.command.description",
+        config_model=CommandNodeConfig,
         input_handles=_IN,
         output_handles=_BRANCH,
         workflow_roles=("parent", "child"),
@@ -180,7 +180,7 @@ def node_catalog_payload() -> list[dict[str, object]]:
 
 __all__ = [
     "AgentNodeConfig",
-    "ConditionRouterNodeConfig",
+    "CommandNodeConfig",
     "EmptyNodeConfig",
     "NODE_CATALOG",
     "NodeHandleSpec",

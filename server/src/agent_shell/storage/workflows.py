@@ -69,17 +69,17 @@ class WorkflowStore:
                 return self._public(item)
         return None
 
-    def get_item_by_condition_router(self, component_id: str) -> dict | None:
+    def get_item_by_command(self, component_id: str) -> dict | None:
         for item in self._repository.config().get("workflows", []):
             definition = item.get("definition")
             nodes = definition.get("nodes", []) if isinstance(definition, dict) else []
             for node in nodes if isinstance(nodes, list) else []:
-                if not isinstance(node, dict) or node.get("type") != "condition-router":
+                if not isinstance(node, dict) or node.get("type") != "command":
                     continue
                 node_config = node.get("config")
                 if (
                     isinstance(node_config, dict)
-                    and node_config.get("condition_router_id") == component_id
+                    and node_config.get("command_id") == component_id
                 ):
                     return self._public(item)
         return None

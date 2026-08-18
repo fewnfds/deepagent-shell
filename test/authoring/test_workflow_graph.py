@@ -109,14 +109,14 @@ def test_catalog_exposes_the_first_supported_node_and_handle_paradigms() -> None
     assert [item.type for item in NODE_CATALOG] == [
         "start",
         "agent",
-        "condition-router",
+        "command",
         "task-dispatcher",
         "end",
     ]
     assert [item.runtime_kind for item in NODE_CATALOG] == [
         "graph_entry",
         "agent_wrapper",
-        "command_router",
+        "command_node",
         "send_dispatcher",
         "graph_exit",
     ]
@@ -500,10 +500,10 @@ def test_executable_validation_allows_agent_free_script_graph() -> None:
                 {"id": "start", "type": "start", "type_version": 1, "config": {}},
                 {
                     "id": "router",
-                    "type": "condition-router",
+                    "type": "command",
                     "type_version": 1,
                     "config": {
-                        "condition_router_id": "11111111-1111-4111-8111-111111111111"
+                        "command_id": "11111111-1111-4111-8111-111111111111"
                     },
                 },
                 {"id": "end", "type": "end", "type_version": 1, "config": {}},
@@ -522,7 +522,7 @@ def test_executable_validation_allows_agent_free_script_graph() -> None:
                     "source_handle": "branch",
                     "target": "end",
                     "target_handle": "in",
-                    "branch_key": "otherwise",
+                    "branch_key": "finish",
                 },
             ],
         },
@@ -534,14 +534,14 @@ def test_executable_validation_allows_agent_free_script_graph() -> None:
 
     async def router(state, runtime):
         return {
-            "activate": ["otherwise"],
+            "activate": ["finish"],
             "update": {"shared_vars": {"script_ran": True}},
         }
 
     report = validate_workflow_executable(
         document,
         validate_main_agent=valid_main_agent,
-        condition_routers={"router": router},
+        commands={"router": router},
     )
 
     assert report.valid is True
@@ -549,7 +549,7 @@ def test_executable_validation_allows_agent_free_script_graph() -> None:
     graph = compile_workflow(
         document,
         node_agents={},
-        condition_routers={"router": router},
+        commands={"router": router},
     )
     runtime = AgentRuntime(
         object(),  # type: ignore[arg-type]

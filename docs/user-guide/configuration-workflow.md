@@ -19,7 +19,7 @@ Lifecycle/Run Store；父 State 的 `agent_invocations` 只保存 `invocation_id
 插入顺序解释先后。普通 Agent 的 State 索引按画布 Node、worker 按 Dispatcher Node + task ID 保留最新逻辑槽；旧 artifact
 保留到 Lifecycle 清场，因此旧 checkpoint 的旧引用仍可读取。
 
-后台 Run 管理不是画布 Node。每个 Run 的官方 Runtime Context 提供 `background_runs` 命令对象，Condition Router、Task Dispatcher、
+后台 Run 管理不是画布 Node。每个 Run 的官方 Runtime Context 提供 `background_runs` 命令对象，Command Node、Task Dispatcher、
 Custom Tool、Middleware 或普通 Node 可以在自己的 invocation 内调用 `start_agent()`、`start_workflow()`、`check()`、`list()` 和
 `cancel()`。启动命令立即返回 handle；查询不需要为了“检查状态”再走一个额外 Node。调用方负责把需要的 handle/snapshot 写入
 `background_tasks` 或自己的 State channel，并自行编排循环、延时、retry 和结束条件。
@@ -37,11 +37,11 @@ messages、task records、resolved mapping records 和 parent/child checkpoint �
 删除开始后 Lifecycle 进入 `deleting`，不再接受新的后台 Run；清理失败时保留该状态，可由用户再次执行删除继续清场。
 
 “生产 -> 审查 -> 重试”可以用于校验这些通用能力，但不是内置流程：Task Dispatcher 或普通控制流启动生产 Run，commands 查询
-读取已完成项，Condition Router 根据用户自己的任务变量决定启动哪一个审查 Agent；审查不通过时再由 Router 回到用户自己的
+读取已完成项，Command Node 根据用户自己的任务变量决定启动哪一个审查 Agent；审查不通过时再由 Command 回到用户自己的
 重派路径，达到用户定义的次数后可以 Cancel 或 End。平台不理解“及格”“重试次数”或 Reviewer 身份，只提供 Run 事实和图编排原语。
 
 【编辑 Flow】进入独立全屏 Vue Flow 页面。左右各有一条始终保留的工具图标轨；点击 active 图标只收起功能 panel，图标轨
-不会消失。左侧提供组件库、元素追踪和问题：组件库提供当前角色允许的 Agent、条件路由和任务分发，可以点击或拖到画布；元素追踪列出当前全部 Node，
+不会消失。左侧提供组件库、元素追踪和问题：组件库提供当前角色允许的 Agent、Command 和任务分发，可以点击或拖到画布；元素追踪列出当前全部 Node，
 点击条目会保持当前缩放、把 Node 平滑移到视口中心并打开右侧属性；存在问题时问题图标显示红色数量角标，点击后在左侧列出
 当前问题。右侧属性使用紧凑的 `key : value/control` 行，编辑所选 Node 或 Edge；空白点击会
 清除选择并收起属性，平移、缩放和拖动不会触发收起，重新打开空选择属性时显示 Workflow 名称和 State contract。
@@ -60,7 +60,7 @@ messages、task records、resolved mapping records 和 parent/child checkpoint �
 LangGraph 编译要求时，在 Agent 装配和 Graph compile 前返回 422。
 
 普通可达叶子不需要到达 End。若业务需要等待多条都会激活的路径后再集中结束，应显式汇聚到实际执行的 Node（例如
-Condition Router），再由该 Node 连接 End，不把 End 当作隐式 join。互斥分支不能误接到 all-of fan-in；未满足的 waiting edge
+Command Node），再由该 Node 连接 End，不把 End 当作隐式 join。互斥分支不能误接到 all-of fan-in；未满足的 waiting edge
 不会执行，其他路径耗尽后 Graph 仍自然结束。
 
 画布 Start/End 分别映射 LangGraph 官方虚拟 `START/END`，不编译成 Shell 函数节点；Start 的初始激活不参与普通 all-of fan-in，

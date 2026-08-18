@@ -91,10 +91,10 @@ def test_create_app_installs_minimal_cors_and_runtime_directories(
     assert (data_root / "state").is_dir()
     assert (data_root / "files").is_dir()
     assert (data_root / "logs").is_dir()
-    assert (python_templates_dir / "workflow" / "condition_router").is_dir()
+    assert (python_templates_dir / "workflow" / "command").is_dir()
     assert (python_templates_dir / "workflow" / "task_dispatcher").is_dir()
     assert (python_templates_dir / "agent" / "custom_middleware").is_dir()
-    assert (python_package_instances_dir / "condition-router").is_dir()
+    assert (python_package_instances_dir / "command").is_dir()
     assert (python_package_instances_dir / "task-dispatcher").is_dir()
     assert (python_package_instances_dir / "agent-middleware").is_dir()
 

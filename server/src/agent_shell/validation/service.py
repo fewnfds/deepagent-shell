@@ -255,8 +255,8 @@ class ConfigurationValidationService:
                 reference,
                 **arguments,
             )
-        if block_type == "condition-router":
-            return self._python_package_validation.condition_router_issues(
+        if block_type == "command":
+            return self._python_package_validation.command_issues(
                 reference,
                 **arguments,
             )

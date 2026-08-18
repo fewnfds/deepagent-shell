@@ -2,17 +2,17 @@
 import type { LocalizedMessagePayload } from '@/api'
 import PythonPackageEditor from '@/components/PythonPackageEditor.vue'
 import {
-  type ConditionRouterCatalogItem,
-  type ConditionRouterDefaults,
-  type ConditionRouterDraft,
+  type CommandCatalogItem,
+  type CommandDefaults,
+  type CommandDraft,
 } from '@/domain/blocks'
 import type { PythonPackageDraftState } from '@/domain/blocks/pythonPackage'
 import { useEditorModel } from './shared/useEditorModel'
 
 const props = withDefaults(defineProps<{
-  modelValue: ConditionRouterDraft
-  defaults?: ConditionRouterDefaults
-  catalog?: ConditionRouterCatalogItem[]
+  modelValue: CommandDraft
+  defaults?: CommandDefaults
+  catalog?: CommandCatalogItem[]
   errors?: Record<string, LocalizedMessagePayload>
   loading?: boolean
 }>(), {
@@ -21,7 +21,7 @@ const props = withDefaults(defineProps<{
   loading: false,
 })
 const emit = defineEmits<{
-  'update:modelValue': [value: ConditionRouterDraft]
+  'update:modelValue': [value: CommandDraft]
   'load-files': [paths: string[]]
   refresh: []
 }>()
@@ -37,11 +37,11 @@ function updatePackage(value: PythonPackageDraftState): void {
 </script>
 
 <template>
-  <div data-editor="condition-router">
+  <div data-editor="command">
     <PythonPackageEditor
       :catalog="catalog"
       :errors="errors"
-      id-prefix="condition-router"
+      id-prefix="command"
       :loading="loading"
       :model-value="draft"
       :saved="Boolean(draft.id)"

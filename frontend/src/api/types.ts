@@ -18,7 +18,7 @@ export type BlockType =
 
 export type WorkflowComponentType =
   | 'workflow-event-output'
-  | 'condition-router'
+  | 'command'
   | 'task-dispatcher'
 export type ManagedComponentType = BlockType | WorkflowComponentType
 
@@ -201,7 +201,7 @@ export interface PythonPackageManifest {
   format_version: 1
   id: string
   family: 'workflow-node' | 'middleware'
-  adapter: 'condition-router' | 'task-dispatcher' | 'agent-middleware'
+  adapter: 'command' | 'task-dispatcher' | 'agent-middleware'
   folder: string
 }
 
@@ -222,7 +222,7 @@ export interface PythonPackageTemplate {
   format_version: 1
   key: string
   family: 'workflow-node' | 'middleware'
-  adapter: 'condition-router' | 'task-dispatcher' | 'agent-middleware'
+  adapter: 'command' | 'task-dispatcher' | 'agent-middleware'
   name: string
   files: PythonPackageFile[]
   revision: string
@@ -354,7 +354,7 @@ export interface WorkflowRunEventPage {
 export type WorkflowNodeType =
   | 'start'
   | 'agent'
-  | 'condition-router'
+  | 'command'
   | 'task-dispatcher'
   | 'end'
 
@@ -373,7 +373,7 @@ export interface WorkflowNodeCatalogItem {
     | 'graph_entry'
     | 'graph_exit'
     | 'agent_wrapper'
-    | 'command_router'
+    | 'command_node'
     | 'send_dispatcher'
   title_key: string
   description_key: string
@@ -389,7 +389,7 @@ export interface WorkflowGraphNode {
   type_version: 1
   config: {
     main_agent_id?: string
-    condition_router_id?: string
+    command_id?: string
     task_dispatcher_id?: string
     defer?: boolean
   }

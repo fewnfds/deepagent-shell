@@ -48,12 +48,12 @@ WORKFLOW_COMPONENT_CATALOG = (
         "editor_key": "workflow_event_output",
     },
     {
-        "type": "condition-router",
-        "terminology_key": "condition-router",
-        "label": "Condition Router",
+        "type": "command",
+        "terminology_key": "command",
+        "label": "Command Node",
         "order": 2,
         "icon_key": "circle-half",
-        "editor_key": "condition_router",
+        "editor_key": "command",
     },
     {
         "type": "task-dispatcher",
@@ -227,10 +227,10 @@ def build_router(
             message_args={"owner": owner["name"]},
         )
 
-    def reject_condition_router_reference(block_type: str, block_id: str) -> None:
-        if block_type != "condition-router":
+    def reject_command_reference(block_type: str, block_id: str) -> None:
+        if block_type != "command":
             return
-        owner = workflow_store.get_item_by_condition_router(block_id)
+        owner = workflow_store.get_item_by_command(block_id)
         if owner is None:
             return
         raise management_error(
@@ -450,7 +450,7 @@ def build_router(
                 )
             reject_workflow_filesystem_reference(block_type, block_id)
             reject_workflow_event_output_reference(block_type, block_id)
-            reject_condition_router_reference(block_type, block_id)
+            reject_command_reference(block_type, block_id)
             reject_task_dispatcher_reference(block_type, block_id)
             manifest = CAPABILITY_BY_TYPE.get(block_type)
             if manifest is not None and manifest.required:
@@ -734,7 +734,7 @@ def build_router(
         check_type(block_type)
         reject_workflow_filesystem_reference(block_type, block_id)
         reject_workflow_event_output_reference(block_type, block_id)
-        reject_condition_router_reference(block_type, block_id)
+        reject_command_reference(block_type, block_id)
         reject_task_dispatcher_reference(block_type, block_id)
         manifest = CAPABILITY_BY_TYPE.get(block_type)
         if manifest is not None and manifest.required:

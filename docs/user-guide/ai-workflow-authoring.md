@@ -80,7 +80,7 @@ token；不要尝试从页面、普通 API、DOM 或日志中找回 secret。
 | `GET /api/python-package-templates/{kind}` | 当前脚本模板和只读内置示例 |
 | `GET /api/validation/repository` | 当前完整配置仓库诊断 |
 
-`{kind}` 当前为 `middleware`、`condition-router` 或 `task-dispatcher`。节点和组件类型必须来自
+`{kind}` 当前为 `middleware`、`command` 或 `task-dispatcher`。节点和组件类型必须来自
 catalog，不要靠模型记忆猜测。
 
 执行写操作时遵守以下顺序：
@@ -329,13 +329,13 @@ GET  /api/workflows/{id}/graph     读取当前唯一 document
 `/v1/models` 和 child target 可用集合。Workflow 领域不设置 Node 数量、Edge 数量或 document 字节数配额；基础 HTTP、内存、
 磁盘和 SQLite 仍可能按真实资源情况失败。
 
-【正式保存】执行静态全量校验：wire、Node type/version/config、角色、Handle、Edge、拓扑、Router/Dispatcher 引用和 Main Agent
-装配，以及 Router/Dispatcher 独占 Python package 的 folder、manifest、入口文件和静态 adapter contract。正式图必须恰有一个
+【正式保存】执行静态全量校验：wire、Node type/version/config、角色、Handle、Edge、拓扑、Command/Dispatcher 引用和 Main Agent
+装配，以及 Command/Dispatcher 独占 Python package 的 folder、manifest、入口文件和静态 adapter contract。正式图必须恰有一个
 Start 和一个 End，且 Start 至少有一条合法出边；`Start -> End` 合法。编辑器通过 `/validate` 预先显示全部 issue，并在存在
 error、校验尚未完成或校验请求失败时禁用正式保存；请求失败会显示独立的重新校验操作。后端仍在正式 PUT 时重复相同校验，
 不能绕过。正式失败不写候选 Graph，也不改变原 `enabled` 状态。
 
-`admit_workflow_document()` 和 `validate_workflow_executable()` 都是静态校验；后者不是试运行，不会调用 Model、Router、Dispatcher
+`admit_workflow_document()` 和 `validate_workflow_executable()` 都是静态校验；后者不是试运行，不会调用 Model、Command、Dispatcher
 或 Agent，不 import 或执行用户 package。它在 admission 之上增加拓扑、引用、package 资源和静态 Agent 装配检查。
 `GET /api/validation/repository` 校验整个配置仓库，也不代替
 一次真实 Workflow 调用。
@@ -360,7 +360,7 @@ Workflow metadata PUT 只更新名称、角色、Filesystem 和运行限制，�
 | --- | --- | --- | --- |
 | `start` | `{}` | 无 -> `next` | 否；直接映射 LangGraph `START` |
 | `agent` | `main_agent_id`, `defer` | `in` -> `next` | Node 本身不写；行为来自 Main Agent、WIC 和组件 |
-| `condition-router` | `condition_router_id` | `in` -> `branch` | 是；组件提供 `create_router()` |
+| `command` | `command_id` | `in` -> `branch` | 是；组件提供 `create_command()` |
 | `task-dispatcher` | `task_dispatcher_id` | `in` -> `dispatch` | 是；组件提供 `create_dispatcher()` |
 | `end` | `{}` | `in` -> 无 | 否；直接映射 LangGraph `END` |
 
@@ -375,50 +375,54 @@ AI 画图时按以下顺序决定，不要从视觉布局反推运行语义：
 6. 最后检查 fan-out、fan-in、动态 key、叶子和循环退出，再调用 `/validate`。不要通过移动 Node、改颜色或添加 Vue Flow
    renderer 字段试图改变运行语义。
 
-Node 做工作和 State update；Edge 表达激活。Router/Dispatcher 脚本只返回业务 key、task 和 update，不读取 Edge ID、目标 Node ID、
+画布把其他来自 Start 的 Edge 显示为绿色，把进入 End 的 Edge 显示为红色；`Start -> End` 按 End 优先显示红色。其余 normal
+Edge 为蓝色，branch/dispatch 保留自己的虚线与动画。颜色、class、marker 和 animation 都只是 Vue Flow 投影，不进入 Graph
+document，也不改变 LangGraph 调度。
+
+Node 做工作和 State update；Edge 表达激活。Command/Dispatcher 脚本只返回业务 key、task 和 update，不读取 Edge ID、目标 Node ID、
 布局或全图拓扑。复杂业务优先拆成多个 Node + Edge，不创建同时拥有业务处理、路由、等待和终止语义的万能 Node。
 
-每个来源只使用一种路由机制。普通 Agent/Start 使用 normal 静态 Edge；Condition Router 的全部输出使用 branch Edge；Task
-Dispatcher 的全部输出使用 dispatch Edge。不要给 Router/Dispatcher 追加 normal 出边，也不要让脚本直接返回 LangGraph
+每个来源只使用一种路由机制。普通 Agent/Start 使用 normal 静态 Edge；Command Node 的全部输出使用 branch Edge；Task
+Dispatcher 的全部输出使用 dispatch Edge。不要给 Command/Dispatcher 追加 normal 出边，也不要让脚本直接返回 LangGraph
 `Command`/`Send`；否则会把 Shell 的候选 Edge 映射与另一套动态路由混在一起。
 
-### 7.1 Condition Router
+### 7.1 Command Node
 
-建议先从 `GET /api/python-package-templates/condition-router` 读取
-`内置示例-rule-based-router` 的当前 revision 和源码，再按业务改写；不要依赖文档中的代码副本。
+建议先从 `GET /api/python-package-templates/command` 读取
+`内置示例-rule-based-command` 的当前 revision 和源码，再按业务改写；不要依赖文档中的代码副本。
 
 Graph Node 只引用组件 UUID：
 
 ```json
 {
-  "id": "router",
-  "type": "condition-router",
+  "id": "decision",
+  "type": "command",
   "type_version": 1,
-  "config": {"condition_router_id": "<condition-router UUID>"}
+  "config": {"command_id": "<command UUID>"}
 }
 ```
 
 固定 contract 是同步工厂和返回结构；下面的字段、判断和 State 更新只是可替换示例：
 
 ```python
-def create_router():
-    async def route(state, runtime):
+def create_command():
+    async def command(state, runtime):
         shared_vars = state.get("shared_vars", {})
-        branch = "review" if shared_vars.get("requires_review") is True else "otherwise"
+        branch = "review" if shared_vars.get("requires_review") is True else "continue"
         return {
             "activate": [branch],
             "update": {"shared_vars": {"last_route": branch}},
         }
 
-    return route
+    return command
 ```
 
 Graph 中对应的候选边必须使用：
 
 ```json
 {
-  "id": "router-review",
-  "source": "router",
+  "id": "decision-review",
+  "source": "decision",
   "source_handle": "branch",
   "target": "reviewer",
   "target_handle": "in",
@@ -426,10 +430,12 @@ Graph 中对应的候选边必须使用：
 }
 ```
 
-并显式连接唯一 `branch_key: "otherwise"`。`route` 可以按场景读取完整 `state`、`runtime.context` 和 `runtime.store`；
-示例中的 `shared_vars.requires_review` 不是固定输入。`activate` 可以同时返回多个不同 key；空列表等价于 `otherwise`；
-`otherwise` 不能和其他 key 同时激活。`update` 是正式能力，可以更新当前 Workflow State 已声明的任意顶层 channel，
-不需要更新时才返回 `{}`。脚本只返回 Agent Shell contract，不 import 或返回 LangGraph `Command`，不返回 Node ID。
+如果脚本可能返回 `continue`，再连接一条 `branch_key: "continue"` 候选边。`command` 可以按场景读取完整 `state`、
+`runtime.context` 和 `runtime.store`；示例中的 `shared_vars.requires_review` 不是固定输入。`activate` 可以返回零个、一个或
+多个不同 key；为空或省略时不激活后继，只提交 `update`，当前路径在该节点自然结束。Shell 不保留兜底 key，也不检查
+脚本的条件是否穷尽；`if/elif/else`、`match` 和业务 key 全部由脚本负责。非空 key 必须完全匹配同源 Branch Edge，未知 key
+使本次运行受控失败。`update` 可以更新当前 Workflow State 已声明的任意顶层 channel，不需要更新时返回 `{}`。脚本只返回
+Agent Shell contract，不 import 或返回 LangGraph `Command`，不返回 Node ID。
 
 ### 7.2 Task Dispatcher
 
@@ -481,7 +487,7 @@ Graph 中对应的边使用 `source_handle: "dispatch"` 和 `dispatch_key: "item
 决定。每次调用必须产生 1–1000 个任务；`task_id` 在本批唯一并来自稳定业务身份；`payload` 必须是严格 JSON object；
 `update` 可以更新任意已声明的顶层 State channel。脚本不 import 或返回 `Send`。
 
-当前 contract 不接受空 `tasks`；如果数据可能为空，建议由上游 Condition Router 绕过 Dispatcher。Agent Shell 会为每个
+当前 contract 不接受空 `tasks`；如果数据可能为空，建议由上游 Command Node 绕过 Dispatcher。Agent Shell 会为每个
 worker 注入独立 `workflow_task`，目标 Agent 是否读取、如何转换以及加入哪些 task 字段，仍由该 Agent 的 WIC 决定。内置
 WIC 只提供一个可删除的默认转换。
 
@@ -515,7 +521,7 @@ LangGraph 按 super-step 执行。一个 super-step 中所有已调度 Node 读�
 - 某条路径到达 End 只终止该路径，不取消同一步或其他分支，也不取消后台 Run。
 - 全图仅在所有路径都不再产生任务时结束。叶子和 End 可以同时出现在同一张图中。
 - 有环不等于有退出条件。环若始终产生下一步任务，会一直运行到用户逻辑退出、Run timeout 或 `recursion_limit`；建议让
-  Condition Router 的退出分支连接 End。
+  Command Node 的退出分支连接 End。
 
 以下四种无循环连接方式在“何时全图没有剩余任务”上等价；每张画布仍有唯一 End，只是有些路径没有连接它。End 不会让尚在
 运行的另一条路径提前停止：
@@ -552,7 +558,7 @@ Start -> A -> J
 
 这里编译为 `add_edge(START, J)`、`add_edge(START, A)` 和 `add_edge(A, J)`；J 在启动时执行一次，A 完成后再执行一次，
 不是等待 START 与 A 的 join。同理，`Start -> A -> B -> A` 可以直接表达循环入口：START 初始激活 A，B 的回边以后再次激活 A，
-无需增加隔离 Start 的占位 Router。循环必须另有能停止继续激活的条件路径，通常由 Router 连接 End，并受 `recursion_limit` 兜底。
+无需增加隔离 Start 的占位 Node。循环必须另有能停止继续激活的条件路径，通常由 Command 连接 End，并受 `recursion_limit` 兜底。
 
 End 是例外，不是可执行 join Node：
 
@@ -566,11 +572,11 @@ B -> End    编译为 add_edge(B, END)
 
 ```text
 A --normal--+
-            +-> Condition Router --branch_key=otherwise--> End
+            +-> Command Node --branch_key=finish--> End
 B --normal--+
 ```
 
-这个 Router 的多 normal 入边就是明确的 all-of join；只有预期 A、B 在同一次运行都会激活时才这样画。Branch 只激活
+这个 Command 的多 normal 入边就是明确的 all-of join；只有预期 A、B 在同一次运行都会激活时才这样画。Branch 只激活
 `activate` 返回的候选 key；Dispatch 只为返回的 task 创建 worker；未选择的候选 Edge 不产生任务。
 
 官方语义参考 [LangGraph Graph API](https://docs.langchain.com/oss/python/langgraph/graph-api) 和
@@ -582,11 +588,11 @@ B --normal--+
 实现第二套 super-step、Edge 触发、汇聚或终止规则。
 
 Node 负责一次清晰工作以及 State/Runtime 的读取和更新；Edge 负责 Node 之间的激活关系。用户 Python package 不读取 Edge ID、
-目标 Node ID、画布布局或完整拓扑，也不自行解释 Edge。Router/Dispatcher 只返回业务 key、update 或 task，Shell compiler 再机械
+目标 Node ID、画布布局或完整拓扑，也不自行解释 Edge。Command/Dispatcher 只返回业务 key、update 或 task，Shell compiler 再机械
 映射到画布声明的候选目标。
 
 复杂逻辑优先拆成多个单一职责 Node，并通过 normal、branch 或 dispatch Edge 组合。只有无法用现有 Node + Edge 清楚表达、并且确实
-对应一个完整官方运行范式时，才增加新 Node type；不要把业务处理、条件路由、等待、循环和汇聚塞进一个万能 Node。
+对应一个完整官方运行范式时，才增加新 Node type；不要把业务处理、动态路由、等待、循环和汇聚塞进一个万能 Node。
 
 ## 8. 不是 Node、但可能需要写的脚本
 
@@ -605,14 +611,14 @@ Agent Output Mode 处理 Agent 事件；Workflow Event Output 只处理 Workflow
 
 ### 8.2 创建 Python package 脚本组件
 
-Condition Router、Task Dispatcher 和 Custom Middleware 都是配置独占 Python package。创建自定义
-Router 的最小 body 形状如下；其他 package 类型只替换 endpoint 和 `main.py` contract：
+Command Node、Task Dispatcher 和 Custom Middleware 都是配置独占 Python package。创建自定义
+Command 的最小 body 形状如下；其他 package 类型只替换 endpoint 和 `main.py` contract：
 
 ```http
-POST /api/blocks/condition-router
+POST /api/blocks/command
 
 {
-  "name": "Review router",
+  "name": "Review command",
   "python_package": {
     "folder": "",
     "editable_files": ["main.py"]
@@ -657,14 +663,14 @@ AI 能理解 Python 和常见库的用法，但不能仅凭模型知识判断当
 - `dependency_status: "failed"`：依赖解析或准备失败，结合 `dependency_error_code` 修正；
 - `requirements_fingerprint`：当前依赖声明指纹，不是可用库清单。
 
-依赖只从已启用 Workflow 可达的 Router、Dispatcher、Main Agent 和 Subagent 配置收集。最可靠的闭环是：声明直接依赖 ->
+依赖只从已启用 Workflow 可达的 Command、Dispatcher、Main Agent 和 Subagent 配置收集。最可靠的闭环是：声明直接依赖 ->
 重启 -> GET 组件确认 `dependency_status` -> 调用一次真实 Workflow。AI 可以根据库的官方文档编写用法，但不能跳过这套实例
 验证。
 
 ## 9. 后台任务与多 Run 结构
 
 Agent Shell 自己提供了一个单进程后台任务系统，但它不是 LangGraph Graph Node，也不是 Deep Agents 的
-SubagentMiddleware。它通过当前 Run 的官方 `Runtime.context.background_runs` 暴露给 Condition Router、Task Dispatcher、
+SubagentMiddleware。它通过当前 Run 的官方 `Runtime.context.background_runs` 暴露给 Command Node、Task Dispatcher、
 Custom Tool、Middleware 和普通 Node：
 
 ```python
@@ -773,7 +779,7 @@ Content-Type: application/json
 - Main Agent、Subagent、Workflow 语义：[Workflow、Main Agent 与 Subagent](configuration-workflow.md)
 - WIC 与前序 invocation 读取：[Workflow Input Context](workflow-input-context.md)
 - Python package、模板、依赖和加载：[文件化 Python 扩展](middleware-packages.md)
-- Condition Router 完整 contract：[条件路由](../wizard-pages/condition-router-config.md)
+- Command 节点完整 contract：[Command 节点](../wizard-pages/command-config.md)
 - Task Dispatcher 完整 contract：[任务分发](../wizard-pages/task-dispatcher-config.md)
 - Output Mode 稳定事件字段：[输出模式](../wizard-pages/output-mode-config.md)
 - Workflow Event Output 字段：[事件输出](../wizard-pages/workflow-event-output-config.md)

@@ -4,16 +4,16 @@ import { WORKFLOW_NODE_DRAG_MIME } from '@/domain/workflowGraph'
 
 defineProps<{
   agent: WorkflowNodeCatalogItem | null
-  conditionRouter: WorkflowNodeCatalogItem | null
+  command: WorkflowNodeCatalogItem | null
   taskDispatcher: WorkflowNodeCatalogItem | null
   agentDisabled: boolean
-  conditionRouterDisabled: boolean
+  commandDisabled: boolean
   taskDispatcherDisabled: boolean
 }>()
 
 const emit = defineEmits<{
   addAgent: []
-  addConditionRouter: []
+  addCommand: []
   addTaskDispatcher: []
 }>()
 
@@ -56,19 +56,19 @@ function startDrag(event: DragEvent, item: WorkflowNodeCatalogItem | null, disab
           </span>
         </button>
         <button
-          v-if="conditionRouter"
+          v-if="command"
           class="workflow-node-library-item"
-          :disabled="conditionRouterDisabled"
-          :draggable="!conditionRouterDisabled"
+          :disabled="commandDisabled"
+          :draggable="!commandDisabled"
           type="button"
-          @click="emit('addConditionRouter')"
-          @dragstart="startDrag($event, conditionRouter, conditionRouterDisabled)"
+          @click="emit('addCommand')"
+          @dragstart="startDrag($event, command, commandDisabled)"
         >
           <span class="workflow-node-library-icon" aria-hidden="true">
             <i class="bi bi-circle-half" />
           </span>
           <span class="workflow-node-library-copy">
-            <span class="workflow-node-library-title">{{ $t('workflows.editor.conditionRouter') }}</span>
+            <span class="workflow-node-library-title">{{ $t('workflows.editor.command') }}</span>
             <span class="workflow-node-library-meta">{{ $t('workflows.editor.commandRouter') }}</span>
           </span>
         </button>

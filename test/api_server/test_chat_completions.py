@@ -179,7 +179,7 @@ def test_incomplete_saved_workflow_draft_is_not_a_public_model(
     assert response.json()["error"]["code"] == "model_not_found"
 
 
-def test_chat_materializes_condition_router_package_before_compiling_workflow(
+def test_chat_materializes_command_package_before_compiling_workflow(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     package_dir = (
@@ -187,12 +187,12 @@ def test_chat_materializes_condition_router_package_before_compiling_workflow(
         / "data"
         / "templates"
         / "workflow"
-        / "condition_router"
+        / "command"
         / "always-run"
     )
     package_dir.mkdir(parents=True)
     (package_dir / "main.py").write_text(
-        "def create_router():\n"
+        "def create_command():\n"
         "    async def route(state, runtime):\n"
         "        return {'activate': ['run'], 'update': {}}\n"
         "    return route\n",
@@ -201,10 +201,10 @@ def test_chat_materializes_condition_router_package_before_compiling_workflow(
     with make_client(tmp_path, monkeypatch) as client:
         main_agent = create_main_agent(client)
         selected = client.get(
-            "/api/python-package-templates/condition-router"
+            "/api/python-package-templates/command"
         ).json()["catalog"][0]
         router = client.post(
-            "/api/blocks/condition-router",
+            "/api/blocks/command",
             json={
                 "name": "Always run",
                 "python_package": {"folder": "", "editable_files": ["main.py"]},
@@ -230,9 +230,9 @@ def test_chat_materializes_condition_router_package_before_compiling_workflow(
                         {"id": "start", "type": "start", "type_version": 1, "config": {}},
                         {
                             "id": "router",
-                            "type": "condition-router",
+                            "type": "command",
                             "type_version": 1,
-                            "config": {"condition_router_id": router.json()["id"]},
+                            "config": {"command_id": router.json()["id"]},
                         },
                         {
                             "id": "agent",
@@ -245,7 +245,7 @@ def test_chat_materializes_condition_router_package_before_compiling_workflow(
                     "edges": [
                         {"id": "start-router", "source": "start", "source_handle": "next", "target": "router", "target_handle": "in"},
                         {"id": "run", "source": "router", "source_handle": "branch", "target": "agent", "target_handle": "in", "branch_key": "run"},
-                        {"id": "otherwise", "source": "router", "source_handle": "branch", "target": "end", "target_handle": "in", "branch_key": "otherwise"},
+                        {"id": "finish", "source": "router", "source_handle": "branch", "target": "end", "target_handle": "in", "branch_key": "finish"},
                         {"id": "agent-end", "source": "agent", "source_handle": "next", "target": "end", "target_handle": "in"},
                     ],
                 },

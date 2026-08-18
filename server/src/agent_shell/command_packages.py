@@ -13,12 +13,12 @@ from agent_shell.runtime.errors import AgentRuntimeError
 
 
 _FAMILY = "workflow-node"
-_ADAPTER = "condition-router"
-_FACTORY = "create_router"
+_ADAPTER = "command"
+_FACTORY = "create_command"
 _PARAMETERS: tuple[str, ...] = ()
 
 
-def scan_condition_router_package(
+def scan_command_package(
     folder: Path,
     *,
     owner_id: str,
@@ -35,7 +35,7 @@ def scan_condition_router_package(
     )
 
 
-def resolve_condition_router_package(
+def resolve_command_package(
     folder: str,
     directory: Path,
     *,
@@ -53,7 +53,7 @@ def resolve_condition_router_package(
         runtime_root=runtime_root,
     )
 
-class ConditionRouterPackageRuntime:
+class CommandPackageRuntime:
     def __init__(
         self,
         *,
@@ -70,46 +70,46 @@ class ConditionRouterPackageRuntime:
             factory_name=_FACTORY,
             factory_parameters=_PARAMETERS,
         )
-        self._routers: dict[str, Callable[..., Any]] = {}
+        self._commands: dict[str, Callable[..., Any]] = {}
         self._closed = False
 
-    def router_for(
+    def command_for(
         self,
         owner_id: str,
         package_owner_id: str,
         reference: dict[str, Any],
     ) -> Callable[..., Any]:
-        cached = self._routers.get(owner_id)
+        cached = self._commands.get(owner_id)
         if cached is not None:
             return cached
         folder = str(reference["folder"])
         factory, metadata, _package_dir = self._loader.entrypoint(
             owner_id,
-            "condition-router",
+            "command",
             0,
             folder,
             package_owner_id=package_owner_id,
         )
         try:
-            route = factory()
+            command = factory()
         except Exception as exc:
             raise AgentRuntimeError(
-                "condition_router_package.materialization_failed",
-                f"Condition Router package {folder!r} could not create a router.",
+                "command_package.materialization_failed",
+                f"Command package {folder!r} could not create a command.",
                 status_code=422,
             ) from exc
-        if not callable(route) or not inspect.iscoroutinefunction(route):
+        if not callable(command) or not inspect.iscoroutinefunction(command):
             raise AgentRuntimeError(
-                "condition_router_package.result_invalid",
-                f"Condition Router package {folder!r} must return an async route callable.",
+                "command_package.result_invalid",
+                f"Command package {folder!r} must return an async command callable.",
                 status_code=422,
             )
         try:
-            signature = inspect.signature(route)
+            signature = inspect.signature(command)
         except (TypeError, ValueError) as exc:
             raise AgentRuntimeError(
-                "condition_router_package.result_invalid",
-                f"Condition Router package {folder!r} returned an invalid route callable.",
+                "command_package.result_invalid",
+                f"Command package {folder!r} returned an invalid command callable.",
                 status_code=422,
             ) from exc
         parameters = list(signature.parameters.values())
@@ -122,23 +122,23 @@ class ConditionRouterPackageRuntime:
             )
         ):
             raise AgentRuntimeError(
-                "condition_router_package.result_invalid",
-                f"Condition Router package {folder!r} route must accept exactly state and runtime.",
+                "command_package.result_invalid",
+                f"Command package {folder!r} command must accept exactly state and runtime.",
                 status_code=422,
             )
-        self._routers[owner_id] = route
-        return route
+        self._commands[owner_id] = command
+        return command
 
     async def close(self) -> None:
         if self._closed:
             return
         self._closed = True
         self._loader.close()
-        self._routers.clear()
+        self._commands.clear()
 
 
 __all__ = [
-    "ConditionRouterPackageRuntime",
-    "resolve_condition_router_package",
-    "scan_condition_router_package",
+    "CommandPackageRuntime",
+    "resolve_command_package",
+    "scan_command_package",
 ]

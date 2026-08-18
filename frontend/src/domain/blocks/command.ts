@@ -8,28 +8,28 @@ import {
 } from './pythonPackage'
 import { cleanName, identity, isRecord, type BlockDraftBase, type BlockPayloadBase } from './shared'
 
-export interface ConditionRouterDraft extends BlockDraftBase, PythonPackageDraftState {}
+export interface CommandDraft extends BlockDraftBase, PythonPackageDraftState {}
 
-export type ConditionRouterDefaults = Record<string, never>
-export type ConditionRouterCatalogItem = PythonPackageTemplate
+export type CommandDefaults = Record<string, never>
+export type CommandCatalogItem = PythonPackageTemplate
 
-interface ConditionRouterPayload extends BlockPayloadBase {
+interface CommandPayload extends BlockPayloadBase {
   python_package: PythonPackageDraftState['python_package']
   python_package_files: PythonPackageDraftState['python_package_files']
 }
 
-export const conditionRouterAdapter = {
-  blank(_defaults?: ConditionRouterDefaults): ConditionRouterDraft {
+export const commandAdapter = {
+  blank(_defaults?: CommandDefaults): CommandDraft {
     return { id: '', name: '', ...blankPythonPackage() }
   },
-  fromApi(value: unknown, _defaults?: ConditionRouterDefaults): ConditionRouterDraft {
+  fromApi(value: unknown, _defaults?: CommandDefaults): CommandDraft {
     const source = isRecord(value) ? value : {}
     return {
       ...identity(source),
       ...pythonPackageFromApi(source),
     }
   },
-  toPayload(value: ConditionRouterDraft): ConditionRouterPayload {
+  toPayload(value: CommandDraft): CommandPayload {
     return {
       name: cleanName(value.name),
       ...pythonPackagePayload(value),

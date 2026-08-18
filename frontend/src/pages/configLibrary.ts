@@ -45,7 +45,7 @@ export function editLocation(category: LibraryCategoryId, id: string): {
   if (category === 'subagent-profile') return { path: '/agents/subagents', query: { id } }
   if (
     category === 'workflow-event-output'
-    || category === 'condition-router'
+    || category === 'command'
     || category === 'task-dispatcher'
   ) {
     return { path: `/workflow-components/${category}`, query: { id } }

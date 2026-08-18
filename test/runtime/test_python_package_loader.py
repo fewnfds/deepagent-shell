@@ -10,7 +10,7 @@ def _write_package(folder: Path, value: str) -> None:
     folder.mkdir(parents=True)
     (folder / "main.py").write_text(
         "from .helper import VALUE\n\n"
-        "def create_router():\n"
+        "def create_command():\n"
         "    return VALUE\n",
         encoding="utf-8",
     )
@@ -44,8 +44,8 @@ def test_package_loaders_own_unique_module_namespaces(
             packages_dir=tmp_path,
             runtime_root=tmp_path / "runtime",
             family="workflow-node",
-            adapter="condition-router",
-            factory_name="create_router",
+            adapter="command",
+            factory_name="create_command",
             factory_parameters=(),
         )
 
@@ -53,14 +53,14 @@ def test_package_loaders_own_unique_module_namespaces(
     second = loader()
     first_module, _, _ = first.load(
         "owner-first",
-        "condition-router",
+        "command",
         0,
         "first",
         package_owner_id="package-first",
     )
     second_module, _, _ = second.load(
         "owner-second",
-        "condition-router",
+        "command",
         0,
         "second",
         package_owner_id="package-second",
@@ -77,7 +77,7 @@ def test_package_loaders_own_unique_module_namespaces(
     assert f"{first_module.__name__}.helper" not in sys.modules
     assert second_module.__name__ in sys.modules
     assert f"{second_module.__name__}.helper" in sys.modules
-    assert second_module.create_router() == "second"
+    assert second_module.create_command() == "second"
 
     second.close()
     assert second_module.__name__ not in sys.modules

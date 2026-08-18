@@ -289,11 +289,11 @@
         "paths": ["src/pages/WorkflowEditorPage.vue", "src/components/workflow/*.vue"],
         "classes": [
           "workflow-editor-canvas", "workflow-editor-error", "workflow-editor-flow",
-          "workflow-editor-shell", "workflow-editor-toolbar", "workflow-editor-workspace",
+          "workflow-editor-shell", "workflow-editor-toolbar", "workflow-editor-workspace", "workflow-validation-error",
           "workflow-inspector-context", "workflow-inspector-control", "workflow-inspector-delete",
           "workflow-inspector-label", "workflow-inspector-note", "workflow-inspector-row",
           "workflow-inspector-select", "workflow-inspector-switch", "workflow-inspector-value",
-          "workflow-node", "workflow-node--agent", "workflow-node--condition-router", "workflow-node--task-dispatcher",
+          "workflow-node", "workflow-node--agent", "workflow-node--command", "workflow-node--task-dispatcher",
           "workflow-node--terminal", "workflow-node-header", "workflow-node-icon",
           "workflow-node-endpoint", "workflow-node-endpoints",
           "workflow-node-library-copy", "workflow-node-library-icon", "workflow-node-library-item", "workflow-node-library-list",
@@ -301,13 +301,13 @@
           "workflow-node-title", "workflow-node-tracker-copy", "workflow-node-tracker-icon",
           "workflow-node-tracker-item", "workflow-node-tracker-list", "workflow-node-tracker-meta",
           "workflow-node-tracker-title", "workflow-port", "workflow-port--normal", "workflow-port--branch", "workflow-port--dispatch",
-          "workflow-edge--branch", "workflow-edge--dispatch", "workflow-problems-empty",
+          "workflow-edge--branch", "workflow-edge--dispatch", "workflow-edge--start", "workflow-edge--end", "workflow-problems-empty",
           "workflow-problems-item", "workflow-problems-list", "workflow-problems-message",
           "workflow-problems-owner",
           "workflow-tool-button", "workflow-tool-dock", "workflow-tool-dock--left",
           "workflow-tool-dock--right", "workflow-tool-panel", "workflow-tool-panel-body",
           "workflow-tool-panel-header", "workflow-tool-panel-section-title", "workflow-tool-panel-title",
-          "workflow-tool-badge", "workflow-tool-rail", "form-check", "form-check-input", "form-check-label", "form-control-sm",
+          "workflow-tool-badge", "workflow-tool-rail", "btn-outline-danger", "form-check", "form-check-input", "form-check-label", "form-control-sm",
           "form-select", "form-switch"
         ]
       },
@@ -473,7 +473,7 @@
         "kind": "domain-composition",
         "reason": "Owns template selection and ordered private package text-file editing without changing package identity",
         "callers": [
-          "src/editors/ConditionRouterEditor.vue",
+          "src/editors/CommandEditor.vue",
           "src/editors/CustomMiddlewareEditor.vue",
           "src/editors/TaskDispatcherEditor.vue"
         ]

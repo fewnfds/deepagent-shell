@@ -4,7 +4,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from agent_shell.condition_router_packages import resolve_condition_router_package
+from agent_shell.command_packages import resolve_command_package
 from agent_shell.middleware_packages.packages import resolve_middleware_package
 from agent_shell.task_dispatcher_packages import resolve_task_dispatcher_package
 from agent_shell.registries.errors import ResourceScanError
@@ -41,7 +41,7 @@ class PythonPackageValidationService:
             check_dependencies=check_dependencies,
         )
 
-    def condition_router_issues(
+    def command_issues(
         self,
         reference: dict[str, Any],
         *,
@@ -54,7 +54,7 @@ class PythonPackageValidationService:
     ) -> list[ValidationIssue]:
         return self._reference_issues(
             reference,
-            resolver=resolve_condition_router_package,
+            resolver=resolve_command_package,
             scope=scope,
             owner_id=owner_id,
             package_owner_id=package_owner_id,

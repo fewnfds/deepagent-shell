@@ -32,7 +32,7 @@ import { useToasts } from '@/composables/useToasts'
 import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
 import {
   blockAdapters,
-  type ConditionRouterCatalogItem,
+  type CommandCatalogItem,
   type TaskDispatcherCatalogItem,
   type BlockDraftBase,
   type CustomMiddlewareCatalogItem,
@@ -57,7 +57,7 @@ import {
   SystemPromptEditor,
   TodoListEditor,
   WorkflowEventOutputEditor,
-  ConditionRouterEditor,
+  CommandEditor,
   TaskDispatcherEditor,
 } from '@/editors'
 
@@ -88,7 +88,7 @@ const editorComponents: Record<ManagedComponentType, Component> = {
   summarization: SummarizationEditor,
   'prompt-caching': PromptCachingEditor,
   'workflow-event-output': WorkflowEventOutputEditor,
-  'condition-router': ConditionRouterEditor,
+  'command': CommandEditor,
   'task-dispatcher': TaskDispatcherEditor,
 }
 
@@ -135,8 +135,8 @@ const customTools = ref<CustomToolCatalogItem[]>([])
 const customToolErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const customMiddlewares = ref<CustomMiddlewareCatalogItem[]>([])
 const customMiddlewareErrors = ref<Record<string, LocalizedMessagePayload>>({})
-const conditionRouterPackages = ref<ConditionRouterCatalogItem[]>([])
-const conditionRouterPackageErrors = ref<Record<string, LocalizedMessagePayload>>({})
+const commandPackages = ref<CommandCatalogItem[]>([])
+const commandPackageErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const taskDispatcherPackages = ref<TaskDispatcherCatalogItem[]>([])
 const taskDispatcherPackageErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const skills = ref<SkillCatalogItem[]>([])
@@ -187,11 +187,11 @@ const editorProps = computed<Record<string, unknown>>(() => {
         errors: customMiddlewareErrors.value,
         loading: loadingResource.value,
       }
-    case 'condition-router':
+    case 'command':
       return {
         defaults: activeDefaults.value,
-        catalog: conditionRouterPackages.value,
-        errors: conditionRouterPackageErrors.value,
+        catalog: commandPackages.value,
+        errors: commandPackageErrors.value,
         loading: loadingResource.value,
       }
     case 'task-dispatcher':
@@ -247,7 +247,7 @@ function payloadFromDraft(type: ManagedComponentType, value: BlockDraftBase): Bl
 function usesPythonExtension(type: ManagedComponentType): boolean {
   return (
     type === 'custom-middleware'
-    || type === 'condition-router'
+    || type === 'command'
     || type === 'task-dispatcher'
   )
 }
@@ -389,7 +389,7 @@ async function loadRoute(): Promise<void> {
     if (manifest.type === 'model') await loadProviderCatalog(sequence)
     if (!id && (
       manifest.type === 'custom-middleware'
-      || manifest.type === 'condition-router'
+      || manifest.type === 'command'
       || manifest.type === 'task-dispatcher'
     )) await refreshResource()
   } catch (error) {
@@ -465,7 +465,7 @@ async function startNew(): Promise<void> {
       markClean()
       if (
         activeType.value === 'custom-middleware'
-        || activeType.value === 'condition-router'
+        || activeType.value === 'command'
         || activeType.value === 'task-dispatcher'
       ) await refreshResource()
     }
@@ -608,10 +608,10 @@ async function refreshResource(): Promise<void> {
       const result = await managementApi.listMiddlewareTemplates()
       customMiddlewares.value = result.catalog
       customMiddlewareErrors.value = result.errors
-    } else if (activeType.value === 'condition-router') {
-      const result = await managementApi.listConditionRouterTemplates()
-      conditionRouterPackages.value = result.catalog
-      conditionRouterPackageErrors.value = result.errors
+    } else if (activeType.value === 'command') {
+      const result = await managementApi.listCommandTemplates()
+      commandPackages.value = result.catalog
+      commandPackageErrors.value = result.errors
     } else if (activeType.value === 'task-dispatcher') {
       const result = await managementApi.listTaskDispatcherTemplates()
       taskDispatcherPackages.value = result.catalog

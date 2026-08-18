@@ -67,7 +67,7 @@ def _handle(
 def validate_workflow_topology(
     document: WorkflowGraphDocumentV1,
     *,
-    condition_routers: Mapping[str, object] | None = None,
+    commands: Mapping[str, object] | None = None,
     task_dispatchers: Mapping[str, object] | None = None,
 ) -> tuple[ValidationIssue, ...]:
     nodes = document.definition.nodes
@@ -235,7 +235,7 @@ def validate_workflow_topology(
                             index,
                             "workflow.branch_key_duplicate",
                             "branch_key",
-                            "A condition router branch can connect to only one target.",
+                            "A Command branch can connect to only one target.",
                             "validation.issue.workflow.branchKeyDuplicate",
                             message_args={"branch_key": edge.branch_key},
                         )
@@ -305,38 +305,24 @@ def validate_workflow_topology(
                     )
                 )
 
-    if condition_routers is not None:
+    if commands is not None:
         node_indexes = {node.id: index for index, node in enumerate(nodes)}
         for node in nodes:
             spec = specs[node.id]
-            if spec.runtime_kind != "command_router":
+            if spec.runtime_kind != "command_node":
                 continue
-            if node.id not in condition_routers:
+            if node.id not in commands:
                 issues.append(
                     _issue(
-                        "workflow.condition_router_not_found",
-                        f"definition.nodes[{node_indexes[node.id]}].config.condition_router_id",
-                        "The selected Condition Router configuration does not exist.",
-                        "validation.issue.workflow.conditionRouterNotFound",
+                        "workflow.command_not_found",
+                        f"definition.nodes[{node_indexes[node.id]}].config.command_id",
+                        "The selected Command Node configuration does not exist.",
+                        "validation.issue.workflow.commandNotFound",
                         owner_id=node.id,
                         owner_type=node.type,
                     )
                 )
                 continue
-            connected = set(routed_branches.get(node.id, {}))
-            if "otherwise" not in connected:
-                issues.append(
-                    _issue(
-                        "workflow.condition_router_branch_missing",
-                        f"definition.nodes[{node_indexes[node.id]}]",
-                        "A Condition Router requires an otherwise branch edge.",
-                        "validation.issue.workflow.conditionRouterBranchMissing",
-                        owner_id=node.id,
-                        owner_type=node.type,
-                        message_args={"branch_key": "otherwise"},
-                    )
-                )
-
     if task_dispatchers is not None:
         node_indexes = {node.id: index for index, node in enumerate(nodes)}
         for node in nodes:

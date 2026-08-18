@@ -732,7 +732,7 @@ pre code {
 }
 
 .workflow-node--agent,
-.workflow-node--condition-router,
+.workflow-node--command,
 .workflow-node--task-dispatcher {
   display: grid;
   gap: 10px;
@@ -831,6 +831,14 @@ pre code {
 .workflow-editor-flow .vue-flow__edge.workflow-edge--dispatch .vue-flow__edge-path {
   stroke: var(--bs-info);
   stroke-dasharray: 3 4;
+}
+
+.workflow-editor-flow .vue-flow__edge.workflow-edge--start .vue-flow__edge-path {
+  stroke: var(--bs-success);
+}
+
+.workflow-editor-flow .vue-flow__edge.workflow-edge--end .vue-flow__edge-path {
+  stroke: var(--bs-danger);
 }
 
 .workflow-editor-flow .vue-flow__edge.selected .vue-flow__edge-path {

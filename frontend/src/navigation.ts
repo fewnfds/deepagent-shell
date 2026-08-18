@@ -66,8 +66,8 @@ const sectionNavigationGroups: SectionNavigationGroup[] = [
         labelKey: 'navigation.sections.workflowEventOutput',
       },
       {
-        path: '/workflow-components/condition-router',
-        labelKey: 'navigation.sections.conditionRouter',
+        path: '/workflow-components/command',
+        labelKey: 'navigation.sections.command',
       },
       {
         path: '/workflow-components/task-dispatcher',

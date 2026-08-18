@@ -265,7 +265,7 @@ def validate_workflow_executable(
     document: WorkflowGraphDocumentV1,
     *,
     validate_main_agent: MainAgentValidator,
-    condition_routers: Mapping[str, object] | None = None,
+    commands: Mapping[str, object] | None = None,
     task_dispatchers: Mapping[str, object] | None = None,
     workflow_role: WorkflowRole | None = None,
 ) -> ValidationReport:
@@ -282,7 +282,7 @@ def validate_workflow_executable(
     issues = list(
         validate_workflow_topology(
             normalized,
-            condition_routers=condition_routers,
+            commands=commands,
             task_dispatchers=task_dispatchers,
         )
     )

@@ -30,13 +30,11 @@ import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
 import {
   newAgentCanvasNode,
-  newConditionRouterCanvasNode,
+  newCommandCanvasNode,
   newTaskDispatcherCanvasNode,
   nextWorkflowCanvasEdgeId,
   WORKFLOW_NODE_DRAG_MIME,
-  workflowCanvasEdgeAnimated,
-  workflowCanvasEdgeClass,
-  workflowCanvasEdgeMarker,
+  workflowCanvasEdgeVisual,
   workflowCanvasEdgeTypesBetween,
   workflowCanvasNodeEndpoints,
   workflowCanvasToDocument,
@@ -63,7 +61,7 @@ const managementError = useManagementError()
 const { notify } = useToasts()
 const workflow = ref<Workflow | null>(null)
 const mainAgents = ref<MainAgent[]>([])
-const conditionRouters = ref<SavedBlock[]>([])
+const commands = ref<SavedBlock[]>([])
 const taskDispatchers = ref<SavedBlock[]>([])
 const nodeCatalog = ref<WorkflowNodeCatalogItem[]>([])
 const nodes = ref<WorkflowCanvasNode[]>([])
@@ -99,13 +97,13 @@ const canAddAgent = computed(() => (
   && mainAgents.value.length > 0
   && agentCatalogItem.value !== null
 ))
-const conditionRouterCatalogItem = computed(() => (
-  nodeCatalog.value.find((item) => item.type === 'condition-router') ?? null
+const commandCatalogItem = computed(() => (
+  nodeCatalog.value.find((item) => item.type === 'command') ?? null
 ))
-const canAddConditionRouter = computed(() => (
+const canAddCommand = computed(() => (
   loaded.value
-  && conditionRouters.value.length > 0
-  && conditionRouterCatalogItem.value !== null
+  && commands.value.length > 0
+  && commandCatalogItem.value !== null
 ))
 const taskDispatcherCatalogItem = computed(() => (
   nodeCatalog.value.find((item) => item.type === 'task-dispatcher') ?? null
@@ -140,7 +138,7 @@ const graphRevision = computed(() => JSON.stringify({
     position: node.position,
     type: node.data.nodeType,
     mainAgentId: node.data.mainAgentId,
-    conditionRouterId: node.data.conditionRouterId,
+    commandId: node.data.commandId,
     taskDispatcherId: node.data.taskDispatcherId,
     defer: node.data.defer,
   })),
@@ -217,6 +215,9 @@ function connect(connection: Connection): void {
     nodeCatalog.value,
   )
   if (!edgeType) return
+  const source = nodes.value.find((node) => node.id === connection.source)
+  const target = nodes.value.find((node) => node.id === connection.target)
+  if (!source || !target) return
   nodes.value = nodes.value.map((node) => ({ ...node, selected: false }))
   edges.value = [
     ...edges.value.map((edge) => ({ ...edge, selected: false })),
@@ -227,9 +228,7 @@ function connect(connection: Connection): void {
       target: connection.target,
       targetHandle: connection.targetHandle,
       type: 'default',
-      markerEnd: workflowCanvasEdgeMarker(edgeType),
-      animated: workflowCanvasEdgeAnimated(edgeType),
-      class: workflowCanvasEdgeClass(edgeType),
+      ...workflowCanvasEdgeVisual(edgeType, source.data.nodeType, target.data.nodeType),
       selected: true,
       data: { edgeType },
     },
@@ -251,14 +250,14 @@ function addAgent(position?: XYPosition): void {
   rightPanel.value = 'inspector'
 }
 
-function addConditionRouter(position?: XYPosition): void {
-  const firstRouter = conditionRouters.value[0]
-  if (!canAddConditionRouter.value || !firstRouter) return
-  const nodeId = nextConditionRouterNodeId()
-  const node = newConditionRouterCanvasNode(
+function addCommand(position?: XYPosition): void {
+  const firstRouter = commands.value[0]
+  if (!canAddCommand.value || !firstRouter) return
+  const nodeId = nextCommandNodeId()
+  const node = newCommandCanvasNode(
     nodeId,
     firstRouter.id,
-    position ?? nextConditionRouterPosition(),
+    position ?? nextCommandPosition(),
   )
   node.selected = true
   nodes.value = [
@@ -301,15 +300,15 @@ function nextAgentNodeId(): string {
   return `agent-${index}`
 }
 
-function nextConditionRouterPosition(): XYPosition {
-  const count = nodes.value.filter((node) => node.data.nodeType === 'condition-router').length
+function nextCommandPosition(): XYPosition {
+  const count = nodes.value.filter((node) => node.data.nodeType === 'command').length
   return { x: 620 + (count % 3) * 280, y: 180 + Math.floor(count / 3) * 160 }
 }
 
-function nextConditionRouterNodeId(): string {
+function nextCommandNodeId(): string {
   let index = 1
-  while (nodes.value.some((node) => node.id === `condition-router-${index}`)) index += 1
-  return `condition-router-${index}`
+  while (nodes.value.some((node) => node.id === `command-${index}`)) index += 1
+  return `command-${index}`
 }
 
 function nextTaskDispatcherPosition(): XYPosition {
@@ -325,7 +324,7 @@ function nextTaskDispatcherNodeId(): string {
 
 function dragOver(event: DragEvent): void {
   if (
-    (!canAddAgent.value && !canAddConditionRouter.value && !canAddTaskDispatcher.value)
+    (!canAddAgent.value && !canAddCommand.value && !canAddTaskDispatcher.value)
     || !event.dataTransfer?.types.includes(WORKFLOW_NODE_DRAG_MIME)
   ) return
   event.preventDefault()
@@ -334,9 +333,9 @@ function dragOver(event: DragEvent): void {
 
 function dropNode(event: DragEvent): void {
   if (
-    (!canAddAgent.value && !canAddConditionRouter.value && !canAddTaskDispatcher.value)
+    (!canAddAgent.value && !canAddCommand.value && !canAddTaskDispatcher.value)
     || !flow.value
-    || !['agent', 'condition-router', 'task-dispatcher'].includes(
+    || !['agent', 'command', 'task-dispatcher'].includes(
       event.dataTransfer?.getData(WORKFLOW_NODE_DRAG_MIME) ?? '',
     )
   ) return
@@ -344,7 +343,7 @@ function dropNode(event: DragEvent): void {
   const position = flow.value.screenToFlowCoordinate({ x: event.clientX, y: event.clientY })
   const nodeType = event.dataTransfer?.getData(WORKFLOW_NODE_DRAG_MIME)
   if (nodeType === 'agent') addAgent(position)
-  else if (nodeType === 'condition-router') addConditionRouter(position)
+  else if (nodeType === 'command') addCommand(position)
   else addTaskDispatcher(position)
 }
 
@@ -393,6 +392,9 @@ function replaceEdgeEndpoints(
     nodeCatalog.value,
   )
   if (!edgeType) return
+  const source = nodes.value.find((node) => node.id === edge.source)
+  const target = nodes.value.find((node) => node.id === edge.target)
+  if (!source || !target) return
   edges.value = edges.value.map((item) => (
     item.id === edgeId
       ? {
@@ -404,9 +406,7 @@ function replaceEdgeEndpoints(
             branchKey: edgeType === 'branch' ? item.data.branchKey : undefined,
             dispatchKey: edgeType === 'dispatch' ? item.data.dispatchKey : undefined,
           },
-          markerEnd: workflowCanvasEdgeMarker(edgeType),
-          animated: workflowCanvasEdgeAnimated(edgeType),
-          class: workflowCanvasEdgeClass(edgeType),
+          ...workflowCanvasEdgeVisual(edgeType, source.data.nodeType, target.data.nodeType),
         }
       : item
   ))
@@ -446,10 +446,10 @@ function selectAgent(nodeId: string, mainAgentId: string): void {
   ))
 }
 
-function selectConditionRouter(nodeId: string, conditionRouterId: string): void {
+function selectCommand(nodeId: string, commandId: string): void {
   nodes.value = nodes.value.map((node) => (
     node.id === nodeId
-      ? { ...node, data: { ...node.data, conditionRouterId } }
+      ? { ...node, data: { ...node.data, commandId } }
       : node
   ))
 }
@@ -549,9 +549,9 @@ function mainAgentName(mainAgentId: string): string {
     ?? t('workflows.editor.noMainAgentSelected')
 }
 
-function conditionRouterName(conditionRouterId: string): string {
-  return conditionRouters.value.find((router) => router.id === conditionRouterId)?.name
-    ?? t('workflows.editor.noConditionRouterSelected')
+function commandName(commandId: string): string {
+  return commands.value.find((router) => router.id === commandId)?.name
+    ?? t('workflows.editor.noCommandSelected')
 }
 
 function taskDispatcherName(taskDispatcherId: string): string {
@@ -673,20 +673,20 @@ onMounted(async () => {
       metadata,
       graph,
       agents,
-      conditionRouterRecords,
+      commandRecords,
       taskDispatcherRecords,
       catalog,
     ] = await Promise.all([
       managementApi.getWorkflow(workflowId.value),
       managementApi.getWorkflowGraph(workflowId.value),
       managementApi.listMainAgents(),
-      managementApi.listBlocks('condition-router'),
+      managementApi.listBlocks('command'),
       managementApi.listBlocks('task-dispatcher'),
       managementApi.listWorkflowNodeCatalog(),
     ])
     workflow.value = metadata
     mainAgents.value = agents
-    conditionRouters.value = conditionRouterRecords
+    commands.value = commandRecords
     taskDispatchers.value = taskDispatcherRecords
     nodeCatalog.value = catalog.filter((item) => item.workflow_roles.includes(metadata.workflow_role))
     stateContract.value = graph.definition.state_contract
@@ -775,13 +775,13 @@ onUnmounted(() => {
         <WorkflowNodeLibrary
           v-if="leftPanel === 'library'"
           :agent="agentCatalogItem"
-          :condition-router="conditionRouterCatalogItem"
+          :command="commandCatalogItem"
           :task-dispatcher="taskDispatcherCatalogItem"
           :agent-disabled="!canAddAgent"
-          :condition-router-disabled="!canAddConditionRouter"
+          :command-disabled="!canAddCommand"
           :task-dispatcher-disabled="!canAddTaskDispatcher"
           @add-agent="addAgent()"
-          @add-condition-router="addConditionRouter()"
+          @add-command="addCommand()"
           @add-task-dispatcher="addTaskDispatcher()"
         />
         <WorkflowNodeTracker
@@ -862,15 +862,15 @@ onUnmounted(() => {
             </div>
           </template>
 
-          <template #node-condition-router="{ id, data }">
-            <div class="workflow-node workflow-node--condition-router">
-              <WorkflowNodeEndpoints direction="input" :endpoints="nodeEndpoints('condition-router', 'input')" />
+          <template #node-command="{ id, data }">
+            <div class="workflow-node workflow-node--command">
+              <WorkflowNodeEndpoints direction="input" :endpoints="nodeEndpoints('command', 'input')" />
               <div class="workflow-node-header">
                 <span class="workflow-node-icon" aria-hidden="true"><i class="bi bi-circle-half" /></span>
                 <span class="workflow-node-title">{{ id }}</span>
               </div>
-              <span class="workflow-node-summary">{{ conditionRouterName(data.conditionRouterId ?? '') }}</span>
-              <WorkflowNodeEndpoints direction="output" :endpoints="nodeEndpoints('condition-router', 'output')" />
+              <span class="workflow-node-summary">{{ commandName(data.commandId ?? '') }}</span>
+              <WorkflowNodeEndpoints direction="output" :endpoints="nodeEndpoints('command', 'output')" />
             </div>
           </template>
 
@@ -911,7 +911,7 @@ onUnmounted(() => {
           :edge-type-options="selectedEdgeTypeOptions"
           :input-endpoints="selectedNodeInputEndpoints"
           :main-agents="mainAgents"
-          :condition-routers="conditionRouters"
+          :commands="commands"
           :task-dispatchers="taskDispatchers"
           :node="selectedNode"
           :node-ids="nodes.map((node) => node.id)"
@@ -924,7 +924,7 @@ onUnmounted(() => {
           @select-edge-target-endpoint="selectEdgeTargetEndpoint"
           @select-edge-type="selectEdgeType"
           @update-agent="selectAgent"
-          @update-condition-router="selectConditionRouter"
+          @update-command="selectCommand"
           @update-task-dispatcher="selectTaskDispatcher"
           @update-node-id="updateNodeId"
           @update-branch-key="updateBranchKey"

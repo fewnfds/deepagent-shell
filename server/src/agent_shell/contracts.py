@@ -24,7 +24,7 @@ from agent_shell.capability_manifest import (
     PUBLIC_CAPABILITY_MANIFESTS,
     validate_capability_manifests,
 )
-from agent_shell.condition_router import ConditionRouterBlock
+from agent_shell.command import CommandBlock
 from agent_shell.model_provider_contracts import validate_provider_settings
 from agent_shell.provider_integrations import bundled_provider_ids
 from agent_shell.registries.custom_tools import (
@@ -972,7 +972,7 @@ validate_capability_manifests(CAPABILITY_MANIFESTS, BLOCK_MODELS)
 BLOCK_CATALOG = PUBLIC_CAPABILITY_MANIFESTS
 WORKFLOW_COMPONENT_MODELS = {
     "workflow-event-output": WorkflowEventOutputBlock,
-    "condition-router": ConditionRouterBlock,
+    "command": CommandBlock,
     "task-dispatcher": TaskDispatcherBlock,
 }
 MANAGED_COMPONENT_MODELS = {**BLOCK_MODELS, **WORKFLOW_COMPONENT_MODELS}

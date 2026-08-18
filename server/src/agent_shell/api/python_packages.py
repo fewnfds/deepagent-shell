@@ -14,9 +14,9 @@ def build_python_package_router(
     async def middleware_templates() -> dict[str, object]:
         return authoring.template_catalog("custom-middleware")
 
-    @router.get("/api/python-package-templates/condition-router")
-    async def condition_router_templates() -> dict[str, object]:
-        return authoring.template_catalog("condition-router")
+    @router.get("/api/python-package-templates/command")
+    async def command_templates() -> dict[str, object]:
+        return authoring.template_catalog("command")
 
     @router.get("/api/python-package-templates/task-dispatcher")
     async def task_dispatcher_templates() -> dict[str, object]:

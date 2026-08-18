@@ -23,7 +23,7 @@ const api = vi.hoisted(() => ({
   validateRepository: vi.fn(),
   listCustomTools: vi.fn(),
   listMiddlewareTemplates: vi.fn(),
-  listConditionRouterTemplates: vi.fn(),
+  listCommandTemplates: vi.fn(),
   listTaskDispatcherTemplates: vi.fn(),
   listSkills: vi.fn(),
   fetchModels: vi.fn(),
@@ -72,32 +72,32 @@ const skillManifest: CapabilityManifest = {
   required: false,
 }
 
-const conditionRouterManifest: WorkflowComponentManifest = {
-  type: 'condition-router',
-  terminology_key: 'condition_router',
+const commandManifest: WorkflowComponentManifest = {
+  type: 'command',
+  terminology_key: 'command',
   label: 'Condition router',
   order: 1,
   icon_key: 'workflow',
-  editor_key: 'condition-router',
+  editor_key: 'command',
 }
 
 const taskDispatcherManifest: WorkflowComponentManifest = {
-  ...conditionRouterManifest,
+  ...commandManifest,
   type: 'task-dispatcher',
   terminology_key: 'task_dispatcher',
   label: 'Task dispatcher',
   editor_key: 'task-dispatcher',
 }
 
-const conditionRouterTemplate = {
+const commandTemplate = {
   key: 'basic-router',
   format_version: 1 as const,
   family: 'workflow-node' as const,
-  adapter: 'condition-router' as const,
+  adapter: 'command' as const,
   name: 'Basic router',
   revision: 'template-revision',
   files: [{
-    path: 'main.py', content: 'def create_router():\n    return route\n', exists: true,
+    path: 'main.py', content: 'def create_command():\n    return route\n', exists: true,
   }],
 }
 
@@ -177,7 +177,7 @@ beforeEach(() => {
   api.validateRepository.mockResolvedValue({ valid: true, stage: 'repository_load', issues: [] })
   api.listCustomTools.mockResolvedValue({ catalog: [], errors: {} })
   api.listMiddlewareTemplates.mockResolvedValue({ catalog: [], errors: {} })
-  api.listConditionRouterTemplates.mockResolvedValue({ catalog: [], errors: {} })
+  api.listCommandTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listTaskDispatcherTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listSkills.mockResolvedValue({
     catalog: [{ name: 'research', folder: 'research', description: 'Research skill' }],
@@ -203,8 +203,8 @@ describe('ComponentsPage', () => {
   it('uses the Workflow Components section navigation without a duplicate type navigation', async () => {
     api.getCatalog.mockResolvedValueOnce({
       block_types: [skillManifest, modelManifest],
-      workflow_component_types: [conditionRouterManifest],
-      editor_defaults: { condition_router: {} },
+      workflow_component_types: [commandManifest],
+      editor_defaults: { command: {} },
     })
     const router = createRouter({
       history: createMemoryHistory(),
@@ -214,7 +214,7 @@ describe('ComponentsPage', () => {
         props: { scope: 'workflow' },
       }],
     })
-    await router.push('/workflow-components/condition-router')
+    await router.push('/workflow-components/command')
     await router.isReady()
     const wrapper = mount(ComponentsPage, {
       props: { scope: 'workflow' },
@@ -222,11 +222,11 @@ describe('ComponentsPage', () => {
     })
     await flushPromises()
 
-    expect(api.listConditionRouterTemplates).toHaveBeenCalledOnce()
+    expect(api.listCommandTemplates).toHaveBeenCalledOnce()
 
     expect(wrapper.findAll('[data-testid="section-nav"] button').map((item) => item.text())).toEqual([
       'navigation.sections.workflowEventOutput',
-      'navigation.sections.conditionRouter',
+      'navigation.sections.command',
       'navigation.sections.taskDispatcher',
     ])
     expect(wrapper.get('.page-action-dock').findAll('button').map((button) => button.text())).toEqual([
@@ -240,7 +240,7 @@ describe('ComponentsPage', () => {
   it('resolves each base component route from the first scoped catalog manifest', async () => {
     api.getCatalog.mockResolvedValue({
       block_types: [skillManifest],
-      workflow_component_types: [conditionRouterManifest],
+      workflow_component_types: [commandManifest],
       editor_defaults: {
         skill: { system_prompt: 'default skill prompt', required_placeholders: [] },
       },
@@ -274,10 +274,10 @@ describe('ComponentsPage', () => {
     await flushPromises()
 
     await vi.waitFor(() => {
-      expect(router.currentRoute.value.path).toBe('/workflow-components/condition-router')
+      expect(router.currentRoute.value.path).toBe('/workflow-components/command')
     })
-    expect(api.listBlocks).toHaveBeenLastCalledWith('condition-router')
-    expect(wrapper.find('[data-editor="condition-router"]').exists()).toBe(true)
+    expect(api.listBlocks).toHaveBeenLastCalledWith('command')
+    expect(wrapper.find('[data-editor="command"]').exists()).toBe(true)
     wrapper.unmount()
   })
 
@@ -354,8 +354,8 @@ describe('ComponentsPage', () => {
   it('loads templates without validating an extension before its first save', async () => {
     api.getCatalog.mockResolvedValueOnce({
       block_types: [skillManifest, modelManifest],
-      workflow_component_types: [conditionRouterManifest],
-      editor_defaults: { 'condition-router': {} },
+      workflow_component_types: [commandManifest],
+      editor_defaults: { 'command': {} },
     })
     api.listBlocks.mockResolvedValueOnce([])
     const router = createRouter({
@@ -366,7 +366,7 @@ describe('ComponentsPage', () => {
         props: { scope: 'workflow' },
       }],
     })
-    await router.push('/workflow-components/condition-router')
+    await router.push('/workflow-components/command')
     await router.isReady()
 
     const wrapper = mount(ComponentsPage, {
@@ -375,7 +375,7 @@ describe('ComponentsPage', () => {
     })
     await flushPromises()
 
-    expect(api.listConditionRouterTemplates).toHaveBeenCalledOnce()
+    expect(api.listCommandTemplates).toHaveBeenCalledOnce()
     expect(api.listMiddlewareTemplates).not.toHaveBeenCalled()
     expect(wrapper.find('[data-testid="validation-checklist"]').exists()).toBe(false)
     wrapper.unmount()
@@ -413,8 +413,8 @@ describe('ComponentsPage', () => {
   it('offers the empty template and rejects duplicate names for Python extensions', async () => {
     api.getCatalog.mockResolvedValueOnce({
       block_types: [skillManifest, modelManifest],
-      workflow_component_types: [conditionRouterManifest],
-      editor_defaults: { 'condition-router': {} },
+      workflow_component_types: [commandManifest],
+      editor_defaults: { 'command': {} },
     })
     api.listBlocks.mockResolvedValueOnce([{
       id: '00000000-0000-4000-8000-000000000010',
@@ -424,8 +424,8 @@ describe('ComponentsPage', () => {
         editable_files: ['main.py'],
       },
     }])
-    api.listConditionRouterTemplates.mockResolvedValueOnce({
-      catalog: [conditionRouterTemplate],
+    api.listCommandTemplates.mockResolvedValueOnce({
+      catalog: [commandTemplate],
       errors: {},
     })
     const router = createRouter({
@@ -436,7 +436,7 @@ describe('ComponentsPage', () => {
         props: { scope: 'workflow' },
       }],
     })
-    await router.push('/workflow-components/condition-router')
+    await router.push('/workflow-components/command')
     await router.isReady()
     const wrapper = mount(ComponentsPage, {
       props: { scope: 'workflow' },
@@ -453,7 +453,7 @@ describe('ComponentsPage', () => {
     expect(api.saveBlock).not.toHaveBeenCalled()
 
     await wrapper.get('[data-field="record-name"]').setValue('Existing router')
-    await wrapper.get('[data-editor="condition-router"] select').setValue('basic-router')
+    await wrapper.get('[data-editor="command"] select').setValue('basic-router')
     await buttonByText(wrapper, 'common.save').trigger('click')
     expect(wrapper.get('[data-testid="page-error"]').text())
       .toContain('errors.configurationNameConflict')

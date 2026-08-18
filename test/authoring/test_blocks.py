@@ -45,14 +45,14 @@ def test_health_catalog_and_readiness_are_small_and_current(
         "summarization",
         "prompt_caching",
         "workflow_event_output",
-        "condition_router",
+        "command",
         "task_dispatcher",
     }
     assert [item["type"] for item in catalog["block_types"]] == list(PUBLIC_TYPES)
     assert [item["order"] for item in catalog["block_types"]] == list(range(1, 14))
     assert [item["type"] for item in catalog["workflow_component_types"]] == [
         "workflow-event-output",
-        "condition-router",
+        "command",
         "task-dispatcher",
     ]
     by_type = {item["type"]: item for item in catalog["block_types"]}
@@ -98,26 +98,26 @@ def test_health_catalog_and_readiness_are_small_and_current(
     assert readiness["sections"]["runtime_dependencies"]["code"] == "model_streaming"
 
 
-def test_condition_router_uses_component_crud_storage_and_repository_validation(
+def test_command_uses_component_crud_storage_and_repository_validation(
     tmp_path: Path, monkeypatch
 ) -> None:
     source = (
-        "def create_router():\n"
+        "def create_command():\n"
         "    async def route(state, runtime):\n"
         "        return {'activate': ['review'], 'update': {}}\n"
         "    return route\n"
     )
     _write_package_template(
         tmp_path,
-        category=("workflow", "condition_router"),
+        category=("workflow", "command"),
         key="risk-router",
         family="workflow-node",
-        adapter="condition-router",
+        adapter="command",
         source=source,
     )
     client = make_client(tmp_path, monkeypatch)
     selected = client.get(
-        "/api/python-package-templates/condition-router"
+        "/api/python-package-templates/command"
     ).json()["catalog"][0]
     payload = {
         "name": "Risk routing",
@@ -132,18 +132,18 @@ def test_condition_router_uses_component_crud_storage_and_repository_validation(
         },
     }
 
-    created_response = client.post("/api/blocks/condition-router", json=payload)
+    created_response = client.post("/api/blocks/command", json=payload)
     assert created_response.status_code == 200
     created = created_response.json()
     assert client.get(
-        f"/api/blocks/condition-router/{created['id']}"
+        f"/api/blocks/command/{created['id']}"
     ).json() == created
     assert (
         tmp_path
         / "data"
         / "config"
         / "components"
-        / "condition-router"
+        / "command"
         / f"{created['id']}.yaml"
     ).is_file()
     assert client.get("/api/validation/repository").json()["valid"] is True
@@ -157,13 +157,13 @@ def test_condition_router_uses_component_crud_storage_and_repository_validation(
         "python_package_files": created["python_package_files"],
     }
     rejected = client.put(
-        f"/api/blocks/condition-router/{created['id']}",
+        f"/api/blocks/command/{created['id']}",
         json=invalid,
     )
     assert rejected.status_code == 422
 
     assert client.delete(
-        f"/api/blocks/condition-router/{created['id']}"
+        f"/api/blocks/command/{created['id']}"
     ).json() == {"ok": True}
 
 

@@ -59,7 +59,7 @@ def create_dispatcher():
   不隐式改写本批显式 Send State。
 - 包不 import LangGraph，不返回 Node ID、`Send` 或 `Command`。
 
-没有任务时，第一阶段要求由上游 Condition Router 绕过 Dispatcher；返回空 `tasks` 会使运行失败。
+没有任务时，第一阶段要求由上游 Command Node 绕过 Dispatcher；返回空 `tasks` 会使运行失败。
 
 ## Worker 如何读取任务
 

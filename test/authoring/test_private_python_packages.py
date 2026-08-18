@@ -12,11 +12,11 @@ from .app_support import make_client
 
 
 def _write_router_template(data_root: Path, *, key: str = "basic_router") -> Path:
-    folder = data_root / "templates" / "workflow" / "condition_router" / key
+    folder = data_root / "templates" / "workflow" / "command" / key
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "main.py").write_text(
-        "def create_router():\n"
-        "    branch = 'otherwise'\n"
+        "def create_command():\n"
+        "    branch = 'finish'\n"
         "    async def route(state, runtime):\n"
         "        return {'activate': [branch], 'update': {}}\n"
         "    return route\n",
@@ -35,7 +35,7 @@ def _template_content(selected: dict, path: str) -> str:
     )
 
 
-def _create_router(
+def _create_command(
     client: TestClient,
     selected: dict,
     *,
@@ -44,7 +44,7 @@ def _create_router(
 ) -> dict:
     editable_paths = paths or ["main.py"]
     response = client.post(
-        "/api/blocks/condition-router",
+        "/api/blocks/command",
         json={
             "name": name,
             "python_package": {
@@ -96,7 +96,7 @@ def test_manifest_free_template_creates_owned_package_and_keeps_missing_file_war
     template = _write_router_template(data_root)
     client = make_client(tmp_path, monkeypatch)
 
-    catalog_response = client.get("/api/python-package-templates/condition-router")
+    catalog_response = client.get("/api/python-package-templates/command")
     assert catalog_response.status_code == 200
     selected = catalog_response.json()["catalog"][0]
     assert selected["key"] == "basic_router"
@@ -108,7 +108,7 @@ def test_manifest_free_template_creates_owned_package_and_keeps_missing_file_war
     ]
     assert not (template / "template.json").exists()
 
-    created = _create_router(
+    created = _create_command(
         client,
         selected,
         name="Private router",
@@ -133,14 +133,14 @@ def test_manifest_free_template_creates_owned_package_and_keeps_missing_file_war
         data_root
         / "config"
         / "python_package_instances"
-        / "condition-router"
+        / "command"
         / folder_name
     )
     manifest = json.loads((private_folder / "package.json").read_text(encoding="utf-8"))
     assert manifest == {
         "format_version": 1,
         "family": "workflow-node",
-        "adapter": "condition-router",
+        "adapter": "command",
         "id": folder_name,
     }
     assert not (private_folder / "missing.py").exists()
@@ -149,7 +149,7 @@ def test_manifest_free_template_creates_owned_package_and_keeps_missing_file_war
             data_root
             / "config"
             / "components"
-            / "condition-router"
+            / "command"
             / f"{block_id}.yaml"
         ).read_text(encoding="utf-8")
     )
@@ -170,12 +170,12 @@ def test_builtin_example_coexists_with_same_named_user_template_and_is_copied(
         tmp_path
         / "examples"
         / "workflow-components"
-        / "condition-router"
+        / "command"
         / "shared-name"
     )
     example.mkdir(parents=True)
     example_source = (
-        "def create_router():\n"
+        "def create_command():\n"
         "    async def route(state, runtime):\n"
         "        return {'activate': ['builtin'], 'update': {}}\n"
         "    return route\n"
@@ -184,7 +184,7 @@ def test_builtin_example_coexists_with_same_named_user_template_and_is_copied(
 
     client = make_client(tmp_path, monkeypatch)
     catalog = client.get(
-        "/api/python-package-templates/condition-router"
+        "/api/python-package-templates/command"
     ).json()["catalog"]
 
     assert [item["key"] for item in catalog] == [
@@ -194,31 +194,31 @@ def test_builtin_example_coexists_with_same_named_user_template_and_is_copied(
     builtin = next(item for item in catalog if item["key"].startswith("内置示例-"))
     assert builtin["name"] == "内置示例-shared-name"
 
-    created = _create_router(client, builtin, name="Built-in router")
+    created = _create_command(client, builtin, name="Built-in router")
     copied = (
         data_root
         / "config"
         / "python_package_instances"
-        / "condition-router"
+        / "command"
         / created["id"]
         / "main.py"
     )
     assert copied.read_text(encoding="utf-8") == example_source
 
 
-def test_condition_router_can_be_created_from_empty_template_selection(
+def test_command_can_be_created_from_empty_template_selection(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
     source = (
-        "def create_router():\n"
+        "def create_command():\n"
         "    async def route(state, runtime):\n"
-        "        return {'activate': ['otherwise'], 'update': {}}\n"
+        "        return {'activate': ['finish'], 'update': {}}\n"
         "    return route\n"
     )
 
     response = client.post(
-        "/api/blocks/condition-router",
+        "/api/blocks/command",
         json={
             "name": "Empty template router",
             "python_package": {"folder": "", "editable_files": ["main.py"]},
@@ -241,11 +241,11 @@ def test_existing_package_updates_ordered_text_files_and_creates_new_file(
     _write_router_template(data_root)
     client = make_client(tmp_path, monkeypatch)
     selected = client.get(
-        "/api/python-package-templates/condition-router"
+        "/api/python-package-templates/command"
     ).json()["catalog"][0]
-    created = _create_router(client, selected, name="Editable router")
+    created = _create_command(client, selected, name="Editable router")
     loaded_files = client.post(
-        f"/api/blocks/condition-router/{created['id']}/python-package-files",
+        f"/api/blocks/command/{created['id']}/python-package-files",
         json={"paths": ["helpers/rules.py", "missing.py"]},
     )
     assert loaded_files.status_code == 200, loaded_files.text
@@ -262,7 +262,7 @@ def test_existing_package_updates_ordered_text_files_and_creates_new_file(
         "'update': {}", "'update': {'shared_vars': {'edited': True}}"
     )
     response = client.put(
-        f"/api/blocks/condition-router/{created['id']}",
+        f"/api/blocks/command/{created['id']}",
         json={
             "name": created["name"],
             "python_package": {
@@ -291,13 +291,13 @@ def test_existing_package_updates_ordered_text_files_and_creates_new_file(
         data_root
         / "config"
         / "python_package_instances"
-        / "condition-router"
+        / "command"
         / updated["python_package"]["folder"]
     )
     assert (folder / "nested" / "new.py").read_text(encoding="utf-8") == "ENABLED = True\n"
 
     conflict = client.put(
-        f"/api/blocks/condition-router/{created['id']}",
+        f"/api/blocks/command/{created['id']}",
         json={
             "name": created["name"],
             "python_package": updated["python_package"],
@@ -322,11 +322,11 @@ def test_editable_file_paths_cannot_escape_owned_package(
     _write_router_template(data_root)
     client = make_client(tmp_path, monkeypatch)
     selected = client.get(
-        "/api/python-package-templates/condition-router"
+        "/api/python-package-templates/command"
     ).json()["catalog"][0]
 
     response = client.post(
-        "/api/blocks/condition-router",
+        "/api/blocks/command",
         json={
             "name": "Escaping router",
             "python_package": {
@@ -346,7 +346,7 @@ def test_editable_file_paths_cannot_escape_owned_package(
     assert not (data_root / "config" / "python_package_instances" / "outside.py").exists()
 
     managed_manifest = client.post(
-        "/api/blocks/condition-router",
+        "/api/blocks/command",
         json={
             "name": "Manifest editor",
             "python_package": {
@@ -371,11 +371,11 @@ def test_legacy_python_package_config_is_rejected(
     _write_router_template(data_root)
     client = make_client(tmp_path, monkeypatch)
     selected = client.get(
-        "/api/python-package-templates/condition-router"
+        "/api/python-package-templates/command"
     ).json()["catalog"][0]
 
     response = client.post(
-        "/api/blocks/condition-router",
+        "/api/blocks/command",
         json={
             "name": "Legacy router",
             "python_package": {
@@ -397,7 +397,7 @@ def test_legacy_python_package_config_is_rejected(
     )
 
     assert response.status_code == 422
-    instance_root = data_root / "config" / "python_package_instances" / "condition-router"
+    instance_root = data_root / "config" / "python_package_instances" / "command"
     assert not instance_root.exists() or not any(instance_root.iterdir())
 
 
@@ -408,12 +408,12 @@ def test_copy_and_delete_follow_private_package_ownership(
     _write_router_template(data_root)
     client = make_client(tmp_path, monkeypatch)
     selected = client.get(
-        "/api/python-package-templates/condition-router"
+        "/api/python-package-templates/command"
     ).json()["catalog"][0]
-    created = _create_router(client, selected, name="Source router")
+    created = _create_command(client, selected, name="Source router")
 
     copied_response = client.post(
-        f"/api/blocks/condition-router/{created['id']}/copy",
+        f"/api/blocks/command/{created['id']}/copy",
         json={"name": "Copied router"},
     )
     assert copied_response.status_code == 200, copied_response.text
@@ -423,9 +423,9 @@ def test_copy_and_delete_follow_private_package_ownership(
         data_root
         / "config"
         / "python_package_instances"
-        / "condition-router"
+        / "command"
         / copied["python_package"]["folder"]
     )
     assert copied_folder.is_dir()
-    assert client.delete(f"/api/blocks/condition-router/{copied['id']}").status_code == 200
+    assert client.delete(f"/api/blocks/command/{copied['id']}").status_code == 200
     assert not copied_folder.exists()

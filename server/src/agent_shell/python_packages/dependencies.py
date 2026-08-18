@@ -342,7 +342,7 @@ def prepare_windows_dependencies(
     data_root: Path,
     runtime_root: Path,
 ) -> None:
-    from agent_shell.condition_router_packages import resolve_condition_router_package
+    from agent_shell.command_packages import resolve_command_package
     from agent_shell.middleware_packages.packages import resolve_middleware_package
     from agent_shell.task_dispatcher_packages import resolve_task_dispatcher_package
     from agent_shell.storage.file_config import FileConfigRepository
@@ -357,7 +357,7 @@ def prepare_windows_dependencies(
     components = config.get("components", {})
 
     active_main_agent_ids: set[str] = set()
-    active_condition_router_ids: set[str] = set()
+    active_command_ids: set[str] = set()
     active_task_dispatcher_ids: set[str] = set()
     for workflow in config.get("workflows", []):
         if not isinstance(workflow, dict) or workflow.get("enabled") is not True:
@@ -371,16 +371,16 @@ def prepare_windows_dependencies(
                 continue
             if node.get("type") == "agent":
                 active_main_agent_ids.add(str(node_config.get("main_agent_id", "")))
-            elif node.get("type") == "condition-router":
-                active_condition_router_ids.add(
-                    str(node_config.get("condition_router_id", ""))
+            elif node.get("type") == "command":
+                active_command_ids.add(
+                    str(node_config.get("command_id", ""))
                 )
             elif node.get("type") == "task-dispatcher":
                 active_task_dispatcher_ids.add(
                     str(node_config.get("task_dispatcher_id", ""))
                 )
     active_main_agent_ids.discard("")
-    active_condition_router_ids.discard("")
+    active_command_ids.discard("")
     active_task_dispatcher_ids.discard("")
 
     main_agents = {
@@ -395,8 +395,8 @@ def prepare_windows_dependencies(
     }
 
     def referenced_ids(component_type: str) -> set[str]:
-        if component_type == "condition-router":
-            return set(active_condition_router_ids)
+        if component_type == "command":
+            return set(active_command_ids)
         if component_type == "task-dispatcher":
             return set(active_task_dispatcher_ids)
         found: set[str] = set()
@@ -443,10 +443,10 @@ def prepare_windows_dependencies(
             "middleware",
             "agent-middleware",
         ),
-        "condition-router": (
-            resolve_condition_router_package,
+        "command": (
+            resolve_command_package,
             "workflow-node",
-            "condition-router",
+            "command",
         ),
         "task-dispatcher": (
             resolve_task_dispatcher_package,

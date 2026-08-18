@@ -18,13 +18,13 @@ Agent Shell 的文件化 Python 扩展分为扩展模板、配置扩展和组件
 ```text
 data/
   templates/
-    workflow/condition_router/<template-key>/
+    workflow/command/<template-key>/
     workflow/task_dispatcher/<template-key>/
     agent/custom_middleware/<template-key>/
   config/
     components/<type>/<configuration-uuid>.yaml
     python_package_instances/
-      condition-router/
+      command/
         <configuration-uuid>/
       task-dispatcher/
         <configuration-uuid>/
@@ -32,7 +32,7 @@ data/
         <configuration-uuid>/
 
 examples/
-  workflow-components/condition-router/<example-key>/
+  workflow-components/command/<example-key>/
   workflow-components/task-dispatcher/<example-key>/
   agent-components/custom-middleware/<example-key>/
 ```
@@ -51,7 +51,7 @@ examples/
 {
   "format_version": 1,
   "family": "workflow-node",
-  "adapter": "condition-router",
+  "adapter": "command",
   "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 }
 ```
@@ -60,7 +60,7 @@ examples/
 
 ## 配置引用
 
-Condition Router、Task Dispatcher 和 Custom Middleware 使用同一 YAML 外壳：
+Command Node、Task Dispatcher 和 Custom Middleware 使用同一 YAML 外壳：
 
 ```yaml
 python_package:
@@ -80,23 +80,23 @@ YAML 不保存源码、requirements、manifest 投影、模板引用、revision 
 不存在的相对路径显示非阻塞警告；填写内容后保存会创建文件，保持空内容则继续缺失。未列出的文件保持原样。
 绝对路径、`..`、反斜杠路径、重复路径和 `package.json` 会被拒绝。文件保存使用 revision，若目录已被外部修改，必须重新载入后再保存。
 
-## Condition Router
+## Command Node
 
-Router 使用 `family: workflow-node`、`adapter: condition-router`。同步工厂返回固定签名的 async callable：
+Command 使用 `family: workflow-node`、`adapter: command`。同步工厂返回固定签名的 async callable：
 
 ```python
-def create_router():
+def create_command():
     threshold = 80
 
-    async def route(state, runtime):
+    async def command(state, runtime):
         risk = state.get("shared_vars", {}).get("risk", 0)
-        branch = "review" if risk >= threshold else "otherwise"
+        branch = "review" if risk >= threshold else "continue"
         return {"activate": [branch], "update": {}}
 
     return route
 ```
 
-`route(state, runtime)` 返回 `activate` 和 `update`。画布 compiler 将结果映射为 LangGraph `Command`；包不接触 Node ID，
+`command(state, runtime)` 返回 `activate` 和 `update`。画布 compiler 将结果映射为 LangGraph `Command`；包不接触 Node ID，
 也不直接返回 `Command`。
 
 ## Task Dispatcher
@@ -160,7 +160,7 @@ Agent 的有序 `middleware_refs` 决定位置。完整说明见 [Workflow Input
 Python 名称仍需显式 `import`。本地模块使用正常相对导入，例如 `from .helpers import build_route`。非核心直接依赖逐行写入配置扩展
 的可选 `requirements.txt`。
 
-启动器只从启用 Workflow 可达的 Condition Router、Task Dispatcher、Main Agent 和其 Subagent 引用中收集配置扩展 requirements。静态模板和
+启动器只从启用 Workflow 可达的 Command Node、Task Dispatcher、Main Agent 和其 Subagent 引用中收集配置扩展 requirements。静态模板和
 未被运行配置触达的扩展不进入依赖指纹，也不影响全局依赖。依赖层生成在
 `runtime/python_packages/site-packages/`；requirements 修改后重启生效，Python 源码在下一次请求重新加载。
 

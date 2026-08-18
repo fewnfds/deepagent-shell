@@ -42,7 +42,7 @@ git pull --ff-only
 `runtime/cache` 中的旧下载缓存可按需重建，不是安装位置契约。
 
 文件化 Python 配置扩展的 `requirements.txt` 不进入项目 `pyproject.toml`。Windows 启动器在核心 runtime 准备完成后，
-只按启用 Workflow 可达的 Router、Dispatcher、Main Agent 与 Subagent 配置所引用扩展的需求指纹生成 `runtime/python_packages/site-packages`；静态模板和未触达的配置扩展
+只按启用 Workflow 可达的 Command、Dispatcher、Main Agent 与 Subagent 配置所引用扩展的需求指纹生成 `runtime/python_packages/site-packages`；静态模板和未触达的配置扩展
 不参与，输入未变化时复用。扩展层只能
 增加与核心锁兼容的二进制 wheel，不能修改 `runtime/app`。启动设置初始化与读取合并为一次 preflight；扩展依赖准备在最终
 服务进程内、应用创建前完成，避免为了相邻启动步骤重复拉起并导入 Python 应用。

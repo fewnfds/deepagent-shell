@@ -16,34 +16,34 @@ BranchKey = Annotated[
     StringConstraints(strip_whitespace=True),
     Field(min_length=1, max_length=64),
 ]
-ConditionRouterCallable = Callable[
+CommandCallable = Callable[
     [dict[str, Any], Runtime[WorkflowRuntimeContext]],
     Awaitable[Any],
 ]
 
 
-class ConditionRouterBlock(BaseModel):
+class CommandBlock(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: Annotated[str, Field(min_length=1, max_length=120)]
     python_package: PythonPackageReference
 
 
-class ConditionRouterResult(BaseModel):
+class CommandResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    activate: list[BranchKey] = Field(default_factory=list, max_length=100)
+    activate: list[BranchKey] = Field(default_factory=list)
     update: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("activate")
     @classmethod
     def unique_branches(cls, values: list[str]) -> list[str]:
         if len(values) != len(set(values)):
-            raise ValueError("activated condition router branches must be unique")
+            raise ValueError("activated command branches must be unique")
         return values
 
 
-class ConditionRouterError(RuntimeError):
+class CommandError(RuntimeError):
     """Safe wrapper for user-authored routing failures."""
 
 
@@ -70,13 +70,13 @@ def _state_delta(
     unexpected = sorted(set(after) - allowed)
     if unexpected:
         raise ValueError(
-            "route modified unsupported Workflow State fields: "
+            "command modified unsupported Workflow State fields: "
             + ", ".join(unexpected)
         )
     deleted = sorted(set(before) - set(after))
     if deleted:
         raise ValueError(
-            "route cannot delete Workflow State channels: " + ", ".join(deleted)
+            "command cannot delete Workflow State channels: " + ", ".join(deleted)
         )
     return {
         key: value
@@ -85,23 +85,23 @@ def _state_delta(
     }
 
 
-async def run_condition_router(
-    route: ConditionRouterCallable,
+async def run_command(
+    command: CommandCallable,
     *,
     state: Mapping[str, Any],
     runtime: Runtime[WorkflowRuntimeContext],
     allowed_branches: Collection[str],
-) -> ConditionRouterResult:
+) -> CommandResult:
     from agent_shell.runtime.state import WorkflowState
 
     original_state = _detached(state)
     script_state = _detached(state)
     try:
-        value = await route(
+        value = await command(
             state=script_state,
             runtime=runtime,
         )
-        result = ConditionRouterResult.model_validate(value)
+        result = CommandResult.model_validate(value)
         mutation_update = _state_delta(original_state, script_state)
         update = {**mutation_update, **result.update}
         unsupported_updates = sorted(
@@ -109,28 +109,26 @@ async def run_condition_router(
         )
         if unsupported_updates:
             raise ValueError(
-                "route returned unsupported Workflow State fields: "
+                "command returned unsupported Workflow State fields: "
                 + ", ".join(unsupported_updates)
             )
-        activate = result.activate or ["otherwise"]
+        activate = result.activate
         unknown = sorted(set(activate) - set(allowed_branches))
         if unknown:
             raise ValueError(
-                "route activated branches without a matching Workflow edge: "
+                "command activated branches without a matching Workflow edge: "
                 + ", ".join(unknown)
             )
-        if "otherwise" in activate and len(activate) != 1:
-            raise ValueError("otherwise cannot be activated with another branch")
-        return ConditionRouterResult(activate=activate, update=update)
+        return CommandResult(activate=activate, update=update)
     except Exception as exc:
-        raise ConditionRouterError("condition router failed") from exc
+        raise CommandError("command failed") from exc
 
 
 __all__ = [
     "BranchKey",
-    "ConditionRouterBlock",
-    "ConditionRouterCallable",
-    "ConditionRouterError",
-    "ConditionRouterResult",
-    "run_condition_router",
+    "CommandBlock",
+    "CommandCallable",
+    "CommandError",
+    "CommandResult",
+    "run_command",
 ]

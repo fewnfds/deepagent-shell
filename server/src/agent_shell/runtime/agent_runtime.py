@@ -15,7 +15,7 @@ from agent_shell.runtime.agent_builder import AgentBuilder, BuiltAgent
 from agent_shell.runtime.capabilities import DeepAgentsWorkspace
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.middleware_packages.runtime import MiddlewarePackageRuntime
-from agent_shell.condition_router_packages import ConditionRouterPackageRuntime
+from agent_shell.command_packages import CommandPackageRuntime
 from agent_shell.task_dispatcher_packages import TaskDispatcherPackageRuntime
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.diagnostics import (
@@ -63,7 +63,7 @@ class RunExecution:
     middleware_runtime: MiddlewarePackageRuntime | None
     media_response: MainAgentMediaResponse
     middleware_runtimes: tuple[MiddlewarePackageRuntime, ...] = ()
-    condition_router_runtime: ConditionRouterPackageRuntime | None = None
+    command_runtime: CommandPackageRuntime | None = None
     task_dispatcher_runtime: TaskDispatcherPackageRuntime | None = None
     event_observers: tuple[Callable[[OutputEvent], None], ...] = ()
     context: WorkflowRuntimeContext | None = None
@@ -153,8 +153,8 @@ class RunExecution:
             )
             for runtime in runtimes:
                 await runtime.close()
-            if self.condition_router_runtime is not None:
-                await self.condition_router_runtime.close()
+            if self.command_runtime is not None:
+                await self.command_runtime.close()
             if self.task_dispatcher_runtime is not None:
                 await self.task_dispatcher_runtime.close()
 
@@ -625,7 +625,7 @@ class AgentRuntime:
         public_model: str = "",
         workflow_built: tuple[tuple[str, BuiltAgent], ...] = (),
         workflow_output_config: dict[str, object] | None = None,
-        condition_router_runtime: ConditionRouterPackageRuntime | None = None,
+        command_runtime: CommandPackageRuntime | None = None,
         task_dispatcher_runtime: TaskDispatcherPackageRuntime | None = None,
         context: WorkflowRuntimeContext | None = None,
         run_config: dict[str, Any] | None = None,
@@ -722,7 +722,7 @@ class AgentRuntime:
                 agent.middleware_runtime
                 for _, agent in workflow_agents[1:]
             ),
-            condition_router_runtime=condition_router_runtime,
+            command_runtime=command_runtime,
             task_dispatcher_runtime=task_dispatcher_runtime,
             context=context,
             run_config=run_config,
@@ -848,7 +848,7 @@ class AgentRuntime:
     ) -> RunExecution:
         from agent_shell.workflow.catalog import (
             AgentNodeConfig,
-            ConditionRouterNodeConfig,
+            CommandNodeConfig,
             TaskDispatcherNodeConfig,
         )
         from agent_shell.workflow.compiler import compile_workflow
@@ -856,10 +856,10 @@ class AgentRuntime:
         agent_nodes = [
             node for node in document.definition.nodes if node.type == "agent"
         ]
-        condition_router_nodes = [
+        command_nodes = [
             node
             for node in document.definition.nodes
-            if node.type == "condition-router"
+            if node.type == "command"
         ]
         task_dispatcher_nodes = [
             node
@@ -884,34 +884,34 @@ class AgentRuntime:
                 raise
             return ValidationReport(stage="workflow_publish")
 
-        from agent_shell.condition_router import ConditionRouterBlock
+        from agent_shell.command import CommandBlock
         from agent_shell.task_dispatcher import TaskDispatcherBlock
 
-        condition_router_blocks: dict[str, tuple[str, ConditionRouterBlock]] = {}
-        for router_node in condition_router_nodes:
-            router_id = str(
-                ConditionRouterNodeConfig.model_validate(
-                    router_node.config
-                ).condition_router_id
+        command_blocks: dict[str, tuple[str, CommandBlock]] = {}
+        for command_node in command_nodes:
+            command_id = str(
+                CommandNodeConfig.model_validate(
+                    command_node.config
+                ).command_id
             )
-            stored_router = (
-                self._blocks.get_block_internal("condition-router", router_id)
+            stored_command = (
+                self._blocks.get_block_internal("command", command_id)
                 if self._blocks is not None
                 else None
             )
-            if stored_router is None:
+            if stored_command is None:
                 continue
             try:
-                condition_router_blocks[router_node.id] = (
-                    router_id,
-                    ConditionRouterBlock.model_validate(
-                        {key: value for key, value in stored_router.items() if key != "id"}
+                command_blocks[command_node.id] = (
+                    command_id,
+                    CommandBlock.model_validate(
+                        {key: value for key, value in stored_command.items() if key != "id"}
                     ),
                 )
             except Exception as exc:
                 raise AgentRuntimeError(
-                    "workflow.condition_router_invalid",
-                    "The selected Condition Router configuration is invalid.",
+                    "workflow.command_invalid",
+                    "The selected Command Node configuration is invalid.",
                     status_code=422,
                 ) from exc
 
@@ -953,8 +953,8 @@ class AgentRuntime:
                     status_code=422,
                 ) from exc
 
-        resolved_condition_router_nodes: dict[str, Any] = {
-            node_id: block for node_id, (_router_id, block) in condition_router_blocks.items()
+        resolved_command_nodes: dict[str, Any] = {
+            node_id: block for node_id, (_command_id, block) in command_blocks.items()
         }
         resolved_task_dispatcher_nodes: dict[str, Any] = {
             node_id: block for node_id, (_dispatcher_id, block) in task_dispatcher_blocks.items()
@@ -962,7 +962,7 @@ class AgentRuntime:
         executable = validate_workflow_executable(
             document,
             validate_main_agent=validate_main_agent,
-            condition_routers=resolved_condition_router_nodes,
+            commands=resolved_command_nodes,
             task_dispatchers=resolved_task_dispatcher_nodes,
             workflow_role=(workflow_snapshot or {}).get("workflow_role"),
         )
@@ -1066,15 +1066,15 @@ class AgentRuntime:
         )
         built_agents: list[tuple[str, BuiltAgent]] = []
         workflow_output_config: dict[str, object] | None = None
-        condition_router_runtime: ConditionRouterPackageRuntime | None = None
+        command_runtime: CommandPackageRuntime | None = None
         task_dispatcher_runtime: TaskDispatcherPackageRuntime | None = None
-        condition_routers: dict[str, Any] = {}
+        commands: dict[str, Any] = {}
         task_dispatchers: dict[str, Any] = {}
         workspace = None
 
         async def close_workflow_package_runtimes() -> None:
-            if condition_router_runtime is not None:
-                await condition_router_runtime.close()
+            if command_runtime is not None:
+                await command_runtime.close()
             if task_dispatcher_runtime is not None:
                 await task_dispatcher_runtime.close()
 
@@ -1103,26 +1103,26 @@ class AgentRuntime:
                 background_runtime=background_runtime,
             )
 
-            if condition_router_blocks or task_dispatcher_blocks:
+            if command_blocks or task_dispatcher_blocks:
                 if self._python_packages_dir is None or self._runtime_dir is None:
                     raise AgentRuntimeError(
                         "workflow.python_package_runtime_unavailable",
                         "The Python package runtime is not configured.",
                         status_code=500,
                     )
-            if condition_router_blocks:
-                condition_router_runtime = ConditionRouterPackageRuntime(
+            if command_blocks:
+                command_runtime = CommandPackageRuntime(
                     request_id=request_id,
                     packages_dir=self._python_packages_dir,
                     runtime_root=self._runtime_dir,
                 )
-                condition_routers = {
-                    node_id: condition_router_runtime.router_for(
+                commands = {
+                    node_id: command_runtime.command_for(
                         node_id,
-                        router_id,
+                        command_id,
                         block.model_dump(mode="python")["python_package"],
                     )
-                    for node_id, (router_id, block) in condition_router_blocks.items()
+                    for node_id, (command_id, block) in command_blocks.items()
                 }
             if task_dispatcher_blocks:
                 task_dispatcher_runtime = TaskDispatcherPackageRuntime(
@@ -1186,7 +1186,7 @@ class AgentRuntime:
             graph = compile_workflow(
                 document,
                 node_agents=dict(built_agents),
-                condition_routers=condition_routers,
+                commands=commands,
                 task_dispatchers=task_dispatchers,
                 workflow_role=(workflow_snapshot or {}).get("workflow_role"),
                 checkpointer=(
@@ -1289,6 +1289,6 @@ class AgentRuntime:
             owns_lifecycle=owns_lifecycle,
             public_output=public_output,
             run_kind="workflow",
-            condition_router_runtime=condition_router_runtime,
+            command_runtime=command_runtime,
             task_dispatcher_runtime=task_dispatcher_runtime,
         )

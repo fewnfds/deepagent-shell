@@ -46,13 +46,13 @@ export function workflowCanvasProblems(
         `definition.nodes[${index}].config.main_agent_id`,
       ))
     }
-    if (node.data.nodeType === 'condition-router' && !node.data.conditionRouterId) {
+    if (node.data.nodeType === 'command' && !node.data.commandId) {
       problems.push(canvasProblem(
-        'workflow.canvas.condition_router_required',
-        'workflows.editor.canvasProblems.conditionRouterRequired',
+        'workflow.canvas.command_required',
+        'workflows.editor.canvasProblems.commandRequired',
         node.id,
         node.data.nodeType,
-        `definition.nodes[${index}].config.condition_router_id`,
+        `definition.nodes[${index}].config.command_id`,
       ))
     }
     if (node.data.nodeType === 'task-dispatcher' && !node.data.taskDispatcherId) {

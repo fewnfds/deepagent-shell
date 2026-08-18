@@ -20,7 +20,7 @@ const props = defineProps<{
   edgeTypeOptions: WorkflowCanvasEdgeType[]
   inputEndpoints: WorkflowNodeHandleSpec[]
   mainAgents: MainAgent[]
-  conditionRouters: SavedBlock[]
+  commands: SavedBlock[]
   taskDispatchers: SavedBlock[]
   node: WorkflowCanvasNode | null
   nodeIds: string[]
@@ -36,7 +36,7 @@ const emit = defineEmits<{
   selectEdgeTargetEndpoint: [edgeId: string, endpointId: string]
   selectEdgeType: [edgeId: string, edgeType: WorkflowCanvasEdgeType]
   updateAgent: [nodeId: string, mainAgentId: string]
-  updateConditionRouter: [nodeId: string, conditionRouterId: string]
+  updateCommand: [nodeId: string, commandId: string]
   updateTaskDispatcher: [nodeId: string, taskDispatcherId: string]
   updateNodeId: [nodeId: string, nextNodeId: string]
   updateBranchKey: [edgeId: string, branchKey: string]
@@ -65,8 +65,8 @@ watch(
 
 const contextTitle = computed(() => {
   if (props.node) {
-    const nodeTypeKey = props.node.data.nodeType === 'condition-router'
-      ? 'conditionRouter'
+    const nodeTypeKey = props.node.data.nodeType === 'command'
+      ? 'command'
       : props.node.data.nodeType === 'task-dispatcher'
         ? 'taskDispatcher'
         : props.node.data.nodeType
@@ -98,9 +98,9 @@ function updateAgent(event: Event): void {
   emit('updateAgent', props.node.id, (event.target as HTMLSelectElement).value)
 }
 
-function updateConditionRouter(event: Event): void {
-  if (!props.node || props.node.data.nodeType !== 'condition-router') return
-  emit('updateConditionRouter', props.node.id, (event.target as HTMLSelectElement).value)
+function updateCommand(event: Event): void {
+  if (!props.node || props.node.data.nodeType !== 'command') return
+  emit('updateCommand', props.node.id, (event.target as HTMLSelectElement).value)
 }
 
 function updateTaskDispatcher(event: Event): void {
@@ -241,15 +241,15 @@ function selectEdgeTargetEndpoint(event: Event): void {
           </div>
           <button class="workflow-inspector-delete" type="button" @click="emit('removeNode', node.id)"><i class="bi bi-trash" aria-hidden="true" />{{ $t('workflows.editor.removeAgent') }}</button>
         </template>
-        <template v-else-if="node.data.nodeType === 'condition-router'">
+        <template v-else-if="node.data.nodeType === 'command'">
           <div class="workflow-inspector-row">
-            <label class="workflow-inspector-label" for="workflow-node-condition-router"><span>{{ $t('workflows.editor.conditionRouterConfig') }}</span><span aria-hidden="true">:</span></label>
-            <select id="workflow-node-condition-router" class="form-select form-select-sm workflow-inspector-select" :value="node.data.conditionRouterId" @change="updateConditionRouter">
-              <option v-if="conditionRouters.length === 0" value="">{{ $t('workflows.editor.noConditionRouters') }}</option>
-              <option v-for="router in conditionRouters" :key="router.id" :value="router.id">{{ router.name }}</option>
+            <label class="workflow-inspector-label" for="workflow-node-command"><span>{{ $t('workflows.editor.commandConfig') }}</span><span aria-hidden="true">:</span></label>
+            <select id="workflow-node-command" class="form-select form-select-sm workflow-inspector-select" :value="node.data.commandId" @change="updateCommand">
+              <option v-if="commands.length === 0" value="">{{ $t('workflows.editor.noCommands') }}</option>
+              <option v-for="router in commands" :key="router.id" :value="router.id">{{ router.name }}</option>
             </select>
           </div>
-          <button class="workflow-inspector-delete" type="button" @click="emit('removeNode', node.id)"><i class="bi bi-trash" aria-hidden="true" />{{ $t('workflows.editor.removeConditionRouter') }}</button>
+          <button class="workflow-inspector-delete" type="button" @click="emit('removeNode', node.id)"><i class="bi bi-trash" aria-hidden="true" />{{ $t('workflows.editor.removeCommand') }}</button>
         </template>
         <template v-else-if="node.data.nodeType === 'task-dispatcher'">
           <div class="workflow-inspector-row">

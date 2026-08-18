@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
-from agent_shell.condition_router import BranchKey
+from agent_shell.command import BranchKey
 from agent_shell.task_dispatcher import DispatchKey
 
 

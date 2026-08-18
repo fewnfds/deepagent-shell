@@ -9,7 +9,7 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.runtime import Runtime
 
-from agent_shell.condition_router import run_condition_router
+from agent_shell.command import run_command
 from agent_shell.runtime.background_commands import BackgroundRunCaller
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.task_dispatcher import run_task_dispatcher
@@ -18,6 +18,7 @@ from agent_shell.task_dispatcher import run_task_dispatcher
 class _CommandRuntime:
     def __init__(self) -> None:
         self.calls: list[tuple[str, BackgroundRunCaller]] = []
+        self.starts: list[tuple[str, str, BackgroundRunCaller]] = []
 
     async def list_background_tasks(self, *, caller, statuses=None):
         self.calls.append(("list", caller))
@@ -32,7 +33,8 @@ class _CommandRuntime:
         return []
 
     async def start_background_agent(self, target_agent_id, **kwargs):
-        raise AssertionError("not used by this access test")
+        self.starts.append((target_agent_id, kwargs["operation_id"], kwargs["caller"]))
+        return object()
 
     async def start_background_workflow(self, target_workflow_id, **kwargs):
         raise AssertionError("not used by this access test")
@@ -49,17 +51,17 @@ def _context(service: _CommandRuntime) -> WorkflowRuntimeContext:
     )
 
 
-def test_router_and_dispatcher_receive_the_official_runtime_commands() -> None:
+def test_command_and_dispatcher_receive_the_official_runtime_commands() -> None:
     async def scenario() -> None:
         service = _CommandRuntime()
         official_runtime = Runtime(context=_context(service))
         seen = []
 
-        async def route(state, runtime):
+        async def command(state, runtime):
             seen.append(runtime)
             assert runtime.context.background_runs is not None
             await runtime.context.background_runs.list()
-            return {"activate": ["otherwise"], "update": {}}
+            return {"activate": [], "update": {}}
 
         async def dispatch(state, runtime):
             seen.append(runtime)
@@ -76,11 +78,11 @@ def test_router_and_dispatcher_receive_the_official_runtime_commands() -> None:
                 "update": {},
             }
 
-        await run_condition_router(
-            route,
+        await run_command(
+            command,
             state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
             runtime=official_runtime,
-            allowed_branches={"otherwise"},
+            allowed_branches=set(),
         )
         await run_task_dispatcher(
             dispatch,
@@ -92,6 +94,35 @@ def test_router_and_dispatcher_receive_the_official_runtime_commands() -> None:
         assert seen == [official_runtime, official_runtime]
         assert [name for name, _caller in service.calls] == ["list", "check"]
         assert all(caller.run_id == "run-1" for _name, caller in service.calls)
+
+    asyncio.run(scenario())
+
+
+def test_command_can_start_background_agent_and_end_without_a_target() -> None:
+    async def scenario() -> None:
+        service = _CommandRuntime()
+        official_runtime = Runtime(context=_context(service))
+
+        async def command(state, runtime):
+            assert runtime.context.background_runs is not None
+            await runtime.context.background_runs.start_agent(
+                "agent-1",
+                operation_id="publish-review",
+                shared_vars={"task_id": "task-1"},
+            )
+            return {"activate": [], "update": {"shared_vars": {"published": True}}}
+
+        result = await run_command(
+            command,
+            state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
+            runtime=official_runtime,
+            allowed_branches=set(),
+        )
+
+        assert result.activate == []
+        assert result.update == {"shared_vars": {"published": True}}
+        assert service.starts[0][:2] == ("agent-1", "publish-review")
+        assert service.starts[0][2].run_id == "run-1"
 
     asyncio.run(scenario())
 

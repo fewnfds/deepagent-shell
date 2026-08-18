@@ -12,7 +12,7 @@ from agent_shell.validation import ValidationIssue, report_from_validation_error
 from agent_shell.validation.models import ValidationReport, validation_failure_detail
 from agent_shell.validation.service import ConfigurationValidationService
 from agent_shell.workflow.catalog import (
-    ConditionRouterNodeConfig,
+    CommandNodeConfig,
     TaskDispatcherNodeConfig,
     node_catalog_payload,
 )
@@ -111,7 +111,7 @@ def _executable_report(
     blocks: BlockStore,
     configuration_validation: ConfigurationValidationService,
 ) -> ValidationReport:
-    condition_routers: dict[str, object] = {}
+    commands: dict[str, object] = {}
     task_dispatchers: dict[str, object] = {}
     referenced_issues: list[ValidationIssue] = []
     component_reports: dict[tuple[str, str], ValidationReport] = {}
@@ -159,14 +159,14 @@ def _executable_report(
             )
 
     for node_index, node in enumerate(document.definition.nodes):
-        if node.type == "condition-router":
-            reference = ConditionRouterNodeConfig.model_validate(
+        if node.type == "command":
+            reference = CommandNodeConfig.model_validate(
                 node.config
-            ).condition_router_id
-            stored = blocks.get_block_internal("condition-router", str(reference))
+            ).command_id
+            stored = blocks.get_block_internal("command", str(reference))
             if stored is not None:
                 report = component_report(
-                    "condition-router",
+                    "command",
                     str(reference),
                     stored,
                 )
@@ -174,10 +174,10 @@ def _executable_report(
                     node_id=node.id,
                     node_type=node.type,
                     node_index=node_index,
-                    reference_field="condition_router_id",
+                    reference_field="command_id",
                     report=report,
                 )
-                condition_routers[node.id] = stored
+                commands[node.id] = stored
         elif node.type == "task-dispatcher":
             reference = TaskDispatcherNodeConfig.model_validate(
                 node.config
@@ -209,7 +209,7 @@ def _executable_report(
     executable = validate_workflow_executable(
         document,
         validate_main_agent=validate_main_agent,
-        condition_routers=condition_routers,
+        commands=commands,
         task_dispatchers=task_dispatchers,
         workflow_role=workflow["workflow_role"],
     )

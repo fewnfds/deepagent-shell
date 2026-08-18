@@ -2,10 +2,10 @@ import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import { describe, expect, it } from 'vitest'
 
-import { conditionRouterAdapter } from '@/domain/blocks'
+import { commandAdapter } from '@/domain/blocks'
 import { en } from '@/locales/en'
 
-import ConditionRouterEditor from './ConditionRouterEditor.vue'
+import CommandEditor from './CommandEditor.vue'
 
 const i18n = () => createI18n({
   legacy: false,
@@ -13,21 +13,21 @@ const i18n = () => createI18n({
   messages: { en },
 })
 
-describe('ConditionRouterEditor', () => {
+describe('CommandEditor', () => {
   it('orders editable package files from the relative path list', async () => {
     const templateKey = 'threshold-router'
-    const wrapper = mount(ConditionRouterEditor, {
+    const wrapper = mount(CommandEditor, {
       props: {
-        modelValue: conditionRouterAdapter.blank(),
+        modelValue: commandAdapter.blank(),
         catalog: [{
           key: templateKey,
           format_version: 1,
           family: 'workflow-node',
-          adapter: 'condition-router',
+          adapter: 'command',
           name: 'threshold-router',
           revision: 'revision',
           files: [
-            { path: 'main.py', content: 'def create_router():\n    return route\n', exists: true },
+            { path: 'main.py', content: 'def create_command():\n    return route\n', exists: true },
             { path: 'helpers/rules.py', content: 'THRESHOLD = 80\n', exists: true },
           ],
         }],
@@ -62,7 +62,7 @@ describe('ConditionRouterEditor', () => {
 
   it('keeps selected files visible when the saved package is invalid', () => {
     const folder = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
-    const draft = conditionRouterAdapter.fromApi({
+    const draft = commandAdapter.fromApi({
       id: 'router-id',
       name: 'Broken router',
       python_package: {
@@ -73,7 +73,7 @@ describe('ConditionRouterEditor', () => {
       python_package_files: {
         files: [{
           path: 'main.py',
-          content: 'def create_router():\n    return (\n',
+          content: 'def create_command():\n    return (\n',
           exists: true,
         }],
         revision: 'broken-revision',
@@ -84,7 +84,7 @@ describe('ConditionRouterEditor', () => {
       },
       dependency_status: 'failed',
     })
-    const wrapper = mount(ConditionRouterEditor, {
+    const wrapper = mount(CommandEditor, {
       props: { modelValue: draft },
       global: { plugins: [i18n()] },
     })
@@ -95,8 +95,8 @@ describe('ConditionRouterEditor', () => {
   })
 
   it('applies an empty template without a catalog entry', async () => {
-    const wrapper = mount(ConditionRouterEditor, {
-      props: { modelValue: conditionRouterAdapter.blank(), catalog: [] },
+    const wrapper = mount(CommandEditor, {
+      props: { modelValue: commandAdapter.blank(), catalog: [] },
       global: { plugins: [i18n()] },
     })
 
@@ -118,7 +118,7 @@ describe('ConditionRouterEditor', () => {
   })
 
   it('requests newly selected files from a saved package', async () => {
-    const draft = conditionRouterAdapter.fromApi({
+    const draft = commandAdapter.fromApi({
       id: 'router-id',
       name: 'Router',
       python_package: {
@@ -130,7 +130,7 @@ describe('ConditionRouterEditor', () => {
         revision: 'revision',
       },
     })
-    const wrapper = mount(ConditionRouterEditor, {
+    const wrapper = mount(CommandEditor, {
       props: { modelValue: draft },
       global: { plugins: [i18n()] },
     })
@@ -140,7 +140,7 @@ describe('ConditionRouterEditor', () => {
     await pathList.trigger('change')
 
     expect(wrapper.emitted('load-files')?.at(-1)?.[0]).toEqual(['helpers/rules.py'])
-    const emitted = wrapper.emitted('update:modelValue')?.at(-1)?.[0] as ReturnType<typeof conditionRouterAdapter.blank>
+    const emitted = wrapper.emitted('update:modelValue')?.at(-1)?.[0] as ReturnType<typeof commandAdapter.blank>
     expect(emitted.python_package_files.files[1]).toEqual({
       path: 'helpers/rules.py',
       content: '',

@@ -40,12 +40,12 @@ class PackageAdapterSpec:
 
 
 PACKAGE_COMPONENT_SPECS: dict[str, PackageAdapterSpec] = {
-    "condition-router": PackageAdapterSpec(
-        template_parts=("workflow", "condition_router"),
-        example_parts=("workflow-components", "condition-router"),
+    "command": PackageAdapterSpec(
+        template_parts=("workflow", "command"),
+        example_parts=("workflow-components", "command"),
         family="workflow-node",
-        adapter="condition-router",
-        factory_name="create_router",
+        adapter="command",
+        factory_name="create_command",
         factory_parameters=(),
     ),
     "task-dispatcher": PackageAdapterSpec(

@@ -2,6 +2,7 @@ import {
   MarkerType,
   type Connection,
   type Edge,
+  type EdgeMarkerType,
   type Node,
   type ViewportTransform,
   type XYPosition,
@@ -19,7 +20,7 @@ import type {
 export interface WorkflowCanvasNodeData {
   nodeType: WorkflowNodeType
   mainAgentId: string
-  conditionRouterId?: string
+  commandId?: string
   taskDispatcherId?: string
   defer?: boolean
 }
@@ -35,10 +36,6 @@ export interface WorkflowCanvasEdgeData {
 export type WorkflowCanvasEdge = Edge<WorkflowCanvasEdgeData>
 
 export const WORKFLOW_NODE_DRAG_MIME = 'application/x-agent-shell-workflow-node'
-export const WORKFLOW_NORMAL_EDGE_MARKER = MarkerType.ArrowClosed
-export const WORKFLOW_BRANCH_EDGE_MARKER = MarkerType.ArrowClosed
-export const WORKFLOW_DISPATCH_EDGE_MARKER = MarkerType.ArrowClosed
-
 export const WORKFLOW_CANVAS_EDGE_TYPES = ['normal', 'branch', 'dispatch'] as const
 export type WorkflowCanvasEdgeType = (typeof WORKFLOW_CANVAS_EDGE_TYPES)[number]
 export type WorkflowEndpointDirection = 'input' | 'output'
@@ -52,7 +49,7 @@ export interface WorkflowCanvasState {
 const defaultPositions = {
   start: { x: 80, y: 180 },
   agent: { x: 360, y: 180 },
-  'condition-router': { x: 620, y: 180 },
+  'command': { x: 620, y: 180 },
   'task-dispatcher': { x: 620, y: 340 },
   end: { x: 900, y: 180 },
 } satisfies Record<WorkflowNodeType, { x: number; y: number }>
@@ -66,7 +63,7 @@ function canvasNode(node: WorkflowGraphNode, document: WorkflowGraphDocument): W
     data: {
       nodeType: node.type,
       mainAgentId: node.config.main_agent_id ?? '',
-      conditionRouterId: node.config.condition_router_id ?? '',
+      commandId: node.config.command_id ?? '',
       taskDispatcherId: node.config.task_dispatcher_id ?? '',
       defer: node.config.defer ?? false,
     },
@@ -126,6 +123,7 @@ export function workflowDocumentToCanvas(
         { id: 'start', type: 'start', type_version: 1, config: {} },
         { id: 'end', type: 'end', type_version: 1, config: {} },
       ] satisfies WorkflowGraphNode[]
+  const nodeTypesById = new Map(sourceNodes.map((node) => [node.id, node.type]))
 
   return {
     nodes: sourceNodes.map((node) => canvasNode(node, document)),
@@ -138,9 +136,11 @@ export function workflowDocumentToCanvas(
         target: edge.target,
         targetHandle: edge.target_handle,
         type: 'default',
-        markerEnd: workflowCanvasEdgeMarker(edgeType),
-        animated: workflowCanvasEdgeAnimated(edgeType),
-        class: workflowCanvasEdgeClass(edgeType),
+        ...workflowCanvasEdgeVisual(
+          edgeType,
+          nodeTypesById.get(edge.source),
+          nodeTypesById.get(edge.target),
+        ),
         data: {
           edgeType,
           branchKey: edge.branch_key ?? undefined,
@@ -167,8 +167,8 @@ export function workflowCanvasToDocument(
               main_agent_id: node.data.mainAgentId,
               ...(node.data.defer ? { defer: true } : {}),
             }
-          : node.data.nodeType === 'condition-router'
-            ? { condition_router_id: node.data.conditionRouterId }
+          : node.data.nodeType === 'command'
+            ? { command_id: node.data.commandId }
           : node.data.nodeType === 'task-dispatcher'
             ? { task_dispatcher_id: node.data.taskDispatcherId }
           : {}
@@ -215,24 +215,24 @@ export function newAgentCanvasNode(
     data: {
       nodeType: 'agent',
       mainAgentId,
-      conditionRouterId: '',
+      commandId: '',
       taskDispatcherId: '',
       defer: false,
     },
   }
 }
 
-export function newConditionRouterCanvasNode(
+export function newCommandCanvasNode(
   id: string,
-  conditionRouterId: string,
-  position: XYPosition = defaultPositions['condition-router'],
+  commandId: string,
+  position: XYPosition = defaultPositions['command'],
 ): WorkflowCanvasNode {
   return {
     id,
-    type: 'condition-router',
+    type: 'command',
     position: { ...position },
     deletable: true,
-    data: { nodeType: 'condition-router', mainAgentId: '', conditionRouterId },
+    data: { nodeType: 'command', mainAgentId: '', commandId },
   }
 }
 
@@ -250,20 +250,31 @@ export function newTaskDispatcherCanvasNode(
   }
 }
 
-export function workflowCanvasEdgeMarker(edgeType: string): MarkerType {
-  if (edgeType === 'branch') return WORKFLOW_BRANCH_EDGE_MARKER
-  if (edgeType === 'dispatch') return WORKFLOW_DISPATCH_EDGE_MARKER
-  return WORKFLOW_NORMAL_EDGE_MARKER
-}
+export function workflowCanvasEdgeVisual(
+  edgeType: string,
+  sourceNodeType?: WorkflowNodeType,
+  targetNodeType?: WorkflowNodeType,
+): { markerEnd: EdgeMarkerType; animated: boolean; class?: string } {
+  const classes: string[] = []
+  if (edgeType === 'branch') classes.push('workflow-edge--branch')
+  if (edgeType === 'dispatch') classes.push('workflow-edge--dispatch')
+  if (sourceNodeType === 'start') classes.push('workflow-edge--start')
+  if (targetNodeType === 'end') classes.push('workflow-edge--end')
 
-export function workflowCanvasEdgeAnimated(edgeType: string): boolean {
-  return edgeType === 'branch' || edgeType === 'dispatch'
-}
-
-export function workflowCanvasEdgeClass(edgeType: string): string | undefined {
-  if (edgeType === 'branch') return 'workflow-edge--branch'
-  if (edgeType === 'dispatch') return 'workflow-edge--dispatch'
-  return undefined
+  const color = targetNodeType === 'end'
+    ? 'var(--bs-danger)'
+    : sourceNodeType === 'start'
+      ? 'var(--bs-success)'
+      : edgeType === 'branch'
+        ? 'var(--bs-warning)'
+        : edgeType === 'dispatch'
+          ? 'var(--bs-info)'
+          : 'var(--bs-primary)'
+  return {
+    markerEnd: { type: MarkerType.ArrowClosed, color },
+    animated: edgeType === 'branch' || edgeType === 'dispatch',
+    class: classes.length > 0 ? classes.join(' ') : undefined,
+  }
 }
 
 export function nextWorkflowCanvasEdgeId(edges: WorkflowCanvasEdge[]): string {

@@ -331,12 +331,12 @@ def test_workflow_publish_reports_broken_router_package_without_missing_referenc
         / "data"
         / "templates"
         / "workflow"
-        / "condition_router"
+        / "command"
         / "test-router"
     )
     package_dir.mkdir(parents=True)
     (package_dir / "main.py").write_text(
-        "def create_router():\n"
+        "def create_command():\n"
         "    async def route(state, runtime):\n"
         "        return {'activate': [], 'update': {}}\n"
         "    return route\n",
@@ -344,10 +344,10 @@ def test_workflow_publish_reports_broken_router_package_without_missing_referenc
     )
     with make_client(tmp_path, monkeypatch) as client:
         selected = client.get(
-            "/api/python-package-templates/condition-router"
+            "/api/python-package-templates/command"
         ).json()["catalog"][0]
         router = client.post(
-            "/api/blocks/condition-router",
+            "/api/blocks/command",
             json={
                 "name": "Broken router package",
                 "python_package": {"folder": "", "editable_files": ["main.py"]},
@@ -369,7 +369,7 @@ def test_workflow_publish_reports_broken_router_package_without_missing_referenc
             / "data"
             / "config"
             / "python_package_instances"
-            / "condition-router"
+            / "command"
             / folder
         )
         workflow = create_workflow(client, name="Broken package workflow")
@@ -381,15 +381,15 @@ def test_workflow_publish_reports_broken_router_package_without_missing_referenc
                     {"id": "start", "type": "start", "type_version": 1, "config": {}},
                     {
                         "id": "router",
-                        "type": "condition-router",
+                        "type": "command",
                         "type_version": 1,
-                        "config": {"condition_router_id": router.json()["id"]},
+                        "config": {"command_id": router.json()["id"]},
                     },
                     {"id": "end", "type": "end", "type_version": 1, "config": {}},
                 ],
                 "edges": [
                     {"id": "start-router", "source": "start", "source_handle": "next", "target": "router", "target_handle": "in"},
-                    {"id": "router-end", "source": "router", "source_handle": "branch", "target": "end", "target_handle": "in", "branch_key": "otherwise"},
+                    {"id": "command-end", "source": "router", "source_handle": "branch", "target": "end", "target_handle": "in", "branch_key": "finish"},
                 ],
             },
             "layout": {"nodes": {}, "viewport": {"x": 0, "y": 0, "zoom": 1}},
@@ -403,7 +403,7 @@ def test_workflow_publish_reports_broken_router_package_without_missing_referenc
     assert report.status_code == 200, report.text
     codes = {issue["code"] for issue in report.json()["issues"]}
     assert "python_package.not_found" in codes
-    assert "workflow.condition_router_not_found" not in codes
+    assert "workflow.command_not_found" not in codes
     assert published.status_code == 422
 
 
@@ -510,7 +510,7 @@ def test_workflow_graph_catalog_save_and_reload(
     assert [item["type"] for item in catalog.json()] == [
         "start",
         "agent",
-        "condition-router",
+        "command",
         "task-dispatcher",
         "end",
     ]

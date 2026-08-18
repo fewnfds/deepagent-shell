@@ -11,10 +11,10 @@ from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import Command, Send
 
-from agent_shell.condition_router import (
-    ConditionRouterCallable,
-    ConditionRouterError,
-    run_condition_router,
+from agent_shell.command import (
+    CommandCallable,
+    CommandError,
+    run_command,
 )
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.context import WorkflowRuntimeContext
@@ -174,13 +174,13 @@ def _make_agent_node(*, node_id: str, built_agent: Any):
     return call_agent
 
 
-def _make_condition_router_node(
+def _make_command_node(
     *,
     node_id: str,
-    route: ConditionRouterCallable,
-    route_targets: Mapping[str, str],
+    command: CommandCallable,
+    command_targets: Mapping[str, str],
 ):
-    async def call_router(
+    async def call_command(
         state: WorkflowState,
         runtime: Runtime[WorkflowRuntimeContext],
     ) -> Command:
@@ -192,24 +192,24 @@ def _make_condition_router_node(
             )
         )
         try:
-            result = await run_condition_router(
-                route,
+            result = await run_command(
+                command,
                 state=state,
                 runtime=node_runtime,
-                allowed_branches=route_targets,
+                allowed_branches=command_targets,
             )
-        except ConditionRouterError as exc:
+        except CommandError as exc:
             raise AgentRuntimeError(
-                "workflow.condition_router_failed",
-                "The Condition Router script failed.",
+                "workflow.command_failed",
+                "The Command Node script failed.",
                 status_code=422,
             ) from exc
         targets = list(
-            dict.fromkeys(route_targets[branch] for branch in result.activate)
+            dict.fromkeys(command_targets[branch] for branch in result.activate)
         )
         return Command(update=result.update, goto=targets)
 
-    return call_router
+    return call_command
 
 
 def _make_task_dispatcher_node(
@@ -270,7 +270,7 @@ def compile_workflow(
     document: WorkflowGraphDocumentV1,
     *,
     node_agents: Mapping[str, Any],
-    condition_routers: Mapping[str, ConditionRouterCallable] | None = None,
+    commands: Mapping[str, CommandCallable] | None = None,
     task_dispatchers: Mapping[str, TaskDispatcherCallable] | None = None,
     workflow_role: WorkflowRole | None = None,
     checkpointer: Any | None = None,
@@ -286,11 +286,11 @@ def compile_workflow(
         issue = admission.issues[0]
         raise _compile_error(issue.code, issue.message)
 
-    router_configs = condition_routers or {}
+    command_configs = commands or {}
     dispatcher_configs = task_dispatchers or {}
     topology_issues = validate_workflow_topology(
         normalized,
-        condition_routers=router_configs,
+        commands=command_configs,
         task_dispatchers=dispatcher_configs,
     )
     if topology_issues:
@@ -340,20 +340,20 @@ def compile_workflow(
     for node in executable_nodes:
         spec = node_type_spec(node.type, node.type_version)
         assert spec is not None
-        if spec.runtime_kind == "command_router":
-            route = router_configs.get(node.id)
-            if route is None:
+        if spec.runtime_kind == "command_node":
+            command = command_configs.get(node.id)
+            if command is None:
                 raise _compile_error(
-                    "workflow.condition_router_not_found",
-                    "The selected Condition Router configuration does not exist.",
+                    "workflow.command_not_found",
+                    "The selected Command Node configuration does not exist.",
                 )
             targets = branch_targets.get(node.id, {})
             builder.add_node(
                 node.id,
-                _make_condition_router_node(
+                _make_command_node(
                     node_id=node.id,
-                    route=route,
-                    route_targets=targets,
+                    command=command,
+                    command_targets=targets,
                 ),
                 destinations=tuple(dict.fromkeys(targets.values())),
             )

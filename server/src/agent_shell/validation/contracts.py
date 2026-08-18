@@ -136,7 +136,7 @@ def _specific_contract_identity(
         and owner_type
         in {
             "custom-middleware",
-            "condition-router",
+            "command",
             "task-dispatcher",
         }
         and path == "python_package.folder"

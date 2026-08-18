@@ -18,7 +18,7 @@
 | 上下文摘要 | `SummarizationMiddleware` 阈值、保留和工具参数截断 | 可选 | 继承、替换或关闭 |
 | Prompt 缓存 | Anthropic prompt caching TTL 与最少消息数 | 可选 | 继承、替换或关闭 |
 | 事件输出 | 用 Python 把 Workflow-owned v3 事件投影为响应字符串 | Workflow 可选绑定 | 不属于 Agent capability |
-| 条件路由 | 读取完整 Workflow State/Context，更新 State 并激活具名 Branch Edge | 画布 Node 引用 | 不属于 Agent capability |
+| Command | 读取完整 Workflow State/Context，更新 State 并激活零个、一个或多个具名 Branch Edge | 画布 Node 引用 | 不属于 Agent capability |
 | 任务分发 | 从 Workflow State/Context 生成任务，并通过 Dispatch Edge 动态 Send 到 worker | 画布 Node 引用 | 不属于 Agent capability |
 
 组件编辑页从服务端 catalog 取得字段、默认值和资源发现结果。草稿校验与保存校验都以后端 contract
@@ -44,10 +44,11 @@ Lifecycle/Run Store；父 Workflow State 的 `agent_invocations` 只保存身份
 dict，返回值必须是字符串。它只控制 Workflow-owned 非 Agent 事件的 OpenAI 响应投影，不改变 checkpoint、Debug、
 最终 State 或 Agent 自己的输出模式。字段和 Python 对象类型见[事件输出](../wizard-pages/workflow-event-output-config.md)。
 
-条件路由组件保存一个 `workflow-node/condition-router` Python 扩展引用和普通 config。扩展通过同步
-`create_router()` 工厂物化 `async route(state, runtime)`；用户在画布 Branch Edge 上直接填写分支 key，route 通过
-`activate` 返回一个或多个完全匹配的 key，并可通过 `update` 返回 State 局部更新，空列表使用必须显式连接的 `otherwise`。
-完整 package 和返回契约见[条件路由](../wizard-pages/condition-router-config.md)。
+Command 组件保存一个 `workflow-node/command` Python 扩展引用和普通 config。扩展通过同步
+`create_command()` 工厂物化 `async command(state, runtime)`；用户在画布 Branch Edge 上直接填写业务分支 key，command 通过
+`activate` 返回零个、一个或多个完全匹配的 key，并可通过 `update` 返回 State 局部更新；空列表表示当前路径自然结束，平台不
+保留任何兜底 key 语义。
+完整 package 和返回契约见[Command 节点](../wizard-pages/command-config.md)。
 
 任务分发组件保存一个 `workflow-node/task-dispatcher` Python 扩展引用。同步 `create_dispatcher()` 工厂物化
 `async dispatch(state, runtime)`；返回的每个任务包含稳定 `task_id`、匹配画布 Dispatch Edge 的 `dispatch_key` 和 JSON
@@ -55,6 +56,6 @@ dict，返回值必须是字符串。它只控制 Workflow-owned 非 Agent 事�
 Runtime Context 和完成 invocation 都带 task identity。
 完整规则和城市/乡镇示例见[任务分发](../wizard-pages/task-dispatcher-config.md)。
 
-这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。自定义 Middleware、Condition Router 和 Task Dispatcher 从用户模板或内置示例
+这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。自定义 Middleware、Command Node 和 Task Dispatcher 从用户模板或内置示例
 创建配置独占的 Python 扩展，并在扩展目录可选的 `requirements.txt` 声明外部包；模板和示例本身不运行也不参与依赖。
 requirements 修改后重启生效；文件化扩展源码在下一次请求重新加载。仍为内联形式的事件输出等组件源码按各自组件说明生效。
