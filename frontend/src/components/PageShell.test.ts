@@ -13,6 +13,7 @@ const messages = {
     sections: {
       systemSettings: 'System settings',
       fileManager: 'File manager',
+      messageInterception: 'Message interception',
       eventFeed: 'Log center',
       styleLab: 'Style lab',
       mainAgent: 'Main Agent',
@@ -49,10 +50,11 @@ describe('PageShell', () => {
     expect(buttons.map((button) => button.text())).toEqual([
       'System settings',
       'File manager',
+      'Message interception',
       'Log center',
     ])
-    expect(buttons[2]?.attributes('aria-current')).toBe('page')
-    expect(buttons[2]?.classes()).toContain('btn-primary')
+    expect(buttons[3]?.attributes('aria-current')).toBe('page')
+    expect(buttons[3]?.classes()).toContain('btn-primary')
 
     await buttons[1]?.trigger('click')
     await flushPromises()

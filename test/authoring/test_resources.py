@@ -249,7 +249,5 @@ def test_saving_custom_middleware_source_does_not_execute_it(
     )
 
     assert response.status_code == 200, response.text
-    assert response.json()["python_package"]["folder"].startswith(
-        f"{response.json()['id']}--side-effect--"
-    )
+    assert response.json()["python_package"]["folder"] == response.json()["id"]
     assert not marker.exists()

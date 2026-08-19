@@ -9,7 +9,7 @@ import yaml
 from agent_shell.app import create_app
 from agent_shell.settings import get_settings
 from agent_shell.storage.file_config import FileConfigRepository
-from support import API_KEY, ScopedAuthTestClient, configure_scope_tokens
+from support import API_KEY, MANAGEMENT_TOKEN, ScopedAuthTestClient, configure_scope_tokens
 
 
 @pytest.fixture(autouse=True)
@@ -48,8 +48,6 @@ def test_system_settings_get_reports_secret_status_without_secret_values(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _, client = _client(tmp_path, monkeypatch)
-    management = os.environ["AGENT_SHELL_MANAGEMENT_TOKEN"]
-
     response = client.get("/api/system/settings")
 
     assert response.status_code == 200
@@ -68,7 +66,7 @@ def test_system_settings_get_reports_secret_status_without_secret_values(
         "restart_required": False,
         "active_management_url": "http://testserver/admin",
     }
-    assert management not in response.text
+    assert MANAGEMENT_TOKEN not in response.text
 
 
 def test_valid_system_settings_are_atomic_and_take_effect_after_restart(
@@ -181,7 +179,6 @@ def test_management_password_replacement_is_write_only_and_persists(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _, client = _client(tmp_path, monkeypatch)
-    old_management = os.environ["AGENT_SHELL_MANAGEMENT_TOKEN"]
     replacement = "new-management-password"
 
     response = client.put(
@@ -193,7 +190,7 @@ def test_management_password_replacement_is_write_only_and_persists(
 
     assert response.status_code == 200
     assert replacement not in response.text
-    assert old_management not in response.text
+    assert MANAGEMENT_TOKEN not in response.text
     restarted = get_settings(application_home=tmp_path)
     assert restarted.management_token is not None
     assert restarted.management_token.get_secret_value() == replacement
