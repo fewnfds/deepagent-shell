@@ -72,7 +72,6 @@ class RequestRuntimeSnapshot:
         return await self._runtime.start_workflow(
             document,
             raw_messages,
-            workflow_filesystem_id=str(workflow["filesystem_id"]),
             workflow_snapshot=workflow,
             background_runtime=self,
             **kwargs,
@@ -118,7 +117,6 @@ class RequestRuntimeSnapshot:
             return await child_runtime.start_workflow(
                 document,
                 messages,
-                workflow_filesystem_id=str(target["filesystem_id"]),
                 workflow_snapshot=target,
                 request_id=caller.request_id,
                 public_model=str(target["name"]),
@@ -157,13 +155,7 @@ class RequestRuntimeSnapshot:
         shared_vars: Mapping[str, Any],
         workflow_task: Mapping[str, Any] | None = None,
     ) -> BackgroundTaskHandle:
-        workflow_filesystem_id = str(
-            caller.workflow.get("filesystem_id", "")
-        )
-        report, assembly = self._validation.resolve_main_agent(
-            target_agent_id,
-            workflow_filesystem_id=workflow_filesystem_id,
-        )
+        report, assembly = self._validation.resolve_main_agent(target_agent_id)
         if assembly is None:
             issue = report.issues[0]
             raise AgentRuntimeError(

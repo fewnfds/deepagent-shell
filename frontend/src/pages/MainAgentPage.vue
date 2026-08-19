@@ -54,7 +54,7 @@ let profileLoadSequence = 0
 const obsoleteReferences = computed(() => {
   const supported = new Set<string>(
     manifests.value
-      .filter((manifest) => !['filesystem', 'custom-middleware'].includes(manifest.type))
+      .filter((manifest) => manifest.type !== 'custom-middleware')
       .map((manifest) => manifest.type),
   )
   return form.value.capability_refs
@@ -212,7 +212,6 @@ async function loadWorkspace(): Promise<void> {
     profiles.value = mainAgentItems.map(normalizeMainAgent)
     subagentProfiles.value = subagentItems
     const entries = await Promise.all(manifests.value
-      .filter((manifest) => manifest.type !== 'filesystem')
       .map(async (manifest) => [
       manifest.type,
       await service.value?.listBlocks(manifest.type) ?? [],
@@ -335,8 +334,15 @@ watch(
                   </span>
                 </header>
                 <div class="card-body">
-                  <select id="main-agent-capability-filesystem" class="form-select" data-testid="main-agent-capability-filesystem" disabled>
-                    <option>{{ t('agents.override.mode.inherit') }}</option>
+                  <select
+                    id="main-agent-capability-filesystem"
+                    class="form-select"
+                    data-testid="main-agent-capability-filesystem"
+                    :value="referenceId(form, 'filesystem')"
+                    @change="updateReference('filesystem', ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option value="">{{ t('agents.capability.minimal') }}</option>
+                    <option v-for="block in capabilityBlocks('filesystem')" :key="block.id" :value="block.id">{{ block.name }}</option>
                   </select>
                 </div>
               </section>

@@ -60,9 +60,7 @@ const filesystemPermissionsDefaults: FilesystemPermissionsDefaults = {
 }
 const outputDefaults: OutputModeDefaults = {
   events: [{ key: 'assistant_text', fields: ['message'] }],
-  filter_fields: ['message'],
   default_value: {
-    filter_mode: 'blocklist', filter_mappings: [],
     event_outputs: {
       assistant_text: {
         enabled: true, output_source: 'def output(event):\n    return event["message"]\n',
@@ -267,8 +265,8 @@ describe('dedicated block editors', () => {
       props: { modelValue: filesystemDraft, defaults: filesystemDefaults },
       global: { plugins: [localizedI18n] },
     })
-    expect(filesystem.get('#mapped-directory-path-origin-0').element).toHaveProperty('value', 'absolute')
-    expect(filesystem.get('#mapped-directory-lifecycle-mode-0').element).toHaveProperty('value', 'fixed')
+    expect(filesystem.get('#mapped-directory-path-origin-absolute-0').element).toHaveProperty('checked', true)
+    expect(filesystem.get('#mapped-directory-lifecycle-fixed-0').element).toHaveProperty('checked', true)
     expect(filesystem.findAll('[data-action="add-mapped-directory"]')).toHaveLength(1)
     expect(filesystem.findAll('[data-action="add-virtual-directory"]')).toHaveLength(1)
     expect(filesystem.findAll('[data-action="add-virtual-file"]')).toHaveLength(1)
@@ -286,12 +284,11 @@ describe('dedicated block editors', () => {
     expect(filesystem.text()).not.toContain('内置文件工具')
 
     const outputDraft = outputModeAdapter.blank(outputDefaults)
-    outputDraft.filter_mappings.push({ field: 'message', value: 'secret' })
     const output = mount(OutputModeEditor, {
       props: { modelValue: outputDraft, defaults: outputDefaults },
       global: { plugins: [localizedI18n] },
     })
-    expect(output.findAll('[data-action="add-filter-mapping"]')).toHaveLength(1)
+    expect(output.find('[data-testid="output-filter-settings"]').exists()).toBe(false)
   })
 
   it('inserts field buttons as Python dict expressions for each event script', async () => {

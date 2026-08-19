@@ -20,7 +20,6 @@ const workflow: Workflow = {
   name: 'Research Workflow',
   workflow_role: 'parent',
   description: 'Runs the research agent.',
-  filesystem_id: 'filesystem-1',
   workflow_event_output_id: null,
   recursion_limit: 100,
   execution_timeout_seconds: 600,

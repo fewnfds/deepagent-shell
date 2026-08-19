@@ -28,22 +28,16 @@ const workflow: Workflow = {
   name: 'Research Workflow',
   workflow_role: 'parent',
   description: 'Runs the research agent.',
-  filesystem_id: 'filesystem-1',
   workflow_event_output_id: null,
   recursion_limit: 100,
   execution_timeout_seconds: 600,
   max_concurrency: 16,
   enabled: true,
 }
-const filesystem: SavedBlock = {
-  id: 'filesystem-1',
-  name: 'Shared Filesystem',
-}
 const eventOutput: SavedBlock = { id: 'event-output-1', name: 'Public events' }
 
 function mockComponentLists(): void {
   vi.spyOn(managementApi, 'listBlocks').mockImplementation(async (type) => {
-    if (type === 'filesystem') return [filesystem]
     if (type === 'workflow-event-output') return [eventOutput]
     return []
   })
@@ -94,7 +88,6 @@ describe('WorkflowsPage', () => {
     await wrapper.get('#workflow-form textarea').setValue('New description')
     const componentSelects = wrapper.findAll('#workflow-form select:not([required])')
     await componentSelects[0]!.setValue(eventOutput.id)
-    await wrapper.get('#workflow-form select[required]').setValue(filesystem.id)
     const runtimeLimits = wrapper.findAll('#workflow-form input[type="number"]')
     await runtimeLimits[0]!.setValue(250)
     await runtimeLimits[1]!.setValue(900)
@@ -106,7 +99,6 @@ describe('WorkflowsPage', () => {
       name: 'New Workflow',
       workflow_role: 'parent',
       description: 'New description',
-      filesystem_id: filesystem.id,
       workflow_event_output_id: eventOutput.id,
       recursion_limit: 250,
       execution_timeout_seconds: 900,
@@ -139,7 +131,6 @@ describe('WorkflowsPage', () => {
     expect(list).toHaveBeenCalledWith('child')
     await wrapper.findAll('button').find((button) => button.text() === 'New')!.trigger('click')
     await wrapper.get('#workflow-form input[type="text"]').setValue('Child Workflow')
-    await wrapper.get('#workflow-form select[required]').setValue(filesystem.id)
     await wrapper.get('#workflow-form').trigger('submit')
     await flushPromises()
 
@@ -147,7 +138,6 @@ describe('WorkflowsPage', () => {
       name: 'Child Workflow',
       workflow_role: 'child',
       description: '',
-      filesystem_id: filesystem.id,
       workflow_event_output_id: null,
       recursion_limit: 100,
       execution_timeout_seconds: 600,
@@ -186,7 +176,6 @@ describe('WorkflowsPage', () => {
       name: workflow.name,
       workflow_role: 'parent',
       description: workflow.description,
-      filesystem_id: filesystem.id,
       workflow_event_output_id: eventOutput.id,
       recursion_limit: 100,
       execution_timeout_seconds: 600,

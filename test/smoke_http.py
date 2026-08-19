@@ -114,8 +114,6 @@ def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> d
         "custom-tool": {"name": name, "tools": []},
         "output-mode": {
             "name": name,
-            "filter_mode": "blocklist",
-            "filter_mappings": [],
             "event_outputs": {
                 event_type: {
                     "enabled": True,

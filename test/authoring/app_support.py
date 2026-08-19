@@ -91,8 +91,6 @@ def model_payload(name: str = "Local model") -> dict:
 def output_mode_payload(name: str = "Development timeline") -> dict:
     return {
         "name": name,
-        "filter_mode": "blocklist",
-        "filter_mappings": [],
         "event_outputs": {
             event_type: {
                 "enabled": event_type != "reasoning",

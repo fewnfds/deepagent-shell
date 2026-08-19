@@ -396,6 +396,9 @@ def build_api_server_router(
             "status": "running" if current["enabled"] else "stopped",
             "api_key": {"configured": bool(current["api_key_configured"])},
             "max_initial_messages": current["max_initial_messages"],
+            "message_interception_enabled": current[
+                "message_interception_enabled"
+            ],
             "api_base_url": f"{base}/v1",
             "models_endpoint": f"{base}/v1/models",
             "chat_completions_endpoint": f"{base}/v1/chat/completions",

@@ -24,7 +24,6 @@ class WorkflowStore:
             "name": str(record["name"]),
             "workflow_role": str(record["workflow_role"]),
             "description": str(record["description"]),
-            "filesystem_id": str(record["filesystem_id"]),
             "workflow_event_output_id": record.get("workflow_event_output_id"),
             "recursion_limit": int(record["recursion_limit"]),
             "execution_timeout_seconds": int(record["execution_timeout_seconds"]),
@@ -54,12 +53,6 @@ class WorkflowStore:
     def get_item_by_name(self, name: str) -> dict | None:
         for item in self._repository.config().get("workflows", []):
             if item.get("name") == name:
-                return self._public(item)
-        return None
-
-    def get_item_by_filesystem(self, filesystem_id: str) -> dict | None:
-        for item in self._repository.config().get("workflows", []):
-            if item.get("filesystem_id") == filesystem_id:
                 return self._public(item)
         return None
 

@@ -10,8 +10,6 @@ class _PythonOutputProjector:
     def __init__(self, config: dict[str, object], *, workflow: bool = False) -> None:
         self._config = config
         self._workflow = workflow
-        mappings = config.get("filter_mappings")
-        self._filter_mappings = mappings if isinstance(mappings, list) else []
         outputs = config.get("event_outputs")
         self._settings = outputs if isinstance(outputs, dict) else {}
         self._renderers = {
@@ -28,39 +26,13 @@ class _PythonOutputProjector:
 
     def render(self, event: OutputEvent) -> str:
         renderer = self._renderers.get(self._key(event))
-        if renderer is None or not self._passes_filter(event):
+        if renderer is None:
             return ""
         return renderer(event.output_dict())
 
-    def _passes_filter(self, event: OutputEvent) -> bool:
-        matched = any(
-            self._mapping_matches(event, mapping)
-            for mapping in self._filter_mappings
-        )
-        mode = self._config.get("filter_mode")
-        return not (
-            (mode == "allowlist" and not matched)
-            or (mode == "blocklist" and matched)
-        )
-
-    @staticmethod
-    def _mapping_matches(event: OutputEvent, mapping: object) -> bool:
-        if not isinstance(mapping, dict):
-            return False
-        configured_field = str(mapping.get("field") or "")
-        expected_value = str(mapping.get("value") or "")
-        event_scope, separator, field_name = configured_field.partition(".")
-        if separator:
-            if event.event_type != event_scope:
-                return False
-        else:
-            field_name = event_scope
-        values = event.output_dict()
-        return field_name in values and str(values[field_name]) == expected_value
-
 
 class OutputProjector(_PythonOutputProjector):
-    """Filter stable Agent events and render them through user Python."""
+    """Render stable Agent events through user Python."""
 
 
 class WorkflowOutputProjector:

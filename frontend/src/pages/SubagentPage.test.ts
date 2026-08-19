@@ -104,7 +104,7 @@ describe('Subagent authoring page', () => {
     wrapper.unmount()
   })
 
-  it('shows Workflow-owned Filesystem as presentation only', async () => {
+  it('lets each Agent select its effective Filesystem', async () => {
     const api = service({
       getCatalog: vi.fn(async () => ({
         block_types: [
@@ -122,11 +122,12 @@ describe('Subagent authoring page', () => {
 
     expect(wrapper.findAll('[data-capability]')).toHaveLength(3)
     const filesystem = wrapper.get('[data-testid="subagent-capability-filesystem"]')
-    expect(filesystem.attributes('disabled')).toBeDefined()
-    expect(filesystem.attributes('name')).toBeUndefined()
-    expect(filesystem.attributes('value')).toBeUndefined()
-    expect(filesystem.get('option').attributes('value')).toBeUndefined()
+    expect(filesystem.attributes('disabled')).toBeUndefined()
+    expect((filesystem.element as HTMLSelectElement).value).toBe('__inherit__')
+    expect(filesystem.find('option[value="__disabled__"]').exists()).toBe(true)
     expect(filesystem.text()).toContain('agents.override.mode.inherit')
+    expect(filesystem.text()).toContain('agents.capability.minimal')
+    await filesystem.setValue('00000000-0000-0000-0000-000000000002')
 
     const permissions = wrapper.get('[data-testid="subagent-capability-filesystem-permissions"]')
     expect(permissions.attributes('disabled')).toBeUndefined()
@@ -153,10 +154,14 @@ describe('Subagent authoring page', () => {
         ]),
       }),
     }))
-    expect(api.createSubagent).not.toHaveBeenCalledWith(expect.objectContaining({
+    expect(api.createSubagent).toHaveBeenCalledWith(expect.objectContaining({
       settings: expect.objectContaining({
         capability_overrides: expect.arrayContaining([
-          expect.objectContaining({ type: 'filesystem' }),
+          {
+            type: 'filesystem',
+            mode: 'replace',
+            block_id: '00000000-0000-0000-0000-000000000002',
+          },
         ]),
       }),
     }))

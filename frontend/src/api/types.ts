@@ -244,7 +244,6 @@ export interface WorkflowPayload {
   name: string
   workflow_role: WorkflowRole
   description: string
-  filesystem_id: string
   workflow_event_output_id: string | null
   recursion_limit: number
   execution_timeout_seconds: number
@@ -501,6 +500,7 @@ export interface ApiServerSettings {
     configured: boolean
   }
   max_initial_messages: number
+  message_interception_enabled: boolean
   api_base_url: string
   models_endpoint: string
   chat_completions_endpoint: string

@@ -162,7 +162,7 @@
         "classes": [
           "active", "app-header", "app-main", "app-sidebar", "app-wrapper", "bg-body",
           "app-page-title",
-          "api-status-indicator", "api-status-indicator--running", "api-status-indicator--stopped",
+          "api-status-indicator", "api-status-indicator--intercepting", "api-status-indicator--running", "api-status-indicator--stopped",
           "bg-body-secondary", "border-bottom", "brand-link", "brand-text", "container-fluid",
           "flex-column", "ms-auto", "nav", "nav-icon", "nav-item", "nav-link", "nav-pills",
           "nav-sidebar", "navbar", "navbar-expand", "navbar-nav", "shadow", "sidebar-brand",

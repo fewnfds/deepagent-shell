@@ -550,7 +550,6 @@ class AgentRuntime:
         model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
         model_response_observer: Callable[[ModelResponse], None] | None = None,
         request_id: str = "",
-        workflow_filesystem_id: str | None = None,
         workflow_node_id: str | None = None,
         workspace: DeepAgentsWorkspace | None = None,
     ) -> BuiltAgent:
@@ -561,7 +560,6 @@ class AgentRuntime:
                 model_request_observer=model_request_observer,
                 model_response_observer=model_response_observer,
                 request_id=request_id,
-                workflow_filesystem_id=workflow_filesystem_id,
                 workflow_node_id=workflow_node_id,
                 workspace=workspace,
             )
@@ -581,36 +579,48 @@ class AgentRuntime:
             await self._builder.close_failed_build()
             raise
 
-    async def _resolved_mapped_directory_paths(
+    async def _resolved_mapped_directory_paths_by_filesystem(
         self,
         lifecycle_id: str,
         assembly: StaticAssembly,
-    ) -> dict[str, Path] | None:
-        stored = assembly.blocks.get("filesystem")
-        if stored is None:
-            return None
-        filesystem_id = str(stored.get("id", ""))
-        if not filesystem_id:
-            raise AgentRuntimeError(
-                "filesystem_identity_missing",
-                "The selected Filesystem has no stable identity.",
-                status_code=422,
+    ) -> dict[str, dict[str, Path]]:
+        stored_filesystems: dict[str, dict[str, Any]] = {}
+        for blocks in (
+            assembly.blocks,
+            *(node.blocks for node in assembly.subagent_nodes.values()),
+        ):
+            stored = blocks.get("filesystem")
+            if stored is None:
+                continue
+            filesystem_id = str(stored.get("id", ""))
+            if not filesystem_id:
+                raise AgentRuntimeError(
+                    "filesystem_identity_missing",
+                    "The selected Filesystem has no stable identity.",
+                    status_code=422,
+                )
+            stored_filesystems[filesystem_id] = stored
+
+        resolved: dict[str, dict[str, Path]] = {}
+        for filesystem_id, stored in stored_filesystems.items():
+            filesystem = FilesystemBlock.model_validate(
+                {key: value for key, value in stored.items() if key != "id"}
             )
-        filesystem = FilesystemBlock.model_validate(
-            {key: value for key, value in stored.items() if key != "id"}
-        )
-        try:
-            return await self._workflow_lifecycle.resolve_mapped_directories(
-                lifecycle_id,
-                filesystem_id,
-                filesystem,
-            )
-        except (OSError, RuntimeError, ValueError) as exc:
-            raise AgentRuntimeError(
-                "filesystem_mapping_unavailable",
-                "The selected Filesystem mapping could not be resolved.",
-                status_code=422,
-            ) from exc
+            try:
+                resolved[filesystem_id] = (
+                    await self._workflow_lifecycle.resolve_mapped_directories(
+                        lifecycle_id,
+                        filesystem_id,
+                        filesystem,
+                    )
+                )
+            except (OSError, RuntimeError, ValueError) as exc:
+                raise AgentRuntimeError(
+                    "filesystem_mapping_unavailable",
+                    "The selected Filesystem mapping could not be resolved.",
+                    status_code=422,
+                ) from exc
+        return resolved
 
     def _execution(
         self,
@@ -767,16 +777,20 @@ class AgentRuntime:
         background_runtime: Any | None = None,
     ) -> RunExecution:
         messages = validate_client_messages(raw_messages)
-        mapped_directory_paths = await self._resolved_mapped_directory_paths(
-            lifecycle_id,
-            assembly,
+        mapped_directory_paths_by_filesystem = (
+            await self._resolved_mapped_directory_paths_by_filesystem(
+                lifecycle_id,
+                assembly,
+            )
         )
         built = await self.build_resolved_agent(
             assembly,
             messages,
             request_id=request_id,
             workflow_node_id=None,
-            mapped_directory_paths=mapped_directory_paths,
+            mapped_directory_paths_by_filesystem=(
+                mapped_directory_paths_by_filesystem
+            ),
         )
         context = WorkflowRuntimeContext.for_run(
             request_id=request_id,
@@ -827,7 +841,6 @@ class AgentRuntime:
         document: WorkflowGraphDocumentV1,
         raw_messages: object,
         *,
-        workflow_filesystem_id: str,
         workflow_snapshot: Mapping[str, Any] | None = None,
         model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
         model_response_observer: Callable[[ModelResponse], None] | None = None,
@@ -874,10 +887,7 @@ class AgentRuntime:
             if main_agent_id in assemblies:
                 return ValidationReport(stage="workflow_publish")
             try:
-                assemblies[main_agent_id] = self._builder.resolve(
-                    main_agent_id,
-                    workflow_filesystem_id=workflow_filesystem_id,
-                )
+                assemblies[main_agent_id] = self._builder.resolve(main_agent_id)
             except AgentRuntimeError as exc:
                 if exc.validation_report is not None:
                     return exc.validation_report
@@ -976,7 +986,6 @@ class AgentRuntime:
             )
         workflow_context = {
             **dict(workflow_snapshot or {}),
-            "filesystem_id": workflow_filesystem_id,
             "graph": document.model_dump(mode="json"),
         }
         workflow_checkpoints = getattr(self, "_workflow_checkpoints", None)
@@ -1065,6 +1074,7 @@ class AgentRuntime:
             context=assembly_diagnostic_context,
         )
         built_agents: list[tuple[str, BuiltAgent]] = []
+        workflow_initial_files: dict[str, Any] = {}
         workflow_output_config: dict[str, object] | None = None
         command_runtime: CommandPackageRuntime | None = None
         task_dispatcher_runtime: TaskDispatcherPackageRuntime | None = None
@@ -1162,13 +1172,11 @@ class AgentRuntime:
                 ).model_dump(mode="python", exclude={"name"})
 
             for agent_node, assembly in resolved_agents:
-                mapped_directory_paths = (
-                    await self._resolved_mapped_directory_paths(
+                mapped_directory_paths_by_filesystem = (
+                    await self._resolved_mapped_directory_paths_by_filesystem(
                         resolved_lifecycle_id,
                         assembly,
                     )
-                    if workspace is None
-                    else None
                 )
                 built = await self.build_resolved_agent(
                     assembly,
@@ -1178,11 +1186,22 @@ class AgentRuntime:
                     request_id=request_id,
                     workflow_node_id=agent_node.id,
                     workspace=workspace,
-                    mapped_directory_paths=mapped_directory_paths,
+                    mapped_directory_paths_by_filesystem=(
+                        mapped_directory_paths_by_filesystem
+                    ),
                 )
                 built_agents.append((agent_node.id, built))
                 if workspace is None:
                     workspace = built.workspace
+                for path, value in built.input_state.get("files", {}).items():
+                    previous = workflow_initial_files.get(path)
+                    if previous is not None and previous != value:
+                        raise AgentRuntimeError(
+                            "filesystem_virtual_source_conflict",
+                            f"Workflow Agent virtual sources conflict at {path!r}.",
+                            status_code=422,
+                        )
+                    workflow_initial_files[path] = value
             graph = compile_workflow(
                 document,
                 node_agents=dict(built_agents),
@@ -1251,8 +1270,8 @@ class AgentRuntime:
         }
         if initial_workflow_task is not None:
             input_state["workflow_task"] = deepcopy(dict(initial_workflow_task))
-        if built is not None and "files" in built.input_state:
-            input_state["files"] = built.input_state["files"]
+        if workflow_initial_files:
+            input_state["files"] = workflow_initial_files
         return self._execution(
             built,
             graph=graph,

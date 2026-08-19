@@ -83,6 +83,11 @@ body {
   filter: drop-shadow(0 0 0.35rem color-mix(in srgb, var(--bs-success) 65%, transparent));
 }
 
+.api-status-indicator--intercepting {
+  color: var(--bs-warning);
+  filter: drop-shadow(0 0 0.35rem color-mix(in srgb, var(--bs-warning) 65%, transparent));
+}
+
 .api-status-indicator--stopped {
   color: var(--bs-danger);
   filter: drop-shadow(0 0 0.35rem color-mix(in srgb, var(--bs-danger) 55%, transparent));

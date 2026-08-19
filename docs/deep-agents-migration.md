@@ -21,10 +21,10 @@ model/tool/agent Hook。需要 checkpoint 的业务数据通过官方 state upda
 - 启用的父图 Workflow 名称是公开 model ID；子图名称不进入 `/v1`；Main Agent 引用保存在 Graph Agent node config，不在 Workflow metadata 中；
 - Main Agent 必须有模型与输出模式；
 - 只有 Main Agent 保存直接 Subagent UUID，Subagent contract 没有 child 引用；
-- Workflow 唯一选择共享 Filesystem；Main Agent/Subagent payload 不保存 Filesystem ref；
+- Main Agent 可选择项目 Filesystem 或最小 Filesystem；Subagent 可继承、选择自己的项目 Filesystem 或回到最小 Filesystem，Workflow 不保存 Filesystem ref；
 - Subagent 能力按 inherit/replace/disabled 解析，并投影为官方 `CompiledSubAgent` 字典 spec；
-- 同一次 Workflow 请求共享 Deep Agents workspace/backend，各 Main Agent/Subagent 的 `filesystem-permissions` 与文件
-  tool override 按身份显式装配；
+- 同一次 Workflow 请求共享 Deep Agents StateBackend 文件状态；每个 Main Agent/Subagent 按自己的 Filesystem、
+  `filesystem-permissions` 与 file-tool override 构造 backend 路由视图；
 - Summarization 与 Prompt Caching 是两个独立 capability，每个身份显式物化自己的官方 middleware；
 - Agent Shell 传给 `create_deep_agent(middleware=...)` 的 caller 列表中，Shell 预设 Middleware 在前；每个
   `custom-middleware` 配置只产生一个 Middleware，用户有序 `middleware_refs` 的顺序保持不变并统一位于末尾；
@@ -58,7 +58,7 @@ middleware 列表中消失。
 Deep Agents 也支持 `HarnessProfile.excluded_middleware` 物理移除普通 middleware，但它是按 model/provider profile
 生效，无法表达同一模型下每个 Agent 独立的 capability 选择，因此当前运行时没有用它承载上述 per-agent 设置。
 
-当前项目仍支持把 Workflow 的 mapped directories 接到 Deep Agents `FilesystemBackend`。LangChain 官方文档明确把
+当前项目仍支持把 Agent Filesystem 的 mapped directories 接到 Deep Agents `FilesystemBackend`。LangChain 官方文档明确把
 `FilesystemBackend` 列为不适合 Web server/HTTP API 的 backend；这是一条官方限制记录，不是 Shell 自己声称的安全保证。
 如果未来要消除该限制，应按官方建议改用 `StateBackend`、`StoreBackend` 或 sandbox backend，并另立需求，不在本次 ctx 迁移中偷偷替换。
 

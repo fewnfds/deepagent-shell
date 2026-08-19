@@ -74,7 +74,7 @@ CAPABILITY_MANIFESTS = (
     CapabilityManifest(
         "filesystem", "file-system", "文件系统", 3,
         "folder", "filesystem",
-        subagent_overrideable=False, required=False, subagent_policy="inherit",
+        subagent_overrideable=True, required=False, subagent_policy="inherit",
         tool_names=FILESYSTEM_TOOL_NAMES,
     ),
     CapabilityManifest(

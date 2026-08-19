@@ -52,8 +52,9 @@
   `write_file`、`edit_file`、`delete`、`glob`、`grep`。`read_file` 固定可见；`execute` 固定不可见；
   `delete` 默认关闭。
 
-同一个 Workflow Run 中的 Main Agent 与同步 Subagent 共享普通 StateBackend、初始文件和 mapped routes；Subagent settings
-不能单独替换文件系统。独立后台 Run 各自拥有私有 StateBackend，不复制或合并其中的临时文件；同一 Lifecycle 的
+同一个 Workflow Run 中的 Main Agent 与同步 Subagent 按 Deep Agents 官方行为共享普通 StateBackend 文件状态；每个 Agent
+按自己的有效 Filesystem 构造初始文件和 mapped route 视图，Subagent 可继承、选择自己的项目 Filesystem 或回到最小 Filesystem。
+独立后台 Run 各自拥有私有 StateBackend，不复制或合并其中的临时文件；同一 Lifecycle 的
 父 Run 和后台 Run 通过相同的 resolved mapped route 共享已落盘文件。每个 Agent 的 `/skills/` 仍按最终 Skill 选择建立只读视图。需要让不同 Agent 对共享
 workspace 使用不同路径权限、文件工具或文件系统提示词时，另行选择[文件系统权限](filesystem-permissions-config.md)。
 

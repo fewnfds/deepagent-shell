@@ -383,23 +383,6 @@ def _output_events() -> list[dict[str, object]]:
     ]
 
 
-def _filter_fields() -> list[str]:
-    unscoped = [field for field in OUTPUT_COMMON_FIELDS if field != "data"]
-    for name in OUTPUT_EVENT_NAMES:
-        for variable in OUTPUT_EVENT_FIELDS[name]:
-            if variable not in unscoped:
-                unscoped.append(variable)
-    scoped = [
-        f"{name}.{variable}"
-        for name in OUTPUT_EVENT_NAMES
-        for variable in (
-            *(field for field in OUTPUT_COMMON_FIELDS if field != "data"),
-            *OUTPUT_EVENT_FIELDS[name],
-        )
-    ]
-    return [*unscoped, *scoped]
-
-
 def _output_mode_default() -> dict[str, object]:
     event_outputs = {
         name: {
@@ -411,8 +394,6 @@ def _output_mode_default() -> dict[str, object]:
         for name in OUTPUT_EVENT_NAMES
     }
     return {
-        "filter_mode": "blocklist",
-        "filter_mappings": [],
         "event_outputs": event_outputs,
     }
 
@@ -474,7 +455,6 @@ _EDITOR_DEFAULTS = {
     },
     "output_mode": {
         "events": _output_events(),
-        "filter_fields": _filter_fields(),
         "default_value": _output_mode_default(),
     },
     "exception_retry": {

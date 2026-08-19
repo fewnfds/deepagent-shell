@@ -54,13 +54,6 @@ def _save(
     validated = _validated(payload)
     existing = store.get_item(item_id)
     validated["enabled"] = existing["enabled"] if existing is not None else False
-    if blocks.get_block("filesystem", validated["filesystem_id"]) is None:
-        raise management_error(
-            422,
-            code="workflow_filesystem_not_found",
-            message_key="errors.workflowFilesystemNotFound",
-            message="The selected Workflow filesystem does not exist.",
-        )
     event_output_id = validated["workflow_event_output_id"]
     if (
         event_output_id is not None
@@ -201,7 +194,6 @@ def _executable_report(
     def validate_main_agent(main_agent_id: str) -> ValidationReport:
         report, _ = configuration_validation.resolve_main_agent(
             main_agent_id,
-            workflow_filesystem_id=str(workflow["filesystem_id"]),
             stage=WORKFLOW_EXECUTABLE_STAGE,
         )
         return report

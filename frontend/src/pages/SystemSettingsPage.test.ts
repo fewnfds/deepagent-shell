@@ -31,6 +31,7 @@ const apiServerSettings: ApiServerSettings = {
   status: 'running',
   api_key: { configured: true },
   max_initial_messages: 1000,
+  message_interception_enabled: false,
   api_base_url: 'http://127.0.0.1:19100/v1',
   models_endpoint: 'http://127.0.0.1:19100/v1/models',
   chat_completions_endpoint: 'http://127.0.0.1:19100/v1/chat/completions',

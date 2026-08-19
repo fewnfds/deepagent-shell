@@ -19,7 +19,6 @@ def test_workflow_runtime_boundaries_are_managed(
                 "name": workflow["name"],
                 "workflow_role": workflow["workflow_role"],
                 "description": workflow["description"],
-                "filesystem_id": workflow["filesystem_id"],
                 "recursion_limit": 250,
                 "execution_timeout_seconds": 900,
                 "max_concurrency": 32,
@@ -46,7 +45,7 @@ def test_workflow_event_output_is_a_reusable_component_reference(
             f"/api/workflows/{workflow['id']}",
             json={
                 **{key: workflow[key] for key in (
-                        "name", "workflow_role", "description", "filesystem_id",
+                        "name", "workflow_role", "description",
                         "recursion_limit",
                         "execution_timeout_seconds", "max_concurrency"
                     )},
@@ -97,8 +96,6 @@ def test_workflow_roles_filter_management_and_public_model_entries(
         ]
         assert created["workflow_role"] == "parent"
         assert child["workflow_role"] == "child"
-        assert created["filesystem_id"]
-
         assert client.delete(f"/api/main-agents/{main_agent['id']}").json() == {
             "ok": True
         }
@@ -125,7 +122,6 @@ def test_workflow_rejects_duplicate_names_and_removed_main_agent_field(
                 "name": "Unique Workflow",
                 "workflow_role": "parent",
                 "description": "Duplicate.",
-                "filesystem_id": existing["filesystem_id"],
             },
         )
         removed_field = client.post(
@@ -135,7 +131,6 @@ def test_workflow_rejects_duplicate_names_and_removed_main_agent_field(
                 "workflow_role": "parent",
                 "description": "Rejected legacy shape.",
                 "main_agent_id": "missing-agent",
-                "filesystem_id": existing["filesystem_id"],
             },
         )
         enabled_field = client.post(
@@ -144,7 +139,6 @@ def test_workflow_rejects_duplicate_names_and_removed_main_agent_field(
                 "name": "Manual enable",
                 "workflow_role": "parent",
                 "description": "Rejected publication bypass.",
-                "filesystem_id": existing["filesystem_id"],
                 "enabled": True,
             },
         )
@@ -157,52 +151,22 @@ def test_workflow_rejects_duplicate_names_and_removed_main_agent_field(
     assert enabled_field.json()["detail"]["code"] == "workflow_invalid"
 
 
-def test_workflow_requires_existing_filesystem_and_protects_its_reference(
+def test_workflow_rejects_removed_filesystem_field(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
-        missing = client.post(
+        legacy = client.post(
             "/api/workflows",
             json={
-                "name": "Missing Filesystem",
+                "name": "Legacy Filesystem owner",
                 "workflow_role": "parent",
-                "description": "Rejected reference.",
+                "description": "Rejected legacy shape.",
                 "filesystem_id": "00000000-0000-0000-0000-000000000000",
             },
         )
-        first = client.post(
-            "/api/blocks/filesystem", json={"name": "First shared workspace"}
-        ).json()
-        second = client.post(
-            "/api/blocks/filesystem", json={"name": "Second shared workspace"}
-        ).json()
-        workflow = create_workflow(
-            client,
-            name="Protected Workflow",
-            filesystem_id=first["id"],
-        )
-        protected = client.delete(f"/api/blocks/filesystem/{first['id']}")
-        changed = client.put(
-            f"/api/workflows/{workflow['id']}",
-            json={
-                "name": workflow["name"],
-                "workflow_role": workflow["workflow_role"],
-                "description": workflow["description"],
-                "filesystem_id": second["id"],
-            },
-        )
-        released = client.delete(f"/api/blocks/filesystem/{first['id']}")
-        client.delete(f"/api/workflows/{workflow['id']}")
-        final_delete = client.delete(f"/api/blocks/filesystem/{second['id']}")
 
-    assert missing.status_code == 422
-    assert missing.json()["detail"]["code"] == "workflow_filesystem_not_found"
-    assert protected.status_code == 409
-    assert protected.json()["detail"]["code"] == "configuration_referenced"
-    assert changed.status_code == 200, changed.text
-    assert changed.json()["filesystem_id"] == second["id"]
-    assert released.json() == {"ok": True}
-    assert final_delete.json() == {"ok": True}
+    assert legacy.status_code == 422
+    assert legacy.json()["detail"]["code"] == "workflow_invalid"
 
 
 def test_workflow_draft_publish_and_validation_share_one_graph(
@@ -221,7 +185,6 @@ def test_workflow_draft_publish_and_validation_share_one_graph(
                 "name": workflow["name"],
                 "workflow_role": workflow["workflow_role"],
                 "description": "Metadata cannot demote a published graph.",
-                "filesystem_id": workflow["filesystem_id"],
             },
         )
         assert metadata.status_code == 200, metadata.text
@@ -500,7 +463,6 @@ def test_workflow_graph_catalog_save_and_reload(
                 "name": workflow["name"],
                 "workflow_role": workflow["workflow_role"],
                 "description": "Metadata changed without touching the graph.",
-                "filesystem_id": workflow["filesystem_id"],
             },
         )
         reloaded = client.get(graph_url)

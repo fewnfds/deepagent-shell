@@ -410,15 +410,10 @@ def test_filesystem_permissions_reject_invalid_or_duplicate_paths(
         assert response.status_code == 422, response.text
 
 
-def test_output_mode_rejects_invalid_filter_and_python_script_contracts(
+def test_output_mode_rejects_invalid_event_and_python_script_contracts(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
-
-    invalid_mapping = output_mode_payload("Invalid mapping")
-    invalid_mapping["filter_mappings"] = [
-        {"field": "tool_result..tool_name", "value": "commit"}
-    ]
 
     missing_event = output_mode_payload("Missing event")
     missing_event["event_outputs"].pop("lifecycle")
@@ -445,7 +440,6 @@ def test_output_mode_rejects_invalid_filter_and_python_script_contracts(
     )
 
     for payload in (
-        invalid_mapping,
         missing_event,
         extra_event,
         wrong_signature,
@@ -472,16 +466,18 @@ def test_output_mode_reports_the_exact_malformed_event_script(
     assert issue["path"] == "event_outputs.assistant_text.output_source"
 
 
-def test_output_mode_accepts_a_custom_filter_field(
+def test_output_mode_rejects_removed_filter_fields(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
-    payload = output_mode_payload("Custom filter field")
+    payload = output_mode_payload("Removed filter field")
     payload["filter_mappings"] = [
         {"field": "future_event.custom_field", "value": "custom value"}
     ]
 
     response = client.post("/api/blocks/output-mode", json=payload)
 
-    assert response.status_code == 200, response.text
-    assert response.json()["filter_mappings"] == payload["filter_mappings"]
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"]["validation"]["issues"][0]["path"] == (
+        "filter_mappings"
+    )

@@ -6,7 +6,7 @@
 | --- | --- | --- | --- |
 | 模型 | Provider、模型名、凭据和请求设置 | 必选 | 继承或替换 |
 | 系统提示词 | 基础 system prompt | 可选 | 继承、替换或关闭 |
-| 文件系统 | Workflow 共享 workspace、映射、临时文件和文件工具 | Workflow 必选；Agent 不引用 | 锁定继承 Workflow |
+| 文件系统 | Agent workspace、映射、初始文件和文件工具 | 自选；未选时使用最小 Filesystem | 继承、自选或最小 |
 | 文件系统权限 | 路径权限与文件工具、提示词覆写 | 可选 | 继承、替换或关闭 |
 | 待办计划 | `write_todos` 与规划提示 | 可选 | 继承、替换或关闭 |
 | 自定义工具 | 选择 `data/resources/custom_tools/` 中的工具 | 可选 | 继承、替换或关闭 |

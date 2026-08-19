@@ -66,7 +66,7 @@ function insertField(eventKey: string, field: string): void {
             {{ field }}
           </LteButton>
         </div>
-        <FormField :field-path="`event_outputs.${row.event.key}.output_source`" :hint="t('editors.outputMode.scriptHint')">
+        <FormField :field-path="`event_outputs.${row.event.key}.output_source`">
           <LteTextarea
             :id="`workflow-event-output-source-${row.event.key.replace('.', '-')}`"
             v-model="row.setting.output_source"

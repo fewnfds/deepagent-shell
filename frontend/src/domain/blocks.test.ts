@@ -33,10 +33,7 @@ const filesystemDefaults: FilesystemDefaults = {
 
 const outputDefaults: OutputModeDefaults = {
   events: [{ key: 'assistant_text', fields: ['message'] }],
-  filter_fields: ['message'],
   default_value: {
-    filter_mode: 'blocklist',
-    filter_mappings: [],
     event_outputs: {
       assistant_text: {
         enabled: true,
@@ -136,8 +133,9 @@ describe('block adapters', () => {
     const blank = outputModeAdapter.blank(outputDefaults)
     expect(blank.event_outputs.assistant_text?.output_source)
       .toBe('def output(event):\n    return event["message"]\n')
-    blank.filter_mappings.push({ field: 'message', value: 'hidden' })
-    expect(outputDefaults.default_value.filter_mappings).toEqual([])
+    blank.event_outputs.assistant_text!.output_source = 'changed'
+    expect(outputDefaults.default_value.event_outputs.assistant_text?.output_source)
+      .toBe('def output(event):\n    return event["message"]\n')
     expect(outputModeAdapter.toPayload(blank)).not.toHaveProperty('id')
   })
 
@@ -145,8 +143,6 @@ describe('block adapters', () => {
     const saved = {
       id: 'output-id',
       name: 'Legacy output',
-      filter_mode: 'blocklist',
-      filter_mappings: [],
       event_outputs: {
         assistant_text: {
           enabled: true,
@@ -204,8 +200,7 @@ describe('block adapters', () => {
     })
 
     const output = outputModeAdapter.fromApi({
-      id: 'output', name: 'Output', filter_mode: 'legacy',
-      filter_mappings: [{ field: 'message', value: 'kept' }, 'discarded'],
+      id: 'output', name: 'Output',
       event_outputs: {
         assistant_text: {
           enabled: false,
@@ -214,8 +209,6 @@ describe('block adapters', () => {
         legacy_event: { enabled: true, output_source: 'def output(event):\n    return "discarded"\n' },
       },
     } as never, outputDefaults)
-    expect(output.filter_mode).toBe(outputDefaults.default_value.filter_mode)
-    expect(output.filter_mappings).toEqual([{ field: 'message', value: 'kept' }])
     expect(output.event_outputs).toEqual({
       assistant_text: {
         enabled: false,

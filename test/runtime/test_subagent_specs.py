@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 from agent_shell.runtime.state import AgentShellStateMiddleware
@@ -21,6 +22,7 @@ def test_direct_subagents_become_official_dictionary_specs_with_shared_workspace
         owner_name,
         workflow_node_id,
         workspace,
+        mapped_directory_paths_by_filesystem,
         disabled_capabilities,
     ):
         assert filesystem_mode == "configured-shared"
@@ -28,6 +30,9 @@ def test_direct_subagents_become_official_dictionary_specs_with_shared_workspace
         assert owner_id in {"reader-id", "writer-id"}
         assert disabled_capabilities == frozenset()
         assert workflow_node_id is None
+        assert mapped_directory_paths_by_filesystem == {
+            "reader-filesystem": {"/reader/": Path("reader-root")}
+        }
         materialized_workspaces.append(workspace)
         return SimpleNamespace(
             model=object(),
@@ -78,6 +83,9 @@ def test_direct_subagents_become_official_dictionary_specs_with_shared_workspace
         nodes=nodes,
         workspace=workspace,
         materialize_profile=materialize,
+        mapped_directory_paths_by_filesystem={
+            "reader-filesystem": {"/reader/": Path("reader-root")}
+        },
     )
 
     assert [item["name"] for item in specs] == ["reader", "writer"]

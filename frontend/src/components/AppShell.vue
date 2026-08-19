@@ -122,8 +122,13 @@ async function changeLifecycle(action: 'start' | 'stop'): Promise<void> {
 }
 
 function onManagementEvent(event: ManagementEvent): void {
-  if (event.type === 'settings_changed') {
+  if (
+    event.type === 'settings_changed'
+    || event.type === 'message_interception_changed'
+  ) {
     void loadApiServer()
+  }
+  if (event.type === 'settings_changed') {
     void validationSettings.load()
   }
 }
@@ -221,7 +226,20 @@ onBeforeUnmount(() => {
 
           <li class="nav-item">
             <button
-              v-if="apiServerRunning"
+              v-if="apiServerRunning && apiServerSettings?.message_interception_enabled"
+              id="app-api-server-status"
+              class="nav-link api-status-indicator api-status-indicator--intercepting"
+              type="button"
+              :aria-label="apiServerStatusLabel"
+              :title="apiServerStatusLabel"
+              :disabled="apiServerLoading || Boolean(lifecycleAction)"
+              @click="changeLifecycle('stop')"
+            >
+              <span v-if="lifecycleAction" class="spinner-border spinner-border-sm" aria-hidden="true" />
+              <i v-else class="bi bi-play-fill" aria-hidden="true" />
+            </button>
+            <button
+              v-else-if="apiServerRunning"
               id="app-api-server-status"
               class="nav-link api-status-indicator api-status-indicator--running"
               type="button"

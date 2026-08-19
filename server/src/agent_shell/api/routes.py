@@ -194,23 +194,6 @@ def build_router(
                 raise authoring_error(exc) from exc
         return block
 
-    def reject_workflow_filesystem_reference(
-        block_type: str,
-        block_id: str,
-    ) -> None:
-        if block_type != "filesystem":
-            return
-        owner = workflow_store.get_item_by_filesystem(block_id)
-        if owner is None:
-            return
-        raise management_error(
-            409,
-            code="configuration_referenced",
-            message_key="errors.configurationReferencedByWorkflow",
-            message="The configuration is still referenced by a Workflow.",
-            message_args={"owner": owner["name"]},
-        )
-
     def reject_workflow_event_output_reference(
         block_type: str, block_id: str
     ) -> None:
@@ -448,7 +431,6 @@ def build_router(
                     message_key="errors.blockNotFound",
                     message="A component configuration does not exist.",
                 )
-            reject_workflow_filesystem_reference(block_type, block_id)
             reject_workflow_event_output_reference(block_type, block_id)
             reject_command_reference(block_type, block_id)
             reject_task_dispatcher_reference(block_type, block_id)
@@ -732,7 +714,6 @@ def build_router(
     @router.delete("/api/blocks/{block_type}/{block_id}")
     async def delete_block(block_type: str, block_id: str) -> dict[str, bool]:
         check_type(block_type)
-        reject_workflow_filesystem_reference(block_type, block_id)
         reject_workflow_event_output_reference(block_type, block_id)
         reject_command_reference(block_type, block_id)
         reject_task_dispatcher_reference(block_type, block_id)

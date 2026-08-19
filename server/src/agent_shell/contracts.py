@@ -66,19 +66,6 @@ PromptOverrideText = Annotated[
     StringConstraints(strip_whitespace=False),
     Field(max_length=100_000),
 ]
-OutputFilterField = Annotated[
-    str,
-    StringConstraints(
-        strip_whitespace=True,
-        pattern=r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)?$",
-    ),
-    Field(min_length=1, max_length=240),
-]
-OutputFilterValue = Annotated[
-    str,
-    StringConstraints(strip_whitespace=False),
-    Field(min_length=1, max_length=4096),
-]
 ModelBoolean = Annotated[bool, Field(strict=True)]
 ModelText = Annotated[
     str,
@@ -369,16 +356,7 @@ OUTPUT_EVENT_FIELDS = {
 from agent_shell.workflow_event_output import EventOutputScript, validate_event_outputs
 
 
-class OutputFilterMapping(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=False)
-
-    field: OutputFilterField
-    value: OutputFilterValue
-
-
 class OutputModeBlock(StrictBlock):
-    filter_mode: Literal["allowlist", "blocklist"]
-    filter_mappings: Annotated[list[OutputFilterMapping], Field(max_length=100)]
     event_outputs: dict[OutputEventName, EventOutputScript]
 
     @model_validator(mode="after")
@@ -854,10 +832,6 @@ class CapabilityReference(BaseModel):
         if value == "custom-middleware":
             raise ValueError(
                 "custom-middleware must be selected through middleware_refs"
-            )
-        if value == "filesystem":
-            raise ValueError(
-                "filesystem is selected by Workflow and cannot be selected by Main Agent"
             )
         return value
 

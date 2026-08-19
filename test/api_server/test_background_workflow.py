@@ -44,7 +44,6 @@ def test_frozen_snapshot_runs_child_workflow_silently_with_independent_checkpoin
                         "name",
                         "workflow_role",
                         "description",
-                        "filesystem_id",
                         "recursion_limit",
                         "execution_timeout_seconds",
                         "max_concurrency",

@@ -82,16 +82,13 @@ def output(event):
 
 如只需要兼容不同 Provider 的公开文本，优先使用已规范化的 `message`、`arguments` 或 `output`。
 
-## 过滤与保存结构
+## 脚本内过滤与保存结构
 
-`allowlist` 只输出至少匹配一条映射的事件，`blocklist` 排除匹配项。映射对完整事件 dict 中的字符串化字段做精确匹配；
-`data` 不作为过滤字段。可以使用公共字段名，也可以使用 `tool_result.status` 这样的事件限定字段名。
+输出模式没有独立事件过滤配置。需要过滤时直接在对应 Python 脚本中判断 `event` 并返回空字符串；非空返回值才进入响应。
 
 ```json
 {
   "name": "普通文本",
-  "filter_mode": "blocklist",
-  "filter_mappings": [],
   "event_outputs": {
     "assistant_text": {
       "enabled": true,

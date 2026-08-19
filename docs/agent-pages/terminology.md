@@ -2,7 +2,7 @@
 
 | 界面名称 | 含义 |
 | --- | --- |
-| Workflow | 保存共享 Filesystem 和当前 Graph definition/layout 的图实体；父图可映射 `/v1/models`，子图只作为内部目标 |
+| Workflow | 保存当前 Graph definition/layout 与运行约束的图实体；父图可映射 `/v1/models`，子图只作为内部目标 |
 | Main Agent | 完整的 Deep Agents 装配，可被 Workflow 画布的 Agent node 引用 |
 | Endpoint | Node Catalog 声明的输入/输出控制流端点；当前 Edge 类型为 normal、branch、dispatch |
 | Edge | 从 source endpoint 到 target endpoint 的具体激活连接；不是 Vue Flow renderer 类型 |

@@ -32,6 +32,7 @@ const stoppedSettings: ApiServerSettings = {
   status: 'stopped',
   api_key: { configured: true },
   max_initial_messages: 1000,
+  message_interception_enabled: false,
   api_base_url: 'http://127.0.0.1:19100/v1',
   models_endpoint: 'http://127.0.0.1:19100/v1/models',
   chat_completions_endpoint: 'http://127.0.0.1:19100/v1/chat/completions',
@@ -212,6 +213,22 @@ describe('AppShell', () => {
     await flushPromises()
     expect(api.stopApiServer).toHaveBeenCalledTimes(1)
     expect(shell.get('#app-api-server-status').get('i').classes()).toContain('bi-stop-fill')
+  })
+
+  it('shows a yellow running arrow while message interception is enabled', async () => {
+    const api = createShellApi({
+      getApiServer: vi.fn(async () => ({
+        ...stoppedSettings,
+        enabled: true,
+        status: 'running' as const,
+        message_interception_enabled: true,
+      })),
+    })
+    const { wrapper: shell } = await mountShell('/', api)
+    await flushPromises()
+
+    expect(shell.get('#app-api-server-status').classes())
+      .toContain('api-status-indicator--intercepting')
   })
 
   it('reports an API Server lifecycle failure once through the shared toast owner', async () => {

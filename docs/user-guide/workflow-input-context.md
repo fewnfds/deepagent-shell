@@ -14,7 +14,7 @@ WIC 不是画布 Node，也不是一类 capability 组件。当前实现是普�
 的对话历史。
 
 这个边界使不同 Agent 可以针对同一请求获得不同材料：一个 Agent 可以读取完整原始任务，另一个只读取某个前序结果，
-还可以加入共享 Filesystem 中的任务文件或把消息身份重新组织。WIC 是执行这些选择的唯一入口，而不是外围聊天历史、
+还可以加入当前 Agent Filesystem 中的任务文件或把消息身份重新组织。WIC 是执行这些选择的唯一入口，而不是外围聊天历史、
 自动累积机制或隐藏的 State 同步。
 
 ```text
@@ -25,7 +25,7 @@ Lifecycle Store（不可变请求快照）
         │
         ├── WorkflowRuntimeContext（run/invocation 身份）
         ├── 当前 Agent State 的父图快照
-        └── Workflow Filesystem backend
+        └── Agent Filesystem backend
                     │
                     ▼
          WIC abefore_agent(...)
@@ -95,7 +95,7 @@ examples/agent-components/custom-middleware/workflow-input-context/
 - `request_messages`：Main Agent 的原始请求消息；
 - `state`：当前 Agent 私有 State 和父图快照；
 - `runtime.context` / `runtime.store`：当前身份、Lifecycle 数据和 invocation artifact；
-- `backend`：Workflow Filesystem backend，可按虚拟路径读取文件。
+- `backend`：当前 Agent 的 Filesystem backend，可按虚拟路径读取文件。
 
 示例保留 `load_invocation_artifact(runtime, record)` 帮助函数。需要前序结果时，先从父图快照选择明确的 invocation 记录，
 再加载完整 artifact；不要自动拼接所有前序输出。文件读取、消息 role 变换、裁剪和排序没有固定 schema，应按当前 Agent 的
@@ -121,7 +121,7 @@ LangChain 对 `before_*` hook 按 Middleware 列表正序执行；因此，如�
 - 前序 Agent 输出必须先从 `agent_invocations` 显式选择因果可见的引用，再从 Store 读取 artifact；不能依赖 mapping 插入顺序；
 - 同一画布节点再次执行会产生新的 invocation ID，WIC 应按节点身份或明确 ID 选择记录；
 - Subagent 默认保留 delegated messages，是否加入根请求必须由该 Subagent 的 WIC 明确决定；
-- 文件路径属于 Workflow 虚拟 Filesystem，不接受宿主绝对路径；
+- 文件路径属于当前 Agent 的虚拟 Filesystem，不接受宿主绝对路径；
 - Custom Middleware 是受信任的服务端 Python 代码，不在 sandbox 中运行。
 
 LangChain 官方机制可参考 [Custom middleware](https://docs.langchain.com/oss/python/langchain/middleware/custom) 和

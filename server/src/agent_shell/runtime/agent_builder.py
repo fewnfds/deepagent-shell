@@ -176,13 +176,8 @@ class AgentBuilder:
     def resolve(
         self,
         main_agent_id: str,
-        *,
-        workflow_filesystem_id: str | None = None,
     ) -> StaticAssembly:
-        report, assembly = self._validation.resolve_main_agent(
-            main_agent_id,
-            workflow_filesystem_id=workflow_filesystem_id,
-        )
+        report, assembly = self._validation.resolve_main_agent(main_agent_id)
         if not report.valid:
             issue = report.issues[0]
             if issue.code == "assembly.main_agent_not_found":
@@ -214,7 +209,9 @@ class AgentBuilder:
         owner_name: str,
         workflow_node_id: str | None = None,
         workspace: DeepAgentsWorkspace | None = None,
-        mapped_directory_paths: Mapping[str, Path] | None = None,
+        mapped_directory_paths_by_filesystem: Mapping[
+            str, Mapping[str, Path]
+        ] | None = None,
         disabled_capabilities: frozenset[str] = frozenset(),
     ) -> MaterializedAgentProfile:
         model_id = references["model"]
@@ -344,7 +341,14 @@ class AgentBuilder:
                 filesystem_mode=filesystem_mode,
                 skills_dir=self._skills_dir,
                 workspace=workspace,
-                mapped_directory_paths=mapped_directory_paths,
+                mapped_directory_paths=(
+                    mapped_directory_paths_by_filesystem.get(
+                        str(filesystem.get("id", ""))
+                    )
+                    if filesystem is not None
+                    and mapped_directory_paths_by_filesystem is not None
+                    else None
+                ),
             )
         except DeepAgentsCapabilityError as exc:
             raise configuration_error(
@@ -357,7 +361,7 @@ class AgentBuilder:
                 path=(
                     "capability_refs.skill"
                     if skill is not None
-                    else "workflow.filesystem_id"
+                    else "capability_refs.filesystem"
                 ),
             ) from exc
         except Exception as exc:
@@ -371,7 +375,7 @@ class AgentBuilder:
                 path=(
                     "capability_refs.skill"
                     if skill is not None
-                    else "workflow.filesystem_id"
+                    else "capability_refs.filesystem"
                 ),
             ) from exc
         backend = deepagents.backend
@@ -485,18 +489,16 @@ class AgentBuilder:
         model_request_observer: Callable[[dict[str, Any]], Any] | None = None,
         model_response_observer: Callable[[ModelResponse], Any] | None = None,
         request_id: str = "",
-        workflow_filesystem_id: str | None = None,
         workflow_node_id: str | None = None,
         workspace: DeepAgentsWorkspace | None = None,
-        mapped_directory_paths: Mapping[str, Path] | None = None,
+        mapped_directory_paths_by_filesystem: Mapping[
+            str, Mapping[str, Path]
+        ] | None = None,
     ) -> BuiltAgent:
         # Validate the immutable request snapshot before any selected user module
         # can be imported or any optional capability can be materialized.
         messages = validate_client_messages(raw_messages)
-        assembly = self.resolve(
-            main_agent_id,
-            workflow_filesystem_id=workflow_filesystem_id,
-        )
+        assembly = self.resolve(main_agent_id)
         return await self.build_resolved(
             assembly,
             messages,
@@ -505,7 +507,9 @@ class AgentBuilder:
             request_id=request_id,
             workflow_node_id=workflow_node_id,
             workspace=workspace,
-            mapped_directory_paths=mapped_directory_paths,
+            mapped_directory_paths_by_filesystem=(
+                mapped_directory_paths_by_filesystem
+            ),
         )
 
     async def build_resolved(
@@ -518,7 +522,9 @@ class AgentBuilder:
         request_id: str = "",
         workflow_node_id: str | None = None,
         workspace: DeepAgentsWorkspace | None = None,
-        mapped_directory_paths: Mapping[str, Path] | None = None,
+        mapped_directory_paths_by_filesystem: Mapping[
+            str, Mapping[str, Path]
+        ] | None = None,
     ) -> BuiltAgent:
         main_agent = assembly.main_agent
         references = assembly.references
@@ -551,7 +557,9 @@ class AgentBuilder:
             owner_name=main_agent_name,
             workflow_node_id=workflow_node_id,
             workspace=workspace,
-            mapped_directory_paths=mapped_directory_paths,
+            mapped_directory_paths_by_filesystem=(
+                mapped_directory_paths_by_filesystem
+            ),
             disabled_capabilities=assembly.disabled_capabilities,
         )
         constructor: dict[str, object] = {
@@ -588,6 +596,7 @@ class AgentBuilder:
         }
 
         compiled_subagents: list[dict[str, Any]] = []
+        subagent_initial_files: dict[str, Any] = {}
         task_description_override: str | None = None
         if resolved_subagents:
             from agent_shell.runtime.subagents import build_subagent_specs
@@ -598,6 +607,10 @@ class AgentBuilder:
                 workspace=materialized.workspace,
                 materialize_profile=self._materialize_profile,
                 workflow_node_id=workflow_node_id,
+                mapped_directory_paths_by_filesystem=(
+                    mapped_directory_paths_by_filesystem
+                ),
+                initial_files=subagent_initial_files,
             )
             delegation_instruction = selected_blocks["subagent"][
                 "instruction_override"
@@ -633,6 +646,19 @@ class AgentBuilder:
         if exception_retry_runtime is not None:
             middleware.extend(exception_retry_runtime.after_provider_boundary)
         initial_files = dict(materialized.workspace.initial_files)
+        for path, value in subagent_initial_files.items():
+            previous = initial_files.get(path)
+            if previous is not None and previous != value:
+                raise configuration_error(
+                    "filesystem_virtual_source_conflict",
+                    f"Agent virtual source conflicts at {path!r}.",
+                    status_code=422,
+                    scope="main_agent",
+                    owner_id=main_agent_id,
+                    owner_name=main_agent_name,
+                    path="capability_refs.filesystem",
+                )
+            initial_files[path] = value
         if initial_files or resolved_subagents:
             input_state["files"] = initial_files
 

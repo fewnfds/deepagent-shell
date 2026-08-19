@@ -4,8 +4,8 @@
 
 ## 程序用户
 
-AI 或自动化程序通过 management API 配置实例时，先完整阅读 [AI Workflow 装配指南](user-guide/ai-workflow-authoring.md)。
-它集中说明鉴权、对象依赖、最小可运行 payload、Node 脚本 contract、校验和真实调用；以下页面作为字段与机制下钻。
+AI 或自动化程序通过 management API 配置实例时，从 [AI Workflow 编写指南](user-guide/ai-guide/README.md)开始。
+索引按任务指向鉴权、对象依赖、Graph、Node 脚本 contract、校验和真实调用；以下页面作为字段与机制下钻。
 
 1. [启动并认识管理台](user-guide/getting-started.md)
 2. [创建组件](user-guide/capabilities.md)

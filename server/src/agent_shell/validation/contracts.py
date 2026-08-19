@@ -145,16 +145,6 @@ def _specific_contract_identity(
             "contract.python_package_folder_format_invalid",
             "validation.issue.contract.pythonPackageFolderFormatInvalid",
         )
-    if (
-        error_type == "string_pattern_mismatch"
-        and owner_type == "output-mode"
-        and path.startswith("filter_mappings[")
-        and path.endswith(".field")
-    ):
-        return (
-            "contract.output_filter_field_format_invalid",
-            "validation.issue.contract.outputFilterFieldFormatInvalid",
-        )
     if error_type == "value_error" and owner_type == "model" and path == "provider":
         if detail == "provider must be bundled with this Agent Shell version":
             return (

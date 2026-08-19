@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Any
 
 from agent_shell.capability_manifest import FILESYSTEM_TOOL_NAMES
@@ -34,6 +35,10 @@ def build_subagent_specs(
     workspace: DeepAgentsWorkspace,
     materialize_profile: ProfileMaterializer,
     workflow_node_id: str | None = None,
+    mapped_directory_paths_by_filesystem: Mapping[
+        str, Mapping[str, Path]
+    ] | None = None,
+    initial_files: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Project direct children to Deep Agents' official SubAgent dictionaries."""
 
@@ -43,6 +48,10 @@ def build_subagent_specs(
             workspace=workspace,
             materialize_profile=materialize_profile,
             workflow_node_id=workflow_node_id,
+            mapped_directory_paths_by_filesystem=(
+                mapped_directory_paths_by_filesystem
+            ),
+            initial_files=initial_files,
         )
         for edge in roots
     ]
@@ -54,6 +63,10 @@ def _build_subagent_spec(
     workspace: DeepAgentsWorkspace,
     materialize_profile: ProfileMaterializer,
     workflow_node_id: str | None,
+    mapped_directory_paths_by_filesystem: Mapping[
+        str, Mapping[str, Path]
+    ] | None,
+    initial_files: dict[str, Any] | None,
 ) -> dict[str, Any]:
     child = materialize_profile(
         node.references,
@@ -64,8 +77,21 @@ def _build_subagent_spec(
         owner_name=node.name,
         workflow_node_id=workflow_node_id,
         workspace=workspace,
+        mapped_directory_paths_by_filesystem=(
+            mapped_directory_paths_by_filesystem
+        ),
         disabled_capabilities=node.disabled_capabilities,
     )
+    if initial_files is not None:
+        for path, value in child.workspace.initial_files.items():
+            previous = initial_files.get(path)
+            if previous is not None and previous != value:
+                raise AgentRuntimeError(
+                    "filesystem_virtual_source_conflict",
+                    f"Subagent virtual source conflicts at {path!r}.",
+                    status_code=422,
+                )
+            initial_files[path] = value
     middleware: list[Any] = [
         AgentShellStateMiddleware(),
         ToolErrorBoundaryMiddleware(),

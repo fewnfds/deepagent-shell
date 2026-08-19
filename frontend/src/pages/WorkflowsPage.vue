@@ -30,7 +30,6 @@ const editingId = ref('')
 const formOpen = ref(false)
 const saving = ref(false)
 const formError = ref('')
-const filesystems = ref<SavedBlock[]>([])
 const workflowEventOutputs = ref<SavedBlock[]>([])
 const form = ref<WorkflowPayload>(blankWorkflow())
 
@@ -39,7 +38,6 @@ function blankWorkflow(): WorkflowPayload {
     name: '',
     workflow_role: props.workflowRole,
     description: '',
-    filesystem_id: '',
     workflow_event_output_id: null,
     recursion_limit: 100,
     execution_timeout_seconds: 600,
@@ -60,7 +58,6 @@ function openEdit(workflow: Workflow): void {
     name: workflow.name,
     workflow_role: workflow.workflow_role,
     description: workflow.description,
-    filesystem_id: workflow.filesystem_id,
     workflow_event_output_id: workflow.workflow_event_output_id,
     recursion_limit: workflow.recursion_limit,
     execution_timeout_seconds: workflow.execution_timeout_seconds,
@@ -84,7 +81,6 @@ async function save(): Promise<void> {
       name: form.value.name.trim(),
       workflow_role: props.workflowRole,
       description: form.value.description.trim(),
-      filesystem_id: form.value.filesystem_id,
       workflow_event_output_id: form.value.workflow_event_output_id || null,
       recursion_limit: Number(form.value.recursion_limit),
       execution_timeout_seconds: Number(form.value.execution_timeout_seconds),
@@ -102,23 +98,18 @@ async function save(): Promise<void> {
   }
 }
 
-function filesystemName(id: string): string {
-  return filesystems.value.find((item) => item.id === id)?.name ?? id
-}
-
 onMounted(async () => {
   const [blocksResult] = await Promise.allSettled([
     Promise.all([
-      managementApi.listBlocks('filesystem'),
       managementApi.listBlocks('workflow-event-output'),
     ]),
   ])
   if (blocksResult.status === 'fulfilled') {
-    ;[filesystems.value, workflowEventOutputs.value] = blocksResult.value
+    ;[workflowEventOutputs.value] = blocksResult.value
   } else {
     notify({
       tone: 'danger',
-      title: t('workflows.filesystemLoadFailed'),
+      title: t('workflows.componentLoadFailed'),
       message: managementError.describe(blocksResult.reason).display,
     })
   }
@@ -139,11 +130,6 @@ const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
   },
   columns: [
     { key: 'name', label: () => t('workflows.fields.name'), value: (row) => row.name },
-    {
-      key: 'filesystem',
-      label: () => t('workflows.fields.filesystem'),
-      value: (row) => filesystemName(row.filesystem_id),
-    },
     {
       key: 'status',
       label: () => t('workflows.fields.status'),
@@ -215,14 +201,6 @@ const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
       </FormField>
       <FormField field-path="description" label-key="workflows.fields.description">
         <LteTextarea v-model="form.description" :rows="4" maxlength="2000" />
-      </FormField>
-      <FormField field-path="filesystem_id" label-key="workflows.fields.filesystem">
-        <select v-model="form.filesystem_id" class="form-select" required>
-          <option disabled value="">{{ t('common.chooseConfiguration') }}</option>
-          <option v-for="filesystem in filesystems" :key="filesystem.id" :value="filesystem.id">
-            {{ filesystem.name }}
-          </option>
-        </select>
       </FormField>
       <div class="row g-3" data-ui-control-row>
         <div class="col-lg-4">

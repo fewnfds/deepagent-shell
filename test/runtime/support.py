@@ -76,9 +76,8 @@ def config(
     mappings: list[dict[str, str]] | None = None,
     source: str | None = None,
 ) -> dict:
+    del mode, mappings
     return {
-        "filter_mode": mode,
-        "filter_mappings": mappings or [],
         "event_outputs": {
             event_type: {
                 "enabled": event_type == "assistant_text",

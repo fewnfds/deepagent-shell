@@ -19,4 +19,4 @@ Windows 用户请先阅读[启动指南](docs/user-guide/getting-started.md)，�
 完整说明请查看[文档索引](docs/README.md)。
 
 需要由 AI 或自动化程序通过 management API 配置组件、Agent 和 Workflow 时，从
-[AI Workflow 装配指南](docs/user-guide/ai-workflow-authoring.md)开始，不要根据 OpenAPI 中的通用 JSON body 猜字段。
+[AI Workflow 编写指南](docs/user-guide/ai-guide/README.md)开始，不要根据 OpenAPI 中的通用 JSON body 猜字段。

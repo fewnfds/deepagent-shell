@@ -7,20 +7,12 @@ import {
   type BlockPayloadBase,
 } from './shared'
 
-type OutputFilterMode = 'allowlist' | 'blocklist'
-interface OutputFilterMapping {
-  field: string
-  value: string
-}
-
 interface OutputEventScript {
   enabled: boolean
   output_source: string
 }
 
 interface OutputModeValue {
-  filter_mode: OutputFilterMode
-  filter_mappings: OutputFilterMapping[]
   event_outputs: Record<string, OutputEventScript>
 }
 
@@ -37,7 +29,6 @@ interface OutputEventDefault {
 
 export interface OutputModeDefaults {
   events: OutputEventDefault[]
-  filter_fields: string[]
   default_value: OutputModeValue
 }
 
@@ -61,24 +52,12 @@ export const outputModeAdapter = {
     }))
     return {
       ...identity(value),
-      filter_mode: value.filter_mode === 'allowlist' || value.filter_mode === 'blocklist'
-        ? value.filter_mode
-        : defaults.default_value.filter_mode,
-      filter_mappings: Array.isArray(value.filter_mappings)
-        ? value.filter_mappings.flatMap((mapping) => isRecord(mapping)
-          && typeof mapping.field === 'string'
-          && typeof mapping.value === 'string'
-          ? [{ field: mapping.field, value: mapping.value }]
-          : [])
-        : clone(defaults.default_value.filter_mappings),
       event_outputs,
     }
   },
   toPayload(value: OutputModeDraft): OutputModePayload {
     return {
       name: cleanName(value.name),
-      filter_mode: value.filter_mode,
-      filter_mappings: clone(value.filter_mappings),
       event_outputs: clone(value.event_outputs),
     }
   },

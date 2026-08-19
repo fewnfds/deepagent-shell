@@ -57,9 +57,23 @@ def test_reference_contracts_reject_unknown_duplicate_wrong_type_and_force_remov
         )
         assert response.status_code == 422, response.text
 
+    minimal_filesystem = client.post(
+        "/api/subagents",
+        json=subagent_payload(
+            "Minimal Filesystem Subagent",
+            name="minimal_filesystem_subagent",
+            capability_overrides=[
+                {"type": "filesystem", "mode": "disabled", "block_id": ""}
+            ],
+        ),
+    )
+    assert minimal_filesystem.status_code == 200, minimal_filesystem.text
+    assert minimal_filesystem.json()["settings"]["capability_overrides"] == [
+        {"type": "filesystem", "mode": "disabled", "block_id": ""}
+    ]
+
     invalid_overrides = [
         [{"type": "unknown-capability", "mode": "inherit", "block_id": ""}],
-        [{"type": "filesystem", "mode": "disabled", "block_id": ""}],
         [{"type": "model", "mode": "unsupported", "block_id": ""}],
         [{"type": "model", "mode": "replace", "block_id": ""}],
         [{"type": "model", "mode": "disabled", "block_id": ""}],

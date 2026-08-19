@@ -454,37 +454,38 @@ def build_deepagents_capabilities(
         for name in selected_skills:
             skill_sources.append(f"/skills/{name}/")
 
-    if workspace is None:
-        shared_routes: dict[str, Any] = {}
-        for route in filesystem.mapped_directories if filesystem is not None else ():
-            local_path = (
-                mapped_directory_paths.get(route.virtual_path)
-                if mapped_directory_paths is not None
-                else Path(route.local_path)
-            )
-            if local_path is None:
-                raise DeepAgentsCapabilityError(
-                    "resolved mapped directory is missing: "
-                    f"{route.virtual_path}"
-                )
-            if not local_path.is_dir():
-                raise DeepAgentsCapabilityError(
-                    f"mapped local_path is not a directory: {local_path}"
-                )
-            shared_routes[route.virtual_path] = FilesystemBackend(
-                root_dir=local_path,
-                virtual_mode=True,
-            )
-        initial_files = (
-            _seed_virtual_sources(filesystem, create_file_data)
-            if filesystem is not None
-            else {}
+    agent_routes: dict[str, Any] = {}
+    for route in filesystem.mapped_directories if filesystem is not None else ():
+        local_path = (
+            mapped_directory_paths.get(route.virtual_path)
+            if mapped_directory_paths is not None
+            else Path(route.local_path)
         )
-        workspace = DeepAgentsWorkspace(
-            default_backend=StateBackend(),
-            routes=shared_routes,
-            initial_files=initial_files,
+        if local_path is None:
+            raise DeepAgentsCapabilityError(
+                "resolved mapped directory is missing: "
+                f"{route.virtual_path}"
+            )
+        if not local_path.is_dir():
+            raise DeepAgentsCapabilityError(
+                f"mapped local_path is not a directory: {local_path}"
+            )
+        agent_routes[route.virtual_path] = FilesystemBackend(
+            root_dir=local_path,
+            virtual_mode=True,
         )
+    initial_files = (
+        _seed_virtual_sources(filesystem, create_file_data)
+        if filesystem is not None
+        else {}
+    )
+    workspace = DeepAgentsWorkspace(
+        default_backend=(
+            workspace.default_backend if workspace is not None else StateBackend()
+        ),
+        routes=agent_routes,
+        initial_files=initial_files,
+    )
 
     conflicting_route = next(
         (path for path in workspace.routes if _route_paths_overlap(path, "/skills/")),

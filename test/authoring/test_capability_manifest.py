@@ -45,7 +45,7 @@ def test_manifest_matches_current_blocks_and_form_order() -> None:
     manifests = {manifest.type: manifest for manifest in CAPABILITY_MANIFESTS}
     assert manifests["custom-middleware"].subagent_overrideable is False
     assert manifests["custom-middleware"].subagent_policy == "force-remove"
-    assert manifests["filesystem"].subagent_overrideable is False
+    assert manifests["filesystem"].subagent_overrideable is True
     assert manifests["filesystem"].subagent_policy == "inherit"
     assert manifests["filesystem"].required is False
     assert manifests["filesystem-permissions"].subagent_overrideable is True

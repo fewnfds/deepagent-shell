@@ -95,8 +95,6 @@ def block_payload(capability_type: str, name: str) -> dict:
         "custom-middleware": {"name": name},
         "output-mode": {
             "name": name,
-            "filter_mode": "blocklist",
-            "filter_mappings": [],
             "event_outputs": {
                 event_type: {
                     "enabled": True,

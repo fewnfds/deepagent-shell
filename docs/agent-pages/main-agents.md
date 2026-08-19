@@ -10,6 +10,7 @@ Main Agent 是完整、可复用的 Deep Agents 装配。它不直接映射为 O
   "name": "Research coordinator",
   "capability_refs": [
     {"type": "model", "block_id": "model-uuid"},
+    {"type": "filesystem", "block_id": "filesystem-uuid"},
     {"type": "output-mode", "block_id": "output-uuid"}
   ],
   "middleware_refs": [
@@ -22,8 +23,8 @@ Main Agent 是完整、可复用的 Deep Agents 装配。它不直接映射为 O
 }
 ```
 
-`model` 与 `output-mode` 必选，其他 capability 可选。Filesystem 由 Workflow 唯一选择，不进入 Main Agent payload；
-界面上的“继承工作流”只是禁用展示。Main Agent 可选择自己的 `filesystem-permissions`，其中同时定义路径权限和文件
+`model` 与 `output-mode` 必选，其他 capability 可选。Main Agent 可选择自己的项目 Filesystem；未选择时自动使用空 StateBackend 与 `read_file` 组成的最小 Filesystem。Main Agent 也可选择
+`filesystem-permissions`；后者同时定义路径权限和文件
 tool override。Summarization 与 Prompt Caching 是两个可独立选择的 middleware capability。自定义 Middleware 使用独立、
 有序的 `middleware_refs`，每个引用对应一个 Middleware 配置；没有 Agent 外的 prepare、周期循环或结束 Hook。
 

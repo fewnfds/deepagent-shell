@@ -15,7 +15,6 @@ class WorkflowDefinition(BaseModel):
     name: Annotated[str, Field(min_length=1, max_length=120)]
     workflow_role: WorkflowRole
     description: Annotated[str, Field(max_length=2_000)] = ""
-    filesystem_id: RequiredReference
     workflow_event_output_id: RequiredReference | None = None
     recursion_limit: Annotated[int, Field(ge=1, le=100_000)] = 100
     execution_timeout_seconds: Annotated[int, Field(ge=1, le=86_400)] = 600

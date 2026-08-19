@@ -76,6 +76,9 @@ const generalManifests = computed(() => manifests.value.filter(
 const filesystemPermissionsManifest = computed(() => manifests.value.find(
   (manifest) => manifest.type === 'filesystem-permissions',
 ))
+const filesystemManifest = computed(() => manifests.value.find(
+  (manifest) => manifest.type === 'filesystem',
+))
 
 const { markClean, runAfterDiscard } = useUnsavedChanges(
   () => form.value,
@@ -392,8 +395,16 @@ watch(
                   <span class="badge text-bg-primary ms-auto">{{ t('agents.capability.required') }}</span>
                 </header>
                 <div class="card-body">
-                  <select id="subagent-capability-filesystem" class="form-select" data-testid="subagent-capability-filesystem" disabled>
-                    <option>{{ t('agents.override.mode.inherit') }}</option>
+                  <select
+                    id="subagent-capability-filesystem"
+                    class="form-select"
+                    data-testid="subagent-capability-filesystem"
+                    :value="selectionValue('filesystem')"
+                    @change="filesystemManifest && updateSelection(filesystemManifest, ($event.target as HTMLSelectElement).value)"
+                  >
+                    <option :value="INHERIT_VALUE">{{ t('agents.override.mode.inherit') }}</option>
+                    <option :value="DISABLED_VALUE">{{ t('agents.capability.minimal') }}</option>
+                    <option v-for="block in capabilityBlocks('filesystem')" :key="block.id" :value="block.id">{{ block.name }}</option>
                   </select>
                 </div>
               </section>

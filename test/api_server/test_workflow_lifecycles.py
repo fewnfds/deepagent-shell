@@ -110,11 +110,10 @@ def test_lifecycle_management_summarizes_and_deletes_dynamic_workspace(
                 ],
             },
         ).json()
-        main_agent = create_main_agent(client)
+        main_agent = create_main_agent(client, filesystem_id=filesystem["id"])
         workflow = create_workflow(
             client,
             name="Managed lifecycle",
-            filesystem_id=filesystem["id"],
         )
         save_linear_workflow_graph(client, workflow, main_agent)
 

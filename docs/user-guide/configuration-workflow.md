@@ -2,7 +2,7 @@
 
 ## Workflow
 
-【Workflow】按父图和子图两个子页面管理同一种实体。当前 metadata CRUD 保存名称、角色、说明、一个共享 Filesystem、
+【Workflow】按父图和子图两个子页面管理同一种实体。当前 metadata CRUD 保存名称、角色、说明、
 可选事件输出组件引用、`recursion_limit`（最大 super-step 数）、`execution_timeout_seconds`（单个 Run 总执行超时）和 `max_concurrency`（并行节点最大并发数），
 以及一份当前 Graph definition/layout。`enabled` 是同一 Workflow 的草稿/正式状态，只由 Graph 草稿保存或正式保存切换，metadata
 表单不能直接切换。
@@ -25,7 +25,7 @@ Custom Tool、Middleware 或普通 Node 可以在自己的 invocation 内调用 
 `background_tasks` 或自己的 State channel，并自行编排循环、延时、retry 和结束条件。
 
 启动必须提供稳定 `operation_id`；同一 caller Run 内因 Node retry 或重新执行而再次调用同一 operation 时返回原 handle，不会重复派遣。
-该保证不跨 caller Run 或尚未实现的 Resume 边界；业务上确实需要重派时使用新的 operation ID。Workflow target 仍只允许已启用子图，后台 Agent 继承 caller Workflow Filesystem；后台输出不会自动混入
+该保证不跨 caller Run 或尚未实现的 Resume 边界；业务上确实需要重派时使用新的 operation ID。Workflow target 仍只允许已启用子图，后台 Agent 使用自身有效 Filesystem；后台输出不会自动混入
 parent 响应。
 
 【运行历史】页面按一次顶层请求列出 Lifecycle，并展示 root/background Run 父子关系、结构 Timeline、Checkpoint/Store
@@ -84,9 +84,9 @@ task identity。完整配置与城市/乡镇示例见[任务分发](../wizard-pa
 Agent node 引用。需要同步委派时，先创建 Subagent 实体，再由 Main Agent 按顺序保存 `subagent_id` 引用并选择委派
 capability。
 
-Filesystem 不再由 Main Agent 或 Subagent 选择；两处界面只显示锁定的“继承工作流”，且不会把这个显示值写入 payload。
-每个 Main Agent 可以选择自己的 `filesystem-permissions`，Subagent 可以继承、替换或关闭该权限装配。权限配置同时控制
-路径权限和该身份可见的文件工具；运行时由后端把 Workflow 的共享 Filesystem 与各身份权限组合并冻结。
+Main Agent 可选择项目 Filesystem 或最小 Filesystem，Subagent 可继承、选择自己的项目 Filesystem 或回到最小 Filesystem；Workflow metadata 不保存 Filesystem。
+每个身份也可以选择自己的 `filesystem-permissions`。权限配置同时控制路径权限和该身份可见的文件工具；运行时按
+Agent 的有效 Filesystem 与权限组合并冻结 backend 路由视图。
 
 Subagent settings 只定义身份、说明、capability 覆写和自己的有序 Middleware 引用。它没有 child 引用字段。当前固定为一层同步
 `Main -> Subagent`，运行时使用 Deep Agents 官方 dictionary-based CompiledSubAgent。这是 Agent 内部
@@ -129,4 +129,4 @@ Workflow 可绑定零或一个事件输出组件。它处理 `values`、`updates
 
 Main Agent 与 Subagent 编辑页继续提交完整草稿给后端预校验，保存时再次校验。Workflow `/draft` PUT 接受当前画布草稿并停用；
 `/validate` POST 返回正式静态问题；`/graph` PUT 重复完整校验并正式启用。真实 Chat 请求从一次文件配置快照读取 Workflow 当前图、
-共享 Filesystem、Main Agent、Subagent、组件和 Provider secret view，完成 Agent 构造后关闭配置快照。
+Main Agent、Subagent、各自 Filesystem、组件和 Provider secret view，完成 Agent 构造后关闭配置快照。

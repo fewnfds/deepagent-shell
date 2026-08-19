@@ -78,7 +78,6 @@ class ConfigurationValidationService:
         stage: str,
         owner_id: str = "",
         stored: bool = False,
-        workflow_filesystem_id: str | None = None,
         block_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
         profile_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> tuple[ValidationReport, dict[str, Any] | None, StaticAssembly | None]:
@@ -118,7 +117,6 @@ class ConfigurationValidationService:
             main_agent,
             stage=stage,
             owner_id=owner_id,
-            workflow_filesystem_id=workflow_filesystem_id,
             block_overrides=block_overrides,
             profile_overrides=profile_overrides,
         )
@@ -332,7 +330,6 @@ class ConfigurationValidationService:
         self,
         main_agent_id: str,
         *,
-        workflow_filesystem_id: str | None = None,
         stage: str = "request_assembly",
     ) -> tuple[ValidationReport, StaticAssembly | None]:
         main_agent = self._agent_configs.get_item("main_agents", main_agent_id)
@@ -352,7 +349,6 @@ class ConfigurationValidationService:
             stage=stage,
             owner_id=main_agent_id,
             stored=True,
-            workflow_filesystem_id=workflow_filesystem_id,
         )
         if assembly is not None:
             assembly = replace(
@@ -855,15 +851,11 @@ class ConfigurationValidationService:
         *,
         stage: str,
         owner_id: str,
-        workflow_filesystem_id: str | None = None,
         block_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
         profile_overrides: dict[str, dict[str, Any]] | None = None,
     ) -> tuple[ValidationReport, StaticAssembly | None]:
         owner_name = str(main_agent.get("name", ""))
-        profile_references = self._reference_map(main_agent)
-        references = dict(profile_references)
-        if workflow_filesystem_id is not None:
-            references["filesystem"] = workflow_filesystem_id
+        references = self._reference_map(main_agent)
         selected, issues, filesystem_mode = self._resolve_capability_subject(
             references,
             required_types=_MAIN_AGENT_REQUIRED_CAPABILITY_TYPES,

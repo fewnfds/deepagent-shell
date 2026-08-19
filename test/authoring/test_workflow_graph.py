@@ -1413,7 +1413,6 @@ def test_runtime_builds_repeated_main_agent_references_per_workflow_node() -> No
         runtime.start_workflow(
             document,
             [{"role": "user", "content": "Run the Workflow."}],
-            workflow_filesystem_id="33333333-3333-4333-8333-333333333333",
             workflow_snapshot={"id": "workflow-id"},
         )
     )

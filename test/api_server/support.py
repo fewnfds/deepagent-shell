@@ -90,6 +90,7 @@ def create_main_agent(
     *,
     provider_settings: dict[str, object] | None = None,
     model_request_settings: dict[str, object] | None = None,
+    filesystem_id: str | None = None,
 ) -> dict:
     model_payload = {
         "name": "Published model",
@@ -111,9 +112,19 @@ def create_main_agent(
         "/api/blocks/output-mode",
         json=output_mode_payload("Published output", include_lifecycle=False),
     ).json()
+    if filesystem_id is None:
+        filesystem = client.post(
+            "/api/blocks/filesystem",
+            json={"name": "Published Agent filesystem"},
+        )
+        assert filesystem.status_code == 200, filesystem.text
+        filesystem_id = filesystem.json()["id"]
     capability_refs = [{"type": "model", "block_id": model["id"]}]
     capability_refs.append(
         {"type": "output-mode", "block_id": output_mode["id"]}
+    )
+    capability_refs.append(
+        {"type": "filesystem", "block_id": filesystem_id}
     )
     response = client.post(
         "/api/main-agents",
@@ -131,24 +142,15 @@ def create_workflow(
     client: TestClient,
     *,
     name: str | None = None,
-    filesystem_id: str | None = None,
     workflow_role: str = "parent",
 ) -> dict:
     workflow_name = name or "Test Workflow"
-    if filesystem_id is None:
-        filesystem_response = client.post(
-            "/api/blocks/filesystem",
-            json={"name": f"{workflow_name} filesystem"},
-        )
-        assert filesystem_response.status_code == 200, filesystem_response.text
-        filesystem_id = filesystem_response.json()["id"]
     response = client.post(
         "/api/workflows",
         json={
             "name": workflow_name,
             "workflow_role": workflow_role,
             "description": "Test Workflow.",
-            "filesystem_id": filesystem_id,
         },
     )
     assert response.status_code == 200, response.text
@@ -258,8 +260,6 @@ def output_mode_payload(
     }
     return {
         "name": name,
-        "filter_mode": "blocklist",
-        "filter_mappings": [],
         "event_outputs": outputs,
     }
 

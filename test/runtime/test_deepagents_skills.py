@@ -152,7 +152,11 @@ def test_default_workspace_keeps_consumer_skill_overlays_read_only_and_isolated(
     assert alpha_filesystem._tool_token_limit_before_evict is None
     assert isinstance(alpha_capabilities.backend.default, StateBackend)
     assert alpha_capabilities.backend is not beta_capabilities.backend
-    assert alpha_capabilities.workspace is beta_capabilities.workspace
+    assert alpha_capabilities.workspace is not beta_capabilities.workspace
+    assert (
+        alpha_capabilities.workspace.default_backend
+        is beta_capabilities.workspace.default_backend
+    )
     assert alpha_capabilities.backend.default is beta_capabilities.backend.default
     assert alpha_capabilities.skill_sources == ("/skills/alpha/",)
     assert beta_capabilities.skill_sources == ("/skills/beta/",)

@@ -150,7 +150,6 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
                 "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
                 "name": "Enabled workflow",
                 "description": "Dependency reachability test.",
-                "filesystem_id": "ffffffff-ffff-4fff-8fff-ffffffffffff",
                 "workflow_event_output_id": None,
                 "enabled": True,
                 "definition": {

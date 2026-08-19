@@ -19,7 +19,7 @@
 | Workflow | [Command 节点](command-config.md) | `command` |
 | Workflow | [任务分发](task-dispatcher-config.md) | `task-dispatcher` |
 
-模型和输出模式是 Main Agent 必选组件；Filesystem 由 Workflow 必选，事件输出由 Workflow 可选绑定；Command 与任务分发由画布 Node 引用；
-Main/Sub 只显示锁定继承 Filesystem。其余 Agent capability 按需引用。
+模型和输出模式是 Main Agent 必选组件；Filesystem 由每个 Agent 自选，未选时使用最小 Filesystem；事件输出由 Workflow 可选绑定；Command 与任务分发由画布 Node 引用；
+Main Agent 显示“最小 / 项目 Filesystem”，Subagent 显示“继承 / 最小 / 项目 Filesystem”。其余 Agent capability 按需引用。
 组件使用 UUID 建立引用；名称用于显示。
 编辑页提供草稿校验、新建、重置和保存，删除集中在配置仓库。

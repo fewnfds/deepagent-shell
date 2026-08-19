@@ -67,7 +67,7 @@ export const filesystemManifest: CapabilityManifest = {
   type: 'filesystem',
   terminology_key: 'file-system',
   order: 3,
-  subagent_overrideable: false,
+  subagent_overrideable: true,
   required: false,
   subagent_policy: 'inherit',
 }

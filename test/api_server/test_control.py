@@ -34,13 +34,16 @@ def test_api_key_is_write_only_and_takes_effect_immediately(
     assert wrong.status_code == 401
     assert allowed.status_code == 200
     assert persisted.status_code == 200
+    assert status.json()["message_interception_enabled"] is False
     assert secret not in status.text
 
 def test_start_stop_and_known_workflow_runs_after_restart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
+        main_agent = create_main_agent(client)
         workflow = create_workflow(client, name="Runnable later")
+        save_linear_workflow_graph(client, workflow, main_agent)
         stopped = client.post("/api/api-server/stop")
         unavailable = client.get("/v1/models")
         started = client.post("/api/api-server/start")
@@ -59,5 +62,5 @@ def test_start_stop_and_known_workflow_runs_after_restart(
     assert unavailable.json()["error"]["code"] == "api_server_stopped"
     assert started.json()["enabled"] is True
     assert [item["id"] for item in models.json()["data"]] == [workflow["name"]]
-    assert completion.status_code == 422
-    assert completion.json()["error"]["code"] == "workflow.start_required"
+    assert completion.status_code == 200
+    assert completion.json()["choices"][0]["message"]["content"] == "runtime reply"

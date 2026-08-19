@@ -56,20 +56,18 @@ function isVirtualFilePathInvalid(virtualPath: string, sourcePath: string): bool
             <div class="filesystem-mapping-secondary">
               <label class="visually-hidden" :for="`mapped-directory-local-path-${index}`">{{ t('fields.local_path') }}</label>
               <input :id="`mapped-directory-local-path-${index}`" v-model="item.local_path" class="form-control" :placeholder="t('editors.filesystem.mappingExamples.localDirectory')">
-              <div class="row g-3">
-                <div class="col-md-6">
-                  <label class="visually-hidden" :for="`mapped-directory-path-origin-${index}`">{{ t('editors.filesystem.pathOriginLabel') }}</label>
-                  <select :id="`mapped-directory-path-origin-${index}`" v-model="item.path_origin" class="form-select" :aria-label="t('editors.filesystem.pathOriginLabel')">
-                    <option value="absolute">{{ t('editors.filesystem.pathOrigins.absolute') }}</option>
-                    <option value="data-root-relative">{{ t('editors.filesystem.pathOrigins.dataRootRelative') }}</option>
-                  </select>
+              <div class="d-flex flex-wrap gap-3 mt-2">
+                <div class="d-flex gap-1" role="group" :aria-label="t('editors.filesystem.pathOriginLabel')">
+                  <input :id="`mapped-directory-path-origin-absolute-${index}`" v-model="item.path_origin" class="btn-check" type="radio" value="absolute">
+                  <label class="btn btn-sm btn-outline-primary" :for="`mapped-directory-path-origin-absolute-${index}`">{{ t('editors.filesystem.pathOrigins.absolute') }}</label>
+                  <input :id="`mapped-directory-path-origin-relative-${index}`" v-model="item.path_origin" class="btn-check" type="radio" value="data-root-relative">
+                  <label class="btn btn-sm btn-outline-primary" :for="`mapped-directory-path-origin-relative-${index}`">{{ t('editors.filesystem.pathOrigins.dataRootRelative') }}</label>
                 </div>
-                <div class="col-md-6">
-                  <label class="visually-hidden" :for="`mapped-directory-lifecycle-mode-${index}`">{{ t('editors.filesystem.lifecycleModeLabel') }}</label>
-                  <select :id="`mapped-directory-lifecycle-mode-${index}`" v-model="item.lifecycle_mode" class="form-select" :aria-label="t('editors.filesystem.lifecycleModeLabel')">
-                    <option value="fixed">{{ t('editors.filesystem.lifecycleModes.fixed') }}</option>
-                    <option value="dynamic">{{ t('editors.filesystem.lifecycleModes.dynamic') }}</option>
-                  </select>
+                <div class="d-flex gap-1" role="group" :aria-label="t('editors.filesystem.lifecycleModeLabel')">
+                  <input :id="`mapped-directory-lifecycle-fixed-${index}`" v-model="item.lifecycle_mode" class="btn-check" type="radio" value="fixed">
+                  <label class="btn btn-sm btn-outline-primary" :for="`mapped-directory-lifecycle-fixed-${index}`">{{ t('editors.filesystem.lifecycleModes.fixed') }}</label>
+                  <input :id="`mapped-directory-lifecycle-dynamic-${index}`" v-model="item.lifecycle_mode" class="btn-check" type="radio" value="dynamic">
+                  <label class="btn btn-sm btn-outline-primary" :for="`mapped-directory-lifecycle-dynamic-${index}`">{{ t('editors.filesystem.lifecycleModes.dynamic') }}</label>
                 </div>
               </div>
             </div>

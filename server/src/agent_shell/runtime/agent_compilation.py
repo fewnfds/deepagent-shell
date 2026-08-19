@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from pathlib import Path
+from typing import Any, Mapping, Protocol
 
 from agent_shell.runtime.capabilities import DeepAgentsWorkspace
 from agent_shell.runtime.capabilities.exception_retry import ExceptionRetryRuntime
@@ -42,6 +43,9 @@ class ProfileMaterializer(Protocol):
         owner_name: str,
         workflow_node_id: str | None = None,
         workspace: DeepAgentsWorkspace | None = None,
+        mapped_directory_paths_by_filesystem: Mapping[
+            str, Mapping[str, Path]
+        ] | None = None,
         disabled_capabilities: frozenset[str] = frozenset(),
     ) -> MaterializedAgentProfile: ...
 

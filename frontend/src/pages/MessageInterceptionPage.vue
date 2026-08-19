@@ -141,11 +141,9 @@ onMounted(() => { void load(true) })
           </label>
         </div>
 
-        <label class="form-label" for="message-interception-raw">
-          {{ t('messageInterception.rawRequest') }}
-        </label>
         <textarea
           id="message-interception-raw"
+          :aria-label="t('messageInterception.rawRequest')"
           class="form-control font-monospace"
           :placeholder="t('messageInterception.empty')"
           readonly

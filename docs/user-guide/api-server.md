@@ -24,8 +24,8 @@ Content-Type: application/json
 }
 ```
 
-请求只按父图 Workflow name 捕获一次配置快照，从同一快照读取当前 Graph、共享 Filesystem 和画布 Agent 节点引用，再递归
-构造该 Main Agent 的 Subagent、权限、Middleware、组件和 Provider secret view。构造完成后关闭请求配置快照，
+请求只按父图 Workflow name 捕获一次配置快照，从同一快照读取当前 Graph 和画布 Agent 节点引用，再递归
+构造 Main Agent、Subagent、各自 Filesystem、权限、Middleware、组件和 Provider secret view。构造完成后关闭请求配置快照，
 运行中的图不再回读配置。
 
 当前可执行 Node class 为 Start、Agent、Command、任务分发和 End，Edge class 为 normal、branch 与 dispatch；一张图可以包含多个 Agent node，并可串联、
@@ -42,7 +42,7 @@ Lifecycle Store；Runtime Context 只携带定位输入所需的 lifecycle/run/i
 
 `stream=false` 返回标准 `chat.completion` JSON。`stream=true` 返回 `chat.completion.chunk` SSE，并以
 `data: [DONE]` 结束。两种模式都消费同一次 LangGraph v3 事件流，并按 Workflow node 对应 Main Agent 的
-`output-mode` 的同步 Python `output(event)` 过滤和渲染；Workflow-owned 非 Agent 事件由 Workflow 可选绑定的事件输出
+`output-mode` 的同步 Python `output(event)` 渲染；脚本可自行返回空字符串过滤事件。Workflow-owned 非 Agent 事件由 Workflow 可选绑定的事件输出
 组件处理。脚本收到稳定 dict、必须返回字符串；两条路径都不会从最终 state 绕过输出策略读取原始 Agent 内容。
 
 ## 拦截消息
