@@ -5,6 +5,8 @@
 Workflow 的真实 State contract 修改。
 
 画布为该 Command 建立两条 Branch Edge，并分别填写 `branch_key=matched` 与 `branch_key=below_threshold`。
+脚本在返回路由结果前通过 `get_stream_writer()` 写出所选 branch。Workflow 绑定 Event Output 并在 `custom` 的
+`output(event)` 中返回 `event["data"]` 后，这段字符串会进入用户输出。
 
 ## 稳定 contract
 

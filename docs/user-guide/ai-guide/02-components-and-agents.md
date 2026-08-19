@@ -1,7 +1,7 @@
 # 按需装配 Agent Filesystem
 
 每个 Main Agent 可选择一份项目 Filesystem 或使用最小 Filesystem；Subagent 可继承、选择自己的项目 Filesystem 或回到最小 Filesystem。只有包含 Agent Node 时，才需要后续的
-Model、Output Mode、Workflow Input Context（WIC）Middleware 和 Main Agent；不要为了满足 Graph contract 创建无调用方的 Agent。
+Model、Output Mode、Workflow Input Context（WIC）Middleware 和 Main Agent；没有 Agent Node 的 Graph 不需要额外创建这些对象。
 
 ## Filesystem
 
@@ -41,12 +41,12 @@ Content-Type: application/json
 }
 ```
 
-Provider 和 Provider-specific 字段以模型页面及后端校验为准。不要照抄示例中的 model ID；先确认实例当前可用模型。
+Provider 和 Provider-specific 字段以模型页面及后端校验为准。示例中的 model ID 不是实例当前可用模型的事实来源。
 
 ## Output Mode
 
-Main Agent 必须引用完整 Output Mode。不要手写不完整的事件表；从 `GET /api/catalog` 复制
-`editor_defaults.output_mode.default_value`，添加唯一 `name` 后提交到：
+Main Agent 的必选引用包含完整 Output Mode。`GET /api/catalog` 的
+`editor_defaults.output_mode.default_value` 提供完整事件表，添加唯一 `name` 后提交到：
 
 ```http
 POST /api/blocks/output-mode
@@ -59,19 +59,19 @@ def output(event):
     return event["message"]
 ```
 
-每个 `output_source` 必须恰好定义同步 `def output(event)` 并返回 `str`。完整八类事件及字段见
+每个 `output_source` 的固定入口是同步 `def output(event)`，返回类型为 `str`。完整八类事件及字段见
 [输出模式](../../wizard-pages/output-mode-config.md)。
 
 ## Workflow Input Context Middleware
 
-先请求：
+Middleware 模板目录来自：
 
 ```http
 GET /api/python-package-templates/middleware
 ```
 
 在 `catalog` 中按精确 `key == "内置示例-workflow-input-context"` 选择模板。使用该项返回的 `revision` 和 `files`
-创建配置，不要从文档复制整份 WIC 源码：
+创建配置。catalog 返回的是当前源码和 revision，文档不复制整份 WIC 源码：
 
 ```json
 {
@@ -91,7 +91,7 @@ GET /api/python-package-templates/middleware
 }
 ```
 
-提交到 `POST /api/blocks/custom-middleware`。服务端生成独占 package folder；客户端不能自行填写 UUID folder。
+提交到 `POST /api/blocks/custom-middleware`。独占 package folder 由服务端生成，客户端 payload 中的 folder 初始为空。
 
 内置 WIC 给出三项建议起点：Main Agent 读取本次 Lifecycle 原始消息、Subagent 保留委派消息、Dispatcher worker 把自己的
 私有 task 加入上下文。它们不是强制的业务策略。当前 Agent 可以在
@@ -122,7 +122,7 @@ Content-Type: application/json
 ```
 
 `middleware_refs` 有顺序：LangChain 的 `before_*` hook 正序执行，`after_*` 逆序执行，`wrap_*` 按列表嵌套。
-多个 Middleware 会改写 `messages` 时，必须有意识地确定顺序。
+多个 Middleware 改写 `messages` 时，列表顺序决定它们的组合方式。
 
 ## 可选 Subagent
 
@@ -143,10 +143,10 @@ POST /api/subagents
 ```
 
 然后把 `{"subagent_id":"<UUID>"}` 加入 Main Agent 的 `subagents`。Subagent 默认继承 Main Agent 的可继承能力；只在
-确有不同模型、提示、工具或权限时使用 `replace`/`disabled` override。Main Agent 还应引用 `subagent` 委派能力组件，
-让 `task` 工具说明与路由提示符合当前业务。
+不同模型、提示、工具或权限可通过 `replace`/`disabled` override 表达。Main Agent 引用 `subagent` 委派能力组件后，
+`task` 工具说明与路由提示来自当前业务配置。
 
-Subagent 的 `name` 是模型可见路由名；`description` 应明确它何时被委派、负责什么、返回什么。不要创建层层嵌套的
-Subagent 树，当前 contract 只支持 Main Agent 的一层直接 Subagent。
+Subagent 的 `name` 是模型可见路由名；清楚描述委派时机、职责和返回内容有助于模型路由。当前 contract 只支持
+Main Agent 的一层直接 Subagent，不接受嵌套 Subagent 树。
 
 下一步：[创建 Workflow Graph](03-workflow-graph.md)。

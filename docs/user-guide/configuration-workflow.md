@@ -24,7 +24,7 @@ Custom Tool、Middleware 或普通 Node 可以在自己的 invocation 内调用 
 `cancel()`。启动命令立即返回 handle；查询不需要为了“检查状态”再走一个额外 Node。调用方负责把需要的 handle/snapshot 写入
 `background_tasks` 或自己的 State channel，并自行编排循环、延时、retry 和结束条件。
 
-启动必须提供稳定 `operation_id`；同一 caller Run 内因 Node retry 或重新执行而再次调用同一 operation 时返回原 handle，不会重复派遣。
+启动参数包含稳定 `operation_id`；同一 caller Run 内因 Node retry 或重新执行而再次调用同一 operation 时返回原 handle，不会重复派遣。
 该保证不跨 caller Run 或尚未实现的 Resume 边界；业务上确实需要重派时使用新的 operation ID。Workflow target 仍只允许已启用子图，后台 Agent 使用自身有效 Filesystem；后台输出不会自动混入
 parent 响应。
 
@@ -32,8 +32,8 @@ parent 响应。
 摘要、关联诊断以及单 Run/Lifecycle 诊断包下载。Event Journal 只保存结构身份、状态、时间和 usage，不复制运行正文。
 Lifecycle 的
 messages、task records、resolved mapping records 和 parent/child checkpoint 默认持续保留，直到用户显式删除；删除时同时清理
-受管的生命周期动态目录。父 Run 尚未终止，或仍有 `pending`、`running`、`cancel_requested` 后台任务时，删除返回冲突；必须等待
-父 Run 终止，并先由 Workflow 代码、Tool/Middleware 或管理操作显式取消后台任务并使其进入终态。父图到达 End 不会隐式取消后台任务，也不会删除 Lifecycle。
+受管的生命周期动态目录。父 Run 尚未终止，或仍有 `pending`、`running`、`cancel_requested` 后台任务时，删除返回冲突；
+父 Run 终止且后台任务经 Workflow 代码、Tool/Middleware 或管理操作进入终态后，Lifecycle 才可删除。父图到达 End 不会隐式取消后台任务，也不会删除 Lifecycle。
 删除开始后 Lifecycle 进入 `deleting`，不再接受新的后台 Run；清理失败时保留该状态，可由用户再次执行删除继续清场。
 
 “生产 -> 审查 -> 重试”可以用于校验这些通用能力，但不是内置流程：Task Dispatcher 或普通控制流启动生产 Run，commands 查询
@@ -54,13 +54,13 @@ messages、task records、resolved mapping records 和 parent/child checkpoint �
 和 viewport；没有 draft/published revision、自动保存、并发编辑或恢复层。保存草稿不执行 Workflow 语义校验并原子设置
 `enabled=false`；正式保存执行完整静态校验，通过后原子写图并设置 `enabled=true`。当前画布 revision 的预校验请求失败时，正式保存保持禁用并显示重新校验操作；正式失败不落盘。
 
-保存入口允许不完整 draft。正式 Graph 必须恰有一个系统 Start 和一个系统 End，且 Start 至少有一条合法出边；`Start -> End`
+保存入口允许不完整 draft。正式 Graph 恰有一个系统 Start 和一个系统 End，且 Start 至少有一条合法出边；`Start -> End`
 可以正式保存，End 可以没有入边。LangGraph runtime
-允许可达普通叶子在没有后继消息时自然结束。每个参与运行的节点都必须从某个 Start 可达；不满足结构事实、边范式或
+允许可达普通叶子在没有后继消息时自然结束。每个参与运行的节点都从 Start 可达；不满足结构事实、边范式或
 LangGraph 编译要求时，在 Agent 装配和 Graph compile 前返回 422。
 
-普通可达叶子不需要到达 End。若业务需要等待多条都会激活的路径后再集中结束，应显式汇聚到实际执行的 Node（例如
-Command Node），再由该 Node 连接 End，不把 End 当作隐式 join。互斥分支不能误接到 all-of fan-in；未满足的 waiting edge
+普通可达叶子不需要到达 End。等待多条都会激活的路径后再集中结束时，路径显式汇聚到实际执行的 Node（例如
+Command Node），再由该 Node 连接 End。End 不是隐式 join；互斥分支接入 all-of fan-in 时，未满足的 waiting edge
 不会执行，其他路径耗尽后 Graph 仍自然结束。
 
 画布 Start/End 分别映射 LangGraph 官方虚拟 `START/END`，不编译成 Shell 函数节点；Start 的初始激活不参与普通 all-of fan-in，
@@ -112,8 +112,8 @@ Main Agent 的 middleware 实例。
 
 Workflow Input Context 通过普通 Custom Middleware 的 `abefore_agent` 构造当前 Agent 私有消息。它没有专用 capability 或
 装配槽位；从 `内置示例-workflow-input-context` 创建配置后，由 Main Agent 或 Subagent 的有序 `middleware_refs` 选择并排序。
-Main Agent 可以从 Lifecycle Store 读取不可变请求快照，Subagent 默认使用 delegated messages；前序 Agent 输出和 Workflow 文件都必须由当前
-WIC 代码显式选择。完整约定见[Workflow Input Context](workflow-input-context.md)。
+Main Agent 可以从 Lifecycle Store 读取不可变请求快照，Subagent 默认使用 delegated messages；前序 Agent 输出和 Workflow 文件由当前
+WIC 代码选择。完整约定见[Workflow Input Context](workflow-input-context.md)。
 
 WIC 可以读取 `state["workflow_task"]`，把当前任务材料编排进 worker 的私有 `messages`；它不负责认领任务、写入
 `counting` 锁或调度其他 Agent。动态任务集合由 Task Dispatcher 在一个确定的 LangGraph Node invocation 中生成。

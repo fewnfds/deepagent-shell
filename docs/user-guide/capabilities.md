@@ -41,7 +41,7 @@ Lifecycle/Run Store；父 Workflow State 的 `agent_invocations` 只保存身份
 这条父子 State 输出映射不需要额外的结束 Hook 或 Recorder 组件。
 
 事件输出也是 Workflow-owned 组件。Workflow 通过 UUID 可选绑定一份配置；各事件的同步 `output(event)` 读取稳定
-dict，返回值必须是字符串。它只控制 Workflow-owned 非 Agent 事件的 OpenAI 响应投影，不改变 checkpoint、Debug、
+dict，返回类型为字符串。它只控制 Workflow-owned 非 Agent 事件的 OpenAI 响应投影，不改变 checkpoint、Debug、
 最终 State 或 Agent 自己的输出模式。字段和 Python 对象类型见[事件输出](../wizard-pages/workflow-event-output-config.md)。
 
 Command 组件保存一个 `workflow-node/command` Python 扩展引用和普通 config。扩展通过同步

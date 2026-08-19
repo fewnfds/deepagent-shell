@@ -2,7 +2,7 @@
 
 Agent Shell 通过管理台组合 Deep Agents 配置，并把启用的父图 Workflow 暴露为 OpenAI-compatible model。
 
-AI 或自动化程序应先读取 [AI Workflow 编写指南](ai-guide/README.md)的索引，再按当前任务阅读对应章节和下面的详细页面。
+[AI Workflow 编写指南](ai-guide/README.md)是 AI 或自动化程序的索引，下面的详细页面按任务领域展开。
 
 推荐顺序：
 
@@ -16,5 +16,5 @@ AI 或自动化程序应先读取 [AI Workflow 编写指南](ai-guide/README.md)
 8. [查看日志中心与 Workflow 观测边界](runtime-observability.md)
 9. [管理数据、文件与系统设置](system-management.md)
 
-使用时记住三条边界：Main Agent 必须选择模型和输出模式；客户端负责在每次请求中提交完整消息；
+三个基础边界是：Main Agent 的必选组件包括模型和输出模式；客户端在每次请求中提交完整消息；
 `data/` 是需要备份和迁移的完整实例数据根。

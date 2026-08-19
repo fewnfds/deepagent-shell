@@ -4,16 +4,16 @@
 
 ## Output 脚本
 
-Agent Output Mode 与 Workflow Event Output 都是内联同步脚本，签名必须恰好为：
+Agent Output Mode 与 Workflow Event Output 都是内联同步脚本，固定签名为：
 
 ```python
 def output(event):
     return event["message"]
 ```
 
-Agent Output Mode 处理 Agent 事件；Workflow Event Output 只处理 Workflow-owned 非 Agent 事件。不要用它们修改 State、
-做路由或隐藏顶层 HTTP error。应优先使用稳定的 `message`、`output`、`arguments`、`data_json` 字段；只有确实需要结构化
-对象时才读取 `event["data"]`。
+Agent Output Mode 处理 Agent 事件；Workflow Event Output 只处理 Workflow-owned 非 Agent 事件。它们不承担 State 更新、
+路由或顶层 HTTP error 处理。稳定的 `message`、`output`、`arguments`、`data_json` 字段适合常规输出；
+`event["data"]` 用于确实需要结构化对象的场景。
 
 ## 创建文件化 Python package
 
@@ -52,35 +52,104 @@ data/config/python_package_instances/
 
 前端和 Management API 只是创建、查看及保存这些文件的入口，不是唯一修改通道。创建完成后，可以直接在对应实例目录中维护
 `main.py`、`requirements.txt`、本地模块和测试文件；不必为了修改扩展源码而改动 `frontend/`。直接新增的本地文件可以被正常
-相对导入；若还要让组件编辑器显示该文件，应在编辑器的文件清单中加入其包内相对路径。
+相对导入；把包内相对路径加入编辑器文件清单后，该文件也会显示在组件编辑器中。
 
 不要修改 Agent Shell 管理的 `package.json`，也不要移动、重命名扩展目录或让配置改为引用其他配置的目录。
 
-这些代码在服务进程的受信任边界执行，没有 sandbox。Python 源码修改在下一次请求重新加载；`requirements.txt` 修改后必须
-重启。若组件编辑页已在外部修改前打开，页面持有的 revision 会过期，应先重新载入组件再从页面保存，否则服务端会拒绝覆盖。
+这些代码在服务进程的受信任边界执行，没有 sandbox。Python 源码修改在下一次请求重新加载；`requirements.txt` 修改在
+软件服务重启后生效。组件编辑页若早于外部修改打开，页面持有的 revision 会过期；重新载入后才能从页面保存，否则服务端拒绝覆盖。
 
 Command 和 Task Dispatcher 的工厂、返回结构及 Edge key 见[创建 Workflow Graph](03-workflow-graph.md)。Custom Middleware
-必须返回一个官方 LangChain `AgentMiddleware`；完整 contract 见[文件化 Python 扩展](../middleware-packages.md)。
+工厂的返回类型是官方 LangChain `AgentMiddleware`；完整 contract 见[文件化 Python 扩展](../middleware-packages.md)。
+
+## 从 Workflow Node 输出事件
+
+Command 的 `command(state, runtime)` 和 Task Dispatcher 的 `dispatch(state, runtime)` 可以在执行过程中调用 LangGraph
+`get_stream_writer()`，写入一次或多次输出事件，不必等到 Node 返回。唯一权威示例是
+[`内置示例-rule-based-command`](../../../examples/workflow-components/command/rule-based-command/main.py)，其中的写法是：
+
+```python
+from langgraph.config import get_stream_writer
+
+get_stream_writer()(f"Command selected branch {branch}.\n")
+```
+
+同样的调用可以写在 `dispatch(state, runtime)` 中。只在运行期 callable 内获取 writer；不要在模块顶层、
+`create_command()`/`create_dispatcher()` 工厂或 `output(event)` 中调用，也不要在 Node 返回后继续使用 writer。
+
+Agent Shell 通过 LangGraph `astream_events(version="v3")` 消费这些数据。`get_stream_writer()` 写入的数据在 v3 stream 中是
+`custom` 事件；Command/Dispatcher 属于 Workflow，因此由 Workflow 绑定的 Event Output 组件中 `custom` 对应的
+`output(event)` 投影。Agent Node 内 Tool 或 Middleware 写出的 `custom` 事件则由该 Agent 的 Output Mode 投影。
+
+Workflow Event Output 的 `custom` 脚本可以直接把字符串事件交给用户：
+
+```python
+def output(event):
+    data = event["data"]
+    return data if isinstance(data, str) else ""
+```
+
+只有 Workflow 绑定 Event Output 且其中的 `custom` 已启用时，事件才进入用户输出；其他情况下事件仍由运行时消费。
+事件是单向输出，Node 不会收到投影结果。字段说明见[事件输出](../../wizard-pages/workflow-event-output-config.md)。
+
+## 运行时能力与发现路径
+
+Python 扩展的可用能力取决于它由谁调用以及调用发生在哪个阶段。入口函数的公开类型是继续查找 LangChain、LangGraph 和
+Deep Agents 用法的起点：
+
+| 脚本入口 | 当前运行阶段与公开对象 | 可继续发现的能力 |
+| --- | --- | --- |
+| `command(state, runtime)` / `dispatch(state, runtime)` | LangGraph Node；`state` 与 `langgraph.runtime.Runtime` | State、`runtime.context`、`runtime.store`、custom stream、执行身份，以及 Shell context 中的后台 Run 命令 |
+| Custom Tool callable | LangChain Tool；工具参数与可选 `ToolRuntime` | Agent State、Runtime Context、Store、custom stream 和工具返回值 |
+| `AgentMiddleware` runtime hook | LangChain Agent Middleware；hook 的 `state`、`runtime` 或 `request` | Agent 生命周期、模型请求、工具调用、State update 和 custom stream |
+| `create_command()` / `create_dispatcher()` / `create_middleware()` | 请求级构造阶段 | Shell 提供的工厂参数和本地 package；此时还没有 Node/Tool 的运行期 Runtime |
+| Output Mode / Event Output 的 `output(event)` | Agent Shell 输出投影阶段；稳定 `event` dict | 事件筛选与字符串渲染；不处于 LangGraph Node Runtime |
+
+能力有三层来源：
+
+- **Agent Shell contract**：本指南、组件页面、源码和稳定测试明确给出的对象、字段与返回结构；
+- **官方公开能力**：上述公开类型在当前 LangChain/LangGraph/Deep Agents 版本提供的 API；
+- **普通 Python 环境**：标准库、当前 package 本地模块和显式声明的第三方依赖。
+
+功能探索通常从“公开类型名称 + 目标动作”开始。在当前开发环境中，已注册的 `langchain-docs` MCP 提供官方文档检索；
+例如 `LangGraph Runtime store`、`LangGraph get_stream_writer custom data`、`LangChain ToolRuntime state context`、
+`LangChain AgentMiddleware wrap_tool_call`。常用官方入口包括
+[LangGraph Node 与 Runtime](https://docs.langchain.com/oss/python/langgraph/graph-api#nodes)、
+[LangChain Runtime](https://docs.langchain.com/oss/python/langchain/runtime)、
+[LangGraph custom data](https://docs.langchain.com/oss/python/langgraph/streaming#custom-data)和
+[LangChain Middleware](https://docs.langchain.com/oss/python/langchain/middleware/overview)。
+
+一次具体能力判断可以按以下证据收敛：
+
+1. 从本章和对应 package contract 确认脚本入口、运行阶段及已注入对象；
+2. 从[开发与版本](../../development-and-release.md)确认当前锁定版本；
+3. 用公开类型和目标动作查询官方文档，得到官方推荐写法；
+4. 对照 Shell 返回 contract、当前源码或稳定测试，确认该官方能力在本入口中确实可达；
+5. 第三方库再结合 `python_requirements`、dependency status 和一次真实运行确认实例可用性。
+
+官方类型上存在但尚未写入 Shell contract 的属性属于继承能力，不自动成为产品承诺。Shell 自己的返回结构仍覆盖通用官方
+示例：例如 Command/Dispatcher 返回 `activate`、`tasks` 和 `update`，由 compiler 映射为 LangGraph `Command`/`Send`，
+扩展本身不直接返回这两个对象。仓库只保留一份可运行的权威示例，其他能力通过类型、官方文档和实际 contract 继续发现。
 
 ## Python 库与可用能力
 
 AI 能理解 Python 和常见库的用法，但不能仅凭模型知识判断当前 Agent Shell 实例实际安装了哪些包、版本是否兼容或某个
 传递依赖是否会一直存在。当前 Management API 也没有“枚举所有可 import 模块”的 endpoint。
 
-必须把“可用库”作为显式输入告诉 AI：先给它当前模板返回的 `python_requirements` 和文件内容；新增库时让它同时修改该
-配置独占的 `requirements.txt`。不要只说“环境里应该有某库”，也不要要求 AI 猜宿主 Python。AI 可以根据库的官方 API 写代码，
-但实例是否可 import 只能由 dependency status 和真实运行证明。
+“可用库”的可靠输入包括当前模板返回的 `python_requirements`、文件内容和配置独占的 `requirements.txt`。
+“环境里应该有某库”或模型对宿主 Python 的猜测不能证明实例可用。AI 可以根据库的官方 API 写代码，
+实例是否可 import 则由 dependency status 和真实运行证明。
 
 | 来源 | 如何使用 |
 | --- | --- |
 | Python 3.12 标准库 | 可以直接 import；建议能用标准库完成时不增加依赖 |
-| 平台公开 contract | 模板所需的 `langchain`、`langchain_core`、`langgraph`、`deepagents` 及文档明确展示的 `agent_shell` helper 可以使用；只调用公开、已文档化的 API |
+| 平台公开 contract | 模板所需的 `langchain`、`langchain_core`、`langgraph`、`deepagents` 及文档明确展示的 `agent_shell` helper 可以使用；公开、已文档化的 API 构成稳定用法 |
 | 当前 package 的本地模块 | 使用正常相对 import，例如 `from .helpers import build_tasks` |
 | 其他第三方库 | 在当前配置扩展的 `requirements.txt` 中声明直接依赖，再重启并验证 |
 
-不要因为某个库恰好是 FastAPI、Provider 或其他核心包的传递依赖就直接使用，也不要让 AI 根据训练数据猜版本。新增第三方
-能力前，先确认该库支持 CPython 3.12、存在 Windows x64 wheel、与平台核心约束兼容，并在 `requirements.txt`
-逐行写入普通 PyPI requirement。URL、本地路径、`.pth` 和只有源码发行包的依赖会被拒绝。
+FastAPI、Provider 或其他核心包带来的传递依赖不是扩展的稳定依赖声明。第三方能力的可用条件包括支持 CPython 3.12、
+提供 Windows x64 wheel、与平台核心约束兼容，并在 `requirements.txt` 中逐行声明普通 PyPI requirement。
+URL、本地路径、`.pth` 和只有源码发行包的依赖会被拒绝。
 
 保存或 GET Python package 组件时，响应会投影：
 
@@ -90,7 +159,7 @@ AI 能理解 Python 和常见库的用法，但不能仅凭模型知识判断当
 - `requirements_fingerprint`：当前依赖声明指纹，不是可用库清单。
 
 依赖只从已启用 Workflow 可达的 Command、Dispatcher、Main Agent 和 Subagent 配置收集。最可靠的闭环是：声明直接依赖 ->
-重启 -> GET 组件确认 `dependency_status` -> 调用一次真实 Workflow。AI 可以根据库的官方文档编写用法，但不能跳过这套实例验证。
+重启 -> GET 组件确认 `dependency_status` -> 调用一次真实 Workflow。库的官方文档说明用法，这套实例证据说明它在当前环境可用。
 
-下一步：只有需要异步子任务时阅读[使用后台 Run](05-background-runs.md)；否则直接进入
-[验证、启用和真实调用](06-validation-and-references.md)。
+下一步：[使用后台 Run](05-background-runs.md)覆盖异步子任务；[验证、启用和真实调用](06-validation-and-references.md)
+覆盖普通 Workflow 的完成阶段。

@@ -43,7 +43,7 @@ Lifecycle Store；Runtime Context 只携带定位输入所需的 lifecycle/run/i
 `stream=false` 返回标准 `chat.completion` JSON。`stream=true` 返回 `chat.completion.chunk` SSE，并以
 `data: [DONE]` 结束。两种模式都消费同一次 LangGraph v3 事件流，并按 Workflow node 对应 Main Agent 的
 `output-mode` 的同步 Python `output(event)` 渲染；脚本可自行返回空字符串过滤事件。Workflow-owned 非 Agent 事件由 Workflow 可选绑定的事件输出
-组件处理。脚本收到稳定 dict、必须返回字符串；两条路径都不会从最终 state 绕过输出策略读取原始 Agent 内容。
+组件处理。脚本收到稳定 dict 并返回字符串；两条路径都不会从最终 state 绕过输出策略读取原始 Agent 内容。
 
 ## 拦截消息
 

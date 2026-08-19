@@ -6,7 +6,7 @@
 2. `POST /api/workflows/{id}/validate` 提交候选 Graph，修正返回的全部 error。
 3. `PUT /api/workflows/{id}/graph` 正式保存；返回成功后再用 GET 核对 UUID、handle、Command branch key、Dispatcher task key
    和布局节点键。
-4. 通过 `PUT /api/api-server` 设置独立 API Key；不要复用 management token：
+4. 通过 `PUT /api/api-server` 设置独立 API Key；management token 与推理 API Key 是两个凭据域：
 
 ```json
 {
@@ -34,8 +34,8 @@ Content-Type: application/json
 }
 ```
 
-不要仅以“配置保存成功”作为验收。Graph 引用、Python 扩展、Provider 和输出脚本只能由真实运行全部闭合。没有 Agent Node
-的 Workflow 也必须真实调用；不要假设它一定产生 Assistant 文本。
+“配置保存成功”只证明持久化完成；真实运行才会闭合 Graph 引用、Python 扩展、Provider 和输出脚本。没有 Agent Node
+的 Workflow 同样可以真实调用，但不保证产生 Assistant 文本。
 
 ## 详细文档
 
@@ -52,8 +52,8 @@ Content-Type: application/json
 - Debug thread、checkpoint 与日志边界：[日志中心与 Workflow 观测](../runtime-observability.md)
 - secret 与远程访问边界：[安全与部署](../../security-and-deployment.md)
 
-Agent Shell 使用 Deep Agents 官方装配和 LangGraph Graph API。设计 Agent 时遵循官方上下文工程原则：始终相关的约定放在
-精简提示中，任务特定材料由 WIC/Skill 按需加载；长且独立的工作委派给描述清晰的 Subagent；大结果放入共享
+Agent Shell 使用 Deep Agents 官方装配和 LangGraph Graph API。官方上下文工程把始终相关的约定放在
+精简提示中，由 WIC/Skill 按需加载任务特定材料，把长且独立的工作交给描述清晰的 Subagent，并把大结果放入共享
 Filesystem 后按需读取。参考 [Deep Agents context engineering](https://docs.langchain.com/oss/python/deepagents/context-engineering)、
 [Subagents](https://docs.langchain.com/oss/python/deepagents/subagents) 和
 [Custom middleware](https://docs.langchain.com/oss/python/langchain/middleware/custom)。

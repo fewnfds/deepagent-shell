@@ -65,8 +65,8 @@ payload = task.get("payload", {})
 ```
 
 该任务不写入 Workflow root State，也不复制到 Runtime Context。任务完成后，父 State 的 `agent_invocations` 记录会携带
-task identity，供下游汇总 Agent 的 WIC 选择。不要在 WIC 中扫描共享列表并用
-`counting` 字段抢占任务；同一 super-step 的并行 worker 读取各自的 State 快照，不构成实时租约系统。
+task identity，供下游汇总 Agent 的 WIC 选择。WIC 中的共享列表扫描和 `counting` 字段不构成任务抢占机制；
+同一 super-step 的并行 worker 读取各自的 State 快照，不是实时租约系统。
 
 ## 从内置示例创建
 
@@ -97,9 +97,8 @@ examples/agent-components/custom-middleware/workflow-input-context/
 - `runtime.context` / `runtime.store`：当前身份、Lifecycle 数据和 invocation artifact；
 - `backend`：当前 Agent 的 Filesystem backend，可按虚拟路径读取文件。
 
-示例保留 `load_invocation_artifact(runtime, record)` 帮助函数。需要前序结果时，先从父图快照选择明确的 invocation 记录，
-再加载完整 artifact；不要自动拼接所有前序输出。文件读取、消息 role 变换、裁剪和排序没有固定 schema，应按当前 Agent 的
-职责直接写在集中变化函数中。
+示例保留 `load_invocation_artifact(runtime, record)` 帮助函数。前序结果通过父图快照中的明确 invocation 记录加载完整
+artifact；所有前序输出不会自动拼接。文件读取、消息 role 变换、裁剪和排序没有固定 schema，由当前 Agent 的职责决定。
 
 项目不定义更多 WIC 变种 schema。选择哪个前序 invocation、保留哪些原始消息、如何分配 role、是否加入文件以及如何截断，
 都由当前 Middleware 的 Python 代码决定。多个 WIC 变种也只是多个普通 Middleware 配置。
@@ -110,7 +109,7 @@ WIC 没有专用装配槽位，也没有 Agent Shell 管理的固定相对顺序
 `middleware_refs` 决定 Custom Middleware 实例顺序。
 
 LangChain 对 `before_*` hook 按 Middleware 列表正序执行；因此，如果多个 Middleware 都会改写 `messages`，后面的 hook
-看到前面已经返回的 State。应在 Agent 配置中明确排列它们，而不是在 WIC 代码中寻找或调用其他 Middleware。
+看到前面已经返回的 State。Agent 配置中的列表直接表达顺序，WIC 代码不负责寻找或调用其他 Middleware。
 
 ## 边界
 
@@ -118,9 +117,9 @@ LangChain 对 `before_*` hook 按 Middleware 列表正序执行；因此，如�
 - Store 保存 Lifecycle 内跨 Run 公共事实，Runtime Context 只保存当前 Run/Invocation 的不可变身份，Graph State
   继续保存参与路由、reducer 与 checkpoint 的变化数据；
 - Workflow root State 不保存整包输入，也不会自动累积成产品聊天历史；
-- 前序 Agent 输出必须先从 `agent_invocations` 显式选择因果可见的引用，再从 Store 读取 artifact；不能依赖 mapping 插入顺序；
-- 同一画布节点再次执行会产生新的 invocation ID，WIC 应按节点身份或明确 ID 选择记录；
-- Subagent 默认保留 delegated messages，是否加入根请求必须由该 Subagent 的 WIC 明确决定；
+- 前序 Agent 输出经由 `agent_invocations` 中因果可见的引用从 Store 读取 artifact，mapping 插入顺序没有因果语义；
+- 同一画布节点再次执行会产生新的 invocation ID，节点身份或明确 ID 用于选择记录；
+- Subagent 默认保留 delegated messages，是否加入根请求由该 Subagent 的 WIC 决定；
 - 文件路径属于当前 Agent 的虚拟 Filesystem，不接受宿主绝对路径；
 - Custom Middleware 是受信任的服务端 Python 代码，不在 sandbox 中运行。
 

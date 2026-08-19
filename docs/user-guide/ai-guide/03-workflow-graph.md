@@ -2,7 +2,7 @@
 
 ## 创建 parent Workflow
 
-先创建 parent Workflow。新建对象固定为草稿；请求中的 `enabled` 不能绕过正式保存：
+parent Workflow 新建后固定处于草稿状态；请求中的 `enabled` 不会绕过正式保存：
 
 ```http
 POST /api/workflows
@@ -20,7 +20,7 @@ POST /api/workflows
 
 ## 合法的最小拓扑
 
-正式 Graph 必须保留唯一 Start 和唯一 End，但不要求 Agent 或其他工作 Node。以下三种拓扑都合法：
+正式 Graph 的固定系统节点是唯一 Start 和唯一 End，不要求 Agent 或其他工作 Node。以下三种拓扑都合法：
 
 ```text
 Start -> End
@@ -79,7 +79,7 @@ Start -> Work Node -> End
 }
 ```
 
-不要省略 `source_handle`、`target_handle`，也不要把 Vue Flow 自己的临时字段写进 document。
+`source_handle` 和 `target_handle` 是 Edge wire 的组成部分；Vue Flow 的临时字段不属于 Graph document。
 
 同一个 Workflow 只保存这一份 Graph。草稿和正式对象在同一个列表中，以 `enabled=false/true` 区分；没有 revision、第二份
 Graph 或第二个调度器。
@@ -99,10 +99,10 @@ GET  /api/workflows/{id}/graph     读取当前唯一 document
 磁盘和 SQLite 仍可能按真实资源情况失败。
 
 【正式保存】执行静态全量校验：wire、Node type/version/config、角色、Handle、Edge、拓扑、Command/Dispatcher 引用和 Main Agent
-装配，以及 Command/Dispatcher 独占 Python package 的 folder、manifest、入口文件和静态 adapter contract。正式图必须恰有一个
+装配，以及 Command/Dispatcher 独占 Python package 的 folder、manifest、入口文件和静态 adapter contract。正式图恰有一个
 Start 和一个 End，且 Start 至少有一条合法出边；`Start -> End` 合法。编辑器通过 `/validate` 预先显示全部 issue，并在存在
-error、校验尚未完成或校验请求失败时禁用正式保存；请求失败会显示独立的重新校验操作。后端仍在正式 PUT 时重复相同校验，
-不能绕过。正式失败不写候选 Graph，也不改变原 `enabled` 状态。
+error、校验尚未完成或校验请求失败时禁用正式保存；请求失败会显示独立的重新校验操作。后端在正式 PUT 时重复相同校验，
+不存在绕过入口。正式失败不写候选 Graph，也不改变原 `enabled` 状态。
 
 `admit_workflow_document()` 和 `validate_workflow_executable()` 都是静态校验；后者不是试运行，不会调用 Model、Command、Dispatcher
 或 Agent，不 import 或执行用户 package。它在 admission 之上增加拓扑、引用、package 资源和静态 Agent 装配检查。
@@ -110,7 +110,7 @@ error、校验尚未完成或校验请求失败时禁用正式保存；请求失
 
 AI 通过 management FastAPI 调用 `/validate` 时能直接读取完整结构化问题，不需要打开 Vue Flow。响应包含 `valid`、`stage` 和
 `issues[]`；每个 issue 至少提供 `code`、`severity`、`path`、`owner_id`、`owner_type`、`message_key`、`message_args` 和可读
-`message`。读取全部 issue，不要只处理第一项；`severity=error` 阻止正式保存，warning 也应保留给操作者。请求本身失败不是一份
+`message`。响应会一次返回全部 issue；`severity=error` 阻止正式保存，warning 保留给操作者。请求本身失败不是一份
 “无问题”报告：保持候选 Graph 不变，修复连接或服务状态后显式重试 `/validate`。
 
 Workflow metadata PUT 只更新名称、角色和运行限制，并保留当前 `enabled`；只有正式 Graph PUT 可以启用，草稿 PUT
@@ -121,7 +121,7 @@ Workflow metadata PUT 只更新名称、角色和运行限制，并保留当前 
 以 `GET /api/workflow-node-catalog` 为当前事实。现有节点如下：
 
 本节代码分成两类信息：函数签名、返回字段、Edge key 和校验边界是固定 contract；读取哪个 State/Runtime 来源、采用什么
-规则、是否更新 State、task 如何划分都只是建议示例。AI 应根据当前 Workflow 的真实数据流选择，不要把示例字段当成平台字段。
+规则、是否更新 State、task 如何划分都只是建议示例。具体选择来自当前 Workflow 的真实数据流，示例字段不是平台字段。
 
 | Node | `config` | 输入 -> 输出 | 是否写脚本 |
 | --- | --- | --- | --- |
@@ -131,30 +131,30 @@ Workflow metadata PUT 只更新名称、角色和运行限制，并保留当前 
 | `task-dispatcher` | `task_dispatcher_id` | `in` -> `dispatch` | 是；组件提供 `create_dispatcher()` |
 | `end` | `{}` | `in` -> 无 | 否；直接映射 LangGraph `END` |
 
-AI 画图时按以下顺序决定，不要从视觉布局反推运行语义：
+AI 画图时可按以下顺序组织；视觉布局不承载运行语义：
 
 1. 从 Catalog 选择 Node type/version，并严格按 `config_schema` 填 config。正式 Graph 恰有一个系统 `start` 和一个系统 `end`；
    不从组件库添加、复制或删除这两个系统节点。
 2. 给每个业务 Node 分配全图唯一、稳定的 `id`。Node ID 以字母开头，只使用字母、数字、`_`、`-`，最长 64 字符。
-3. 先画控制流，再写 layout。Start 至少连接一条合法出边；除系统 End 外，每个正式 Node 都必须从 Start 可达；End 自身允许没有入边。
-4. 每条 Edge 从来源 Catalog output handle 指向目标接受该类型的 input handle。Edge `id` 同样唯一；不要省略两端 handle。
-5. 来源 handle 决定协议：`next` 是 normal，`branch` 是 branch，`dispatch` 是 dispatch。不要在 wire 里另加 `edge_type`。
-6. 最后检查 fan-out、fan-in、Command 分支 key、Dispatcher task key、叶子和循环退出，再调用 `/validate`。不要通过移动 Node、改颜色或添加 Vue Flow
-   renderer 字段试图改变运行语义。
+3. 控制流决定运行关系，layout 随后描述位置。Start 至少连接一条合法出边；除系统 End 外，每个正式 Node 都从 Start 可达；End 自身允许没有入边。
+4. 每条 Edge 从来源 Catalog output handle 指向目标接受该类型的 input handle。Edge `id` 同样唯一，两端 handle 都是 wire 字段。
+5. 来源 handle 决定协议：`next` 是 normal，`branch` 是 branch，`dispatch` 是 dispatch；wire 没有额外 `edge_type`。
+6. fan-out、fan-in、Command 分支 key、Dispatcher task key、叶子和循环退出构成 `/validate` 前的结构检查。移动 Node、颜色和 Vue Flow
+   renderer 字段都不会改变运行语义。
 
 画布颜色、class、marker 和 animation 只是 Vue Flow 投影，不进入 Graph document，也不改变 LangGraph 调度。
 
 Node 做工作和 State update；Edge 表达激活。Command/Dispatcher 脚本只返回业务 key、task 和 update，不读取 Edge ID、目标 Node ID、
-布局或全图拓扑。复杂业务优先拆成多个 Node + Edge，不创建同时拥有业务处理、路由、等待和终止语义的万能 Node。
+布局或全图拓扑。多个单一职责的 Node + Edge 可以分别表达业务处理、路由、等待和终止语义。
 
 普通 Agent/Start 使用 normal 静态 Edge。条件判断和后继选择全部由 Command Node 完成，其输出使用 branch Edge；Graph 只声明
-候选目标。Task Dispatcher 专门生成并派发 task，其输出使用 dispatch Edge。不要给
-Command/Dispatcher 追加 normal 出边，也不要让脚本直接返回 LangGraph `Command`/`Send`。
+候选目标。Task Dispatcher 专门生成并派发 task，其输出使用 dispatch Edge。Command/Dispatcher 没有 normal 输出 handle，
+其脚本返回 Shell contract，而不是 LangGraph `Command`/`Send`。
 
 ## Command Node
 
-建议先从 `GET /api/python-package-templates/command` 读取
-`内置示例-rule-based-command` 的当前 revision 和源码，再按业务改写；不要依赖文档中的代码副本。
+`GET /api/python-package-templates/command` 返回
+`内置示例-rule-based-command` 的当前 revision 和源码，可作为按业务改写的起点；文档代码不是当前模板副本。
 
 Graph Node 只引用组件 UUID：
 
@@ -182,7 +182,7 @@ def create_command():
     return command
 ```
 
-Graph 中对应的候选边必须使用：
+Graph 中对应候选边的 wire 为：
 
 ```json
 {
@@ -198,13 +198,13 @@ Graph 中对应的候选边必须使用：
 如果脚本可能返回 `continue`，再连接一条 `branch_key: "continue"` 候选边。`command` 可以按场景读取完整 `state`、
 `runtime.context` 和 `runtime.store`；示例中的 `shared_vars.requires_review` 不是固定输入。`activate` 可以返回零个、一个或
 多个不同 key；为空或省略时不激活后继，只提交 `update`，当前路径在该节点自然结束。Shell 不保留兜底 key，也不检查
-脚本的条件是否穷尽；`if/elif/else`、`match` 和业务 key 全部由脚本负责。非空 key 必须完全匹配同源 Branch Edge，未知 key
+脚本的条件是否穷尽；`if/elif/else`、`match` 和业务 key 全部由脚本负责。非空 key 与同源 Branch Edge 完全匹配，未知 key
 使本次运行受控失败。`update` 可以更新当前 Workflow State 已声明的任意顶层 channel，不需要更新时返回 `{}`。脚本只返回
 Agent Shell contract，不 import 或返回 LangGraph `Command`，不返回 Node ID。
 
 ## Task Dispatcher
 
-建议先从 `GET /api/python-package-templates/task-dispatcher` 读取
+`GET /api/python-package-templates/task-dispatcher` 提供
 `内置示例-item-list-dispatcher` 的当前 revision 和源码，再按任务来源改写；`items` 只是示例，不是平台字段。
 
 Graph Node 同样只引用组件 UUID：
@@ -249,7 +249,7 @@ def create_dispatcher():
 
 Graph 中对应的边使用 `source_handle: "dispatch"` 和 `dispatch_key: "item"`。`dispatch` 可以按业务需要从完整 `state`、
 `runtime.context` 或 `runtime.store` 选择任务；任务来源、粒度、目标 key、payload 和父 State `update` 都由当前 Workflow
-决定。每次调用必须产生 1–1000 个任务；`task_id` 在本批唯一并来自稳定业务身份；`payload` 必须是严格 JSON object；
+决定。当前 contract 接受每次调用产生的 1–1000 个任务；`task_id` 在本批唯一并来自稳定业务身份；`payload` 是严格 JSON object；
 `update` 可以更新任意已声明的顶层 State channel。脚本不 import 或返回 `Send`。
 
 当前 contract 不接受空 `tasks`；如果数据可能为空，建议由上游 Command Node 绕过 Dispatcher。Agent Shell 会为每个
@@ -258,15 +258,15 @@ worker 注入独立 `workflow_task`，目标 Agent 是否读取、如何转换�
 ## Agent、Start 和 End
 
 Agent Node 没有 Node script。它只引用完整 Main Agent。需要改变输入时写 WIC；需要调用外部能力时配置 Tool；需要改变
-模型前后行为时配置 LangChain Middleware；需要同步委派时配置 Subagent。不要在画布上再造一个“Agent 脚本”层。
+模型前后行为由 LangChain Middleware 扩展，同步委派由 Subagent 提供。画布 Agent Node 本身没有额外“Agent 脚本”层。
 
 Agent 成功后，完整 reduced messages 写入 Lifecycle Store，父 State 只保留 `agent_invocations` 引用。后继 Agent 不会自动
-继承前序消息；其 WIC 必须显式选择因果可见的 invocation，再按 `result_ref` 从 Store 读取 artifact。
+继承前序消息；其 WIC 通过选择因果可见的 invocation，再按 `result_ref` 从 Store 读取 artifact。
 
 Start/End 没有脚本、配置或业务数据转换。Start 不把客户端消息注入 State；End 不负责自动取消后台任务、删除 Lifecycle
 或拼接最终 Agent 内容。输入由 WIC 负责，输出由 Main Agent Output Mode 和可选 Workflow Event Output 负责。
 
-Start 是图入口，正式 Graph 必须恰有一个 Start 且至少有一条合法出边。End 是 LangGraph `END` 的显式投影，不是普通 Node，
+Start 是图入口，正式 Graph 恰有一个 Start 且至少有一条合法出边。End 是 LangGraph `END` 的显式投影，不是普通 Node，
 也不是全图取消或自动汇聚操作。End 可以没有任何入边。普通可达叶子可以自然结束；有循环时让退出路径连接 End。
 
 ## 叶子、汇聚与 super-step
@@ -275,7 +275,7 @@ LangGraph 按 super-step 执行。一个 super-step 中所有已调度 Node 读�
 合并，再产生下一步任务。Graph 在没有可执行任务、没有待传递消息时自然结束。
 
 - 可达普通 Node 可以没有出边。它完成 update 后成为该路径的叶子，其他活跃分支继续执行。
-- 画布必须保留唯一系统 End，但 End 可以完全没有入边。
+- 画布保留唯一系统 End，但 End 可以完全没有入边。
 - 某条路径到达 End 只终止该路径，不取消同一步、其他分支或后台 Run。
 - 全图仅在所有路径都不再产生任务时结束。
 - 有环不等于有退出条件。环若始终产生任务，会一直运行到用户逻辑退出、Run timeout 或 `recursion_limit`。
@@ -293,8 +293,8 @@ C -> J
 ```
 
 fan-out 表示 A 完成后同时激活 B、C。普通可执行目标 J 的多条非 START normal 入边会编译为
-`add_edge([B, C], J)`；只有 B、C 都完成才激活 J。若 B、C 来自互斥条件而本次只激活一边，J 不执行。因此不要把互斥
-分支汇聚到 all-of 目标；让它们分别成为叶子或分别指向 End。
+`add_edge([B, C], J)`；只有 B、C 都完成才激活 J。若 B、C 来自互斥条件而本次只激活一边，J 不执行。
+互斥分支适合作为独立叶子或分别指向 End，而不是汇聚到 all-of 目标。
 
 START 是例外：`Start -> J` 与 `Start -> A -> J` 会让 J 分别在启动时和 A 完成后各执行一次，不是等待 START 与 A 的 join。
 多条进入 End 的边也互相独立；End 不等待所有来源。需要 A、B 都完成后再决策时，先让两者汇聚到一个真实可执行 Node，
@@ -307,11 +307,11 @@ Branch 只激活 `activate` 返回的候选 key；Dispatch 只为返回的 task 
 
 ## 新 Node type 的边界
 
-增加 Node type 前先确认它能映射到 LangGraph 公开的 Node/Runnable、subgraph、`Command`、`Send` 或虚拟哨兵语义。不要实现
-第二套 super-step、Edge 触发、汇聚或终止规则。
+新 Node type 以 LangGraph 公开的 Node/Runnable、subgraph、`Command`、`Send` 或虚拟哨兵语义为映射基础。
+第二套 super-step、Edge 触发、汇聚或终止规则不属于当前架构。
 
 Node 负责一次清晰工作以及 State/Runtime 的读取和更新；Edge 负责 Node 之间的激活关系。用户 Python package 不读取 Edge ID、
-目标 Node ID、画布布局或完整拓扑，也不自行解释 Edge。复杂逻辑优先拆成多个单一职责 Node；只有无法用现有 Node + Edge
-清楚表达且确实对应官方运行范式时，才增加新 Node type。
+目标 Node ID、画布布局或完整拓扑，也不自行解释 Edge。复杂逻辑可以拆成多个单一职责 Node；新 Node type 对应现有
+Node + Edge 无法清楚表达的官方运行范式。
 
 下一步：[编写 Python 扩展](04-python-extensions.md)。

@@ -40,7 +40,7 @@ examples/
 模板至少包含 `main.py`，可以包含 `requirements.txt`、本地模块、实体第三方包和测试。模板目录名是小写
 `template-key`；模板没有 package UUID，也不属于任何配置。
 
-配置扩展至少包含 `package.json` 和 `main.py`。文件夹名就是拥有它的组件配置 UUID，`package.json.id` 必须等于该 UUID。
+配置扩展至少包含 `package.json` 和 `main.py`。文件夹名就是拥有它的组件配置 UUID，`package.json.id` 与该 UUID 相等。
 系统据此拒绝配置引用其他配置的扩展代码目录，也避免模板名和额外 UUID 增加 Windows 路径长度。
 
 ## Manifest
@@ -56,7 +56,7 @@ examples/
 }
 ```
 
-`package.json` 由 Agent Shell 管理，不能列入前端可编辑文件。它只承担配置 UUID 与 adapter 身份校验。
+`package.json` 由 Agent Shell 管理，不属于前端可编辑文件。它只承担配置 UUID 与 adapter 身份校验。
 
 ## 配置引用
 
@@ -73,12 +73,12 @@ python_package:
 YAML 不保存源码、requirements、manifest 投影、模板引用、revision 或绝对路径。复制组件配置时会复制一份新的配置扩展；删除组件
 配置时会删除其扩展代码目录。
 
-新配置编辑器同时读取对应类别的用户模板和内置示例。用户可以选择任一来源，或【套用空模板】得到空的 `main.py` 草稿；最终保存时仍必须补全
+新配置编辑器同时读取对应类别的用户模板和内置示例。用户可以选择任一来源，或【套用空模板】得到空的 `main.py` 草稿；最终保存只接受包含
 对应 adapter 要求的有效工厂。用户可以在两行高的文件清单中逐行增加
 包内相对路径，编辑器按该顺序显示文本文件内容；
-首次保存才创建配置扩展。已有配置每次打开都从自己的扩展代码目录读取文件，保存时只能更新原目录，不能改指向另一模板或配置扩展。
+首次保存才创建配置扩展。已有配置每次打开都从自己的扩展代码目录读取文件，保存操作更新原目录，不提供改指向另一模板或配置扩展的字段。
 不存在的相对路径显示非阻塞警告；填写内容后保存会创建文件，保持空内容则继续缺失。未列出的文件保持原样。
-绝对路径、`..`、反斜杠路径、重复路径和 `package.json` 会被拒绝。文件保存使用 revision，若目录已被外部修改，必须重新载入后再保存。
+绝对路径、`..`、反斜杠路径、重复路径和 `package.json` 会被拒绝。文件保存使用 revision；目录被外部修改后，旧 revision 的保存会被拒绝，重新载入可取得当前 revision。
 
 ## Command Node
 
@@ -123,11 +123,11 @@ def create_dispatcher():
     return dispatch
 ```
 
-`tasks` 必须包含 1–1000 个具有唯一稳定 `task_id` 的 JSON payload；`dispatch_key` 必须匹配画布同源 Dispatch Edge。
+`tasks` 接受 1–1000 个具有唯一稳定 `task_id` 的 JSON payload；`dispatch_key` 与画布同源 Dispatch Edge 匹配。
 compiler 为每项构造 Shell-owned `WorkflowTaskContext`，再映射为 LangGraph `Send`。包不接触 Node ID，也不直接返回
 `Send`/`Command`。worker 子图通过私有 State 的 `workflow_task` 读取任务。完整规则与内置示例见
 [任务分发](../wizard-pages/task-dispatcher-config.md)。payload 拒绝 Python 对象和非有限数；`update` 仍可写任意已声明
-Workflow State channel，但值必须通过该 channel 的现有类型校验。
+Workflow State channel，值仍经过该 channel 的现有类型校验。
 
 ## Custom Middleware
 
@@ -141,14 +141,14 @@ def create_middleware(agent, config, backend):
     return ModelCallLimitMiddleware(run_limit=20)
 ```
 
-`create_middleware` 必须是同步工厂，但 Agent Shell 不限制它的参数签名。运行时按参数名提供当前可用的构造数据，包括
+`create_middleware` 是同步工厂，Agent Shell 不限制它的参数签名。运行时按参数名提供当前可用的构造数据，包括
 `agent`（包含 `id`、`type`、`name` 和 `package_id` 的身份字典）、`package`、`block`、`assembly`、`backend`、`config`、
 `references`、`scope`、`workflow_node_id` 和 `request_id`；工厂也可以使用 `**kwargs` 接收全部可用值。它们不是 LangChain
 Agent 对象。工厂返回后，Middleware 仍通过 LangChain 官方 hook 的 `state` 和 `runtime` 读取每次运行的动态数据。
 Main Agent/Subagent 的有序 `middleware_refs` 决定多个实例进入列表的顺序。一个实例可以实现多个官方 hook，但 hook 不作为独立
 排序项。LangChain 对 `before_*` 正序执行、对 `after_*` 逆序执行，并把 `wrap_*` 按列表嵌套。Agent Shell 不代理官方
 hook、state schema、tools 或 stream transformer。运行链使用
-异步执行；自定义类覆盖同步 hook 时也必须提供对应 async hook。
+异步执行；只覆盖同步 hook 而没有对应 async hook 的自定义类会在装配时被拒绝。
 
 内置 `workflow-input-context` 示例通过普通 `AgentMiddleware.abefore_agent` 选择 Workflow 原始输入、Subagent 委派消息和
 Dispatcher task。它没有专用 capability、继承规则或装配槽位；复制示例后在

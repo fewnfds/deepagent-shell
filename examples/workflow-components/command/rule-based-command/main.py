@@ -1,3 +1,6 @@
+from langgraph.config import get_stream_writer
+
+
 MATCHED_BRANCH = "matched"
 BELOW_THRESHOLD_BRANCH = "below_threshold"
 SCORE_THRESHOLD = 60
@@ -15,6 +18,7 @@ def create_command():
             if is_number and score >= SCORE_THRESHOLD
             else BELOW_THRESHOLD_BRANCH
         )
+        get_stream_writer()(f"Command selected branch {branch}.\n")
         return {
             "activate": [branch],
             # Command may update any top-level channel declared by WorkflowState.
