@@ -112,7 +112,12 @@ def test_listen_probe_reports_an_occupied_port_without_starting_the_app(
 ) -> None:
     from agent_shell import __main__ as launcher
 
-    monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "management-secret")
+    environment_path = tmp_path / "data" / "config" / "agent-shell.env"
+    environment_path.parent.mkdir(parents=True, exist_ok=True)
+    environment_path.write_text(
+        "AGENT_SHELL_MANAGEMENT_TOKEN=management-secret\n",
+        encoding="utf-8",
+    )
     monkeypatch.setattr(
         launcher,
         "_run_server",
@@ -126,8 +131,6 @@ def test_listen_probe_reports_an_occupied_port_without_starting_the_app(
             [
                 "--home",
                 str(tmp_path),
-                "--mode",
-                "environment",
                 "--port",
                 str(port),
                 "--probe-listen-settings",

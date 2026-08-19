@@ -172,7 +172,6 @@ settings:
         "-m", "agent_shell",
         "--home", ".",
         "--data-dir", ('"{0}"' -f $dataRoot),
-        "--mode", "portable",
         "--no-frontend"
     )
     $backend = Start-Process -FilePath $python `

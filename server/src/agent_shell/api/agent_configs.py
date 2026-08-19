@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_shell.api.errors import management_error
 from agent_shell.storage.agent_configs import AgentConfigStore
+from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.validation.models import ValidationReport, validation_failure_detail
 from agent_shell.validation.service import ConfigurationValidationService
 
@@ -112,6 +113,7 @@ def main_agent_block_reference_owner(
 def build_agent_config_router(
     config_store: AgentConfigStore,
     validation: ConfigurationValidationService,
+    workflow_store: WorkflowStore,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -131,6 +133,16 @@ def build_agent_config_router(
                 message_key="errors.mainAgentNotFound",
                 message="A Main Agent configuration does not exist.",
             )
+        for item_id in ids:
+            workflow = workflow_store.get_item_by_main_agent(item_id)
+            if workflow is not None:
+                raise management_error(
+                    409,
+                    code="configuration_referenced",
+                    message_key="errors.configurationReferencedByWorkflow",
+                    message="The Main Agent is still referenced by a Workflow.",
+                    message_args={"owner": workflow["name"]},
+                )
         return {"deleted": config_store.delete_items(MAIN_AGENT_TABLE, ids)}
 
     @router.get("/api/main-agents/{item_id}")
@@ -233,6 +245,15 @@ def build_agent_config_router(
                 code="main_agent_not_found",
                 message_key="errors.mainAgentNotFound",
                 message="The Main Agent configuration does not exist.",
+            )
+        workflow = workflow_store.get_item_by_main_agent(item_id)
+        if workflow is not None:
+            raise management_error(
+                409,
+                code="configuration_referenced",
+                message_key="errors.configurationReferencedByWorkflow",
+                message="The Main Agent is still referenced by a Workflow.",
+                message_args={"owner": workflow["name"]},
             )
         config_store.delete_item(MAIN_AGENT_TABLE, item_id)
         return {"ok": True}

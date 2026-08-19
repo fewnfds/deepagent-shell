@@ -197,3 +197,80 @@ def test_run_history_distinguishes_repeated_node_spans_and_omits_payloads(
             await lifecycle.close()
 
     asyncio.run(scenario())
+
+
+def test_journal_closes_all_open_spans_when_run_is_cancelled(tmp_path) -> None:
+    async def scenario() -> list[dict[str, object]]:
+        database = SQLiteDatabase(tmp_path / "cancelled.sqlite3")
+        lifecycle = WorkflowLifecycleService(database)
+        await lifecycle.start()
+        try:
+            lifecycle_id = await lifecycle.create(
+                [{"role": "user", "content": "cancel"}],
+                request_id="cancel-request",
+                run_id="cancel-run",
+                thread_id="cancel-thread",
+                workflow_id="cancel-workflow",
+                workflow_name="Cancelled Workflow",
+            )
+            assert lifecycle.start_run("cancel-run") is True
+            context = WorkflowRuntimeContext.for_run(
+                request_id="cancel-request",
+                lifecycle_id=lifecycle_id,
+                run_id="cancel-run",
+                thread_id="cancel-thread",
+                workflow={
+                    "id": "cancel-workflow",
+                    "name": "Cancelled Workflow",
+                },
+            )
+            journal = WorkflowRunJournal(
+                lifecycle,
+                None,
+                context,
+                workflow_node_kinds={"agent-node": "agent"},
+                agent_names={"agent-node": "Writer Agent"},
+            )
+            journal.on_chain_start(
+                {},
+                {},
+                run_id="node-run",
+                name="agent-node",
+                metadata={"langgraph_node": "agent-node"},
+            )
+            journal.on_tool_start(
+                {"name": "waiting-tool"},
+                "",
+                run_id="tool-run",
+                parent_run_id="node-run",
+            )
+
+            journal.finish_open_spans(
+                "cancelled", error_code="request_cancelled"
+            )
+            event_count = len(lifecycle.events(lifecycle_id))
+            journal.finish_open_spans(
+                "cancelled", error_code="request_cancelled"
+            )
+            events = lifecycle.events(lifecycle_id)
+            assert len(events) == event_count
+            return events
+        finally:
+            await lifecycle.close()
+
+    events = asyncio.run(scenario())
+    structural = [
+        event
+        for event in events
+        if event["subject_kind"] in {"workflow_node", "agent", "tool"}
+    ]
+    started = {event["span_id"] for event in structural if event["phase"] == "started"}
+    cancelled = {
+        event["span_id"] for event in structural if event["phase"] == "cancelled"
+    }
+    assert started == cancelled
+    assert all(
+        event["error_code"] == "request_cancelled"
+        for event in structural
+        if event["phase"] == "cancelled"
+    )

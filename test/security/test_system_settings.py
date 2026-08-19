@@ -109,10 +109,7 @@ def test_valid_system_settings_are_atomic_and_take_effect_after_restart(
     assert document["settings"]["langsmith_project"] == "workflow-debug"
     assert "langsmith_api_key" not in document["settings"]
     assert document["settings"]["cors_origins"] == ["https://console.example:8443"]
-    restarted = get_settings(
-        application_home=tmp_path,
-        include_process_environment=False,
-    )
+    restarted = get_settings(application_home=tmp_path)
     assert restarted.port == 9123
     assert restarted.langsmith_tracing_enabled is True
     assert restarted.langsmith_api_key is not None
@@ -197,10 +194,7 @@ def test_management_password_replacement_is_write_only_and_persists(
     assert response.status_code == 200
     assert replacement not in response.text
     assert old_management not in response.text
-    restarted = get_settings(
-        application_home=tmp_path,
-        include_process_environment=False,
-    )
+    restarted = get_settings(application_home=tmp_path)
     assert restarted.management_token is not None
     assert restarted.management_token.get_secret_value() == replacement
     env_text = (tmp_path / "data" / "config" / "agent-shell.env").read_text(
@@ -223,10 +217,7 @@ def test_management_password_can_equal_the_api_key(
     )
 
     assert response.status_code == 200
-    restarted = get_settings(
-        application_home=tmp_path,
-        include_process_environment=False,
-    )
+    restarted = get_settings(application_home=tmp_path)
     assert restarted.management_token is not None
     assert restarted.management_token.get_secret_value() == API_KEY
 
@@ -239,7 +230,7 @@ def test_permission_failure_leaves_existing_settings_unchanged(
     original = system_path.read_text(encoding="utf-8")
     monkeypatch.setattr(
         FileConfigRepository,
-        "update_system",
+        "update_system_and_environment",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("write failed")),
     )
 

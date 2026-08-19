@@ -172,8 +172,36 @@ def test_agent_execution_closes_v3_stream_when_consumer_is_cancelled() -> None:
 
     assert asyncio.run(scenario()) is True
 
+
+def test_execution_timeout_excludes_time_waiting_for_stream_consumer() -> None:
+    async def scenario() -> bool:
+        execution = RunExecution(
+            graph=EventGraph(
+                [message_envelope(AIMessageChunk(content="ready", id="message-1"))]
+            ),
+            input_state={"messages": []},
+            rectifier=OutputEventRectifier(
+                OutputProjector(config(mode="blocklist"))
+            ),
+            normalizer=V3EventNormalizer("Main Agent"),
+            middleware_runtime=noop_middleware_runtime(),
+            media_response=noop_media_response(),
+            execution_timeout_seconds=0.01,
+        )
+        stream = execution.stream_text()
+        assert await anext(stream) == "ready"
+        try:
+            await asyncio.sleep(0.05)
+        except asyncio.CancelledError:
+            return False
+        _remaining = [part async for part in stream]
+        return True
+
+    assert asyncio.run(scenario()) is True
+
+
 def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch, tmp_path) -> None:
-    async def scenario() -> tuple[bool, dict[str, object]]:
+    async def scenario() -> tuple[bool, dict[str, object], list[dict[str, object]]]:
         class BlockingRun:
             def __init__(self) -> None:
                 self.exited = False
@@ -209,6 +237,11 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch, tmp_path) -
             ):
                 assert config["recursion_limit"] == 100
                 assert len(config["callbacks"]) == 1
+                config["callbacks"][0].on_tool_start(
+                    {"name": "waiting-tool"},
+                    "",
+                    run_id="waiting-tool-run",
+                )
                 assert context is not None
                 assert version == "v3"
                 assert transformers
@@ -260,14 +293,17 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch, tmp_path) -
             assert captured.value.code == "execution_timeout"
             record = lifecycle.history.get_run("timeout-run")
             assert record is not None
-            return run.exited, record
+            return run.exited, record, lifecycle.events(lifecycle_id)
         finally:
             await lifecycle.close()
 
-    closed, record = asyncio.run(scenario())
+    closed, record, events = asyncio.run(scenario())
     assert closed is True
     assert record["status"] == "failed"
     assert record["error_code"] == "execution_timeout"
+    tool_events = [event for event in events if event["subject_kind"] == "tool"]
+    assert [event["phase"] for event in tool_events] == ["started", "failed"]
+    assert tool_events[-1]["error_code"] == "execution_timeout"
 
 
 def test_successful_execution_does_not_add_a_runtime_diagnostic() -> None:
@@ -472,7 +508,26 @@ def test_runtime_boundaries_classify_provider_and_tool_failures() -> None:
     assert tool_error.value.code == "tool_execution_failed"
     assert provider_error.value.code == "provider_request_failed"
     assert "private failure details" not in tool_error.value.safe_message
-    assert "private failure details" not in provider_error.value.safe_message
+    assert provider_error.value.safe_message == "private failure details"
+
+
+def test_provider_error_boundary_preserves_status_and_redacts_message() -> None:
+    class RateLimitError(RuntimeError):
+        status_code = 429
+
+    def fail(_request):
+        raise RateLimitError(
+            "quota exceeded at C:\\private\\provider.log with Bearer token-value"
+        )
+
+    with pytest.raises(AgentRuntimeError) as captured:
+        ProviderErrorBoundaryMiddleware().wrap_model_call(None, fail)
+
+    assert captured.value.status_code == 429
+    assert "quota exceeded" in captured.value.safe_message
+    assert "C:\\private" not in captured.value.safe_message
+    assert "token-value" not in captured.value.safe_message
+    assert isinstance(captured.value.__cause__, RateLimitError)
 
 def test_tool_error_boundary_preserves_successful_result() -> None:
     result = ToolMessage(

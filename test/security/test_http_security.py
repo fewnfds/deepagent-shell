@@ -16,7 +16,6 @@ def test_local_management_password_blocks_cross_site_state_change(
     tmp_path: Path,
 ) -> None:
     _configure_paths(monkeypatch, tmp_path)
-    monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", MANAGEMENT_TOKEN)
 
     with TestClient(create_app()) as client:
         before = client.get(
@@ -43,7 +42,6 @@ def test_api_key_remains_independent_from_management_password(
     tmp_path: Path,
 ) -> None:
     _configure_paths(monkeypatch, tmp_path)
-    monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", MANAGEMENT_TOKEN)
     page_key = "api-test-secret"
 
     with TestClient(create_app()) as client:

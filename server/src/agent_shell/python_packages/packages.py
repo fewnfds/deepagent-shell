@@ -102,10 +102,20 @@ def _inspect_folder(folder: Path) -> tuple[Path, ...]:
     return entries
 
 
+def _is_python_runtime_artifact(folder: Path, path: Path) -> bool:
+    relative = path.relative_to(folder)
+    return "__pycache__" in relative.parts or path.suffix.casefold() == ".pyc"
+
+
 def _directory_revision(folder: Path, entries: tuple[Path, ...]) -> str:
     digest = sha256()
     for path in sorted(
-        (entry for entry in entries if entry.is_file()),
+        (
+            entry
+            for entry in entries
+            if entry.is_file()
+            and not _is_python_runtime_artifact(folder, entry)
+        ),
         key=lambda value: value.relative_to(folder).as_posix(),
     ):
         relative = path.relative_to(folder).as_posix().encode("utf-8")
@@ -219,7 +229,12 @@ def scan_python_package_template(
     requirements = read_package_requirements(folder)
     text_files: list[dict[str, object]] = []
     for path in sorted(
-        (entry for entry in entries if entry.is_file()),
+        (
+            entry
+            for entry in entries
+            if entry.is_file()
+            and not _is_python_runtime_artifact(folder, entry)
+        ),
         key=lambda value: value.relative_to(folder).as_posix(),
     ):
         try:

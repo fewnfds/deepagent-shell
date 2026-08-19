@@ -13,7 +13,6 @@ set "SOURCE_APP_DIR=%SCRIPT_DIR%server\src"
 set "SOURCE_FRONTEND_PREPARER=%SCRIPT_DIR%packaging\development\prepare_source_frontend.ps1"
 set "EFFECTIVE_HOST="
 set "EFFECTIVE_PORT="
-set "MANAGEMENT_URL="
 set "OCCUPYING_PID="
 set "PORT_FOUND="
 set "PORT_STALE="
@@ -52,10 +51,9 @@ if exist "%SOURCE_APP_DIR%\agent_shell\__main__.py" (
 )
 
 pushd "%SCRIPT_DIR%"
-for /f "tokens=1,2,3 delims=|" %%H in ('!PYTHON_EXE! !PYTHON_FLAGS! -m agent_shell --home "%SCRIPT_DIR%." --prepare-launch-settings') do (
+for /f "tokens=1,2 delims=|" %%H in ('!PYTHON_EXE! !PYTHON_FLAGS! -m agent_shell --home "%SCRIPT_DIR%." --prepare-launch-settings') do (
   set "EFFECTIVE_HOST=%%H"
   set "EFFECTIVE_PORT=%%I"
-  set "MANAGEMENT_URL=%%J"
 )
 popd
 
@@ -89,10 +87,6 @@ if defined PORT_FOUND (
 )
 
 :after_port_prompt
-echo Preparing custom Middleware dependencies...
-echo Starting Agent Shell...
-echo   !MANAGEMENT_URL!
-echo.
 pushd "%SCRIPT_DIR%"
 "!PYTHON_EXE!" !PYTHON_FLAGS! -m agent_shell --home "%SCRIPT_DIR%." --port !EFFECTIVE_PORT! --prepare-dependencies
 set "EXIT_CODE=%ERRORLEVEL%"
@@ -137,7 +131,6 @@ if not defined PORT_VALID (
   goto port_change
 )
 set "EFFECTIVE_PORT=!NEW_PORT!"
-call :set_management_url
 call :check_port
 if defined PORT_FOUND (
   if defined PORT_UNBINDABLE (
@@ -196,12 +189,6 @@ echo Agent Shell could not prepare the source frontend.
 echo Check Node.js 22, the network connection, and the message above.
 pause
 exit /b 1
-
-:set_management_url
-set "DISPLAY_HOST=!EFFECTIVE_HOST!"
-if not "!DISPLAY_HOST::=!"=="!DISPLAY_HOST!" set "DISPLAY_HOST=[!DISPLAY_HOST!]"
-set "MANAGEMENT_URL=http://!DISPLAY_HOST!:!EFFECTIVE_PORT!/admin"
-goto :eof
 
 :check_port
 set "OCCUPYING_PID="

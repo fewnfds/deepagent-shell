@@ -22,7 +22,9 @@ def clean_agent_shell_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _configure_paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", MANAGEMENT_TOKEN)
+    FileConfigRepository(tmp_path / "data").set_secret(
+        "AGENT_SHELL_MANAGEMENT_TOKEN", MANAGEMENT_TOKEN
+    )
 
 
 def _write_system_settings(root: Path, **values: object) -> None:

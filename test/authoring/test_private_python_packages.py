@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -7,6 +8,7 @@ from fastapi.testclient import TestClient
 import yaml
 
 from agent_shell.python_packages.authoring import PythonPackageAuthoringService
+from agent_shell.command_packages import CommandPackageRuntime, scan_command_package
 
 from .app_support import make_client
 
@@ -159,6 +161,38 @@ def test_manifest_free_template_creates_owned_package_and_keeps_missing_file_war
             "editable_files": ["main.py", "helpers/rules.py", "missing.py"],
         }
     }
+
+
+def test_loading_python_package_does_not_change_source_revision(
+    tmp_path: Path, monkeypatch
+) -> None:
+    data_root = tmp_path / "data"
+    template = _write_router_template(data_root)
+    (template / "requirements.txt").write_text("", encoding="utf-8")
+    client = make_client(tmp_path, monkeypatch)
+    selected = client.get(
+        "/api/python-package-templates/command"
+    ).json()["catalog"][0]
+    created = _create_command(client, selected, name="Stable revision router")
+    owner_id = created["id"]
+    packages_dir = data_root / "config" / "python_package_instances"
+    package_dir = packages_dir / "command" / owner_id
+    before = scan_command_package(package_dir, owner_id=owner_id)["revision"]
+    runtime = CommandPackageRuntime(
+        request_id="revision-test",
+        packages_dir=packages_dir,
+        runtime_root=tmp_path / "runtime",
+    )
+    runtime.command_for(
+        owner_id,
+        owner_id,
+        created["python_package"],
+    )
+
+    assert list(package_dir.rglob("*.pyc"))
+    after = scan_command_package(package_dir, owner_id=owner_id)["revision"]
+    assert after == before
+    asyncio.run(runtime.close())
 
 
 def test_builtin_example_coexists_with_same_named_user_template_and_is_copied(

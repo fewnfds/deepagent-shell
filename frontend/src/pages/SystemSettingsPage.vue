@@ -80,17 +80,18 @@ const settingsValid = computed(() => {
   const normalizedPort = Number(port.value)
   const normalizedMessageLimit = Number(maxInitialMessages.value)
   const normalizedValidationDebounce = Number(validationDebounceMs.value)
-  let endpointValid = false
-  try {
-    const endpoint = new URL(langsmithEndpoint.value.trim())
-    endpointValid = ['http:', 'https:'].includes(endpoint.protocol)
-      && !endpoint.username
-      && !endpoint.password
-      && !endpoint.search
-      && !endpoint.hash
-  } catch {
-    endpointValid = false
-  }
+  const endpointValid = (() => {
+    try {
+      const endpoint = new URL(langsmithEndpoint.value.trim())
+      return ['http:', 'https:'].includes(endpoint.protocol)
+        && !endpoint.username
+        && !endpoint.password
+        && !endpoint.search
+        && !endpoint.hash
+    } catch {
+      return false
+    }
+  })()
   const langsmithApiKeyAvailable = Boolean(langsmithApiKey.value)
     || (!langsmithApiKeyDirty.value && Boolean(settings.value?.langsmith_api_key.configured))
   return Number.isInteger(normalizedPort)

@@ -512,6 +512,9 @@ def prepare_windows_dependencies(
     prepared.mkdir(parents=True)
     try:
         if requirements:
+            print("Python requirements:")
+            for requirement in requirements:
+                print(f"  {requirement}")
             uv_path = _ensure_uv(runtime_root, manifest)
             requirements_path = build_root / "requirements.txt"
             constraints_path = build_root / "core-constraints.txt"
@@ -548,7 +551,6 @@ def prepare_windows_dependencies(
                     str(constraints_path),
                     "--requirements",
                     str(requirements_path),
-                    "--quiet",
                 ],
                 check=False,
                 env=environment,

@@ -16,11 +16,11 @@ API_KEY = "test-api-key"
 
 
 def configure_scope_tokens(monkeypatch, root: Path) -> None:
-    monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", MANAGEMENT_TOKEN)
     database = SQLiteDatabase(
         root / "data" / "state" / "agent-shell.sqlite3"
     )
     configuration = FileConfigRepository(root / "data")
+    configuration.set_secret("AGENT_SHELL_MANAGEMENT_TOKEN", MANAGEMENT_TOKEN)
     store = ApiServerStore(database, configuration)
     if store.api_key() is None:
         store.update_settings(

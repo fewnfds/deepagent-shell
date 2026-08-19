@@ -153,7 +153,15 @@ class WorkflowRunJournal(BaseCallbackHandler):
             "subject_name": subject_name,
             "workflow_node_id": node_id,
             "node_invocation_id": node_invocation_id,
-            "status": "running" if phase == "started" else "failed" if phase == "failed" else "completed",
+            "status": (
+                "running"
+                if phase == "started"
+                else "failed"
+                if phase == "failed"
+                else "cancelled"
+                if phase == "cancelled"
+                else "completed"
+            ),
             "error_code": error_code,
             "usage": _usage(response),
             "metadata": safe_metadata,
@@ -341,6 +349,12 @@ class WorkflowRunJournal(BaseCallbackHandler):
 
     def on_tool_error(self, error, *, run_id, parent_run_id=None, **kwargs):
         self._finish(run_id, "failed", error_code=type(error).__name__)
+
+    def finish_open_spans(self, phase: str, *, error_code: str = "") -> None:
+        for span_id in reversed(tuple(self._spans)):
+            self._finish(span_id, phase, error_code=error_code)
+        self._child_parent_spans.clear()
+        self._synthetic_agent_spans.clear()
 
     def _finish(
         self,

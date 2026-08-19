@@ -4,7 +4,7 @@ import asyncio
 import warnings
 from copy import deepcopy
 from collections.abc import AsyncIterator, Callable, Mapping
-from contextlib import suppress
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -272,6 +272,7 @@ class RunExecution:
                 self.rectifier.discard()
             return parts
 
+        journal: WorkflowRunJournal | None = None
         start_run()
         try:
             for rendered in project_event(
@@ -279,7 +280,24 @@ class RunExecution:
             ):
                 if rendered:
                     yield rendered
-            async with asyncio.timeout(self.execution_timeout_seconds):
+            loop = asyncio.get_running_loop()
+            remaining_timeout = float(self.execution_timeout_seconds)
+            timeout_scope = asyncio.timeout(None)
+
+            @contextmanager
+            def pause_execution_timeout():
+                nonlocal remaining_timeout
+                deadline = timeout_scope.when()
+                if deadline is not None:
+                    remaining_timeout = max(0.0, deadline - loop.time())
+                timeout_scope.reschedule(None)
+                try:
+                    yield
+                finally:
+                    timeout_scope.reschedule(loop.time() + remaining_timeout)
+
+            async with timeout_scope:
+                timeout_scope.reschedule(loop.time() + remaining_timeout)
                 with warnings.catch_warnings():
                     warnings.filterwarnings(
                         "ignore",
@@ -293,15 +311,14 @@ class RunExecution:
                     }
                     if self.context is not None and self.lifecycle_service is not None:
                         callbacks = list(config.get("callbacks", ()))
-                        callbacks.append(
-                            WorkflowRunJournal(
-                                self.lifecycle_service,
-                                self.runtime_diagnostics,
-                                self.context,
-                                workflow_node_kinds=self.journal_node_kinds or {},
-                                agent_names=self.journal_agent_names or {},
-                            )
+                        journal = WorkflowRunJournal(
+                            self.lifecycle_service,
+                            self.runtime_diagnostics,
+                            self.context,
+                            workflow_node_kinds=self.journal_node_kinds or {},
+                            agent_names=self.journal_agent_names or {},
                         )
+                        callbacks.append(journal)
                         config["callbacks"] = callbacks
                     stream_kwargs: dict[str, Any] = {
                         "config": config,
@@ -325,56 +342,46 @@ class RunExecution:
                 # streaming client disconnects and this generator is cancelled.
                 async with stream:
                     envelopes = aiter(stream)
-                    next_envelope: asyncio.Future[object] | None = (
-                        asyncio.ensure_future(anext(envelopes))
-                    )
-                    try:
-                        while next_envelope is not None:
-                            try:
-                                envelope = await next_envelope
-                            except StopAsyncIteration:
-                                next_envelope = None
-                                break
-                            next_envelope = asyncio.ensure_future(anext(envelopes))
-                            for event in self.normalizer.feed(envelope):
-                                if isinstance(event, ModelCallBoundary):
-                                    if not self.public_output:
-                                        projected = []
-                                    elif event.source_key and event.cycle_key:
-                                        projected = self.rectifier.flush_cycle(
-                                            event.source_key, event.cycle_key
-                                        )
-                                    elif event.source_key:
-                                        projected = self.rectifier.flush_source(
-                                            event.source_key
-                                        )
-                                    else:
-                                        projected = self.rectifier.flush()
-                                elif isinstance(event, MainAgentMediaBlock):
-                                    notification = (
-                                        await self.media_response.project(event)
-                                        if self.public_output
-                                        else None
+                    while True:
+                        try:
+                            envelope = await anext(envelopes)
+                        except StopAsyncIteration:
+                            break
+                        for event in self.normalizer.feed(envelope):
+                            if isinstance(event, ModelCallBoundary):
+                                if not self.public_output:
+                                    projected = []
+                                elif event.source_key and event.cycle_key:
+                                    projected = self.rectifier.flush_cycle(
+                                        event.source_key, event.cycle_key
                                     )
-                                    projected = (
-                                        project_event(
-                                            self.normalizer.media_notification(
-                                                event, notification
-                                            )
-                                        )
-                                        if notification is not None
-                                        else []
+                                elif event.source_key:
+                                    projected = self.rectifier.flush_source(
+                                        event.source_key
                                     )
                                 else:
-                                    projected = project_event(event)
-                                for rendered in projected:
-                                    if rendered:
+                                    projected = self.rectifier.flush()
+                            elif isinstance(event, MainAgentMediaBlock):
+                                notification = (
+                                    await self.media_response.project(event)
+                                    if self.public_output
+                                    else None
+                                )
+                                projected = (
+                                    project_event(
+                                        self.normalizer.media_notification(
+                                            event, notification
+                                        )
+                                    )
+                                    if notification is not None
+                                    else []
+                                )
+                            else:
+                                projected = project_event(event)
+                            for rendered in projected:
+                                if rendered:
+                                    with pause_execution_timeout():
                                         yield rendered
-                    finally:
-                        if next_envelope is not None and not next_envelope.done():
-                            next_envelope.cancel()
-                            with suppress(asyncio.CancelledError):
-                                await next_envelope
                     output = await stream.output()
                     self.final_state = dict(output) if isinstance(output, Mapping) else None
                     self.normalizer.close_main_agent_messages()
@@ -385,7 +392,10 @@ class RunExecution:
                     )
                     for rendered in final_parts:
                         if rendered:
-                            yield rendered
+                            with pause_execution_timeout():
+                                yield rendered
+            if journal is not None:
+                journal.finish_open_spans("completed")
             for rendered in project_event(
                 self.normalizer.lifecycle(
                     "end",
@@ -396,6 +406,10 @@ class RunExecution:
                 if rendered:
                     yield rendered
         except asyncio.CancelledError:
+            if journal is not None:
+                journal.finish_open_spans(
+                    "cancelled", error_code="request_cancelled"
+                )
             self.normalizer.abort_main_agent_messages()
             self.rectifier.discard()
             finish_run("cancelled", error_code="request_cancelled")
@@ -407,6 +421,8 @@ class RunExecution:
                 "The Agent execution exceeded the runtime time limit.",
                 status_code=504,
             )
+            if journal is not None:
+                journal.finish_open_spans("failed", error_code=error.code)
             for rendered in failure_output(error.code):
                 yield rendered
             record_runtime_error(error, error.code, detail_exception=exc)
@@ -414,6 +430,8 @@ class RunExecution:
             await finish_lifecycle("failed")
             raise error from exc
         except AgentRuntimeError as exc:
+            if journal is not None:
+                journal.finish_open_spans("failed", error_code=exc.code)
             for rendered in failure_output(exc.code):
                 yield rendered
             record_runtime_error(exc, exc.code)
@@ -433,6 +451,8 @@ class RunExecution:
                     "The Agent failed during graph execution.",
                     status_code=502,
                 )
+            if journal is not None:
+                journal.finish_open_spans("failed", error_code=error.code)
             for rendered in failure_output(error.code):
                 yield rendered
             record_runtime_error(error, error.code, detail_exception=exc)

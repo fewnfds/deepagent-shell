@@ -40,10 +40,10 @@ def create_command():
   Store 在 `runtime.store`；后台 Run 命令在 `runtime.context.background_runs`。它不是 detached dict，也不要使用全局 service locator。
 - `activate` 必须是 Branch Edge key 列表，可以同时激活多个不同分支；key 必须与画布中选中 Edge 后在属性栏填写的值完全一致，
   不会显示在线段上。
-- `update` 必须是 Workflow State 的局部映射，只能更新当前 State contract 已声明的顶层字段。
+- `update` 必须是 Workflow State 的局部映射；顶层字段和值的完整形状都按当前 `WorkflowState` contract 校验。
 - `activate` 为空或省略时不激活后继目标，只提交 `update`，当前路径在该节点自然结束。
 - Shell 不保留兜底 key。条件是否覆盖完整、使用 `if/elif/else` 还是 `match`，由脚本自己负责。
-- 返回未知或未连接的 key、重复 key、非法 State 字段、无效入口或异常都会使本次 Workflow 运行失败。
+- 返回未知或未连接的 key、重复 key、非法 State 字段/值、无效入口或异常都会使本次 Workflow 运行失败。
 
 运行时把结果映射为 LangGraph `Command(update=..., goto=[...])`。Branch Edge 只负责声明候选目标，不会再注册为静态
 `add_edge`，因此未被 `activate` 选中的分支不会执行。package 不接触画布 Node ID，也不直接返回 `Command`。

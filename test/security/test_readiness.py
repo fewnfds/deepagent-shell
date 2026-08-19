@@ -30,9 +30,10 @@ def _paths(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 
 def _auth(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _paths(monkeypatch, tmp_path)
-    monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", MANAGEMENT_TOKEN)
     database = SQLiteDatabase(tmp_path / "data" / "state" / "agent-shell.sqlite3")
-    ApiServerStore(database, FileConfigRepository(tmp_path / "data")).update_settings(
+    repository = FileConfigRepository(tmp_path / "data")
+    repository.set_secret("AGENT_SHELL_MANAGEMENT_TOKEN", MANAGEMENT_TOKEN)
+    ApiServerStore(database, repository).update_settings(
         api_key_operation="replace",
         api_key=API_KEY,
     )

@@ -7,11 +7,38 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ToolCallRequest
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 
+from agent_shell.redaction import redact_for_boundary
 from agent_shell.runtime.errors import AgentRuntimeError
 
 
 GRAPH_RECURSION_LIMIT = 100
 WORKFLOW_MAX_CONCURRENCY = 16
+
+
+def _provider_error(exc: Exception) -> AgentRuntimeError:
+    status_code = 502
+    current: BaseException | None = exc
+    for _depth in range(6):
+        if current is None:
+            break
+        status = getattr(current, "status_code", None)
+        if not isinstance(status, int):
+            status = getattr(getattr(current, "response", None), "status_code", None)
+        if isinstance(status, int) and 400 <= status <= 599:
+            status_code = status
+            break
+        current = current.__cause__ or current.__context__
+    detail = redact_for_boundary("http-error", str(exc).strip())
+    message = (
+        detail
+        if isinstance(detail, str) and detail
+        else "The model provider request failed."
+    )
+    return AgentRuntimeError(
+        "provider_request_failed",
+        message,
+        status_code=status_code,
+    )
 
 
 class ToolErrorBoundaryMiddleware(AgentMiddleware):
@@ -63,11 +90,7 @@ class ProviderErrorBoundaryMiddleware(AgentMiddleware):
         except AgentRuntimeError:
             raise
         except Exception as exc:
-            raise AgentRuntimeError(
-                "provider_request_failed",
-                "The model provider request failed.",
-                status_code=502,
-            ) from exc
+            raise _provider_error(exc) from exc
 
     async def awrap_model_call(
         self,
@@ -79,8 +102,4 @@ class ProviderErrorBoundaryMiddleware(AgentMiddleware):
         except AgentRuntimeError:
             raise
         except Exception as exc:
-            raise AgentRuntimeError(
-                "provider_request_failed",
-                "The model provider request failed.",
-                status_code=502,
-            ) from exc
+            raise _provider_error(exc) from exc

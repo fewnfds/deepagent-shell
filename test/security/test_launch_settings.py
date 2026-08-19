@@ -51,7 +51,9 @@ def test_create_app_installs_minimal_cors_and_runtime_directories(
     python_templates_dir = data_root / "templates"
     python_package_instances_dir = data_root / "config" / "python_package_instances"
     _write_system_settings(tmp_path, cors_origins=["https://console.example"])
-    monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "management-secret")
+    _write_environment_file(
+        tmp_path, "AGENT_SHELL_MANAGEMENT_TOKEN=management-secret\n"
+    )
 
     with TestClient(create_app()) as client:
         allowed = client.options(
@@ -107,7 +109,9 @@ def test_official_launcher_uses_only_validated_settings_and_disables_proxy_heade
 
     calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
     _write_system_settings(tmp_path, host="127.0.0.2", port=9123)
-    monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "management-secret")
+    _write_environment_file(
+        tmp_path, "AGENT_SHELL_MANAGEMENT_TOKEN=management-secret\n"
+    )
     monkeypatch.setattr(
         uvicorn,
         "run",
@@ -139,12 +143,13 @@ def test_project_langsmith_tracing_boundary_is_explicit(
     from agent_shell import langsmith_tracing
 
     _write_system_settings(tmp_path, langsmith_tracing_enabled=enabled)
-    monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "management-secret")
+    environment = "AGENT_SHELL_MANAGEMENT_TOKEN=management-secret\n"
+    if enabled:
+        environment += "LANGSMITH_API_KEY=langsmith-test-key\n"
+    _write_environment_file(tmp_path, environment)
     monkeypatch.setenv("LANGSMITH_TRACING", "true" if not enabled else "false")
     monkeypatch.setenv("LANGCHAIN_TRACING_V2", "true" if not enabled else "false")
     monkeypatch.setenv("LANGCHAIN_TRACING", "true" if not enabled else "false")
-    if enabled:
-        monkeypatch.setenv("LANGSMITH_API_KEY", "langsmith-test-key")
     configured: list[dict[str, object]] = []
     monkeypatch.setattr(
         langsmith_tracing.ls,
@@ -223,11 +228,14 @@ def test_windows_launcher_prepares_and_prints_settings_in_one_process(
 def test_official_launcher_prepares_package_dependencies_before_app(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
 ) -> None:
     from agent_shell import __main__ as launcher
 
     calls: list[str] = []
-    monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", "management-secret")
+    _write_environment_file(
+        tmp_path, "AGENT_SHELL_MANAGEMENT_TOKEN=management-secret\n"
+    )
     monkeypatch.setattr(
         launcher,
         "_prepare_windows_dependencies",
@@ -253,6 +261,12 @@ def test_official_launcher_prepares_package_dependencies_before_app(
 
     assert launcher.main(prepare_dependencies=True, serve_frontend=False) == 0
     assert calls == ["dependencies", "activate", "app", "server"]
+    output = capsys.readouterr().out
+    assert "Python dependency preparation started..." in output
+    assert "Python dependency preparation finished." in output
+    assert output.index("Python dependency preparation finished.") < output.index(
+        "Starting Agent Shell..."
+    )
 
 
 def test_official_launcher_port_help_is_compact(
@@ -290,7 +304,9 @@ def test_official_launcher_warns_when_remote_http_backend_is_enabled(
     management_token = "management-secret-sentinel"
     api_key = "api-secret-sentinel"
     _write_system_settings(tmp_path, allow_remote=True)
-    monkeypatch.setenv("AGENT_SHELL_MANAGEMENT_TOKEN", management_token)
+    _write_environment_file(
+        tmp_path, f"AGENT_SHELL_MANAGEMENT_TOKEN={management_token}\n"
+    )
     database = SQLiteDatabase(tmp_path / "data" / "state" / "agent-shell.sqlite3")
     ApiServerStore(database, FileConfigRepository(tmp_path / "data")).update_settings(
         api_key_operation="replace",
@@ -309,11 +325,16 @@ def test_official_launcher_warns_when_remote_http_backend_is_enabled(
 def test_official_launcher_reports_safe_startup_error(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     from agent_shell import __main__ as launcher
 
     sentinel = "launcher-inference-secret"
-    monkeypatch.setenv("AGENT_SHELL_INFERENCE_TOKEN", sentinel)
+    _write_environment_file(
+        tmp_path,
+        "AGENT_SHELL_MANAGEMENT_TOKEN=management-secret\n"
+        f"AGENT_SHELL_INFERENCE_TOKEN={sentinel}\n",
+    )
     monkeypatch.setattr(
         uvicorn,
         "run",

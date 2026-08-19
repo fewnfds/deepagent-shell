@@ -114,6 +114,27 @@ def test_command_accepts_zero_targets_and_rejects_unmapped_keys() -> None:
         )
 
 
+@pytest.mark.parametrize("mutate_state", [False, True])
+def test_command_rejects_invalid_workflow_state_value_shapes(
+    mutate_state: bool,
+) -> None:
+    async def invalid_update(state, runtime):
+        if mutate_state:
+            state["shared_vars"] = []
+            return {"activate": [], "update": {}}
+        return {"activate": [], "update": {"shared_vars": []}}
+
+    with pytest.raises(CommandError):
+        asyncio.run(
+            run_command(
+                invalid_update,
+                state={"shared_vars": {}, "agent_invocations": {}, "files": {}},
+                runtime=_runtime(),
+                allowed_branches=set(),
+            )
+        )
+
+
 def test_command_package_loads_local_modules_and_materializes_async_route(
     tmp_path: Path,
 ) -> None:

@@ -206,32 +206,32 @@ class SystemSettingsService:
                     "LangSmith connection validation failed. Check the API key, endpoint region, and workspace ID.",
                 ) from None
         try:
-            self._configuration.update_system(
-                lambda system: system.__setitem__(
-                    "settings",
-                    {
-                        "host": candidate.host,
-                        "port": candidate.port,
-                        "allow_remote": candidate.allow_remote,
-                        "langsmith_tracing_enabled": candidate.langsmith_tracing_enabled,
-                        "langsmith_endpoint": candidate.langsmith_endpoint,
-                        "langsmith_project": candidate.langsmith_project,
-                        "langsmith_workspace_id": candidate.langsmith_workspace_id,
-                        "cors_origins": list(candidate.cors_origins),
-                        "trusted_proxy_cidrs": list(candidate.trusted_proxy_cidrs),
-                    },
-                )
-            )
-            self._configuration.set_secret(
-                "AGENT_SHELL_MANAGEMENT_TOKEN",
-                _secret_value(candidate.management_token),
-            )
-            operation = payload["langsmith_api_key"]["operation"]
-            if operation != "keep":
-                self._configuration.set_secret(
-                    "LANGSMITH_API_KEY",
-                    _secret_value(candidate.langsmith_api_key),
-                )
+            def mutate(
+                system: dict[str, Any], environment: dict[str, str]
+            ) -> None:
+                system["settings"] = {
+                    "host": candidate.host,
+                    "port": candidate.port,
+                    "allow_remote": candidate.allow_remote,
+                    "langsmith_tracing_enabled": candidate.langsmith_tracing_enabled,
+                    "langsmith_endpoint": candidate.langsmith_endpoint,
+                    "langsmith_project": candidate.langsmith_project,
+                    "langsmith_workspace_id": candidate.langsmith_workspace_id,
+                    "cors_origins": list(candidate.cors_origins),
+                    "trusted_proxy_cidrs": list(candidate.trusted_proxy_cidrs),
+                }
+                management_token = _secret_value(candidate.management_token)
+                if management_token is not None:
+                    environment["AGENT_SHELL_MANAGEMENT_TOKEN"] = management_token
+                operation = payload["langsmith_api_key"]["operation"]
+                if operation != "keep":
+                    langsmith_api_key = _secret_value(candidate.langsmith_api_key)
+                    if langsmith_api_key is None:
+                        environment.pop("LANGSMITH_API_KEY", None)
+                    else:
+                        environment["LANGSMITH_API_KEY"] = langsmith_api_key
+
+            self._configuration.update_system_and_environment(mutate)
         except OSError as exc:
             raise SystemSettingsError(
                 500,

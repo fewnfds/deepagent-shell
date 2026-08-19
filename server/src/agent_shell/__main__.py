@@ -156,7 +156,6 @@ def initialize_local_settings(
     *,
     application_home: Path | None = None,
     data_root: Path | None = None,
-    include_process_environment: bool = False,
     env_path: Path | None = None,
     password_reader: Callable[[str], str] | None = None,
     output_stream: TextIO | None = None,
@@ -171,7 +170,6 @@ def initialize_local_settings(
         get_settings(
             application_home=home,
             data_root=root,
-            include_process_environment=include_process_environment,
         )
     except SettingsError as exc:
         if not (
@@ -188,7 +186,6 @@ def initialize_local_settings(
         current_settings = load_settings(
             application_home=home,
             data_root=root,
-            include_process_environment=include_process_environment,
         )
     except SettingsError as exc:
         print(f"Startup configuration error: {exc}", file=sys.stderr)
@@ -239,14 +236,12 @@ def prepare_launch_settings(
     *,
     application_home: Path | None = None,
     data_root: Path | None = None,
-    include_process_environment: bool = False,
 ) -> int:
     """Prepare local settings and print the effective launch tuple in one process."""
 
     result = initialize_local_settings(
         application_home=application_home,
         data_root=data_root,
-        include_process_environment=include_process_environment,
         output_stream=sys.stderr,
     )
     if result != 0:
@@ -254,7 +249,6 @@ def prepare_launch_settings(
     return main(
         application_home=application_home,
         data_root=data_root,
-        include_process_environment=include_process_environment,
         print_launch_settings=True,
         serve_frontend=False,
     )
@@ -264,7 +258,6 @@ def main(
     *,
     application_home: Path | None = None,
     data_root: Path | None = None,
-    include_process_environment: bool = True,
     print_launch_settings: bool = False,
     probe_listen_settings: bool = False,
     prepare_dependencies: bool = False,
@@ -276,7 +269,6 @@ def main(
         settings = get_settings(
             application_home=home,
             data_root=data_root,
-            include_process_environment=include_process_environment,
         )
     except SettingsError as exc:
         print(f"Startup configuration error: {exc}", file=sys.stderr)
@@ -303,6 +295,7 @@ def main(
         return 0
 
     if prepare_dependencies:
+        print("Python dependency preparation started...")
         try:
             _prepare_windows_dependencies(
                 data_root=settings.data_root,
@@ -314,6 +307,11 @@ def main(
                 file=sys.stderr,
             )
             return 1
+        print("Python dependency preparation finished.")
+        display_host = f"[{settings.host}]" if ":" in settings.host else settings.host
+        print("Starting Agent Shell...")
+        print(f"  http://{display_host}:{settings.port}/admin")
+        print()
 
     if settings.deployment_mode == "authenticated_remote":
         print(
@@ -345,12 +343,6 @@ def run_cli(arguments: list[str] | None = None) -> int:
         "--data-dir",
         type=Path,
         help="Persistent data root. Relative paths are resolved from application home.",
-    )
-    parser.add_argument(
-        "--mode",
-        choices=("portable", "environment"),
-        default="portable",
-        help="Controls whether the allowed secret values may come from the process environment; system settings remain in system.yaml.",
     )
     parser.add_argument("--port", type=_parse_port, metavar="PORT")
     action = parser.add_mutually_exclusive_group()
@@ -384,23 +376,19 @@ def run_cli(arguments: list[str] | None = None) -> int:
         if data_root.is_absolute()
         else (home / data_root).resolve()
     )
-    include_process_environment = parsed.mode == "environment"
     if parsed.initialize_local_settings:
         return initialize_local_settings(
             application_home=home,
             data_root=data_root,
-            include_process_environment=include_process_environment,
         )
     if parsed.prepare_launch_settings:
         return prepare_launch_settings(
             application_home=home,
             data_root=data_root,
-            include_process_environment=include_process_environment,
         )
     return main(
         application_home=home,
         data_root=data_root,
-        include_process_environment=include_process_environment,
         print_launch_settings=parsed.print_launch_settings,
         probe_listen_settings=parsed.probe_listen_settings,
         prepare_dependencies=parsed.prepare_dependencies,

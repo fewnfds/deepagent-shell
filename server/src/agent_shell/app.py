@@ -489,6 +489,7 @@ def create_app(
         build_agent_config_router(
             config_store,
             configuration_validation,
+            workflow_store,
         )
     )
     app.include_router(
@@ -504,6 +505,7 @@ def create_app(
             background_tasks,
             workflow_checkpoints,
             runtime_diagnostics,
+            settings.resolved_runtime_dir() / "tmp",
         )
     )
     app.include_router(

@@ -218,6 +218,23 @@ def test_lifecycle_management_summarizes_and_deletes_dynamic_workspace(
             assert manifest["captured_at"]
             assert manifest["includes"]["runtime_payloads"] is False
             assert b"private-run-history-sentinel" not in downloaded.content
+        run_downloaded = client.get(
+            f"/api/workflow-lifecycles/{summary['lifecycle_id']}"
+            f"/runs/{root_run['run_id']}/download"
+        )
+        assert run_downloaded.status_code == 200, run_downloaded.text
+        with zipfile.ZipFile(BytesIO(run_downloaded.content)) as archive:
+            assert {
+                "manifest.json",
+                "run.json",
+                "events.jsonl",
+                "checkpoints.jsonl",
+                "diagnostics.jsonl",
+            } <= set(archive.namelist())
+            assert json.loads(archive.read("manifest.json"))["scope"] == "run"
+        assert not list(
+            (tmp_path / "runtime" / "tmp").glob("workflow-diagnostic-*")
+        )
         dynamic_directories = list(dynamic_parent.iterdir())
         assert len(dynamic_directories) == 1
         assert dynamic_directories[0].is_dir()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import AbstractAsyncContextManager
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -100,25 +101,32 @@ class WorkflowCheckpointService:
     async def checkpoint_history(
         self, thread_id: str, *, limit: int | None = 100
     ) -> list[dict[str, object]]:
+        return [
+            item
+            async for item in self.iter_checkpoint_history(
+                thread_id,
+                limit=limit,
+            )
+        ]
+
+    async def iter_checkpoint_history(
+        self, thread_id: str, *, limit: int | None = None
+    ) -> AsyncIterator[dict[str, object]]:
         config = {"configurable": {"thread_id": thread_id}}
-        result: list[dict[str, object]] = []
         async for item in self.checkpointer.alist(config, limit=limit):
             configurable = item.config.get("configurable", {})
             checkpoint = item.checkpoint
             metadata = item.metadata or {}
             channels = checkpoint.get("channel_values", {})
-            result.append(
-                {
-                    "checkpoint_id": str(configurable.get("checkpoint_id", "")),
-                    "checkpoint_ns": str(configurable.get("checkpoint_ns", "")),
-                    "created_at": str(checkpoint.get("ts", "")),
-                    "source": str(metadata.get("source", "")),
-                    "step": metadata.get("step"),
-                    "channel_names": sorted(str(key) for key in channels),
-                    "pending_write_count": len(item.pending_writes or ()),
-                }
-            )
-        return result
+            yield {
+                "checkpoint_id": str(configurable.get("checkpoint_id", "")),
+                "checkpoint_ns": str(configurable.get("checkpoint_ns", "")),
+                "created_at": str(checkpoint.get("ts", "")),
+                "source": str(metadata.get("source", "")),
+                "step": metadata.get("step"),
+                "channel_names": sorted(str(key) for key in channels),
+                "pending_write_count": len(item.pending_writes or ()),
+            }
 
     async def checkpoint_count(self, thread_id: str) -> int:
         config = {"configurable": {"thread_id": thread_id}}

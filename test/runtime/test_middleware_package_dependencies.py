@@ -180,9 +180,10 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
 
     monkeypatch.setattr(dependencies.subprocess, "run", successful_install)
     prepare_windows_dependencies(data_root=data_root, runtime_root=runtime_root)
-    assert (
-        "resource.error.pythonPackage.syntax" in capsys.readouterr().out
-    )
+    output = capsys.readouterr().out
+    assert "resource.error.pythonPackage.syntax" in output
+    assert "Python requirements:" in output
+    assert "Pillow==12.0.0" in output
 
     state = dependencies.load_dependency_state(runtime_root)
     assert state is not None
@@ -193,6 +194,7 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
     assert all(item["status"] == "ready" for item in state["records"].values())
     assert (dependencies.package_site_packages(runtime_root) / "PIL").is_dir()
     assert "--only-binary" in calls[0]
+    assert "--quiet" not in calls[0]
     ready = scan_middleware_package(
         folder, owner_id=owner_id, runtime_root=runtime_root
     )

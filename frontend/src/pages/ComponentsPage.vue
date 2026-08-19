@@ -13,7 +13,6 @@ import {
   type CapabilityManifest,
   type LocalizedMessagePayload,
   type ModelProviderCatalog,
-  type PythonPackageFile,
   type SavedBlock,
   type ValidationReport,
 } from '@/api'

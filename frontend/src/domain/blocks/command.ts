@@ -19,10 +19,10 @@ interface CommandPayload extends BlockPayloadBase {
 }
 
 export const commandAdapter = {
-  blank(_defaults?: CommandDefaults): CommandDraft {
+  blank(): CommandDraft {
     return { id: '', name: '', ...blankPythonPackage() }
   },
-  fromApi(value: unknown, _defaults?: CommandDefaults): CommandDraft {
+  fromApi(value: unknown): CommandDraft {
     const source = isRecord(value) ? value : {}
     return {
       ...identity(source),

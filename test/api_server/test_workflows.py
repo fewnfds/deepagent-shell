@@ -96,8 +96,28 @@ def test_workflow_roles_filter_management_and_public_model_entries(
         ]
         assert created["workflow_role"] == "parent"
         assert child["workflow_role"] == "child"
-        assert client.delete(f"/api/main-agents/{main_agent['id']}").json() == {
-            "ok": True
+        protected = client.delete(f"/api/main-agents/{main_agent['id']}")
+        assert protected.status_code == 409
+        assert protected.json()["detail"] == {
+            "code": "configuration_referenced",
+            "message_key": "errors.configurationReferencedByWorkflow",
+            "message": "The Main Agent is still referenced by a Workflow.",
+            "message_args": {"owner": "Research Workflow"},
+        }
+
+        copied = client.post(
+            f"/api/main-agents/{main_agent['id']}/copy",
+            json={"name": "Unreferenced Main Agent"},
+        )
+        assert copied.status_code == 200, copied.text
+        bulk_protected = client.post(
+            "/api/main-agents/delete",
+            json={"ids": [copied.json()["id"], main_agent["id"]]},
+        )
+        assert bulk_protected.status_code == 409
+        assert {item["id"] for item in client.get("/api/main-agents").json()} == {
+            copied.json()["id"],
+            main_agent["id"],
         }
 
         disabled = client.put(

@@ -173,30 +173,38 @@ class FileConfigRepository:
                 config["workflows"].append({**deepcopy(payload), "id": document.get("id")})
         return config
 
-    def _normalize(self) -> None:
-        self._config.setdefault("config_version", CONFIG_VERSION)
-        self._config.setdefault("components", {})
-        self._config.setdefault("main_agents", [])
-        self._config.setdefault("subagents", [])
-        self._config.setdefault("workflows", [])
-        self._system.setdefault("config_version", CONFIG_VERSION)
+    @staticmethod
+    def _normalize_config(config: dict[str, Any]) -> None:
+        config.setdefault("config_version", CONFIG_VERSION)
+        config.setdefault("components", {})
+        config.setdefault("main_agents", [])
+        config.setdefault("subagents", [])
+        config.setdefault("workflows", [])
+        components = config["components"]
+        if not isinstance(components, dict):
+            raise ValueError("config components must be a mapping")
+
+    @staticmethod
+    def _normalize_system(system: dict[str, Any]) -> None:
+        system.setdefault("config_version", CONFIG_VERSION)
         defaults = _default_system()
         for section, value in defaults.items():
             if section == "config_version":
                 continue
-            current = self._system.setdefault(section, {})
+            current = system.setdefault(section, {})
             if isinstance(current, dict) and isinstance(value, dict):
                 for key, default in value.items():
                     current.setdefault(key, deepcopy(default))
-        self._system.pop("runtime_control", None)
-        self._system.pop("runtime_diagnostics", None)
-        history_retention = self._system.get("history_retention")
+        system.pop("runtime_control", None)
+        system.pop("runtime_diagnostics", None)
+        history_retention = system.get("history_retention")
         if isinstance(history_retention, dict):
             history_retention.pop("runtime_log", None)
             history_retention.pop("workflow_debug_history", None)
-        components = self._config["components"]
-        if not isinstance(components, dict):
-            raise ValueError("config components must be a mapping")
+
+    def _normalize(self) -> None:
+        self._normalize_config(self._config)
+        self._normalize_system(self._system)
 
     @staticmethod
     def _allowed_environment_names(config: dict[str, Any]) -> set[str]:
@@ -233,39 +241,133 @@ class FileConfigRepository:
 
     def update_config(self, mutator: Callable[[dict[str, Any]], Any]) -> Any:
         with self._lock:
-            result = mutator(self._config)
-            self._normalize()
-            self._flush_config()
+            candidate = deepcopy(self._config)
+            result = mutator(candidate)
+            self._normalize_config(candidate)
+            try:
+                self._flush_config(candidate)
+            except BaseException:
+                try:
+                    self._flush_config(self._config)
+                except BaseException:
+                    pass
+                raise
+            self._config = candidate
             return result
 
     def update_system(self, mutator: Callable[[dict[str, Any]], Any]) -> Any:
         with self._lock:
-            result = mutator(self._system)
-            self._normalize()
+            candidate = deepcopy(self._system)
+            result = mutator(candidate)
+            self._normalize_system(candidate)
             if self._persist:
-                _write_atomic(self.system_path, _dump_yaml(self._system))
+                _write_atomic(self.system_path, _dump_yaml(candidate))
+            self._system = candidate
+            return result
+
+    def update_config_and_environment(
+        self,
+        mutator: Callable[[dict[str, Any], dict[str, str]], Any],
+    ) -> Any:
+        with self._lock:
+            original_config = deepcopy(self._config)
+            original_environment = dict(self._env)
+            candidate_config = deepcopy(self._config)
+            candidate_environment = dict(self._env)
+            result = mutator(candidate_config, candidate_environment)
+            self._normalize_config(candidate_config)
+            self._commit_config_and_environment(
+                original_config,
+                original_environment,
+                candidate_config,
+                candidate_environment,
+            )
+            self._config = candidate_config
+            self._env = candidate_environment
+            return result
+
+    def update_system_and_environment(
+        self,
+        mutator: Callable[[dict[str, Any], dict[str, str]], Any],
+    ) -> Any:
+        with self._lock:
+            original_system = deepcopy(self._system)
+            original_environment = dict(self._env)
+            candidate_system = deepcopy(self._system)
+            candidate_environment = dict(self._env)
+            result = mutator(candidate_system, candidate_environment)
+            self._normalize_system(candidate_system)
+            staged_environment = {**original_environment, **candidate_environment}
+            try:
+                if staged_environment != original_environment:
+                    self._write_environment(staged_environment)
+                if self._persist:
+                    _write_atomic(self.system_path, _dump_yaml(candidate_system))
+                if candidate_environment != staged_environment:
+                    self._write_environment(candidate_environment)
+            except BaseException:
+                try:
+                    if self._persist:
+                        _write_atomic(self.system_path, _dump_yaml(original_system))
+                    self._write_environment(original_environment)
+                except BaseException:
+                    pass
+                raise
+            self._system = candidate_system
+            self._env = candidate_environment
             return result
 
     def secret(self, name: str) -> str | None:
         with self._lock:
-            return self._env[name] if name in self._env else os.getenv(name)
+            return self._env.get(name)
 
     def set_secret(self, name: str, value: str | None) -> None:
         with self._lock:
+            candidate = dict(self._env)
             if value is None:
-                self._env.pop(name, None)
+                candidate.pop(name, None)
             else:
-                self._env[name] = value
-            if self._persist:
-                lines = [f"{key}={item}" for key, item in sorted(self._env.items())]
-                _write_atomic(self.environment_path, "\n".join(lines) + ("\n" if lines else ""))
+                candidate[name] = value
+            self._write_environment(candidate)
+            self._env = candidate
 
-    def _flush_config(self) -> None:
+    def _write_environment(self, environment: dict[str, str]) -> None:
+        if not self._persist:
+            return
+        lines = [f"{key}={item}" for key, item in sorted(environment.items())]
+        _write_atomic(
+            self.environment_path,
+            "\n".join(lines) + ("\n" if lines else ""),
+        )
+
+    def _commit_config_and_environment(
+        self,
+        original_config: dict[str, Any],
+        original_environment: dict[str, str],
+        candidate_config: dict[str, Any],
+        candidate_environment: dict[str, str],
+    ) -> None:
+        staged_environment = {**original_environment, **candidate_environment}
+        try:
+            if staged_environment != original_environment:
+                self._write_environment(staged_environment)
+            self._flush_config(candidate_config)
+            if candidate_environment != staged_environment:
+                self._write_environment(candidate_environment)
+        except BaseException:
+            try:
+                self._flush_config(original_config)
+                self._write_environment(original_environment)
+            except BaseException:
+                pass
+            raise
+
+    def _flush_config(self, config: dict[str, Any]) -> None:
         if not self._persist:
             return
         self.components_root.mkdir(parents=True, exist_ok=True)
         expected: set[Path] = set()
-        for block_type, records in self._config.get("components", {}).items():
+        for block_type, records in config.get("components", {}).items():
             directory = self.components_root / str(block_type)
             directory.mkdir(parents=True, exist_ok=True)
             for record in records:
@@ -275,8 +377,8 @@ class FileConfigRepository:
                 path = directory / f"{record['id']}.yaml"
                 expected.add(path)
                 _write_atomic(path, _dump_yaml(document))
-        self._write_agents(expected)
-        self._write_workflows(expected)
+        self._write_agents(config, expected)
+        self._write_workflows(config, expected)
         for directory in (
             self.components_root,
             self.agents_root,
@@ -288,11 +390,11 @@ class FileConfigRepository:
                 if path not in expected:
                     path.unlink(missing_ok=True)
 
-    def _write_agents(self, expected: set[Path]) -> None:
+    def _write_agents(self, config: dict[str, Any], expected: set[Path]) -> None:
         for category, key, identity, kind in (("main", "main_agents", "name", "main_agent"), ("subagent", "subagents", "component_name", "subagent")):
             directory = self.agents_root / category
             directory.mkdir(parents=True, exist_ok=True)
-            for record in self._config.get(key, []):
+            for record in config.get(key, []):
                 if not isinstance(record, dict) or not record.get("id"):
                     continue
                 path = directory / f"{record['id']}.yaml"
@@ -300,9 +402,11 @@ class FileConfigRepository:
                 payload = {k: deepcopy(v) for k, v in record.items() if k not in {"id", identity}}
                 _write_atomic(path, _dump_yaml({"kind": kind, "schema_version": CONFIG_VERSION, "id": record["id"], identity: record.get(identity, ""), "payload": payload}))
 
-    def _write_workflows(self, expected: set[Path]) -> None:
+    def _write_workflows(
+        self, config: dict[str, Any], expected: set[Path]
+    ) -> None:
         self.workflows_root.mkdir(parents=True, exist_ok=True)
-        for record in self._config.get("workflows", []):
+        for record in config.get("workflows", []):
             if not isinstance(record, dict) or not record.get("id"):
                 continue
             path = self.workflows_root / f"{record['id']}.yaml"

@@ -19,10 +19,10 @@ interface TaskDispatcherPayload extends BlockPayloadBase {
 }
 
 export const taskDispatcherAdapter = {
-  blank(_defaults?: TaskDispatcherDefaults): TaskDispatcherDraft {
+  blank(): TaskDispatcherDraft {
     return { id: '', name: '', ...blankPythonPackage() }
   },
-  fromApi(value: unknown, _defaults?: TaskDispatcherDefaults): TaskDispatcherDraft {
+  fromApi(value: unknown): TaskDispatcherDraft {
     const source = isRecord(value) ? value : {}
     return {
       ...identity(source),

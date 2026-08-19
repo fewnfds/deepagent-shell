@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import cache
 from typing import Annotated, Any
 from typing_extensions import TypedDict
 from typing_extensions import NotRequired
@@ -7,7 +8,7 @@ from typing_extensions import NotRequired
 from deepagents import DeepAgentState
 from deepagents.middleware.filesystem import FilesystemState
 from langchain.agents.middleware import AgentMiddleware
-from pydantic import JsonValue
+from pydantic import JsonValue, TypeAdapter
 
 
 def merge_shared_vars(
@@ -118,6 +119,15 @@ class WorkflowNodeInputState(WorkflowState):
     workflow_task: NotRequired[WorkflowTaskContext]
 
 
+@cache
+def _workflow_state_update_adapter() -> TypeAdapter[Any]:
+    return TypeAdapter(WorkflowState)
+
+
+def validate_workflow_state_update(update: dict[str, Any]) -> dict[str, Any]:
+    return _workflow_state_update_adapter().validate_python(update)
+
+
 class AgentShellState(DeepAgentState, FilesystemState):
     """Private Agent state plus Shell-owned variables mapped by its wrapper."""
 
@@ -144,4 +154,5 @@ __all__ = [
     "merge_agent_invocations",
     "merge_background_tasks",
     "merge_shared_vars",
+    "validate_workflow_state_update",
 ]

@@ -14,14 +14,14 @@ def resolver_for(database_path: Path) -> ProviderSecretResolver:
     return ProviderSecretResolver(FileConfigRepository(database_path.parent.parent))
 
 
-def test_explicit_empty_secret_does_not_fall_back_to_process_environment(
+def test_repository_secrets_do_not_fall_back_to_process_environment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     name = "AGENT_SHELL_TEST_EMPTY_SECRET"
     monkeypatch.setenv(name, "process-value")
     repository = FileConfigRepository(tmp_path / "data")
 
-    assert repository.secret(name) == "process-value"
+    assert repository.secret(name) is None
 
     repository.set_secret(name, "")
 

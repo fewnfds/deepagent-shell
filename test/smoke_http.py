@@ -199,8 +199,8 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
         for key, value in os.environ.items()
         if not key.upper().startswith("AGENT_SHELL_")
     }
-    environment["AGENT_SHELL_MANAGEMENT_TOKEN"] = management_token
     configuration = FileConfigRepository(data_dir)
+    configuration.set_secret("AGENT_SHELL_MANAGEMENT_TOKEN", management_token)
     configuration.update_system(
         lambda system: system["settings"].update(
             {
@@ -230,8 +230,6 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
             str(work),
             "--data-dir",
             str(data_dir),
-            "--mode",
-            "environment",
         ],
         cwd=repo_root / "server",
         env=environment,

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import ipaddress
 import json
-import os
 from pathlib import Path
 import re
 from typing import Annotated, Any
@@ -417,24 +416,19 @@ def load_settings(
     *,
     application_home: Path | None = None,
     data_root: Path | None = None,
-    include_process_environment: bool = True,
 ) -> Settings:
     home = (application_home or Path.cwd()).resolve()
     root = data_root or (home / "data")
     root = root.resolve() if root.is_absolute() else (home / root).resolve()
     env_path = root / "config" / "agent-shell.env"
     system_path = root / "config" / "system.yaml"
-    process_unknown = (
-        _unknown_environment_keys(dict(os.environ))
-        if include_process_environment
-        else ()
-    )
     file_unknown = _unknown_environment_keys(
         {key: "" for key in _environment_file_keys(env_path)}
     )
-    unknown = tuple(sorted(set(process_unknown) | set(file_unknown)))
-    if unknown:
-        raise SettingsError(unknown, "Remove or correct unknown AGENT_SHELL_* settings.")
+    if file_unknown:
+        raise SettingsError(
+            file_unknown, "Remove or correct unknown AGENT_SHELL_* settings."
+        )
     try:
         system_values: dict[str, Any] = {}
         if system_path.exists():
@@ -449,18 +443,10 @@ def load_settings(
         system_values.pop("management_token", None)
         system_values.pop("langsmith_api_key", None)
         environment_values = _environment_file_values(env_path)
-        management_token = (
-            os.environ["AGENT_SHELL_MANAGEMENT_TOKEN"]
-            if include_process_environment and "AGENT_SHELL_MANAGEMENT_TOKEN" in os.environ
-            else environment_values.get("AGENT_SHELL_MANAGEMENT_TOKEN")
-        )
+        management_token = environment_values.get("AGENT_SHELL_MANAGEMENT_TOKEN")
         if management_token is not None:
             system_values["management_token"] = management_token
-        langsmith_api_key = (
-            os.environ["LANGSMITH_API_KEY"]
-            if include_process_environment and "LANGSMITH_API_KEY" in os.environ
-            else environment_values.get("LANGSMITH_API_KEY")
-        )
+        langsmith_api_key = environment_values.get("LANGSMITH_API_KEY")
         if langsmith_api_key is not None:
             system_values["langsmith_api_key"] = langsmith_api_key
         settings = Settings(**system_values)
@@ -476,12 +462,10 @@ def get_settings(
     *,
     application_home: Path | None = None,
     data_root: Path | None = None,
-    include_process_environment: bool = True,
 ) -> Settings:
     settings = load_settings(
         application_home=application_home,
         data_root=data_root,
-        include_process_environment=include_process_environment,
     )
     settings.validate_deployment()
     return settings

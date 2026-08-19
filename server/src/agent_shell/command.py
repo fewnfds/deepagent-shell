@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 
 from agent_shell.python_packages.contracts import PythonPackageReference
 from agent_shell.runtime.context import WorkflowRuntimeContext
+from agent_shell.runtime.state import validate_workflow_state_update
 
 
 BranchKey = Annotated[
@@ -112,6 +113,7 @@ async def run_command(
                 "command returned unsupported Workflow State fields: "
                 + ", ".join(unsupported_updates)
             )
+        update = validate_workflow_state_update(update)
         activate = result.activate
         unknown = sorted(set(activate) - set(allowed_branches))
         if unknown:

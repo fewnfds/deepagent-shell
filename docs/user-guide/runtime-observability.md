@@ -25,11 +25,14 @@
 异常详情可能包含请求内容、Provider 返回、凭据、宿主路径和自定义代码信息。删除诊断或降低诊断保留数时，
 对应附件一起删除；附件不具有独立于诊断记录的生命周期。
 
+Provider 有明确 HTTP 状态和可读异常时，当前单管理员调用方会直接收到该状态以及经过普通响应边界清理的说明。原始 Provider 异常仍作为 cause 进入上述完整异常链；无法放入普通 HTTP/SSE 响应的复杂信息不会被静默丢弃。
+
 ## 运行历史
 
 【Workflow / 运行历史】以一次顶层请求的 Lifecycle 聚合 root Workflow、background Workflow 和 background Agent Run。
 Run Registry 是 Run 身份与终态的权威记录；append-only Event Journal 保存 Run、Workflow Node、Agent、Model 和 Tool
 的结构边界。Node 每次执行使用独立 `node_invocation_id/span_id`，同一 Node 的循环、重试和 fan-out 不会合并。
+Run 完成、失败、超时或取消时，Journal 会以相同终态关闭仍开放的 Node、Agent、Model 和 Tool span，Timeline 不保留伪 `running` 子项。
 
 每个 Workflow Run 使用独立 thread，并由 LangGraph `AsyncSqliteSaver` 写入 checkpoint；background Agent 明确标记为
 不具备 checkpoint。Checkpoint 当前只服务 Debug，不提供 Resume。页面可查看 Run 父子关系、结构 Timeline，以及
@@ -39,6 +42,8 @@ Lifecycle 的 management-only 诊断包。
 诊断包标注 `captured_at`、当前终态/活动状态、最后事件 sequence 和观测完整性。它不包含 Lifecycle 输入、`messages[]`、
 模型正文、Tool/Script payload、Provider 原始响应或 Checkpoint State，也不承诺字节级重放。运行历史没有自动 retention；
 只有 Lifecycle 显式删除会清理 Run/Event、Store、Checkpoint 和选择的受管动态目录。
+
+下载时事件按页、checkpoint 按迭代结果写入 `runtime/tmp` 的一次性目录，再生成磁盘 ZIP 并由文件响应发送；响应结束后删除该临时目录。导出不再先把全量记录和 ZIP 同时聚合进进程内存。
 
 ## LangSmith
 

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Collection, Mapping, Sequence
 from copy import deepcopy
-from functools import cache
 from typing import Annotated, Any, Callable
 
 from pydantic import (
@@ -11,13 +10,13 @@ from pydantic import (
     Field,
     JsonValue,
     StringConstraints,
-    TypeAdapter,
     field_validator,
 )
 from langgraph.runtime import Runtime
 
 from agent_shell.python_packages.contracts import PythonPackageReference
 from agent_shell.runtime.context import WorkflowRuntimeContext
+from agent_shell.runtime.state import validate_workflow_state_update
 
 
 DispatchKey = Annotated[
@@ -71,13 +70,6 @@ class TaskDispatcherResult(BaseModel):
 
 class TaskDispatcherError(RuntimeError):
     """Safe wrapper for user-authored task dispatcher failures."""
-
-
-@cache
-def _workflow_state_update_adapter() -> TypeAdapter[Any]:
-    from agent_shell.runtime.state import WorkflowState
-
-    return TypeAdapter(WorkflowState)
 
 
 def _detached(value: Any) -> Any:
@@ -148,7 +140,7 @@ async def run_task_dispatcher(
                 "dispatcher returned unsupported Workflow State fields: "
                 + ", ".join(unsupported_updates)
             )
-        update = _workflow_state_update_adapter().validate_python(update)
+        update = validate_workflow_state_update(update)
         unknown = sorted(
             {item.dispatch_key for item in result.tasks}
             - set(allowed_dispatch_keys)

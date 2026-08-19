@@ -58,14 +58,17 @@ class ApiServerStore:
         api_key: str | None,
         max_initial_messages: int | None = None,
     ) -> None:
-        if api_key_operation == "replace":
-            self._config_repository.set_secret("AGENT_SHELL_API_KEY", api_key)
-        elif api_key_operation == "clear":
-            self._config_repository.set_secret("AGENT_SHELL_API_KEY", None)
-        if max_initial_messages is not None:
-            self._config_repository.update_system(
-                lambda system: system.setdefault("api_server", {}).__setitem__("max_initial_messages", max_initial_messages)
-            )
+        def mutate(system: dict, environment: dict[str, str]) -> None:
+            if api_key_operation == "replace" and api_key is not None:
+                environment["AGENT_SHELL_API_KEY"] = api_key
+            elif api_key_operation == "clear":
+                environment.pop("AGENT_SHELL_API_KEY", None)
+            if max_initial_messages is not None:
+                system.setdefault("api_server", {})[
+                    "max_initial_messages"
+                ] = max_initial_messages
+
+        self._config_repository.update_system_and_environment(mutate)
         self._emit_updated()
 
     def _emit_updated(self, *, state: str = "") -> None:

@@ -47,6 +47,8 @@ git pull --ff-only
 增加与核心锁兼容的二进制 wheel，不能修改 `runtime/app`。启动设置初始化与读取合并为一次 preflight；扩展依赖准备在最终
 服务进程内、应用创建前完成，避免为了相邻启动步骤重复拉起并导入 Python 应用。
 
+依赖准备开始时终端先显示当前 requirements，随后直接显示 uv 原生的解析、下载、安装进度和错误；完成后才显示服务启动阶段。启动器不为扩展依赖安装设置主动超时，操作者根据终端中的真实进度决定继续等待、换网络或中止重启。
+
 ## 当前运行时与依赖基线
 
 当前运行基线由两个锁共同决定：`packaging/windows/runtime-lock.json` 锁定 Windows portable runtime，

@@ -3,7 +3,6 @@ import { createI18n } from 'vue-i18n'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { describe, expect, it, vi } from 'vitest'
 
-import type { ManagementEvent } from '@/api'
 import { en } from '@/locales/en'
 
 import EventFeedPage from './EventFeedPage.vue'
@@ -37,7 +36,7 @@ function api() {
       max_size_mib_limit: 1024,
     })),
     deleteMatchingEventFeed: vi.fn(async () => ({ deleted: 0 })),
-    watchApiServerEvents: vi.fn((_handler: (event: ManagementEvent) => void) => vi.fn()),
+    watchApiServerEvents: vi.fn(() => vi.fn()),
   }
 }
 

@@ -32,7 +32,10 @@ export default tseslint.config(
       'vue/multi-word-component-names': 'off',
       'vue/singleline-html-element-content-newline': 'off',
       'vue/no-bare-strings-in-template': ['error', {
-        allowlist: ['agent-shell', 'API', 'JSON', 'UUID', 'OpenAI', 'LangChain', 'Primary', 'Subagent'],
+        allowlist: [
+          'agent-shell', 'API', 'JSON', 'UUID', 'OpenAI', 'LangChain', 'Primary', 'Subagent',
+          ':', '1', '·', '#', '5m', '1h', 'ms',
+        ],
       }],
     },
   },

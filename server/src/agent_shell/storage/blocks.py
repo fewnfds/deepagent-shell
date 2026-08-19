@@ -114,7 +114,7 @@ class BlockStore:
         new_secret: tuple[str, str] | None = None
         clear_secret: str | None = None
 
-        def mutate(config: dict) -> None:
+        def mutate(config: dict, environment: dict[str, str]) -> None:
             nonlocal existing, old_reference, new_secret, clear_secret
             records = self._records(config, block_type)
             for record in records:
@@ -155,11 +155,19 @@ class BlockStore:
             if not replaced:
                 records.append(stored)
 
-        self._repository.update_config(mutate)
-        if new_secret is not None:
-            self._repository.set_secret(*new_secret)
-        if clear_secret and clear_secret != (new_secret[0] if new_secret else None):
-            self._repository.set_secret(clear_secret, None)
+            if new_secret is not None:
+                environment[new_secret[0]] = new_secret[1]
+            if clear_secret and clear_secret != (
+                new_secret[0] if new_secret else None
+            ):
+                active_references = {
+                    self._credential_reference(record)
+                    for record in self._records(config, "model")
+                }
+                if clear_secret not in active_references:
+                    environment.pop(clear_secret, None)
+
+        self._repository.update_config_and_environment(mutate)
         emit_configuration_events(
             self._events,
             action="updated" if existing is not None else "created",
@@ -213,7 +221,7 @@ class BlockStore:
             return 0
         removed: list[dict] = []
 
-        def mutate(config: dict) -> None:
+        def mutate(config: dict, environment: dict[str, str]) -> None:
             records = self._records(config, block_type)
             retained: list[dict] = []
             for record in records:
@@ -225,15 +233,17 @@ class BlockStore:
             if detach_references:
                 detach_agent_block_references(config, block_type, set(unique_ids))
 
-        self._repository.update_config(mutate)
-        active_refs = {
-            self._credential_reference(record)
-            for record in self.list_blocks_internal("model")
-        }
+            active_refs = {
+                self._credential_reference(record)
+                for record in self._records(config, "model")
+            }
+            for record in removed:
+                reference = self._credential_reference(record)
+                if reference and reference not in active_refs:
+                    environment.pop(reference, None)
+
+        self._repository.update_config_and_environment(mutate)
         for record in removed:
-            reference = self._credential_reference(record)
-            if reference and reference not in active_refs:
-                self._repository.set_secret(reference, None)
             emit_configuration_events(
                 self._events,
                 action="deleted",
