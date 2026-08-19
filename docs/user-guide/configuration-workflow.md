@@ -80,7 +80,7 @@ task identity。完整配置与城市/乡镇示例见[任务分发](../wizard-pa
 
 ## Main Agent 与直接 Subagent
 
-在【Agent / Main Agent】选择模型和输出模式等 capability。Main Agent 是完整 Agent 装配，由 Workflow 的
+在【Agent / Main Agent】选择模型和 Agent 事件输出等 capability。Main Agent 是完整 Agent 装配，由 Workflow 的
 Agent node 引用。需要同步委派时，先创建 Subagent 实体，再由 Main Agent 按顺序保存 `subagent_id` 引用并选择委派
 capability。
 
@@ -121,8 +121,8 @@ WIC 可以读取 `state["workflow_task"]`，把当前任务材料编排进 worke
 ### 事件输出
 
 Workflow 可绑定零或一个事件输出组件。它处理 `values`、`updates`、`custom` 等 Workflow-owned 非 Agent v3 事件；
-每类事件由用户编写同步 `output(event)`，直接读取稳定 dict 和其中的原始 Python `data` 对象并返回字符串。不绑定时
-这些事件不进入 OpenAI 响应。Agent Node 事件仍使用对应 Main Agent 的输出模式。完整字段见
+每类事件由配置独占 Python package 中的同步 `output(event)` 处理，直接读取稳定 dict 和其中的原始 Python `data` 对象并返回字符串。不绑定时
+这些事件不进入 OpenAI 响应。Agent Node 事件仍使用对应 Main Agent 的 Agent 事件输出。完整字段见
 [事件输出](../wizard-pages/workflow-event-output-config.md)。
 
 ## 校验与生效

@@ -12,12 +12,12 @@
 | 自定义工具 | 选择 `data/resources/custom_tools/` 中的工具 | 可选 | 继承、替换或关闭 |
 | Skill | 选择 `data/resources/skills/` 中的 Skill | 可选 | 继承、替换或关闭 |
 | 自定义 Middleware | 定义一个 LangChain Middleware | 通过有序引用装配 | Subagent 独立有序引用 |
-| 输出模式 | 把 v3 事件投影为响应文本 | 必选 | 只用于顶层 Main Agent |
+| Agent 事件输出 | 用文件化 Python 扩展把 v3 Agent 事件投影为响应文本 | 必选 | 只用于顶层 Main Agent |
 | 异常重试 | Provider 或 ModelRetryMiddleware 重试 | 可选 | 继承、替换或关闭 |
 | 委派能力 | 同步 Subagent 的提示与 `task` 说明 | 可选 | 只用于顶层 Main Agent |
 | 上下文摘要 | `SummarizationMiddleware` 阈值、保留和工具参数截断 | 可选 | 继承、替换或关闭 |
 | Prompt 缓存 | Anthropic prompt caching TTL 与最少消息数 | 可选 | 继承、替换或关闭 |
-| 事件输出 | 用 Python 把 Workflow-owned v3 事件投影为响应字符串 | Workflow 可选绑定 | 不属于 Agent capability |
+| Workflow 事件输出 | 用文件化 Python 扩展把 Workflow-owned v3 事件投影为响应字符串 | Workflow 可选绑定 | 不属于 Agent capability |
 | Command | 读取完整 Workflow State/Context，更新 State 并激活零个、一个或多个具名 Branch Edge | 画布 Node 引用 | 不属于 Agent capability |
 | 任务分发 | 从 Workflow State/Context 生成任务，并通过 Dispatch Edge 动态 Send 到 worker | 画布 Node 引用 | 不属于 Agent capability |
 
@@ -40,9 +40,10 @@ Lifecycle/Run Store；父 Workflow State 的 `agent_invocations` 只保存身份
 保留最新引用。同步 Subagent 仍由 Deep Agents 官方 Middleware 在 Main Agent 内部调度，不建立隐藏归档 wrapper。
 这条父子 State 输出映射不需要额外的结束 Hook 或 Recorder 组件。
 
-事件输出也是 Workflow-owned 组件。Workflow 通过 UUID 可选绑定一份配置；各事件的同步 `output(event)` 读取稳定
-dict，返回类型为字符串。它只控制 Workflow-owned 非 Agent 事件的 OpenAI 响应投影，不改变 checkpoint、Debug、
-最终 State 或 Agent 自己的输出模式。字段和 Python 对象类型见[事件输出](../wizard-pages/workflow-event-output-config.md)。
+Workflow 事件输出也是 Workflow-owned 组件。Workflow 通过 UUID 可选绑定一份配置；配置独占扩展中的同步
+`output(event)` 读取稳定 dict，返回类型为字符串。它只控制 Workflow-owned 非 Agent 事件的 OpenAI 响应投影，不改变
+checkpoint、Debug、最终 State 或 Agent 自己的 Agent 事件输出。字段和 Python 对象类型见
+[Workflow 事件输出](../wizard-pages/workflow-event-output-config.md)。
 
 Command 组件保存一个 `workflow-node/command` Python 扩展引用和普通 config。扩展通过同步
 `create_command()` 工厂物化 `async command(state, runtime)`；用户在画布 Branch Edge 上直接填写业务分支 key，command 通过
@@ -56,6 +57,7 @@ Command 组件保存一个 `workflow-node/command` Python 扩展引用和普通 
 Runtime Context 和完成 invocation 都带 task identity。
 完整规则和城市/乡镇示例见[任务分发](../wizard-pages/task-dispatcher-config.md)。
 
-这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。自定义 Middleware、Command Node 和 Task Dispatcher 从用户模板或内置示例
+这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。自定义 Middleware、Command Node、Task Dispatcher、
+Agent 事件输出和 Workflow 事件输出从用户模板或内置示例
 创建配置独占的 Python 扩展，并在扩展目录可选的 `requirements.txt` 声明外部包；模板和示例本身不运行也不参与依赖。
-requirements 修改后重启生效；文件化扩展源码在下一次请求重新加载。仍为内联形式的事件输出等组件源码按各自组件说明生效。
+requirements 修改后重启生效；文件化扩展源码在下一次请求重新加载。

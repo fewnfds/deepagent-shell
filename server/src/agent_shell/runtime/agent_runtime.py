@@ -16,6 +16,10 @@ from agent_shell.runtime.capabilities import DeepAgentsWorkspace
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.middleware_packages.runtime import MiddlewarePackageRuntime
 from agent_shell.command_packages import CommandPackageRuntime
+from agent_shell.event_output_packages import (
+    EventOutputCallable,
+    EventOutputPackageRuntime,
+)
 from agent_shell.task_dispatcher_packages import TaskDispatcherPackageRuntime
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.diagnostics import (
@@ -30,7 +34,11 @@ from agent_shell.runtime.limits import (
 )
 from agent_shell.runtime.media_response import MainAgentMediaResponse
 from agent_shell.runtime.output_event_pool import OutputEventRectifier
-from agent_shell.runtime.output_projection import OutputProjector, WorkflowOutputProjector
+from agent_shell.runtime.output_projection import (
+    EventOutputError,
+    OutputProjector,
+    WorkflowOutputProjector,
+)
 from agent_shell.runtime.output_stream import (
     ModelCallBoundary,
     OutputEvent,
@@ -65,6 +73,7 @@ class RunExecution:
     middleware_runtimes: tuple[MiddlewarePackageRuntime, ...] = ()
     command_runtime: CommandPackageRuntime | None = None
     task_dispatcher_runtime: TaskDispatcherPackageRuntime | None = None
+    event_output_runtimes: tuple[EventOutputPackageRuntime, ...] = ()
     event_observers: tuple[Callable[[OutputEvent], None], ...] = ()
     context: WorkflowRuntimeContext | None = None
     run_config: dict[str, Any] | None = None
@@ -157,6 +166,8 @@ class RunExecution:
                 await self.command_runtime.close()
             if self.task_dispatcher_runtime is not None:
                 await self.task_dispatcher_runtime.close()
+            for runtime in self.event_output_runtimes:
+                await runtime.close()
 
     async def _stream_text_inner(self) -> AsyncIterator[str]:
 
@@ -434,7 +445,13 @@ class RunExecution:
                 journal.finish_open_spans("failed", error_code=exc.code)
             for rendered in failure_output(exc.code):
                 yield rendered
-            record_runtime_error(exc, exc.code)
+            record_runtime_error(
+                exc,
+                exc.code,
+                detail_exception=(
+                    exc.__cause__ if isinstance(exc, EventOutputError) else None
+                ),
+            )
             finish_run("failed", error_code=exc.code)
             await finish_lifecycle("failed")
             raise
@@ -654,7 +671,9 @@ class AgentRuntime:
         request_id: str = "",
         public_model: str = "",
         workflow_built: tuple[tuple[str, BuiltAgent], ...] = (),
-        workflow_output_config: dict[str, object] | None = None,
+        agent_event_outputs: Mapping[str, EventOutputCallable] | None = None,
+        workflow_event_output: EventOutputCallable | None = None,
+        event_output_runtimes: tuple[EventOutputPackageRuntime, ...] = (),
         command_runtime: CommandPackageRuntime | None = None,
         task_dispatcher_runtime: TaskDispatcherPackageRuntime | None = None,
         context: WorkflowRuntimeContext | None = None,
@@ -697,16 +716,15 @@ class AgentRuntime:
             }
         else:
             workflow_sources = None
-        if not public_output:
-            projector = OutputProjector({})
-        elif run_kind == "workflow":
+        if public_output:
+            if run_kind != "workflow":
+                raise ValueError("public output requires a Workflow execution")
             projector = WorkflowOutputProjector(
-                {node_id: agent.output_config for node_id, agent in workflow_agents},
-                workflow_output_config=workflow_output_config,
+                agent_event_outputs or {},
+                workflow_output=workflow_event_output,
             )
         else:
-            assert built is not None
-            projector = OutputProjector(built.output_config)
+            projector = OutputProjector(None)
         journal_node_kinds: dict[str, str] = {}
         if context is not None:
             graph_document = context.workflow.get("graph")
@@ -754,6 +772,7 @@ class AgentRuntime:
             ),
             command_runtime=command_runtime,
             task_dispatcher_runtime=task_dispatcher_runtime,
+            event_output_runtimes=event_output_runtimes,
             context=context,
             run_config=run_config,
             durability=durability,
@@ -1095,7 +1114,10 @@ class AgentRuntime:
         )
         built_agents: list[tuple[str, BuiltAgent]] = []
         workflow_initial_files: dict[str, Any] = {}
-        workflow_output_config: dict[str, object] | None = None
+        agent_event_output_runtime: EventOutputPackageRuntime | None = None
+        workflow_event_output_runtime: EventOutputPackageRuntime | None = None
+        agent_event_outputs: dict[str, EventOutputCallable] = {}
+        workflow_event_output: EventOutputCallable | None = None
         command_runtime: CommandPackageRuntime | None = None
         task_dispatcher_runtime: TaskDispatcherPackageRuntime | None = None
         commands: dict[str, Any] = {}
@@ -1107,6 +1129,10 @@ class AgentRuntime:
                 await command_runtime.close()
             if task_dispatcher_runtime is not None:
                 await task_dispatcher_runtime.close()
+            if agent_event_output_runtime is not None:
+                await agent_event_output_runtime.close()
+            if workflow_event_output_runtime is not None:
+                await workflow_event_output_runtime.close()
 
         try:
             resolved_agents: list[tuple[Any, StaticAssembly]] = []
@@ -1133,13 +1159,27 @@ class AgentRuntime:
                 background_runtime=background_runtime,
             )
 
-            if command_blocks or task_dispatcher_blocks:
+            output_id = (workflow_snapshot or {}).get("workflow_event_output_id")
+            if (
+                command_blocks
+                or task_dispatcher_blocks
+                or (public_output and (resolved_agents or output_id is not None))
+            ):
                 if self._python_packages_dir is None or self._runtime_dir is None:
                     raise AgentRuntimeError(
                         "workflow.python_package_runtime_unavailable",
                         "The Python package runtime is not configured.",
                         status_code=500,
                     )
+            if public_output and resolved_agents:
+                assert self._python_packages_dir is not None
+                assert self._runtime_dir is not None
+                agent_event_output_runtime = EventOutputPackageRuntime(
+                    "agent",
+                    request_id=request_id,
+                    packages_dir=self._python_packages_dir,
+                    runtime_root=self._runtime_dir,
+                )
             if command_blocks:
                 command_runtime = CommandPackageRuntime(
                     request_id=request_id,
@@ -1172,7 +1212,6 @@ class AgentRuntime:
                     ) in task_dispatcher_blocks.items()
                 }
 
-            output_id = (workflow_snapshot or {}).get("workflow_event_output_id")
             if public_output and output_id is not None:
                 stored_output = (
                     self._blocks.get_block_internal(
@@ -1187,9 +1226,33 @@ class AgentRuntime:
                         "The selected event output component does not exist.",
                         status_code=422,
                     )
-                workflow_output_config = WorkflowEventOutputBlock.model_validate(
-                    {key: value for key, value in stored_output.items() if key != "id"}
-                ).model_dump(mode="python", exclude={"name"})
+                try:
+                    output_block = WorkflowEventOutputBlock.model_validate(
+                        {
+                            key: value
+                            for key, value in stored_output.items()
+                            if key != "id"
+                        }
+                    )
+                except Exception as exc:
+                    raise AgentRuntimeError(
+                        "workflow.event_output_invalid",
+                        "The selected Workflow event output configuration is invalid.",
+                        status_code=422,
+                    ) from exc
+                assert self._python_packages_dir is not None
+                assert self._runtime_dir is not None
+                workflow_event_output_runtime = EventOutputPackageRuntime(
+                    "workflow",
+                    request_id=request_id,
+                    packages_dir=self._python_packages_dir,
+                    runtime_root=self._runtime_dir,
+                )
+                workflow_event_output = workflow_event_output_runtime.output_for(
+                    str(workflow_identity.get("id", "")) or "workflow",
+                    str(output_id),
+                    output_block.python_package.model_dump(mode="json"),
+                )
 
             for agent_node, assembly in resolved_agents:
                 mapped_directory_paths_by_filesystem = (
@@ -1211,6 +1274,14 @@ class AgentRuntime:
                     ),
                 )
                 built_agents.append((agent_node.id, built))
+                if agent_event_output_runtime is not None:
+                    agent_event_outputs[agent_node.id] = (
+                        agent_event_output_runtime.output_for(
+                            agent_node.id,
+                            built.event_output_id,
+                            built.event_output_reference,
+                        )
+                    )
                 if workspace is None:
                     workspace = built.workspace
                 for path, value in built.input_state.get("files", {}).items():
@@ -1302,7 +1373,16 @@ class AgentRuntime:
             model_response_observer=model_response_observer,
             request_id=request_id,
             public_model=public_model,
-            workflow_output_config=workflow_output_config,
+            agent_event_outputs=agent_event_outputs,
+            workflow_event_output=workflow_event_output,
+            event_output_runtimes=tuple(
+                runtime
+                for runtime in (
+                    agent_event_output_runtime,
+                    workflow_event_output_runtime,
+                )
+                if runtime is not None
+            ),
             context=context,
             run_config={
                 **(checkpoint_context.config() if checkpoint_context is not None else {}),

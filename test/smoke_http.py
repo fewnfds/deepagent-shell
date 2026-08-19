@@ -31,7 +31,7 @@ CAPABILITY_TYPES = (
     "custom-tool",
     "skill",
     "custom-middleware",
-    "output-mode",
+    "agent-event-output",
     "exception-retry",
     "subagent",
     "summarization",
@@ -41,16 +41,6 @@ CRUD_CAPABILITY_TYPES = tuple(
     capability_type
     for capability_type in CAPABILITY_TYPES
     if capability_type != "custom-middleware"
-)
-OUTPUT_EVENT_TYPES = (
-    "assistant_text",
-    "reasoning",
-    "tool_call",
-    "tool_result",
-    "tool_error",
-    "subagent",
-    "custom",
-    "lifecycle",
 )
 MODEL_PARAMETER_NAMES = (
     "temperature",
@@ -112,14 +102,24 @@ def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> d
             "model_settings": {},
         },
         "custom-tool": {"name": name, "tools": []},
-        "output-mode": {
+        "agent-event-output": {
             "name": name,
-            "event_outputs": {
-                event_type: {
-                    "enabled": True,
-                    "output_source": 'def output(event):\n    return event["message"]\n',
-                }
-                for event_type in OUTPUT_EVENT_TYPES
+            "python_package": {
+                "folder": "",
+                "editable_files": ["main.py"],
+            },
+            "python_package_files": {
+                "template_key": "__empty__",
+                "revision": "",
+                "files": [{
+                    "path": "main.py",
+                    "content": (
+                        'def output(event):\n'
+                        '    if event["event_type"] == "assistant_text":\n'
+                        '        return event["message"]\n'
+                        '    return ""\n'
+                    ),
+                }],
             },
         },
         "filesystem": {"name": name},
@@ -276,6 +276,8 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
         assert tuple(item["type"] for item in catalog["block_types"]) == CAPABILITY_TYPES
         _request(client, "GET", "/api/tools/custom", headers=management)
         _request(client, "GET", "/api/python-package-templates/middleware", headers=management)
+        _request(client, "GET", "/api/python-package-templates/agent-event-output", headers=management)
+        _request(client, "GET", "/api/python-package-templates/workflow-event-output", headers=management)
         _request(client, "GET", "/api/skills", headers=management)
         readiness = _request(
             client, "GET", "/api/readiness", headers=management
@@ -332,17 +334,23 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
                 headers=management,
             ).json()
             assert fetched["id"] == created["id"]
+            update_payload = _payload(
+                capability_type,
+                f"{mode}-{capability_type}-updated",
+                provider_secret,
+                update=True,
+            )
+            if capability_type == "agent-event-output":
+                update_payload["python_package"] = created["python_package"]
+                update_payload["python_package_files"] = created[
+                    "python_package_files"
+                ]
             updated = _request(
                 client,
                 "PUT",
                 f"/api/blocks/{capability_type}/{created['id']}",
                 headers=management,
-                json_body=_payload(
-                    capability_type,
-                    f"{mode}-{capability_type}-updated",
-                    provider_secret,
-                    update=True,
-                ),
+                json_body=update_payload,
             ).json()
             assert updated["id"] == created["id"]
             if capability_type == "model":
@@ -379,8 +387,8 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
                 "capability_refs": [
                     {"type": "model", "block_id": blocks["model"]["id"]},
                     {
-                        "type": "output-mode",
-                        "block_id": blocks["output-mode"]["id"],
+                        "type": "agent-event-output",
+                        "block_id": blocks["agent-event-output"]["id"],
                     },
                 ],
                 "subagents": [],

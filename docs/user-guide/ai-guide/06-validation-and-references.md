@@ -45,7 +45,7 @@ Content-Type: application/json
 - Python package、template、dependency 和 loading：[File-based Python extension](../middleware-packages.md)
 - Command Node 完整 contract：[Command Node](../../wizard-pages/command-config.md)
 - Task Dispatcher 完整 contract：[Task Dispatcher](../../wizard-pages/task-dispatcher-config.md)
-- Output Mode 稳定 event field：[Output Mode](../../wizard-pages/output-mode-config.md)
+- Agent Event Output 稳定 event field：[Agent Event Output](../../wizard-pages/agent-event-output-config.md)
 - Workflow Event Output field：[Workflow Event Output](../../wizard-pages/workflow-event-output-config.md)
 - OpenAI-compatible Run entry point：[API Server](../api-server.md)
 - background Run、Lifecycle cleanup 与 multi-Run semantics：[Workflow、Main Agent 与 Subagent](../configuration-workflow.md)

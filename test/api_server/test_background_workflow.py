@@ -20,19 +20,16 @@ def test_frozen_snapshot_runs_child_workflow_silently_with_independent_checkpoin
             name="Background Child",
             workflow_role="child",
         )
-        event_output = client.get("/api/catalog").json()["editor_defaults"][
-            "workflow_event_output"
-        ]["default_value"]
-        event_output["event_outputs"]["lifecycle"] = {
-            "enabled": True,
-            "output_source": (
+        event_output = workflow_event_output_payload(
+            "Exploding child output",
+            source=(
                 "def output(event):\n"
                 "    raise RuntimeError('child public output must stay disabled')\n"
             ),
-        }
+        )
         output_response = client.post(
             "/api/blocks/workflow-event-output",
-            json={"name": "Exploding child output", **event_output},
+            json=event_output,
         )
         assert output_response.status_code == 200, output_response.text
         child_response = client.put(

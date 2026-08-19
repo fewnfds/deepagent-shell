@@ -14,14 +14,11 @@ from agent_shell.capability_manifest import (
     validate_capability_manifests,
 )
 from agent_shell.contracts import (
+    AgentEventOutputBlock,
     BLOCK_MODELS,
     FilesystemBlock,
-    OUTPUT_COMMON_FIELDS,
-    OUTPUT_EVENT_NAMES,
-    OUTPUT_EVENT_FIELDS,
-    OutputModeBlock,
 )
-from agent_shell.workflow_event_output import WORKFLOW_EVENT_NAMES
+from agent_shell.workflow_event_output import WorkflowEventOutputBlock
 
 
 def test_manifest_matches_current_blocks_and_form_order() -> None:
@@ -34,7 +31,7 @@ def test_manifest_matches_current_blocks_and_form_order() -> None:
         "custom-tool",
         "skill",
         "custom-middleware",
-        "output-mode",
+        "agent-event-output",
         "exception-retry",
         "subagent",
         "summarization",
@@ -51,10 +48,10 @@ def test_manifest_matches_current_blocks_and_form_order() -> None:
     assert manifests["filesystem-permissions"].subagent_overrideable is True
     assert manifests["filesystem-permissions"].subagent_policy == "inherit"
     assert manifests["filesystem-permissions"].required is False
-    assert manifests["output-mode"].subagent_overrideable is False
-    assert manifests["output-mode"].required is True
-    assert manifests["output-mode"].subagent_policy == "top-level-only"
-    assert manifests["output-mode"].tool_names == ()
+    assert manifests["agent-event-output"].subagent_overrideable is False
+    assert manifests["agent-event-output"].required is True
+    assert manifests["agent-event-output"].subagent_policy == "top-level-only"
+    assert manifests["agent-event-output"].tool_names == ()
     assert manifests["exception-retry"].subagent_overrideable is True
     assert manifests["exception-retry"].subagent_policy == "inherit"
     assert manifests["exception-retry"].tool_names == ()
@@ -81,7 +78,7 @@ def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
     defaults = editor_defaults()
     filesystem = defaults["filesystem"]
     filesystem_permissions = defaults["filesystem_permissions"]
-    output = defaults["output_mode"]
+    agent_event_output = defaults["agent_event_output"]
 
     assert [tool["name"] for tool in filesystem["tools"]] == list(
         CAPABILITY_BY_TYPE["filesystem"].tool_names
@@ -126,83 +123,18 @@ def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
         "ttl": "5m",
         "min_messages_to_cache": 0,
     }
-    assert [event["key"] for event in output["events"]] == list(OUTPUT_EVENT_NAMES)
-    assert output["events"][0]["fields"] == [
-        *OUTPUT_COMMON_FIELDS,
-        *OUTPUT_EVENT_FIELDS[OUTPUT_EVENT_NAMES[0]],
-    ]
-    assert all("streaming" not in event for event in output["events"])
-    assert all(
-        setting["enabled"]
-        for setting in output["default_value"]["event_outputs"].values()
-    )
-    assert output["default_value"]["event_outputs"]["assistant_text"] == {
-        "enabled": True,
-        "output_source": (
-            "def output(event):\n"
-            "    return f'<details type=\"agent\"><summary>"
-            "*{event[\"agent_name\"]} response*</summary>"
-            "{event[\"message\"]}</details>\\n'\n"
-        ),
+    assert agent_event_output == {}
+    assert defaults["workflow_event_output"] == {}
+    reference = {
+        "folder": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "editable_files": ["main.py"],
     }
-    output_sources = {
-        name: setting["output_source"]
-        for name, setting in output["default_value"]["event_outputs"].items()
-    }
-    assert all(
-        source.startswith("def output(event):\n") for source in output_sources.values()
-    )
-    assert all(
-        '<details type="agent">' in source for source in output_sources.values()
-    )
-    assert all(
-        '{event["message"]}</details>\\n' in source
-        for source in output_sources.values()
-    )
-    assert not any(
-        field in source
-        for source in output_sources.values()
-        for field in (
-            'event["tool_call_id"]',
-            'event["sequence"]',
-            'event["timestamp"]',
-            'event["namespace"]',
-            'event["workflow_node_id"]',
-            'event["agent_profile_id"]',
-            'event["subagent_profile_id"]',
-        )
-    )
-    assert all(
-        set(setting) == {"enabled", "output_source"}
-        for setting in output["default_value"]["event_outputs"].values()
-    )
-    OutputModeBlock.model_validate(
-        {"name": "Output default", **output["default_value"]}
-    )
-
-    workflow_output = defaults["workflow_event_output"]
-    workflow_sources = {
-        name: setting["output_source"]
-        for name, setting in workflow_output["default_value"]["event_outputs"].items()
-    }
-    assert set(workflow_sources) == set(WORKFLOW_EVENT_NAMES)
-    assert all(
-        '<details type="workflow">' in source
-        and '{event["message"]}</details>\\n' in source
-        for source in workflow_sources.values()
-    )
-    assert not any(
-        field in source
-        for source in workflow_sources.values()
-        for field in (
-            'event["sequence"]',
-            'event["timestamp"]',
-            'event["namespace"]',
-            'event["workflow_node_id"]',
-            'event["agent_profile_id"]',
-            'event["subagent_profile_id"]',
-        )
-    )
+    assert AgentEventOutputBlock.model_validate(
+        {"name": "Agent output", "python_package": reference}
+    ).python_package.folder == reference["folder"]
+    assert WorkflowEventOutputBlock.model_validate(
+        {"name": "Workflow output", "python_package": reference}
+    ).python_package.folder == reference["folder"]
 
 
 def test_editor_catalog_import_does_not_load_optional_runtime_packages() -> None:

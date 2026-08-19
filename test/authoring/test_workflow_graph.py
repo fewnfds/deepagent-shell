@@ -50,7 +50,8 @@ def _built_agent(
     return BuiltAgent(
         graph=graph,
         input_state=input_state or {"messages": [], "shared_vars": {}},
-        output_config={},
+        event_output_id="",
+        event_output_reference={},
         agent_id=agent_id,
         agent_name=agent_name,
         subagent_profile_ids={},
@@ -1398,7 +1399,8 @@ def test_runtime_builds_repeated_main_agent_references_per_workflow_node() -> No
             return BuiltAgent(
                 graph=graph,
                 input_state={"messages": [], "shared_vars": {}},
-                output_config={},
+                event_output_id="",
+                event_output_reference={},
                 agent_id=main_agent_id,
                 agent_name="Repeated Agent",
                 subagent_profile_ids={},
@@ -1410,11 +1412,12 @@ def test_runtime_builds_repeated_main_agent_references_per_workflow_node() -> No
 
     runtime = RecordingRuntime()
     execution = asyncio.run(
-        runtime.start_workflow(
-            document,
-            [{"role": "user", "content": "Run the Workflow."}],
-            workflow_snapshot={"id": "workflow-id"},
-        )
+            runtime.start_workflow(
+                document,
+                [{"role": "user", "content": "Run the Workflow."}],
+                workflow_snapshot={"id": "workflow-id"},
+                public_output=False,
+            )
     )
 
     assert runtime.built_ids == [AGENT_A, AGENT_A]

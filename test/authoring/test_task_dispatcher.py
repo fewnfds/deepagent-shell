@@ -42,7 +42,8 @@ def _built_agent(agent_id: str, graph) -> BuiltAgent:
     return BuiltAgent(
         graph=graph,
         input_state={"messages": [], "shared_vars": {}, "files": {}},
-        output_config={},
+        event_output_id="",
+        event_output_reference={},
         agent_id=agent_id,
         agent_name=agent_id,
         subagent_profile_ids={},

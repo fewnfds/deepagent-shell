@@ -10,7 +10,7 @@ keyword 拆成中英混合词组。搜索源码时直接使用英文原名或 id
 
 固定使用以下 terminology：
 
-- Model、Output Mode、system prompt、Filesystem、Filesystem Permissions；
+- Model、Agent Event Output、system prompt、Filesystem、Filesystem Permissions；
 - Custom Tool、Custom Middleware、Workflow Input Context（WIC）、Workflow Event Output；
 - Main Agent、Subagent、Task Dispatcher；
 - Lifecycle、Run、thread、invocation、checkpoint；
@@ -28,7 +28,7 @@ OpenAI-compatible messages[]
   -> 物化 Command、Task Dispatcher、Main Agent、Subagent 和 Middleware
   -> 编译并执行 Workflow StateGraph，期间 parent Workflow Run 允许创建 child Workflow Run，并归入同一 Lifecycle
   -> 消费 LangGraph stream events v3
-  -> Agent Output Mode / Workflow Event Output projection
+  -> Agent Event Output / Workflow Event Output projection
   -> output assembler 按 event order 把 event string 组成一次响应
 ```
 
@@ -55,13 +55,13 @@ End 或没有 successor 的 reachable leaf 结束当前 path。
 runner 使用 LangGraph `astream_events(version="v3")` 观察 Workflow、Agent、Model、Tool 和用户 Python 产生的 event。event 不会
 自动改写 Workflow State：
 
-- Agent Node 内的 event 按来源归属该 Main Agent，由它的 Output Mode projection；
+- Agent Node 内的 event 按来源归属该 Main Agent，由它的 Agent Event Output projection；
 - Workflow-owned event 由 Workflow 可选绑定的 Workflow Event Output projection；
 - Command/Task Dispatcher 可在 Runtime 中用 `get_stream_writer()` 主动写出 `custom` event；
 - 每个启用的 `output(event)` 返回一个 string，runner 按 event order 组成响应；未启用或返回空 string 的 event 不输出。
 
 Node 的 State/routing return value 与 output event 是两条独立 channel。output event 只用于单向展示，不向产生 event 的 Node 返回处理结果。具体 Python
-用法见[编写 Python extension](04-python-extensions.md)，event field 见[Output Mode](../../wizard-pages/output-mode-config.md)和
+用法见[编写 Python extension](04-python-extensions.md)，event field 见[Agent Event Output](../../wizard-pages/agent-event-output-config.md)和
 [Workflow Event Output](../../wizard-pages/workflow-event-output-config.md)。
 
 ## 最小 Graph 事实
@@ -80,7 +80,7 @@ End 不遵循隐式汇聚。
 Work Node 可以是当前 Node catalog 允许的任意 Work Node。可达 Work Node 没有 outgoing Edge 时，路径自然结束。
 一般 Workflow 可按业务放入实际需要的 Work Node，condition 和 successor selection 由 Command Node 表达。
 包含 loop 的 Graph，需要明确 exit condition 的 path 使用显式 End。
-Model、Output Mode、Main Agent 和 Workflow Input Context（WIC）Middleware 只在使用 Agent Node 时出现。
+Model、Agent Event Output、Main Agent 和 Workflow Input Context（WIC）Middleware 只在使用 Agent Node 时出现。
 客户端 `messages[]` 不会自动写入 Workflow root State；不同配置的 WIC 负责为不同 Agent 单独构造 Agent context。
 
 ## Component 建议

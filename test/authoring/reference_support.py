@@ -42,18 +42,6 @@ def subagent_payload(
             "middleware_refs": [],
         },
     }
-OUTPUT_EVENT_TYPES = (
-    "assistant_text",
-    "reasoning",
-    "tool_call",
-    "tool_result",
-    "tool_error",
-    "subagent",
-    "custom",
-    "lifecycle",
-)
-
-
 def make_client(tmp_path: Path, monkeypatch) -> TestClient:
     monkeypatch.chdir(tmp_path)
     configure_scope_tokens(monkeypatch, tmp_path)
@@ -70,6 +58,19 @@ def make_client(tmp_path: Path, monkeypatch) -> TestClient:
         "from langchain.agents.middleware import AgentMiddleware\n"
         "def create_middleware(agent):\n"
         "    return AgentMiddleware()\n",
+        encoding="utf-8",
+    )
+    output_template = (
+        tmp_path
+        / "data"
+        / "templates"
+        / "agent"
+        / "agent_event_output"
+        / "reference-output"
+    )
+    output_template.mkdir(parents=True, exist_ok=True)
+    (output_template / "main.py").write_text(
+        'def output(event):\n    return event["message"]\n',
         encoding="utf-8",
     )
     return ScopedAuthTestClient(create_app())
@@ -93,16 +94,7 @@ def block_payload(capability_type: str, name: str) -> dict:
         },
         "custom-tool": {"name": name, "tools": []},
         "custom-middleware": {"name": name},
-        "output-mode": {
-            "name": name,
-            "event_outputs": {
-                event_type: {
-                    "enabled": True,
-                    "output_source": 'def output(event):\n    return event["message"]\n',
-                }
-                for event_type in OUTPUT_EVENT_TYPES
-            },
-        },
+        "agent-event-output": {"name": name},
         "filesystem": {"name": name},
         "filesystem-permissions": {
             "name": name,
@@ -136,9 +128,14 @@ def create_blocks(client: TestClient, suffix: str, types=PUBLIC_TYPES) -> dict[s
     blocks = {}
     for capability_type in types:
         payload = block_payload(capability_type, f"{capability_type}-{suffix}")
-        if capability_type == "custom-middleware":
+        if capability_type in {"custom-middleware", "agent-event-output"}:
+            endpoint = (
+                "middleware"
+                if capability_type == "custom-middleware"
+                else "agent-event-output"
+            )
             selected = client.get(
-                "/api/python-package-templates/middleware"
+                f"/api/python-package-templates/{endpoint}"
             ).json()["catalog"][0]
             payload = {
                 **payload,

@@ -4,7 +4,7 @@ import { exceptionRetryAdapter } from './blocks/exceptionRetry'
 import { filesystemAdapter } from './blocks/filesystem'
 import { filesystemPermissionsAdapter } from './blocks/filesystemPermissions'
 import { modelAdapter } from './blocks/model'
-import { outputModeAdapter } from './blocks/outputMode'
+import { agentEventOutputAdapter } from './blocks/agentEventOutput'
 import { promptCachingAdapter } from './blocks/promptCaching'
 import { skillAdapter } from './blocks/skill'
 import { subagentAdapter } from './blocks/subagent'
@@ -47,7 +47,10 @@ export type {
   ModelDraft,
   ModelProviderSettingInput,
 } from './blocks/model'
-export type { OutputModeDefaults, OutputModeDraft } from './blocks/outputMode'
+export type {
+  AgentEventOutputCatalogItem,
+  AgentEventOutputDraft,
+} from './blocks/agentEventOutput'
 export type {
   PromptCachingDefaults,
   PromptCachingDraft,
@@ -63,7 +66,10 @@ export type {
 } from './blocks/summarization'
 export type { SystemPromptDraft } from './blocks/systemPrompt'
 export type { TodoListDefaults, TodoListDraft } from './blocks/todoList'
-export type { WorkflowEventOutputDefaults, WorkflowEventOutputDraft } from './blocks/workflowEventOutput'
+export type {
+  WorkflowEventOutputCatalogItem,
+  WorkflowEventOutputDraft,
+} from './blocks/workflowEventOutput'
 export type {
   CommandCatalogItem,
   CommandDefaults,
@@ -82,7 +88,7 @@ export {
   filesystemAdapter,
   filesystemPermissionsAdapter,
   modelAdapter,
-  outputModeAdapter,
+  agentEventOutputAdapter,
   promptCachingAdapter,
   skillAdapter,
   subagentAdapter,
@@ -98,7 +104,7 @@ export const blockTypes = [
   'model',
   'custom-tool',
   'custom-middleware',
-  'output-mode',
+  'agent-event-output',
   'exception-retry',
   'filesystem',
   'filesystem-permissions',
@@ -121,7 +127,7 @@ export const blockAdapters = {
   model: modelAdapter,
   'custom-tool': customToolAdapter,
   'custom-middleware': customMiddlewareAdapter,
-  'output-mode': outputModeAdapter,
+  'agent-event-output': agentEventOutputAdapter,
   'exception-retry': exceptionRetryAdapter,
   filesystem: filesystemAdapter,
   'filesystem-permissions': filesystemPermissionsAdapter,

@@ -7,8 +7,8 @@ def test_main_agent_subagent_reference_only_stores_entity_id(
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
     required_refs = references(
-        create_blocks(client, "binding-flags-required", ("model", "output-mode")),
-        ("model", "output-mode"),
+        create_blocks(client, "binding-flags-required", ("model", "agent-event-output")),
+        ("model", "agent-event-output"),
     )
     subagent = client.post(
         "/api/subagents",
@@ -30,9 +30,9 @@ def test_reference_contracts_reject_unknown_duplicate_wrong_type_and_force_remov
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
-    required = create_blocks(client, "validation", ("model", "output-mode"))
+    required = create_blocks(client, "validation", ("model", "agent-event-output"))
     model = required["model"]
-    required_refs = references(required, ("model", "output-mode"))
+    required_refs = references(required, ("model", "agent-event-output"))
 
     invalid_main_agent_refs = [
         [
@@ -101,9 +101,9 @@ def test_main_agent_save_enforces_required_and_delegation_contracts_with_skill_f
     blocks = create_blocks(
         client,
         "save-contract",
-        ("model", "output-mode", "filesystem", "skill", "subagent"),
+        ("model", "agent-event-output", "filesystem", "skill", "subagent"),
     )
-    required_refs = references(blocks, ("model", "output-mode"))
+    required_refs = references(blocks, ("model", "agent-event-output"))
 
     missing_required = [
         [],

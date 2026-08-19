@@ -2,15 +2,15 @@
 import type { LocalizedMessagePayload } from '@/api'
 import PythonPackageEditor from '@/components/PythonPackageEditor.vue'
 import {
-  type WorkflowEventOutputCatalogItem,
-  type WorkflowEventOutputDraft,
+  type AgentEventOutputCatalogItem,
+  type AgentEventOutputDraft,
 } from '@/domain/blocks'
 import type { PythonPackageDraftState } from '@/domain/blocks/pythonPackage'
 import { useEditorModel } from './shared/useEditorModel'
 
 const props = withDefaults(defineProps<{
-  modelValue: WorkflowEventOutputDraft
-  catalog?: WorkflowEventOutputCatalogItem[]
+  modelValue: AgentEventOutputDraft
+  catalog?: AgentEventOutputCatalogItem[]
   errors?: Record<string, LocalizedMessagePayload>
   loading?: boolean
 }>(), {
@@ -19,7 +19,7 @@ const props = withDefaults(defineProps<{
   loading: false,
 })
 const emit = defineEmits<{
-  'update:modelValue': [value: WorkflowEventOutputDraft]
+  'update:modelValue': [value: AgentEventOutputDraft]
   'load-files': [paths: string[]]
   refresh: []
 }>()
@@ -36,11 +36,11 @@ function updatePackage(value: PythonPackageDraftState): void {
 </script>
 
 <template>
-  <div data-editor="workflow-event-output">
+  <div data-editor="agent-event-output">
     <PythonPackageEditor
       :catalog="catalog"
       :errors="errors"
-      id-prefix="workflow-event-output"
+      id-prefix="agent-event-output"
       :loading="loading"
       :model-value="draft"
       :saved="Boolean(draft.id)"

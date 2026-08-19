@@ -3,21 +3,21 @@ import { describe, expect, it } from 'vitest'
 import {
   blockAdapters,
   managedComponentTypes,
+  agentEventOutputAdapter,
   customMiddlewareAdapter,
   customToolAdapter,
   filesystemAdapter,
   modelAdapter,
-  outputModeAdapter,
   skillAdapter,
   subagentAdapter,
   systemPromptAdapter,
   todoListAdapter,
   type FilesystemDefaults,
   type ModelApiRecord,
-  type OutputModeDefaults,
   type SkillDefaults,
   type SubagentDefaults,
   type TodoListDefaults,
+  workflowEventOutputAdapter,
 } from './blocks'
 
 const filesystemDefaults: FilesystemDefaults = {
@@ -28,18 +28,6 @@ const filesystemDefaults: FilesystemDefaults = {
     { name: 'delete', configurable: true, visible: false, default_description: 'delete default' },
     { name: 'execute', configurable: false, visible: false, default_description: 'execute default' },
   ],
-}
-
-const outputDefaults: OutputModeDefaults = {
-  events: [{ key: 'assistant_text', fields: ['message'] }],
-  default_value: {
-    event_outputs: {
-      assistant_text: {
-        enabled: true,
-        output_source: 'def output(event):\n    return event["message"]\n',
-      },
-    },
-  },
 }
 
 const skillDefaults: SkillDefaults = { system_prompt: 'skill default' }
@@ -128,39 +116,32 @@ describe('block adapters', () => {
     })
   })
 
-  it('creates output drafts from an independent copy of the catalog default', () => {
-    const blank = outputModeAdapter.blank(outputDefaults)
-    expect(blank.event_outputs.assistant_text?.output_source)
-      .toBe('def output(event):\n    return event["message"]\n')
-    blank.event_outputs.assistant_text!.output_source = 'changed'
-    expect(outputDefaults.default_value.event_outputs.assistant_text?.output_source)
-      .toBe('def output(event):\n    return event["message"]\n')
-    expect(outputModeAdapter.toPayload(blank)).not.toHaveProperty('id')
-  })
-
-  it('loads only the current output event scripts before an explicit save', () => {
-    const saved = {
-      id: 'output-id',
-      name: 'Legacy output',
-      event_outputs: {
-        assistant_text: {
-          enabled: true,
-          output_source: 'def output(event):\n    return "<assistant>" + event["message"] + "</assistant>"\n',
+  it('uses the shared Python package draft contract for both event output owners', () => {
+    for (const adapter of [agentEventOutputAdapter, workflowEventOutputAdapter]) {
+      const draft = adapter.fromApi({
+        id: 'output-id',
+        name: 'Output',
+        python_package: {
+          folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          editable_files: ['main.py'],
         },
-        other: { enabled: true, output_source: 'def output(event):\n    return event["message"]\n' },
-      },
+        python_package_files: {
+          files: [{ path: 'main.py', content: 'def output(event):\n    return ""\n', exists: true }],
+          revision: 'revision',
+        },
+      })
+      expect(adapter.toPayload(draft)).toMatchObject({
+        name: 'Output',
+        python_package: {
+          folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          editable_files: ['main.py'],
+        },
+        python_package_files: {
+          revision: 'revision',
+          files: [{ path: 'main.py', content: 'def output(event):\n    return ""\n' }],
+        },
+      })
     }
-    const draft = outputModeAdapter.fromApi(saved as never, outputDefaults)
-
-    expect(draft.event_outputs).toEqual({
-      assistant_text: {
-        enabled: true,
-        output_source: 'def output(event):\n    return "<assistant>" + event["message"] + "</assistant>"\n',
-      },
-    })
-    expect(outputModeAdapter.toPayload(draft).event_outputs).toEqual(
-      draft.event_outputs,
-    )
   })
 
   it('projects malformed saved components into repairable current drafts', () => {
@@ -196,23 +177,6 @@ describe('block adapters', () => {
     })
     expect(middleware.python_package_files).toMatchObject({
       files: [{ path: 'main.py', content: '', exists: false }], revision: '',
-    })
-
-    const output = outputModeAdapter.fromApi({
-      id: 'output', name: 'Output',
-      event_outputs: {
-        assistant_text: {
-          enabled: false,
-          output_source: 'def output(event):\n    return "kept " + event["message"]\n',
-        },
-        legacy_event: { enabled: true, output_source: 'def output(event):\n    return "discarded"\n' },
-      },
-    } as never, outputDefaults)
-    expect(output.event_outputs).toEqual({
-      assistant_text: {
-        enabled: false,
-        output_source: 'def output(event):\n    return "kept " + event["message"]\n',
-      },
     })
 
     const filesystem = filesystemAdapter.fromApi({

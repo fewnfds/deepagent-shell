@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 
 from agent_shell.python_packages.contracts import PythonPackageReference
 from agent_shell.runtime.context import WorkflowRuntimeContext
-from agent_shell.runtime.state import validate_workflow_state_update
 
 
 BranchKey = Annotated[
@@ -93,7 +92,7 @@ async def run_command(
     runtime: Runtime[WorkflowRuntimeContext],
     allowed_branches: Collection[str],
 ) -> CommandResult:
-    from agent_shell.runtime.state import WorkflowState
+    from agent_shell.runtime.state import WorkflowState, validate_workflow_state_update
 
     original_state = _detached(state)
     script_state = _detached(state)

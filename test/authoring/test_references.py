@@ -11,7 +11,7 @@ def test_default_deep_agent_tool_conflict_is_rejected_at_save(
     blocks = create_blocks(
         client,
         "default-tool-conflict",
-        ("model", "output-mode", "custom-tool"),
+        ("model", "agent-event-output", "custom-tool"),
     )
     selected = client.put(
         f"/api/blocks/custom-tool/{blocks['custom-tool']['id']}",
@@ -25,7 +25,7 @@ def test_default_deep_agent_tool_conflict_is_rejected_at_save(
             "name": "Default tool conflict",
             "capability_refs": references(
                 blocks,
-                ("model", "output-mode", "custom-tool"),
+                ("model", "agent-event-output", "custom-tool"),
             ),
         },
     )
@@ -47,7 +47,7 @@ def test_minimal_filesystem_allows_non_read_file_tool_names(
     blocks = create_blocks(
         client,
         "minimal-filesystem",
-        ("model", "output-mode", "custom-tool"),
+        ("model", "agent-event-output", "custom-tool"),
     )
     selected = client.put(
         f"/api/blocks/custom-tool/{blocks['custom-tool']['id']}",
@@ -61,7 +61,7 @@ def test_minimal_filesystem_allows_non_read_file_tool_names(
             "name": "Minimal filesystem",
             "capability_refs": references(
                 blocks,
-                ("model", "output-mode", "custom-tool"),
+                ("model", "agent-event-output", "custom-tool"),
             ),
         },
     )
@@ -78,7 +78,7 @@ def test_block_update_rejects_new_conflict_in_referencing_main_agent(
     blocks = create_blocks(
         client,
         "impact",
-        ("model", "output-mode", "todo-list", "custom-tool"),
+        ("model", "agent-event-output", "todo-list", "custom-tool"),
     )
     safe = client.put(
         f"/api/blocks/custom-tool/{blocks['custom-tool']['id']}",
@@ -91,7 +91,7 @@ def test_block_update_rejects_new_conflict_in_referencing_main_agent(
             "name": "Protected Main Agent",
             "capability_refs": references(
                 blocks,
-                ("model", "output-mode", "todo-list", "custom-tool"),
+                ("model", "agent-event-output", "todo-list", "custom-tool"),
             ),
         },
     )
@@ -118,7 +118,7 @@ def test_static_tool_conflicts_use_ast_declared_name_not_resource_filename(
     blocks = create_blocks(
         client,
         "declared-tool-name",
-        ("model", "output-mode", "todo-list", "custom-tool"),
+        ("model", "agent-event-output", "todo-list", "custom-tool"),
     )
     selected = client.put(
         f"/api/blocks/custom-tool/{blocks['custom-tool']['id']}",
@@ -132,7 +132,7 @@ def test_static_tool_conflicts_use_ast_declared_name_not_resource_filename(
             "name": "No false tool conflict",
             "capability_refs": references(
                 blocks,
-                ("model", "output-mode", "todo-list", "custom-tool"),
+                ("model", "agent-event-output", "todo-list", "custom-tool"),
             ),
         },
     )
@@ -148,7 +148,7 @@ def test_override_update_rejects_new_conflict_in_bound_subagent(
     blocks = create_blocks(
         client,
         "override-impact",
-        ("model", "output-mode", "todo-list", "subagent"),
+        ("model", "agent-event-output", "todo-list", "subagent"),
     )
     delegation = client.put(
         f"/api/blocks/subagent/{blocks['subagent']['id']}",
@@ -181,7 +181,7 @@ def test_override_update_rejects_new_conflict_in_bound_subagent(
             "name": "Delegating Main Agent",
             "capability_refs": references(
                 blocks,
-                ("model", "output-mode", "todo-list", "subagent"),
+                ("model", "agent-event-output", "todo-list", "subagent"),
             ),
             "subagents": [{"subagent_id": subagent.json()["id"]}],
         },

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shutil
+
 import pytest
 
 from .app_support import *
@@ -40,7 +42,7 @@ def test_health_catalog_and_readiness_are_small_and_current(
         "skill",
         "subagent",
         "todo_list",
-        "output_mode",
+        "agent_event_output",
         "exception_retry",
         "summarization",
         "prompt_caching",
@@ -70,7 +72,7 @@ def test_health_catalog_and_readiness_are_small_and_current(
     }
     assert by_type["model"]["required"] is True
     assert by_type["filesystem"]["required"] is False
-    assert by_type["output-mode"]["required"] is True
+    assert by_type["agent-event-output"]["required"] is True
     assert by_type["filesystem"]["tool_names"] == [
         "ls",
         "read_file",
@@ -82,8 +84,8 @@ def test_health_catalog_and_readiness_are_small_and_current(
         "execute",
     ]
     assert by_type["todo-list"]["tool_names"] == ["write_todos"]
-    assert by_type["output-mode"]["subagent_policy"] == "top-level-only"
-    assert by_type["output-mode"]["subagent_overrideable"] is False
+    assert by_type["agent-event-output"]["subagent_policy"] == "top-level-only"
+    assert by_type["agent-event-output"]["subagent_overrideable"] is False
     readiness = client.get("/api/readiness").json()
     assert readiness["status"] == "configuration_ready"
     assert set(readiness["sections"]) == {
@@ -96,6 +98,57 @@ def test_health_catalog_and_readiness_are_small_and_current(
     )
     assert readiness["sections"]["runtime_dependencies"]["status"] == "ready"
     assert readiness["sections"]["runtime_dependencies"]["code"] == "model_streaming"
+
+
+def test_builtin_event_output_examples_are_loadable(
+    tmp_path: Path, monkeypatch
+) -> None:
+    source_root = Path(__file__).resolve().parents[2] / "examples"
+    for component_type, source_path in (
+        (
+            "agent-event-output",
+            source_root / "agent-components" / "agent-event-output",
+        ),
+        (
+            "workflow-event-output",
+            source_root / "workflow-components" / "workflow-event-output",
+        ),
+    ):
+        target = tmp_path / "examples" / source_path.relative_to(source_root)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(source_path, target)
+
+    client = make_client(tmp_path, monkeypatch)
+    for component_type, endpoint in (
+        ("agent-event-output", "agent-event-output"),
+        ("workflow-event-output", "workflow-event-output"),
+    ):
+        catalog = client.get(
+            f"/api/python-package-templates/{endpoint}"
+        ).json()["catalog"]
+        example = next(
+            item for item in catalog if item["key"] == "内置示例-default"
+        )
+        response = client.post(
+            f"/api/blocks/{component_type}",
+            json={
+                "name": f"{component_type} example",
+                "python_package": {
+                    "folder": "",
+                    "editable_files": ["main.py"],
+                },
+                "python_package_files": {
+                    "template_key": example["key"],
+                    "revision": example["revision"],
+                    "files": [
+                        {"path": file["path"], "content": file["content"]}
+                        for file in example["files"]
+                        if file["path"] == "main.py"
+                    ],
+                },
+            },
+        )
+        assert response.status_code == 200, response.text
 
 
 def test_command_uses_component_crud_storage_and_repository_validation(
@@ -222,7 +275,7 @@ def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) 
         if block_type == "subagent":
             assert created["instruction_override"] is None
             assert created["task_description_override"] is None
-        if block_type == "custom-middleware":
+        if block_type in {"custom-middleware", "agent-event-output"}:
             assert created["python_package"]["folder"] == created["id"]
         if block_type == "todo-list":
             assert created["system_prompt_override"] == payload[
@@ -231,9 +284,6 @@ def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) 
             assert created["tool_description_override"] == payload[
                 "tool_description_override"
             ]
-        if block_type == "output-mode":
-            assert created["event_outputs"] == payload["event_outputs"]
-
         listed = client.get(f"/api/blocks/{block_type}")
         assert listed.status_code == 200
         assert [item["id"] for item in listed.json()] == [created["id"]]
@@ -241,7 +291,7 @@ def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) 
         update_payload = {**payload, "name": f"{payload['name']} updated"}
         if block_type == "model":
             update_payload["credential"] = None
-        if block_type == "custom-middleware":
+        if block_type in {"custom-middleware", "agent-event-output"}:
             update_payload = {
                 "name": f"{payload['name']} updated",
                 "python_package": created["python_package"],
@@ -410,74 +460,27 @@ def test_filesystem_permissions_reject_invalid_or_duplicate_paths(
         assert response.status_code == 422, response.text
 
 
-def test_output_mode_rejects_invalid_event_and_python_script_contracts(
+def test_event_output_components_reject_invalid_package_entrypoints(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
-
-    missing_event = output_mode_payload("Missing event")
-    missing_event["event_outputs"].pop("lifecycle")
-
-    extra_event = output_mode_payload("Extra event")
-    extra_event["event_outputs"]["raw_state"] = {
-        "enabled": False,
-        "output_source": 'def output(event):\n    return event["message"]\n',
-    }
-
-    wrong_signature = output_mode_payload("Wrong signature")
-    wrong_signature["event_outputs"]["assistant_text"]["output_source"] = (
-        "def output(event, extra):\n    return ''\n"
-    )
-
-    async_script = output_mode_payload("Async output")
-    async_script["event_outputs"]["assistant_text"]["output_source"] = (
-        "async def output(event):\n    return ''\n"
-    )
-
-    legacy_template = output_mode_payload("Legacy template")
-    legacy_template["event_outputs"]["assistant_text"]["start_template"] = (
-        "<assistant>"
-    )
-
-    for payload in (
-        missing_event,
-        extra_event,
-        wrong_signature,
-        async_script,
-        legacy_template,
-    ):
-        response = client.post("/api/blocks/output-mode", json=payload)
-        assert response.status_code == 422, (payload["name"], response.text)
-
-
-def test_output_mode_reports_the_exact_malformed_event_script(
-    tmp_path: Path, monkeypatch
-) -> None:
-    client = make_client(tmp_path, monkeypatch)
-    payload = output_mode_payload("Malformed assistant script")
-    payload["event_outputs"]["assistant_text"]["output_source"] = (
-        "def output(event):\n    return (\n"
-    )
-
-    response = client.post("/api/blocks/output-mode", json=payload)
-
-    assert response.status_code == 422, response.text
-    issue = response.json()["detail"]["validation"]["issues"][0]
-    assert issue["path"] == "event_outputs.assistant_text.output_source"
-
-
-def test_output_mode_rejects_removed_filter_fields(
-    tmp_path: Path, monkeypatch
-) -> None:
-    client = make_client(tmp_path, monkeypatch)
-    payload = output_mode_payload("Removed filter field")
-    payload["filter_mappings"] = [
-        {"field": "future_event.custom_field", "value": "custom value"}
-    ]
-
-    response = client.post("/api/blocks/output-mode", json=payload)
-
-    assert response.status_code == 422, response.text
-    assert response.json()["detail"]["validation"]["issues"][0]["path"] == (
-        "filter_mappings"
-    )
+    for block_type in ("agent-event-output", "workflow-event-output"):
+        response = client.post(
+            f"/api/blocks/{block_type}",
+            json={
+                "name": f"Invalid {block_type}",
+                "python_package": {"folder": "", "editable_files": ["main.py"]},
+                "python_package_files": {
+                    "template_key": "__empty__",
+                    "revision": "",
+                    "files": [
+                        {
+                            "path": "main.py",
+                            "content": "def output(event, extra):\n    return ''\n",
+                        }
+                    ],
+                },
+            },
+        )
+        assert response.status_code == 422, response.text
+        assert response.json()["detail"]["code"] == "python_package_invalid"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Callable
 from types import SimpleNamespace
 
 import httpx
@@ -26,30 +27,32 @@ from agent_shell.runtime.output_stream import (
 )
 
 
-EVENT_TYPES = (
-    "assistant_text",
-    "reasoning",
-    "tool_call",
-    "tool_result",
-    "tool_error",
-    "subagent",
-    "custom",
-    "lifecycle",
-)
+def _render_template(template: str, event: dict[str, object]) -> str:
+    return re.sub(
+        r"{{\s*([^{}]+?)\s*}}",
+        lambda match: str(event.get(match.group(1).strip(), "")),
+        template,
+    )
 
 
-def output_source(template: str = "{{message}}") -> str:
-    parts: list[str] = []
-    cursor = 0
-    for match in re.finditer(r"{{\s*([^{}]+?)\s*}}", template):
-        if match.start() > cursor:
-            parts.append(repr(template[cursor:match.start()]))
-        parts.append(f"str(event.get({match.group(1).strip()!r}, ''))")
-        cursor = match.end()
-    if cursor < len(template):
-        parts.append(repr(template[cursor:]))
-    expression = " + ".join(parts) or "''"
-    return f"def output(event):\n    return {expression}\n"
+def output_renderer(
+    templates: dict[str, str] | None = None,
+    *,
+    enabled: set[str] | None = None,
+) -> Callable[[dict[str, object]], str]:
+    resolved_templates = templates or {"assistant_text": "{{message}}"}
+    resolved_enabled = set(resolved_templates) if enabled is None else enabled
+
+    def output(event: dict[str, object]) -> str:
+        event_type = str(event["event_type"])
+        if event_type not in resolved_enabled:
+            return ""
+        return _render_template(
+            resolved_templates.get(event_type, "{{message}}"),
+            event,
+        )
+
+    return output
 
 
 @pytest.fixture
@@ -68,24 +71,6 @@ def provider_http_clients():
     finally:
         sync_client.close()
         asyncio.run(async_client.aclose())
-
-
-def config(
-    *,
-    mode: str,
-    mappings: list[dict[str, str]] | None = None,
-    source: str | None = None,
-) -> dict:
-    del mode, mappings
-    return {
-        "event_outputs": {
-            event_type: {
-                "enabled": event_type == "assistant_text",
-                "output_source": source or output_source(),
-            }
-            for event_type in EVENT_TYPES
-        },
-    }
 
 
 def message_envelope(

@@ -1,6 +1,6 @@
 # 配置 Agent
 
-只有包含 Agent Node 时，才需要 Model、Filesystem、Output Mode、Workflow Input Context（WIC）Middleware 和 Main Agent；没有 Agent Node 的 Graph 不需要额外创建这些对象。其他装配项均为选配。
+只有包含 Agent Node 时，才需要 Model、Filesystem、Agent Event Output、Workflow Input Context（WIC）Middleware 和 Main Agent；没有 Agent Node 的 Graph 不需要额外创建这些对象。其他装配项均为选配。
 
 ## Filesystem
 
@@ -46,27 +46,39 @@ Content-Type: application/json
 
 Provider 和 Provider-specific field 以 Model page 及 backend validation 为准。示例中的 model ID 不是当前实例可用 Model 的事实来源。
 
-## Output Mode
+## Agent Event Output
 
-Main Agent 的 required reference 包含完整 Output Mode。`GET /api/catalog` 的
-`editor_defaults.output_mode.default_value` 提供完整 event catalog，添加唯一 `name` 后提交到：
+Main Agent 的 required reference 包含一个 `agent-event-output` package。先从 template catalog 选择源码，或使用 `__empty__`
+提交完整 `main.py`：
 
-```http
-POST /api/blocks/output-mode
+```json
+{
+  "name": "Primary agent output",
+  "python_package": {"folder": "", "editable_files": ["main.py"]},
+  "python_package_files": {
+    "template_key": "__empty__",
+    "revision": "",
+    "files": [{"path": "main.py", "content": "<complete source>"}]
+  }
+}
 ```
 
-可通过简单的python函数进行
+提交到 `POST /api/blocks/agent-event-output`。推荐先读取
+`GET /api/python-package-templates/agent-event-output`，使用返回的 `revision` 和 `files`，保存后配置拥有独占 package
+目录。
 
 
-若只需要最终 Assistant text，可以保留全部 event key，但只启用 `assistant_text`：
+若只需要最终 Assistant text，可以在同一个入口中过滤其他 event：
 
 ```python
 def output(event):
-    return event["message"]
+    if event["event_type"] == "assistant_text":
+        return event["message"]
+    return ""
 ```
 
-每个 `output_source` 的固定 entry 是同步 `def output(event)`，return type 为 `str`。完整八类 event 及 field 见
-[Output Mode](../../wizard-pages/output-mode-config.md)。
+`main.py` 只定义一个同步 `def output(event)`。在函数内按 `event["event_type"]` 处理全部事件，return type 为 `str`，
+返回 `""` 表示过滤。完整 Agent event 及 field 见[Agent Event Output](../../wizard-pages/agent-event-output-config.md)。
 
 ## Workflow Input Context（WIC）Custom Middleware
 
@@ -107,7 +119,7 @@ Task Dispatcher task、Runtime Context、Store 或当前 Agent Filesystem 材料
 
 ## Main Agent
 
-最小 Main Agent 引用 Model、Output Mode 和 WIC：
+最小 Main Agent 引用 Model、Agent Event Output 和 WIC：
 
 ```http
 POST /api/main-agents
@@ -118,7 +130,7 @@ Content-Type: application/json
   "name": "Primary worker",
   "capability_refs": [
     {"type": "model", "block_id": "<model UUID>"},
-    {"type": "output-mode", "block_id": "<output-mode UUID>"}
+    {"type": "agent-event-output", "block_id": "<agent-event-output UUID>"}
   ],
   "middleware_refs": [
     {"middleware_id": "<WIC UUID>"}

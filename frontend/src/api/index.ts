@@ -114,6 +114,14 @@ export const managementApi = {
     return managementRequest('/api/python-package-templates/middleware')
   },
 
+  listAgentEventOutputTemplates(): Promise<ResourceCatalog<PythonPackageTemplate>> {
+    return managementRequest('/api/python-package-templates/agent-event-output')
+  },
+
+  listWorkflowEventOutputTemplates(): Promise<ResourceCatalog<PythonPackageTemplate>> {
+    return managementRequest('/api/python-package-templates/workflow-event-output')
+  },
+
   listCommandTemplates(): Promise<ResourceCatalog<PythonPackageTemplate>> {
     return managementRequest('/api/python-package-templates/command')
   },

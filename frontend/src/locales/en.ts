@@ -29,7 +29,7 @@ export const en: MessageSchema = {
       parentWorkflows: 'Parent workflows',
       childWorkflows: 'Child workflows',
       workflowLifecycles: 'Run history',
-      workflowEventOutput: 'Event output',
+      workflowEventOutput: 'Workflow event output',
       command: 'Command Node',
       taskDispatcher: 'Task Dispatcher',
     },
@@ -155,7 +155,7 @@ export const en: MessageSchema = {
       name: 'Name',
       description: 'Description',
       filesystem: 'Shared filesystem',
-      eventOutput: 'Event output',
+      eventOutput: 'Workflow event output',
       recursionLimit: 'Super-step limit',
       executionTimeoutSeconds: 'Total Run timeout',
       maxConcurrency: 'Maximum concurrency',
@@ -538,9 +538,9 @@ export const en: MessageSchema = {
       label: 'Custom Middleware',
       description: 'LangChain Middleware constructed in a defined order',
     },
-    'output-mode': {
-      label: 'Output mode',
-      description: 'Filter and format runtime events into public text',
+    'agent-event-output': {
+      label: 'Agent event output',
+      description: 'Filter and format Agent events with a configuration-owned Python extension',
     },
     'exception-retry': {
       label: 'Exception retry',
@@ -559,8 +559,8 @@ export const en: MessageSchema = {
       description: 'Configure Anthropic prompt-caching Middleware independently',
     },
     'workflow-event-output': {
-      label: 'Event output',
-      description: 'Render non-Agent events into response strings with Python',
+      label: 'Workflow event output',
+      description: 'Filter and format Workflow events with a configuration-owned Python extension',
     },
     'command': {
       label: 'Command Node',
@@ -676,9 +676,7 @@ export const en: MessageSchema = {
     source: 'Construction source',
     field: 'Field',
     value: 'Value',
-    event_outputs: 'Event output scripts',
-    output_source: 'Python output script',
-    workflow_event_output_id: 'Event output component UUID',
+    workflow_event_output_id: 'Workflow event output component UUID',
     marker: 'Text marker',
     tool_description: 'Tool description',
     capability_refs: 'Capability references',
@@ -761,32 +759,6 @@ export const en: MessageSchema = {
     customMiddleware: {
       namePlaceholder: 'For example: Reliability middleware',
       empty: 'No Middleware package is attached.',
-    },
-    outputMode: {
-      fieldsTitle: 'Key event dict fields',
-      events: {
-        assistant_text: { label: 'Model answer' },
-        reasoning: { label: 'Reasoning' },
-        tool_call: { label: 'Tool call' },
-        tool_result: { label: 'Tool result' },
-        tool_error: { label: 'Tool error' },
-        subagent: { label: 'Subagent status' },
-        custom: { label: 'Custom progress' },
-        lifecycle: { label: 'Run status' },
-      },
-    },
-    workflowEventOutput: {
-      events: {
-        custom: { label: 'Custom event' },
-        lifecycle: { label: 'Run status' },
-        values: { label: 'Full State (values)' },
-        updates: { label: 'State updates' },
-        tasks: { label: 'Tasks' },
-        checkpoints: { label: 'Checkpoint' },
-        input: { label: 'Input', requested: { label: 'Input request' } },
-        debug: { label: 'Debug' },
-        other: { label: 'Other event' },
-      },
     },
     exceptionRetry: {
       strategyTitle: 'Retry strategy',
@@ -1153,7 +1125,7 @@ export const en: MessageSchema = {
   },
   errors: {
     workflowInvalid: 'The Workflow configuration is invalid.',
-    workflowEventOutputNotFound: 'The selected event output component does not exist.',
+    workflowEventOutputNotFound: 'The selected Workflow event output component does not exist.',
     workflowNameConflict: 'A Workflow with this name already exists.',
     workflowNotFound: 'The Workflow does not exist.',
     workflowLifecycleNotFound: 'The Workflow run history does not exist.',
@@ -1406,8 +1378,6 @@ export const en: MessageSchema = {
       pythonPackageDependenciesRestartRequired: 'Restart Agent Shell to prepare the package requirements.',
       credentialMetadataInvalid: 'Open the model configuration, re-enter or confirm its credential, and save it.',
       unknownBlockType: 'This configuration type is no longer supported. Delete the obsolete record or recreate the required configuration with the current editor.',
-      outputEventTypesInvalid: 'Reopen the event output editor, make sure every currently listed event is present, and save it in the current structure.',
-      outputScriptInvalid: 'The script must define synchronous output(event) and return a string. Correct it and save again.',
       runtimeConfiguration: 'Check the location above and save again. If it still fails, use the request ID to inspect System Logs.',
     },
     failure: {
@@ -1482,8 +1452,6 @@ export const en: MessageSchema = {
         subagentNameDuplicate: 'This Subagent name is already used by another Subagent.',
         subagentReferenceDuplicate: 'The same Subagent entity is referenced more than once by this Agent.',
         subagentNestedReferencesForbidden: 'Only a Main Agent may reference Subagents. A Subagent cannot configure child Subagents.',
-        outputEventTypesInvalid: 'The event output script set is missing required current entries or still contains obsolete entries.',
-        outputScriptInvalid: 'The Python output script for {event_name_label} is invalid.',
       },
       assembly: {
         mainAgentNotFound: 'The previously selected Main Agent no longer exists.',

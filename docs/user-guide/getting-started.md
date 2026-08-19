@@ -23,7 +23,7 @@ Windows 源码 Clone 从项目根运行：
 ## 第一份可运行 Workflow
 
 1. 在【组件 / Filesystem】创建共享空间配置。
-2. 创建模型、输出模式和 Main Agent；需要把客户端多轮消息整理到 Agent 初始上下文时，从
+2. 创建模型、Agent 事件输出和 Main Agent；需要把客户端多轮消息整理到 Agent 初始上下文时，从
    `内置示例-workflow-input-context` 创建 Custom Middleware 并装配到 Agent。
 3. 在【Agent / Main Agent】选择该 Filesystem，再到【Workflow / 父图】新建记录；点击【编辑 Flow】进入全屏画布。
 4. 添加 Agent 节点，选择 Main Agent，连接 `Start -> Agent -> End` 并保存。

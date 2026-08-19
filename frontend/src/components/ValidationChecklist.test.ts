@@ -132,7 +132,7 @@ describe('ValidationChecklist', () => {
     expect(wrapper.text()).toContain('当前编辑的 Main Agent 配置')
   })
 
-  it('pinpoints invalid output scripts and always provides a concrete next step', () => {
+  it('pinpoints invalid event output packages and provides a concrete next step', () => {
     const wrapper = mountChecklist({
       status: 'invalid',
       error: '',
@@ -140,26 +140,25 @@ describe('ValidationChecklist', () => {
         valid: false,
         stage: 'draft_validation',
         issues: [{
-          code: 'contract.output_script_invalid',
+          code: 'python_package.invalid',
           scope: 'block',
           owner_id: 'output-id',
           owner_name: 'Default output',
-          owner_type: 'output-mode',
-          path: 'event_outputs.assistant_text.output_source',
+          owner_type: 'agent-event-output',
+          path: 'python_package.folder',
           message: 'safe backend detail',
-          message_key: 'validation.issue.contract.outputScriptInvalid',
-          message_args: { event_name: 'assistant_text' },
+          message_key: 'validation.issue.pythonPackage.invalid',
+          message_args: { package_id: 'output-id' },
         }],
       },
     })
 
     const card = wrapper.get('[data-testid="validation-issue"]')
     expect(card.get('[data-testid="validation-owner"]').text())
-      .toBe('组件类型 输出模式 配置名称 Default output')
-    expect(card.text()).toContain('事件输出脚本下的模型回答下的Python 输出脚本')
-    expect(card.text()).toContain('模型回答的 Python 输出脚本无效。')
+      .toBe('组件类型 Agent 事件输出 配置名称 Default output')
+    expect(card.text()).toContain('Python 包 output-id 未通过静态检查。')
     expect(card.get('[data-testid="validation-resolution"]').text())
-      .toContain('必须定义同步函数 output(event)，并返回字符串')
+      .toContain('修正 Python 包，或选择其他包。')
     expect(card.text()).not.toMatch(/[\u300c\u300d\u201c\u201d\u00b7\u2192]/)
   })
 
@@ -395,22 +394,22 @@ describe('ValidationChecklist', () => {
           scope: 'main_agent',
           owner_id: 'main-agent-id',
           owner_name: 'writer',
-          path: 'capability_refs.output-mode',
+          path: 'capability_refs.agent-event-output',
           message: 'raw backend report message',
           message_key: 'validation.issue.assembly.requiredCapabilityMissing',
-          message_args: { capability_type: 'output-mode' },
+          message_args: { capability_type: 'agent-event-output' },
         }],
       },
     })
 
     const card = wrapper.get('[data-testid="validation-issue"]')
     const problemLocation = card.get('[data-testid="validation-location"]')
-    expect(problemLocation.text()).toContain('能力引用下的输出模式')
-    expect(problemLocation.text()).not.toContain('output-mode')
-    expect(card.text()).toContain('尚未选择输出模式配置。')
+    expect(problemLocation.text()).toContain('能力引用下的Agent 事件输出')
+    expect(problemLocation.text()).not.toContain('agent-event-output')
+    expect(card.text()).toContain('尚未选择Agent 事件输出配置。')
     expect(card.get('[data-testid="validation-resolution"]').text())
-      .toContain('在所属配置中选择一份输出模式配置。')
-    expect(card.get('[data-testid="validation-technical-path"]').text()).toBe('capability_refs.output-mode')
+      .toContain('在所属配置中选择一份Agent 事件输出配置。')
+    expect(card.get('[data-testid="validation-technical-path"]').text()).toBe('capability_refs.agent-event-output')
     expect(card.text()).not.toContain('raw backend report message')
   })
 

@@ -6,7 +6,7 @@
 
 相关对象分为以下几层：
 
-1. **Agent component**：Model、Output Mode、Filesystem、system prompt、Skill、Filesystem Permissions、Custom Middleware 等。
+1. **Agent component**：Model、Agent Event Output、Filesystem、system prompt、Skill、Filesystem Permissions、Custom Middleware 等。
 2. **Agent configuration**：Main Agent 引用 component 和 Subagent；Subagent 定义一层同步 delegation 的 target 及 capability override。
 3. **Workflow component**：Main Agent 自动成为 Workflow component，其他 component 通常通过 Python package 编程。
 4. **Workflow**：保存 execution logic、runtime limits 和一份 Graph document。

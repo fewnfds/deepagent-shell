@@ -23,6 +23,8 @@ const api = vi.hoisted(() => ({
   validateRepository: vi.fn(),
   listCustomTools: vi.fn(),
   listMiddlewareTemplates: vi.fn(),
+  listAgentEventOutputTemplates: vi.fn(),
+  listWorkflowEventOutputTemplates: vi.fn(),
   listCommandTemplates: vi.fn(),
   listTaskDispatcherTemplates: vi.fn(),
   listSkills: vi.fn(),
@@ -177,6 +179,8 @@ beforeEach(() => {
   api.validateRepository.mockResolvedValue({ valid: true, stage: 'repository_load', issues: [] })
   api.listCustomTools.mockResolvedValue({ catalog: [], errors: {} })
   api.listMiddlewareTemplates.mockResolvedValue({ catalog: [], errors: {} })
+  api.listAgentEventOutputTemplates.mockResolvedValue({ catalog: [], errors: {} })
+  api.listWorkflowEventOutputTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listCommandTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listTaskDispatcherTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listSkills.mockResolvedValue({

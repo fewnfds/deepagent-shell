@@ -108,10 +108,14 @@ def create_main_agent(
         "/api/blocks/model",
         json=model_payload,
     ).json()
-    output_mode = client.post(
-        "/api/blocks/output-mode",
-        json=output_mode_payload("Published output", include_lifecycle=False),
-    ).json()
+    output_response = client.post(
+        "/api/blocks/agent-event-output",
+        json=agent_event_output_payload(
+            "Published output", include_lifecycle=False
+        ),
+    )
+    assert output_response.status_code == 200, output_response.text
+    event_output = output_response.json()
     if filesystem_id is None:
         filesystem = client.post(
             "/api/blocks/filesystem",
@@ -121,7 +125,7 @@ def create_main_agent(
         filesystem_id = filesystem.json()["id"]
     capability_refs = [{"type": "model", "block_id": model["id"]}]
     capability_refs.append(
-        {"type": "output-mode", "block_id": output_mode["id"]}
+        {"type": "agent-event-output", "block_id": event_output["id"]}
     )
     capability_refs.append(
         {"type": "filesystem", "block_id": filesystem_id}
@@ -227,41 +231,43 @@ def subagent_payload(
     }
 
 
-def output_mode_payload(
-    name: str = "Visible timeline", *, include_lifecycle: bool = True
-) -> dict:
-    event_types = (
-        "assistant_text",
-        "reasoning",
-        "tool_call",
-        "tool_result",
-        "tool_error",
-        "subagent",
-        "custom",
-        "lifecycle",
-    )
-    outputs = {
-        event_type: {
-            "enabled": False,
-            "output_source": 'def output(event):\n    return event["message"]\n',
-        }
-        for event_type in event_types
-    }
-    outputs["assistant_text"] = {
-        "enabled": True,
-        "output_source": 'def output(event):\n    return event["message"]\n',
-    }
-    outputs["lifecycle"] = {
-        "enabled": include_lifecycle,
-        "output_source": (
-            'def output(event):\n'
-            '    return f\'<status phase="{event["phase"]}">{event["status"]}</status>\'\n'
-        ),
-    }
+def _python_output_payload(name: str, source: str) -> dict[str, object]:
     return {
         "name": name,
-        "event_outputs": outputs,
+        "python_package": {"folder": "", "editable_files": ["main.py"]},
+        "python_package_files": {
+            "template_key": "__empty__",
+            "revision": "",
+            "files": [{"path": "main.py", "content": source}],
+        },
     }
+
+
+def agent_event_output_payload(
+    name: str = "Visible timeline", *, include_lifecycle: bool = True
+) -> dict[str, object]:
+    lifecycle_branch = (
+        '    if event["event_type"] == "lifecycle":\n'
+        '        return f\'<status phase="{event["phase"]}">{event["status"]}</status>\'\n'
+        if include_lifecycle
+        else ""
+    )
+    return _python_output_payload(
+        name,
+        'def output(event):\n'
+        '    if event["event_type"] == "assistant_text":\n'
+        '        return event["message"]\n'
+        f"{lifecycle_branch}"
+        '    return ""\n',
+    )
+
+
+def workflow_event_output_payload(
+    name: str = "Visible workflow events",
+    *,
+    source: str = 'def output(event):\n    return ""\n',
+) -> dict[str, object]:
+    return _python_output_payload(name, source)
 
 
 def capability_reference_id(main_agent: dict, capability_type: str) -> str:

@@ -130,8 +130,8 @@ def test_subagent_delete_detaches_entity_references(
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
     required_refs = references(
-        create_blocks(client, "binding-required", ("model", "output-mode")),
-        ("model", "output-mode"),
+        create_blocks(client, "binding-required", ("model", "agent-event-output")),
+        ("model", "agent-event-output"),
     )
     subagent_response = client.post(
         "/api/subagents",

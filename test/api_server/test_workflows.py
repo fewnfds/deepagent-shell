@@ -4,6 +4,7 @@ from copy import deepcopy
 import json
 import shutil
 
+from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.workflows import WorkflowStore
 from .support import *
 
@@ -32,12 +33,9 @@ def test_workflow_event_output_is_a_reusable_component_reference(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
-        defaults = client.get("/api/catalog").json()["editor_defaults"][
-            "workflow_event_output"
-        ]["default_value"]
         output = client.post(
             "/api/blocks/workflow-event-output",
-            json={"name": "Public workflow events", **defaults},
+            json=workflow_event_output_payload("Public workflow events"),
         )
         assert output.status_code == 200, output.text
         workflow = create_workflow(client, name="Event Workflow")
@@ -62,6 +60,68 @@ def test_workflow_event_output_is_a_reusable_component_reference(
     with make_client(tmp_path, monkeypatch) as client:
         saved = client.get(f"/api/workflows/{workflow['id']}").json()
         assert saved["workflow_event_output_id"] == output.json()["id"]
+
+
+def test_workflow_validation_reports_a_missing_event_output_reference(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        main_agent = create_main_agent(client)
+        output = client.post(
+            "/api/blocks/workflow-event-output",
+            json=workflow_event_output_payload("Missing during validation"),
+        )
+        assert output.status_code == 200, output.text
+        workflow = create_workflow(client, name="Missing event output")
+        updated = client.put(
+            f"/api/workflows/{workflow['id']}",
+            json={
+                **{
+                    key: workflow[key]
+                    for key in (
+                        "name",
+                        "workflow_role",
+                        "description",
+                        "recursion_limit",
+                        "execution_timeout_seconds",
+                        "max_concurrency",
+                    )
+                },
+                "workflow_event_output_id": output.json()["id"],
+            },
+        )
+        assert updated.status_code == 200, updated.text
+        document = save_linear_workflow_graph(client, workflow, main_agent)
+
+        original_get = BlockStore.get_block_internal
+
+        def hide_event_output(self, block_type: str, block_id: str):
+            if (
+                block_type == "workflow-event-output"
+                and block_id == output.json()["id"]
+            ):
+                return None
+            return original_get(self, block_type, block_id)
+
+        monkeypatch.setattr(BlockStore, "get_block_internal", hide_event_output)
+        report = client.post(
+            f"/api/workflows/{workflow['id']}/validate", json=document
+        )
+        published = client.put(
+            f"/api/workflows/{workflow['id']}/graph", json=document
+        )
+
+    assert report.status_code == 200, report.text
+    issue = next(
+        item
+        for item in report.json()["issues"]
+        if item["code"] == "workflow_event_output_not_found"
+    )
+    assert issue["scope"] == "workflow"
+    assert issue["owner_id"] == workflow["id"]
+    assert issue["path"] == "workflow_event_output_id"
+    assert report.json()["valid"] is False
+    assert published.status_code == 422
 
 
 def test_workflow_roles_filter_management_and_public_model_entries(

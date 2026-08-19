@@ -10,17 +10,9 @@ from agent_shell.contracts import (
     ExceptionRetryBlock,
     FilesystemBlock,
     FilesystemToolConfigs,
-    OUTPUT_COMMON_FIELDS,
-    OUTPUT_EVENT_NAMES,
-    OUTPUT_EVENT_FIELDS,
     PromptCachingBlock,
     SKILL_PROMPT_FIELDS,
     SummarizationBlock,
-)
-from agent_shell.workflow_event_output import (
-    WORKFLOW_EVENT_FIELDS,
-    WORKFLOW_EVENT_NAMES,
-    WorkflowEventOutputBlock,
 )
 
 
@@ -311,49 +303,6 @@ _FILESYSTEM_TOOL_DESCRIPTIONS = {
     "execute": ("执行", EXECUTE_TOOL_DESCRIPTION),
 }
 
-_OUTPUT_EVENT_UI = {
-    "assistant_text": ("模型文本", "Main Agent 模型完成的普通文本块。"),
-    "reasoning": ("推理内容", "模型明确提供的完整 reasoning block。"),
-    "tool_call": ("工具调用", "工具名称、调用 ID 与完整参数。"),
-    "tool_result": ("工具结果", "工具完成后的最终结果。"),
-    "tool_error": ("工具错误", "工具执行失败时的稳定错误信息。"),
-    "subagent": ("子代理", "命名 Subagent 的完整开始和结束状态。"),
-    "custom": ("自定义进度", "Middleware 或 tool 显式产生的自定义事件。"),
-    "lifecycle": ("运行状态", "整次执行的开始、正常结束和错误状态。"),
-}
-
-_OUTPUT_EVENT_DEFAULT_SUMMARIES = {
-    "assistant_text": '{event["agent_name"]} response',
-    "reasoning": '{event["agent_name"]} reasoning',
-    "tool_call": '{event["agent_name"]} Tool {event["tool_name"]} call',
-    "tool_result": '{event["agent_name"]} Tool {event["tool_name"]} result',
-    "tool_error": '{event["agent_name"]} Tool {event["tool_name"]} error',
-    "subagent": 'Subagent {event["subagent_name"]} {event["status"]}',
-    "custom": '{event["agent_name"]} Custom {event["channel"]}',
-    "lifecycle": '{event["agent_name"]} Lifecycle {event["status"]}',
-}
-
-_WORKFLOW_EVENT_DEFAULT_SUMMARIES = {
-    "custom": 'Workflow Custom {event["channel"]}',
-    "lifecycle": 'Workflow Lifecycle {event["status"]}',
-    "values": "Workflow Values",
-    "updates": "Workflow Updates",
-    "tasks": "Workflow Tasks",
-    "checkpoints": "Workflow Checkpoints",
-    "input": "Workflow Input",
-    "input.requested": "Workflow Input requested",
-    "debug": "Workflow Debug",
-    "other": 'Workflow {event["channel"]}',
-}
-
-
-def _details_output_source(output_type: str, summary: str) -> str:
-    return (
-        "def output(event):\n"
-        f"    return f'<details type=\"{output_type}\"><summary>*{summary}*</summary>"
-        "{event[\"message\"]}</details>\\n'\n"
-    )
-
 def _filesystem_tools() -> list[dict[str, object]]:
     defaults = FilesystemToolConfigs().model_dump(mode="json")
     return [
@@ -366,60 +315,6 @@ def _filesystem_tools() -> list[dict[str, object]]:
         }
         for name in CAPABILITY_BY_TYPE["filesystem"].tool_names
     ]
-
-
-def _output_events() -> list[dict[str, object]]:
-    return [
-        {
-            "key": name,
-            "label": _OUTPUT_EVENT_UI[name][0],
-            "description": _OUTPUT_EVENT_UI[name][1],
-            "fields": [
-                *OUTPUT_COMMON_FIELDS,
-                *OUTPUT_EVENT_FIELDS[name],
-            ],
-        }
-        for name in OUTPUT_EVENT_NAMES
-    ]
-
-
-def _output_mode_default() -> dict[str, object]:
-    event_outputs = {
-        name: {
-            "enabled": True,
-            "output_source": _details_output_source(
-                "agent", _OUTPUT_EVENT_DEFAULT_SUMMARIES[name]
-            ),
-        }
-        for name in OUTPUT_EVENT_NAMES
-    }
-    return {
-        "event_outputs": event_outputs,
-    }
-
-
-def _workflow_event_output_default() -> dict[str, object]:
-    return {
-        "events": [
-            {
-                "key": name,
-                "fields": [*OUTPUT_COMMON_FIELDS, *WORKFLOW_EVENT_FIELDS[name]],
-            }
-            for name in WORKFLOW_EVENT_NAMES
-        ],
-        "default_value": WorkflowEventOutputBlock(
-            name="Event output",
-            event_outputs={
-                name: {
-                    "enabled": name in {"custom", "lifecycle"},
-                    "output_source": _details_output_source(
-                        "workflow", _WORKFLOW_EVENT_DEFAULT_SUMMARIES[name]
-                    ),
-                }
-                for name in WORKFLOW_EVENT_NAMES
-            },
-        ).model_dump(mode="json", exclude={"name"}),
-    }
 
 
 _EDITOR_DEFAULTS = {
@@ -453,10 +348,7 @@ _EDITOR_DEFAULTS = {
         "system_prompt": WRITE_TODOS_SYSTEM_PROMPT,
         "tool_description": WRITE_TODOS_TOOL_DESCRIPTION,
     },
-    "output_mode": {
-        "events": _output_events(),
-        "default_value": _output_mode_default(),
-    },
+    "agent_event_output": {},
     "exception_retry": {
         "strategies": list(EXCEPTION_RETRY_STRATEGIES),
         "conditions": list(EXCEPTION_RETRY_CONDITIONS),
@@ -480,7 +372,7 @@ _EDITOR_DEFAULTS = {
         mode="json",
         exclude={"name"},
     ),
-    "workflow_event_output": _workflow_event_output_default(),
+    "workflow_event_output": {},
     "command": {},
     "task_dispatcher": {},
 }

@@ -144,17 +144,12 @@ def test_agent_execution_closes_v3_stream_when_consumer_is_cancelled() -> None:
                 assert transformers
                 return self.run
 
-        settings = config(mode="blocklist")
-        settings["event_outputs"]["assistant_text"]["enabled"] = False
-        settings["event_outputs"]["lifecycle"] = {
-            "enabled": True,
-            "output_source": output_source(),
-        }
+        output = output_renderer({"lifecycle": "{{message}}"})
         run = BlockingRun()
         execution = RunExecution(
             graph=Graph(run),
             input_state={"messages": [{"role": "user", "content": "cancel me"}]},
-            rectifier=OutputEventRectifier(OutputProjector(settings)),
+            rectifier=OutputEventRectifier(OutputProjector(output)),
             normalizer=V3EventNormalizer("Main Agent"),
             middleware_runtime=noop_middleware_runtime(),
             media_response=noop_media_response(),
@@ -181,7 +176,7 @@ def test_execution_timeout_excludes_time_waiting_for_stream_consumer() -> None:
             ),
             input_state={"messages": []},
             rectifier=OutputEventRectifier(
-                OutputProjector(config(mode="blocklist"))
+                OutputProjector(output_renderer())
             ),
             normalizer=V3EventNormalizer("Main Agent"),
             middleware_runtime=noop_middleware_runtime(),
@@ -247,12 +242,7 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch, tmp_path) -
                 assert transformers
                 return self.run
 
-        settings = config(mode="blocklist")
-        settings["event_outputs"]["assistant_text"]["enabled"] = False
-        settings["event_outputs"]["lifecycle"] = {
-            "enabled": True,
-            "output_source": output_source(),
-        }
+        output = output_renderer({"lifecycle": "{{message}}"})
         run = BlockingRun()
         lifecycle = WorkflowLifecycleService(tmp_path / "timeout.sqlite3")
         await lifecycle.start()
@@ -275,7 +265,7 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch, tmp_path) -
             execution = RunExecution(
                 graph=Graph(run),
                 input_state={"messages": [{"role": "user", "content": "wait"}]},
-                rectifier=OutputEventRectifier(OutputProjector(settings)),
+                rectifier=OutputEventRectifier(OutputProjector(output)),
                 normalizer=V3EventNormalizer("Main Agent"),
                 middleware_runtime=noop_middleware_runtime(),
                 media_response=noop_media_response(),
@@ -346,7 +336,7 @@ def test_successful_execution_does_not_add_a_runtime_diagnostic() -> None:
         execution = RunExecution(
             graph=Graph(),
             input_state={"messages": [], "shared_vars": {}},
-            rectifier=OutputEventRectifier(OutputProjector(config(mode="blocklist"))),
+            rectifier=OutputEventRectifier(OutputProjector(output_renderer())),
             normalizer=V3EventNormalizer("Main Agent"),
             middleware_runtime=noop_middleware_runtime(),
             media_response=noop_media_response(),
@@ -483,7 +473,7 @@ def test_graph_recursion_failure_uses_step_limit_error() -> None:
             graph=Graph(),
             input_state={"messages": [{"role": "user", "content": "loop"}]},
             rectifier=OutputEventRectifier(
-                OutputProjector(config(mode="blocklist"))
+                OutputProjector(output_renderer())
             ),
             normalizer=V3EventNormalizer("Main Agent"),
             middleware_runtime=noop_middleware_runtime(),
@@ -562,17 +552,12 @@ def test_unclassified_graph_failure_is_not_mislabeled_as_provider() -> None:
                 assert transformers
                 raise RuntimeError("private middleware or graph details")
 
-        settings = config(mode="blocklist")
-        settings["event_outputs"]["assistant_text"]["enabled"] = False
-        settings["event_outputs"]["lifecycle"] = {
-            "enabled": True,
-            "output_source": output_source(),
-        }
+        output = output_renderer({"lifecycle": "{{message}}"})
         diagnostics = RecordingDiagnostics()
         execution = RunExecution(
             graph=Graph(),
             input_state={"messages": [{"role": "user", "content": "fail"}]},
-            rectifier=OutputEventRectifier(OutputProjector(settings)),
+            rectifier=OutputEventRectifier(OutputProjector(output)),
             normalizer=V3EventNormalizer("Main Agent"),
             middleware_runtime=noop_middleware_runtime(),
             media_response=noop_media_response(),
@@ -604,16 +589,11 @@ def test_classified_graph_failure_emits_matching_lifecycle_error() -> None:
                     status_code=502,
                 )
 
-        settings = config(mode="blocklist")
-        settings["event_outputs"]["assistant_text"]["enabled"] = False
-        settings["event_outputs"]["lifecycle"] = {
-            "enabled": True,
-            "output_source": output_source("{{phase}}:{{error_code}}"),
-        }
+        output = output_renderer({"lifecycle": "{{phase}}:{{error_code}}"})
         execution = RunExecution(
             graph=Graph(),
             input_state={"messages": [{"role": "user", "content": "fail"}]},
-            rectifier=OutputEventRectifier(OutputProjector(settings)),
+            rectifier=OutputEventRectifier(OutputProjector(output)),
             normalizer=V3EventNormalizer("Main Agent"),
             middleware_runtime=noop_middleware_runtime(),
             media_response=noop_media_response(),

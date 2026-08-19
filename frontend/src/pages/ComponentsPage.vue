@@ -31,6 +31,7 @@ import { useToasts } from '@/composables/useToasts'
 import { useUnsavedChanges } from '@/composables/useUnsavedChanges'
 import {
   blockAdapters,
+  type AgentEventOutputCatalogItem,
   type CommandCatalogItem,
   type TaskDispatcherCatalogItem,
   type BlockDraftBase,
@@ -39,6 +40,7 @@ import {
   type FilesystemImportSource,
   type SkillCatalogItem,
   type ModelDraft,
+  type WorkflowEventOutputCatalogItem,
 } from '@/domain/blocks'
 import type { PythonPackageDraftState } from '@/domain/blocks/pythonPackage'
 import {
@@ -48,7 +50,7 @@ import {
   FilesystemEditor,
   FilesystemPermissionsEditor,
   ModelEditor,
-  OutputModeEditor,
+  AgentEventOutputEditor,
   PromptCachingEditor,
   SkillEditor,
   SubagentCapabilityEditor,
@@ -81,7 +83,7 @@ const editorComponents: Record<ManagedComponentType, Component> = {
   'custom-tool': CustomToolEditor,
   skill: SkillEditor,
   'custom-middleware': CustomMiddlewareEditor,
-  'output-mode': OutputModeEditor,
+  'agent-event-output': AgentEventOutputEditor,
   'exception-retry': ExceptionRetryEditor,
   subagent: SubagentCapabilityEditor,
   summarization: SummarizationEditor,
@@ -134,6 +136,10 @@ const customTools = ref<CustomToolCatalogItem[]>([])
 const customToolErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const customMiddlewares = ref<CustomMiddlewareCatalogItem[]>([])
 const customMiddlewareErrors = ref<Record<string, LocalizedMessagePayload>>({})
+const agentEventOutputs = ref<AgentEventOutputCatalogItem[]>([])
+const agentEventOutputErrors = ref<Record<string, LocalizedMessagePayload>>({})
+const workflowEventOutputs = ref<WorkflowEventOutputCatalogItem[]>([])
+const workflowEventOutputErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const commandPackages = ref<CommandCatalogItem[]>([])
 const commandPackageErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const taskDispatcherPackages = ref<TaskDispatcherCatalogItem[]>([])
@@ -186,6 +192,18 @@ const editorProps = computed<Record<string, unknown>>(() => {
         errors: customMiddlewareErrors.value,
         loading: loadingResource.value,
       }
+    case 'agent-event-output':
+      return {
+        catalog: agentEventOutputs.value,
+        errors: agentEventOutputErrors.value,
+        loading: loadingResource.value,
+      }
+    case 'workflow-event-output':
+      return {
+        catalog: workflowEventOutputs.value,
+        errors: workflowEventOutputErrors.value,
+        loading: loadingResource.value,
+      }
     case 'command':
       return {
         defaults: activeDefaults.value,
@@ -210,12 +228,10 @@ const editorProps = computed<Record<string, unknown>>(() => {
     case 'filesystem':
     case 'filesystem-permissions':
     case 'todo-list':
-    case 'output-mode':
     case 'exception-retry':
     case 'subagent':
     case 'summarization':
     case 'prompt-caching':
-    case 'workflow-event-output':
       return {
         defaults: activeDefaults.value,
         ...(activeType.value === 'filesystem-permissions'
@@ -246,6 +262,8 @@ function payloadFromDraft(type: ManagedComponentType, value: BlockDraftBase): Bl
 function usesPythonExtension(type: ManagedComponentType): boolean {
   return (
     type === 'custom-middleware'
+    || type === 'agent-event-output'
+    || type === 'workflow-event-output'
     || type === 'command'
     || type === 'task-dispatcher'
   )
@@ -388,6 +406,8 @@ async function loadRoute(): Promise<void> {
     if (manifest.type === 'model') await loadProviderCatalog(sequence)
     if (!id && (
       manifest.type === 'custom-middleware'
+      || manifest.type === 'agent-event-output'
+      || manifest.type === 'workflow-event-output'
       || manifest.type === 'command'
       || manifest.type === 'task-dispatcher'
     )) await refreshResource()
@@ -464,6 +484,8 @@ async function startNew(): Promise<void> {
       markClean()
       if (
         activeType.value === 'custom-middleware'
+        || activeType.value === 'agent-event-output'
+        || activeType.value === 'workflow-event-output'
         || activeType.value === 'command'
         || activeType.value === 'task-dispatcher'
       ) await refreshResource()
@@ -607,6 +629,14 @@ async function refreshResource(): Promise<void> {
       const result = await managementApi.listMiddlewareTemplates()
       customMiddlewares.value = result.catalog
       customMiddlewareErrors.value = result.errors
+    } else if (activeType.value === 'agent-event-output') {
+      const result = await managementApi.listAgentEventOutputTemplates()
+      agentEventOutputs.value = result.catalog
+      agentEventOutputErrors.value = result.errors
+    } else if (activeType.value === 'workflow-event-output') {
+      const result = await managementApi.listWorkflowEventOutputTemplates()
+      workflowEventOutputs.value = result.catalog
+      workflowEventOutputErrors.value = result.errors
     } else if (activeType.value === 'command') {
       const result = await managementApi.listCommandTemplates()
       commandPackages.value = result.catalog

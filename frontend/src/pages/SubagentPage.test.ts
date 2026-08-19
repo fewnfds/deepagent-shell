@@ -9,7 +9,7 @@ import {
   modelManifest,
   mountMainAgentPage,
   mountSubagentPage,
-  outputModeManifest,
+  agentEventOutputManifest,
   promptManifest,
   resetAgentPageTestState,
   service,
@@ -112,7 +112,7 @@ describe('Subagent authoring page', () => {
           promptManifest,
           filesystemManifest,
           filesystemPermissionsManifest,
-          outputModeManifest,
+          agentEventOutputManifest,
           subagentManifest,
         ],
         editor_defaults: {},
@@ -135,10 +135,10 @@ describe('Subagent authoring page', () => {
     expect(permissions.find('option[value="__disabled__"]').exists()).toBe(true)
     await permissions.setValue('00000000-0000-0000-0000-000000000002')
 
-    const outputMode = wrapper.get('[data-testid="subagent-capability-output-mode"]')
-    expect(outputMode.attributes('disabled')).toBeDefined()
-    expect((outputMode.element as HTMLSelectElement).value).toBe('__invalid__')
-    expect(outputMode.text()).toContain('agents.override.mode.invalid')
+    const eventOutput = wrapper.get('[data-testid="subagent-capability-agent-event-output"]')
+    expect(eventOutput.attributes('disabled')).toBeDefined()
+    expect((eventOutput.element as HTMLSelectElement).value).toBe('__invalid__')
+    expect(eventOutput.text()).toContain('agents.override.mode.invalid')
 
     expect(wrapper.find('[data-testid="subagent-capability-subagent"]').exists()).toBe(false)
     await buttonByText(wrapper, 'common.save').trigger('click')

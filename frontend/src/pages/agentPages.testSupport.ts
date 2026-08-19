@@ -92,11 +92,11 @@ export const middlewareManifest: CapabilityManifest = {
   subagent_policy: 'force-remove',
 }
 
-export const outputModeManifest: CapabilityManifest = {
+export const agentEventOutputManifest: CapabilityManifest = {
   ...modelManifest,
-  type: 'output-mode',
-  terminology_key: 'output-policy',
-  order: 8,
+  type: 'agent-event-output',
+  terminology_key: 'agent-event-output',
+  order: 9,
   subagent_overrideable: false,
   subagent_policy: 'top-level-only',
 }

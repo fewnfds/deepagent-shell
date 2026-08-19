@@ -10,7 +10,7 @@ export type BlockType =
   | 'custom-tool'
   | 'skill'
   | 'custom-middleware'
-  | 'output-mode'
+  | 'agent-event-output'
   | 'exception-retry'
   | 'subagent'
   | 'summarization'
@@ -200,8 +200,8 @@ export interface PythonPackageReference {
 export interface PythonPackageManifest {
   format_version: 1
   id: string
-  family: 'workflow-node' | 'middleware'
-  adapter: 'command' | 'task-dispatcher' | 'agent-middleware'
+  family: 'workflow-node' | 'middleware' | 'event-output'
+  adapter: 'command' | 'task-dispatcher' | 'agent-middleware' | 'agent-event-output' | 'workflow-event-output'
   folder: string
 }
 
@@ -221,8 +221,8 @@ export interface PythonPackageFiles {
 export interface PythonPackageTemplate {
   format_version: 1
   key: string
-  family: 'workflow-node' | 'middleware'
-  adapter: 'command' | 'task-dispatcher' | 'agent-middleware'
+  family: 'workflow-node' | 'middleware' | 'event-output'
+  adapter: 'command' | 'task-dispatcher' | 'agent-middleware' | 'agent-event-output' | 'workflow-event-output'
   name: string
   files: PythonPackageFile[]
   revision: string

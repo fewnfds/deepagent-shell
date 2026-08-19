@@ -1,23 +1,31 @@
-# 事件输出
+# Workflow 事件输出
 
-事件输出是可复用的 Workflow 组件。每个 Workflow 可绑定零或一个；不绑定时，Workflow-owned 的非 Agent 事件不会写入
-OpenAI 响应。画布 Agent Node 产生的事件仍使用各 Main Agent 的[输出模式](output-mode-config.md)。
+Workflow 事件输出是可复用的 Workflow 组件。每个 Workflow 可绑定零或一个；不绑定时，Workflow-owned 的非 Agent 事件不会写入
+OpenAI 响应。画布 Agent Node 产生的事件仍使用各 Main Agent 的[Agent 事件输出](agent-event-output-config.md)。
 
-编辑方式与输出模式一致：每类事件提供启用开关、字段按钮和同步 Python `output(event)`。函数必须返回 `str`，脚本在一个
-完整语义事件上执行一次。
+它与 Agent 事件输出使用同一文件化扩展模式：一份配置独占一个 Python package，`main.py` 只提供一个同步
+`output(event)`。所有 Workflow 事件在同一函数内按 `event["event_type"]` 分支；函数必须返回 `str`，空字符串表示过滤。
+可从 `GET /api/python-package-templates/workflow-event-output` 加载内置示例，保存后源码与示例解耦。
 
-新建事件输出组件时，各事件默认返回 `type="workflow"` 的 `details`；`summary` 只保留事件类别及必要的 channel 或短
-状态，不包含配置 UUID、时间戳、事件序号或 namespace。默认脚本在 `</details>` 后追加一个换行。
+内置示例使用与 Agent 事件输出相同的 HTML `details` 结构，并为 `custom`、`lifecycle`、`values`、`updates`、`tasks`、
+`checkpoints`、`input`、`input.requested`、`debug` 和 `other` 分别保留分支。之前页面上每类事件各有一段脚本；迁移到一个
+`output(event)` 后，示例曾暂时只展示 `custom` 和 `lifecycle`，这只是示例收缩，不是 Workflow runtime 删除了事件类别。
+旧版页面虽然列出全部类别，但默认只启用 `custom` 和 `lifecycle`；其余类别主要用于 State、checkpoint、task 和 debug 观察，
+默认不进入公开文本是为了避免把内部运行数据直接刷进响应。现在统一 package 仍可按需为这些类别返回字符串。
 
 ```python
 def output(event):
-    state = event["data"]
-    return str(state["shared_vars"]["answer"])
+    if event["event_type"] != "values":
+        return ""
+    return (
+        '<details type="workflow"><summary>*Workflow values*</summary>'
+        f'{event["message"]}</details>\n'
+    )
 ```
 
 ## 公共字段
 
-所有 Workflow 事件都含有输出模式文档列出的公共字段：`event_type`、`phase`、`sequence`、`timestamp`、
+所有 Workflow 事件都含有 Agent 事件输出文档列出的公共字段：`event_type`、`phase`、`sequence`、`timestamp`、
 `namespace`、`agent_name`、`node`、`message`、`data`、`source_type`、`workflow_node_id`、`agent_profile_id`、
 `subagent_profile_id`。这里的 `event_type` 是下表的 Workflow v3 method 分类，而不是统一写成 `custom`。
 
@@ -40,5 +48,5 @@ def output(event):
 对象、`Command` 或其他 Python 值，应使用 `event["data"]`。这些对象来自锁定 LangChain/LangGraph 版本的 v3 语义 payload，
 不保证本身 JSON-compatible；本页外层 `event` dict 和字段名才是 Agent Shell 的稳定输出脚本 contract。
 
-脚本异常、返回非字符串和签名不符的处理边界与[输出模式](output-mode-config.md)相同。组件源码在受信任服务进程中执行，
-不是 sandbox。
+脚本异常、返回非字符串、签名、依赖和独占目录边界与[Agent 事件输出](agent-event-output-config.md)相同。组件源码在受信任
+服务进程中执行，不是 sandbox。创建 payload 结构也相同，仅 endpoint 改为 `POST /api/blocks/workflow-event-output`。

@@ -343,6 +343,10 @@ def prepare_windows_dependencies(
     runtime_root: Path,
 ) -> None:
     from agent_shell.command_packages import resolve_command_package
+    from agent_shell.event_output_packages import (
+        resolve_agent_event_output_package,
+        resolve_workflow_event_output_package,
+    )
     from agent_shell.middleware_packages.packages import resolve_middleware_package
     from agent_shell.task_dispatcher_packages import resolve_task_dispatcher_package
     from agent_shell.storage.file_config import FileConfigRepository
@@ -359,9 +363,13 @@ def prepare_windows_dependencies(
     active_main_agent_ids: set[str] = set()
     active_command_ids: set[str] = set()
     active_task_dispatcher_ids: set[str] = set()
+    active_workflow_event_output_ids: set[str] = set()
     for workflow in config.get("workflows", []):
         if not isinstance(workflow, dict) or workflow.get("enabled") is not True:
             continue
+        workflow_event_output_id = str(workflow.get("workflow_event_output_id", ""))
+        if workflow_event_output_id:
+            active_workflow_event_output_ids.add(workflow_event_output_id)
         definition = workflow.get("definition", {})
         for node in definition.get("nodes", []) if isinstance(definition, dict) else []:
             if not isinstance(node, dict):
@@ -399,6 +407,8 @@ def prepare_windows_dependencies(
             return set(active_command_ids)
         if component_type == "task-dispatcher":
             return set(active_task_dispatcher_ids)
+        if component_type == "workflow-event-output":
+            return set(active_workflow_event_output_ids)
         found: set[str] = set()
         active_subagent_ids: set[str] = set()
         for main_agent_id in active_main_agent_ids:
@@ -438,6 +448,16 @@ def prepare_windows_dependencies(
 
     records: list[dict[str, object]] = []
     resolver_specs = {
+        "agent-event-output": (
+            resolve_agent_event_output_package,
+            "event-output",
+            "agent-event-output",
+        ),
+        "workflow-event-output": (
+            resolve_workflow_event_output_package,
+            "event-output",
+            "workflow-event-output",
+        ),
         "custom-middleware": (
             resolve_middleware_package,
             "middleware",

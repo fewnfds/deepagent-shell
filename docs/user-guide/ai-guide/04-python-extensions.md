@@ -1,27 +1,32 @@
 # 编写 Python extension
 
-本章覆盖 Output script、Command、Task Dispatcher 和 Custom Middleware 的 file-based Python package，以及 instance directory 和 dependency 规则。
+本章覆盖 Agent Event Output、Workflow Event Output、Command、Task Dispatcher 和 Custom Middleware 的 file-based Python package，以及 instance directory 和 dependency 规则。
 
-## Output script
+## Event output package
 
-Agent Output Mode 与 Workflow Event Output 都使用 inline synchronous script，固定 signature 为：
+Agent Event Output 与 Workflow Event Output 都使用 configuration-owned Python package，固定 signature 为：
 
 ```python
 def output(event):
-    return event["message"]
+    if event["event_type"] == "assistant_text":
+        return event["message"]
+    return ""
 ```
 
-Agent Output Mode 处理 Agent event；Workflow Event Output 只处理 Workflow-owned non-Agent event。它们不承担 State update、
+每个 package 只有这一份 entry；在同一函数内按 `event_type` 分支。Agent Event Output 处理 Agent event；Workflow Event Output 只处理 Workflow-owned non-Agent event。它们不承担 State update、
 routing 或 top-level HTTP error handling。稳定的 `message`、`output`、`arguments`、`data_json` field 适合常规 output；
 `event["data"]` 用于确实需要结构化对象的场景。
 
+Runtime 会把所属范围内的每种 `event_type` 交给同一个 `output(event)`；读取 `tool_name`、`status`、`channel` 等事件专属 field 前，
+必须先判断 `event_type`，未选择的分支返回 `""`。空字符串只过滤最终渲染文本，不改变完整 block 合并或 Agent tool call/outcome 配对。
+
 ## 创建 file-based Python package
 
-Command Node、Task Dispatcher 和 Custom Middleware 都使用 configuration-owned Python package。创建 Command 的最小 body
-如下；其他 package kind 只替换 endpoint 和 `main.py` contract：
+Command Node、Task Dispatcher、Custom Middleware 和两类 Event Output 都使用 configuration-owned Python package。创建 Event Output 的最小 body
+如下；只需替换 endpoint 和 `main.py` contract：
 
 ```http
-POST /api/blocks/command
+POST /api/blocks/agent-event-output
 
 {
   "name": "Review command",
@@ -39,7 +44,8 @@ POST /api/blocks/command
 }
 ```
 
-建议从经过审查的 template 创建；AI 已经拥有完整且符合 contract 的 source 时也可以使用 `__empty__`。
+Workflow Event Output 使用 `POST /api/blocks/workflow-event-output`。建议从对应 template catalog 创建；AI 已经拥有完整且符合
+contract 的 source 时也可以使用 `__empty__`。
 
 首次保存后，系统会把 template 复制到该 configuration 独占的 extension directory：
 
@@ -48,6 +54,8 @@ data/config/python_package_instances/
   command/<configuration-uuid>/
   task-dispatcher/<configuration-uuid>/
   agent-middleware/<configuration-uuid>/
+  agent-event-output/<configuration-uuid>/
+  workflow-event-output/<configuration-uuid>/
 ```
 
 frontend 和 Management API 只是创建、查看及保存这些 file 的入口，不是唯一修改入口。创建完成后，可以直接在对应 instance directory 中维护
@@ -79,9 +87,9 @@ get_stream_writer()(f"Command selected branch {branch}.\n")
 
 Agent Shell 通过 LangGraph `astream_events(version="v3")` 消费这些数据。`get_stream_writer()` 写入的数据在 v3 stream 中是
 `custom` event；Command/Task Dispatcher 属于 Workflow，因此由 Workflow 绑定的 Workflow Event Output component 中 `custom` 对应的
-`output(event)` 进行 projection。Agent Node 内 Tool 或 Middleware 写出的 `custom` event 则由该 Agent 的 Output Mode projection。
+`output(event)` 进行 projection。Agent Node 内 Tool 或 Middleware 写出的 `custom` event 则由该 Agent 的 Agent Event Output projection。
 
-Workflow Event Output 的 `custom` script 可以直接把 string event 交给用户：
+Workflow Event Output 的 `custom` branch 可以直接把 string event 交给用户：
 
 ```python
 def output(event):
@@ -89,8 +97,13 @@ def output(event):
     return data if isinstance(data, str) else ""
 ```
 
-只有 Workflow 绑定 Workflow Event Output 且其中的 `custom` 已启用时，event 才进入响应；其他情况下 event 仍由 Runtime 消费。
+只有 Workflow 绑定 Workflow Event Output 且 `output(event)` 对 `custom` 返回非空字符串时，event 才进入响应；其他情况下 event 仍由 Runtime 消费。
 event 是单向 output，Node 不会收到 projection result。field 说明见[Workflow Event Output](../../wizard-pages/workflow-event-output-config.md)。
+
+Workflow Event Output 的内置示例继续使用 HTML `details` 格式，并覆盖 `custom`、`lifecycle`、`values`、`updates`、`tasks`、
+`checkpoints`、`input`、`input.requested`、`debug` 和 `other`。这些类别仍由当前 v3 normalizer 产生；统一 package 只是把原来每类
+独立的脚本合并到同一个 `output(event)` 分支中。旧版默认只把 `custom` 和 `lifecycle` 投影到公开文本，其余类别默认关闭是为了
+避免 State、checkpoint、task 和 debug 数据直接进入响应；当前示例把分支全部列出，用户可按需返回字符串。
 
 ## Runtime capability 与 discovery path
 
@@ -103,7 +116,7 @@ Deep Agents 用法的起点：
 | Custom Tool callable | LangChain Tool；Tool argument 与可选 `ToolRuntime` | Agent State、Runtime Context、Store、custom stream 和 Tool return value |
 | `AgentMiddleware` runtime hook | LangChain Agent Middleware；hook 的 `state`、`runtime` 或 `request` | Agent lifecycle、Model request、Tool call、State update 和 custom stream |
 | `create_command()` / `create_dispatcher()` / `create_middleware()` | request-scoped construction stage | Shell 提供的 factory argument 和 local package；此时还没有 Node/Tool Runtime |
-| Output Mode / Workflow Event Output 的 `output(event)` | Agent Shell output projection stage；稳定 `event` dict | event filtering 与 string rendering；不处于 LangGraph Node Runtime |
+| Agent Event Output / Workflow Event Output 的 `output(event)` | Agent Shell output projection stage；稳定 `event` dict | event filtering 与 string rendering；不处于 LangGraph Node Runtime |
 
 capability 有三层来源：
 

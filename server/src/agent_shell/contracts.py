@@ -307,62 +307,8 @@ class CustomMiddlewareBlock(StrictBlock):
     python_package: PythonPackageReference
 
 
-OutputEventName = Literal[
-    "assistant_text",
-    "reasoning",
-    "tool_call",
-    "tool_result",
-    "tool_error",
-    "subagent",
-    "custom",
-    "lifecycle",
-]
-OUTPUT_EVENT_NAMES = (
-    "assistant_text",
-    "reasoning",
-    "tool_call",
-    "tool_result",
-    "tool_error",
-    "subagent",
-    "custom",
-    "lifecycle",
-)
-OUTPUT_COMMON_FIELDS = (
-    "event_type",
-    "phase",
-    "sequence",
-    "timestamp",
-    "namespace",
-    "agent_name",
-    "node",
-    "message",
-    "data",
-    "source_type",
-    "workflow_node_id",
-    "agent_profile_id",
-    "subagent_profile_id",
-)
-OUTPUT_EVENT_FIELDS = {
-    "assistant_text": ("message_id",),
-    "reasoning": ("message_id",),
-    "tool_call": ("tool_name", "tool_call_id", "arguments"),
-    "tool_result": ("tool_name", "tool_call_id", "status", "output"),
-    "tool_error": ("tool_name", "tool_call_id", "status", "error_code"),
-    "subagent": ("subagent_name", "tool_call_id", "status"),
-    "custom": ("channel", "data_json"),
-    "lifecycle": ("status", "finish_reason", "error_code"),
-}
-
-from agent_shell.workflow_event_output import EventOutputScript, validate_event_outputs
-
-
-class OutputModeBlock(StrictBlock):
-    event_outputs: dict[OutputEventName, EventOutputScript]
-
-    @model_validator(mode="after")
-    def validate_output_mode(self) -> "OutputModeBlock":
-        validate_event_outputs(self.event_outputs, OUTPUT_EVENT_NAMES)
-        return self
+class AgentEventOutputBlock(StrictBlock):
+    python_package: PythonPackageReference
 
 
 ExceptionRetryStrategy = Literal["provider_native", "model_retry_middleware"]
@@ -935,7 +881,7 @@ BLOCK_MODELS: dict[str, type[StrictBlock]] = {
     "custom-tool": CustomToolBlock,
     "skill": SkillBlock,
     "custom-middleware": CustomMiddlewareBlock,
-    "output-mode": OutputModeBlock,
+    "agent-event-output": AgentEventOutputBlock,
     "exception-retry": ExceptionRetryBlock,
     "subagent": SubagentBlock,
     "summarization": SummarizationBlock,

@@ -13,9 +13,9 @@ from agent_shell.middleware_packages.runtime import MiddlewarePackageRuntime
 from agent_shell.python_packages.dependencies import dependency_metadata
 from agent_shell.capability_manifest import FILESYSTEM_TOOL_NAMES
 from agent_shell.contracts import (
+    AgentEventOutputBlock,
     FilesystemBlock,
     FilesystemPermissionsBlock,
-    OutputModeBlock,
     SkillBlock,
 )
 from agent_shell.provider_http import PROVIDER_HTTP_TIMEOUT, ProviderHttpClients
@@ -126,7 +126,8 @@ def _build_chat_model(
 class BuiltAgent:
     graph: Any
     input_state: dict[str, Any]
-    output_config: dict[str, Any]
+    event_output_id: str
+    event_output_reference: dict[str, Any]
     agent_id: str
     agent_name: str
     subagent_profile_ids: dict[str, str]
@@ -529,13 +530,14 @@ class AgentBuilder:
         main_agent = assembly.main_agent
         references = assembly.references
         selected_blocks = assembly.blocks
-        output_config = OutputModeBlock.model_validate(
+        stored_event_output = selected_blocks["agent-event-output"]
+        event_output = AgentEventOutputBlock.model_validate(
             {
                 key: value
-                for key, value in selected_blocks["output-mode"].items()
+                for key, value in stored_event_output.items()
                 if key != "id"
             }
-        ).model_dump(mode="json")
+        )
         resolved_subagents = assembly.subagents
 
         main_agent_id = str(main_agent["id"])
@@ -723,7 +725,8 @@ class AgentBuilder:
         return BuiltAgent(
             graph=graph,
             input_state=input_state,
-            output_config=output_config,
+            event_output_id=str(stored_event_output["id"]),
+            event_output_reference=event_output.python_package.model_dump(mode="json"),
             agent_id=main_agent_id,
             agent_name=str(main_agent["name"]),
             subagent_profile_ids={

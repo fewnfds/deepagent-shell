@@ -40,6 +40,22 @@ class PackageAdapterSpec:
 
 
 PACKAGE_COMPONENT_SPECS: dict[str, PackageAdapterSpec] = {
+    "agent-event-output": PackageAdapterSpec(
+        template_parts=("agent", "agent_event_output"),
+        example_parts=("agent-components", "agent-event-output"),
+        family="event-output",
+        adapter="agent-event-output",
+        factory_name="output",
+        factory_parameters=("event",),
+    ),
+    "workflow-event-output": PackageAdapterSpec(
+        template_parts=("workflow", "workflow_event_output"),
+        example_parts=("workflow-components", "workflow-event-output"),
+        family="event-output",
+        adapter="workflow-event-output",
+        factory_name="output",
+        factory_parameters=("event",),
+    ),
     "command": PackageAdapterSpec(
         template_parts=("workflow", "command"),
         example_parts=("workflow-components", "command"),

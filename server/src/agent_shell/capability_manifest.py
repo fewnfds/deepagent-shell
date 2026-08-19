@@ -104,8 +104,8 @@ CAPABILITY_MANIFESTS = (
         subagent_overrideable=False, required=False, subagent_policy="force-remove",
     ),
     CapabilityManifest(
-        "output-mode", "output-policy", "输出模式", 9,
-        "braces", "output_mode",
+        "agent-event-output", "agent-event-output", "Agent 事件输出", 9,
+        "braces", "agent_event_output",
         subagent_overrideable=False, required=True, subagent_policy="top-level-only",
     ),
     CapabilityManifest(

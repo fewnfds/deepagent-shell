@@ -39,7 +39,6 @@ _ERROR_CODES = {
     "mapping_type": "contract.object_required",
     "model_type": "contract.object_required",
     "model_attributes_type": "contract.object_required",
-    "output_event_types_invalid": "contract.output_event_types_invalid",
 }
 
 _ERROR_MESSAGE_KEYS = {
@@ -72,7 +71,6 @@ _ERROR_MESSAGE_KEYS = {
     "mapping_type": "validation.issue.contract.objectRequired",
     "model_type": "validation.issue.contract.objectRequired",
     "model_attributes_type": "validation.issue.contract.objectRequired",
-    "output_event_types_invalid": "validation.issue.contract.outputEventTypesInvalid",
 }
 
 _ERROR_ARG_KEYS = {
@@ -86,7 +84,6 @@ _ERROR_ARG_KEYS = {
     "less_than_equal": ("le",),
     "literal_error": ("expected",),
     "enum": ("expected",),
-    "output_event_types_invalid": ("details",),
 }
 
 
@@ -138,6 +135,8 @@ def _specific_contract_identity(
             "custom-middleware",
             "command",
             "task-dispatcher",
+            "agent-event-output",
+            "workflow-event-output",
         }
         and path == "python_package.folder"
     ):
@@ -163,15 +162,6 @@ def _specific_contract_identity(
                 "contract.credential_masked",
                 "validation.issue.contract.credentialMasked",
             )
-    if (
-        error_type == "value_error"
-        and owner_type in {"output-mode", "workflow-event-output"}
-        and path.endswith("output_source")
-    ):
-        return (
-            "contract.output_script_invalid",
-            "validation.issue.contract.outputScriptInvalid",
-        )
     return None
 
 
@@ -252,8 +242,6 @@ def _issue_path(
     error: dict[str, object],
     message_args: Mapping[str, MessageArg],
 ) -> str:
-    if error_type == "output_event_types_invalid":
-        return "event_outputs"
     return _path(error.get("loc", ()))
 
 

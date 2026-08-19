@@ -19,7 +19,7 @@ model/tool/agent Hook。需要 checkpoint 的业务数据通过官方 state upda
 ## 装配
 
 - 启用的父图 Workflow 名称是公开 model ID；子图名称不进入 `/v1`；Main Agent 引用保存在 Graph Agent node config，不在 Workflow metadata 中；
-- Main Agent 必须有模型与输出模式；
+- Main Agent 必须有模型与 Agent 事件输出；
 - 只有 Main Agent 保存直接 Subagent UUID，Subagent contract 没有 child 引用；
 - Main Agent 可选择项目 Filesystem 或最小 Filesystem；Subagent 可继承、选择自己的项目 Filesystem 或回到最小 Filesystem，Workflow 不保存 Filesystem ref；
 - Subagent 能力按 inherit/replace/disabled 解析，并投影为官方 `CompiledSubAgent` 字典 spec；
@@ -33,6 +33,8 @@ model/tool/agent Hook。需要 checkpoint 的业务数据通过官方 state upda
 - Main Agent 未选择、或 Subagent 选择 `disabled` 的可选默认 Middleware，必须保留为主动禁用状态，并以官方支持的同名
   no-op replacement 阻止 Deep Agents 默认 stack 回填；仅省略 constructor 参数不表示禁用；
 - `AgentShellState.shared_vars` 是公共 checkpointed 业务变量，Middleware 实例属性不是。
+- 旧版本的 `output-mode` 内联事件脚本不再属于当前 contract；当前配置库不会迁移或兼容该结构，需按
+  `agent-event-output` 的 configuration-owned Python package 重新创建并引用。
 
 ### Middleware 禁用装配查证表（deepagents 0.7.5）
 

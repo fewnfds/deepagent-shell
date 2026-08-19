@@ -1,36 +1,37 @@
-# 输出模式
+# Agent 事件输出
 
-输出模式是 Main Agent 必选组件。它把规范化后的 LangChain v3 Agent 事件交给用户编写的 Python，函数返回值成为
+Agent 事件输出是 Main Agent 必选组件。它把规范化后的 LangChain v3 Agent 事件交给配置独占的 Python 扩展，函数返回值成为
 `/v1/chat/completions` 的文本输出。它不修改 Agent State、提示词或工具。
 
-## 编写输出脚本
+## 编写 Python 扩展
 
-每个事件类型都有独立开关和一段完整 Python 源码。源码必须只定义一个同步入口 `output(event)`；`event` 是下文定义的
-稳定 `dict`，返回值必须是 `str`。
+扩展的 `main.py` 必须提供一个同步入口 `output(event)`；`event` 是下文定义的稳定 `dict`，返回值必须是 `str`。
+所有事件类型在同一个函数中按 `event["event_type"]` 分支，返回空字符串表示过滤该事件。
 
 ```python
 def output(event):
-    return f'<details type="agent"><summary>*{event["agent_name"]} response*</summary>{event["message"]}</details>\n'
+    if event["event_type"] == "assistant_text":
+        return event["message"]
+    return ""
 ```
 
-新建输出模式时，各事件默认使用同一 `details` 结构，并按事件选择 Agent 名称、工具名称、Subagent 名称或短状态组成
-`summary`。缩略标题不包含调用 ID、配置 UUID、时间戳、事件序号或 namespace；这些运行标识仍可由自定义脚本从
-`event` 读取。
+新建配置时可从 `GET /api/python-package-templates/agent-event-output` 加载内置示例。示例按事件选择 Agent 名称、工具名称、
+Subagent 名称或短状态组成 `details`；保存后源码复制到配置独占目录，与示例彻底解耦。
 
 例如自行拼接工具结果：
 
 ```python
 def output(event):
+    if event["event_type"] != "tool_result":
+        return ""
     tool = event["tool_name"]
     return f"<tool>{tool}: {event['output']}</tool>"
 ```
 
-编辑器的小按钮显示当前事件可用的 dict key。点击 `tool_name` 会在光标处插入 `event["tool_name"]`；按钮不再生成
-双花括号变量或替用户拼接字符串。
-
 函数签名必须恰好是 `def output(event)`：不接受 `async def`、额外参数、默认参数、`*args` 或 `**kwargs`。脚本异常或
 返回非字符串会终止本次运行，并经过普通运行错误边界返回；普通 API 和日志摘要不包含脚本 traceback 或事件正文。
-这些脚本在受信任的服务进程内运行，不是 sandbox，也不支持为输出模式单独声明第三方依赖。
+扩展在受信任的服务进程内运行，不是 sandbox。可在配置目录的 `requirements.txt` 声明受支持的第三方依赖；依赖变更需
+重启服务准备，源码在下一次请求重新加载。
 
 ## 公共 dict 字段
 
@@ -68,7 +69,8 @@ def output(event):
 | `lifecycle` | `status`, `finish_reason`, `error_code` | lifecycle envelope `dict`，或 Shell 构造的状态 `dict` |
 
 `assistant_text` 和 `reasoning` 的 token delta 会先缓冲。脚本只在完整语义 block 到达时执行一次，不能依赖每个 token
-调用一次 `output()`。工具调用与可匹配的结果仍按同一来源和调用周期配对，并保持相邻输出。
+调用一次 `output()`。工具调用与可匹配的结果仍按同一来源和调用周期配对，并保持相邻输出。返回空字符串只过滤配对后的
+渲染文本，不会让该事件绕过整流；因此 `tool_call` 即使最终被过滤，也可能先等待匹配的结果或调用周期边界。
 
 ## 读取 `data`
 
@@ -76,31 +78,37 @@ def output(event):
 
 ```python
 def output(event):
+    if event["event_type"] != "tool_result":
+        return ""
     result = event["data"]
     return str(result["answer"])
 ```
 
 如只需要兼容不同 Provider 的公开文本，优先使用已规范化的 `message`、`arguments` 或 `output`。
 
-## 脚本内过滤与保存结构
+## 过滤与保存结构
 
-输出模式没有独立事件过滤配置。需要过滤时直接在对应 Python 脚本中判断 `event` 并返回空字符串；非空返回值才进入响应。
+Agent 事件输出没有独立事件过滤配置。需要过滤时直接在 `output(event)` 中判断并返回空字符串；非空返回值才进入响应。
 
 ```json
 {
   "name": "普通文本",
-  "event_outputs": {
-    "assistant_text": {
-      "enabled": true,
-      "output_source": "def output(event):\n    return event[\"message\"]\n"
-    },
-    "reasoning": {
-      "enabled": false,
-      "output_source": "def output(event):\n    return event[\"message\"]\n"
-    }
+  "python_package": {
+    "folder": "",
+    "editable_files": ["main.py"]
+  },
+  "python_package_files": {
+    "template_key": "__empty__",
+    "revision": "",
+    "files": [
+      {
+        "path": "main.py",
+        "content": "def output(event):\n    if event[\"event_type\"] == \"assistant_text\":\n        return event[\"message\"]\n    return \"\"\n"
+      }
+    ]
   }
 }
 ```
 
-真实 payload 必须包含 catalog 当前列出的全部八类事件；上例只节选两项。关闭事件会抑制该类普通投影，但不会隐藏顶层
-HTTP/API 错误。流式与非流式响应消费同一组脚本结果，不会从最终 State 绕过输出模式读取原始 Agent 内容。
+提交到 `POST /api/blocks/agent-event-output`。首次保存后服务端生成配置 UUID，并令 package folder、manifest ID 与配置 UUID
+一致。流式与非流式响应消费同一扩展结果，不会从最终 State 绕过 Agent 事件输出读取原始 Agent 内容。

@@ -27,7 +27,7 @@ export const zhCN = {
       parentWorkflows: '父图',
       childWorkflows: '子图',
       workflowLifecycles: '运行历史',
-      workflowEventOutput: '事件输出',
+      workflowEventOutput: 'Workflow 事件输出',
       command: 'Command 节点',
       taskDispatcher: '任务分发',
     },
@@ -153,7 +153,7 @@ export const zhCN = {
       name: '名称',
       description: '说明',
       filesystem: '共享文件系统',
-      eventOutput: '事件输出',
+      eventOutput: 'Workflow 事件输出',
       recursionLimit: 'Super-step 上限',
       executionTimeoutSeconds: 'Run 总执行超时',
       maxConcurrency: '最大并发数',
@@ -536,9 +536,9 @@ export const zhCN = {
       label: '自定义 Middleware',
       description: '按顺序构造的 LangChain Middleware',
     },
-    'output-mode': {
-      label: '输出模式',
-      description: '筛选并格式化运行事件的对外文本流',
+    'agent-event-output': {
+      label: 'Agent 事件输出',
+      description: '用配置独占的 Python 扩展筛选并格式化 Agent 事件',
     },
     'exception-retry': {
       label: '异常重试',
@@ -557,8 +557,8 @@ export const zhCN = {
       description: '独立装配 Anthropic Prompt caching Middleware',
     },
     'workflow-event-output': {
-      label: '事件输出',
-      description: '用 Python 脚本把非 Agent 事件拼接为响应字符串',
+      label: 'Workflow 事件输出',
+      description: '用配置独占的 Python 扩展筛选并格式化 Workflow 事件',
     },
     'command': {
       label: 'Command 节点',
@@ -674,9 +674,7 @@ export const zhCN = {
     source: '构造源码',
     field: '字段',
     value: '值',
-    event_outputs: '事件输出脚本',
-    output_source: 'Python 输出脚本',
-    workflow_event_output_id: '事件输出组件 UUID',
+    workflow_event_output_id: 'Workflow 事件输出组件 UUID',
     marker: '文字标志位',
     tool_description: '工具说明',
     capability_refs: '能力引用',
@@ -759,32 +757,6 @@ export const zhCN = {
     customMiddleware: {
       namePlaceholder: '例如：可靠性中间件',
       empty: '尚未装配 Middleware 包。',
-    },
-    outputMode: {
-      fieldsTitle: 'event dict 关键字段',
-      events: {
-        assistant_text: { label: '模型回答' },
-        reasoning: { label: '推理内容' },
-        tool_call: { label: '工具调用' },
-        tool_result: { label: '工具结果' },
-        tool_error: { label: '工具错误' },
-        subagent: { label: 'Subagent 状态' },
-        custom: { label: '自定义进度' },
-        lifecycle: { label: '运行状态' },
-      },
-    },
-    workflowEventOutput: {
-      events: {
-        custom: { label: '自定义事件' },
-        lifecycle: { label: '运行状态' },
-        values: { label: '完整 State（values）' },
-        updates: { label: 'State 更新（updates）' },
-        tasks: { label: '任务（tasks）' },
-        checkpoints: { label: 'Checkpoint' },
-        input: { label: '输入', requested: { label: '输入请求' } },
-        debug: { label: 'Debug' },
-        other: { label: '其他事件' },
-      },
     },
     exceptionRetry: {
       strategyTitle: '重试方案',
@@ -1151,7 +1123,7 @@ export const zhCN = {
   },
   errors: {
     workflowInvalid: 'Workflow 配置无效。',
-    workflowEventOutputNotFound: '所选事件输出组件不存在。',
+    workflowEventOutputNotFound: '所选 Workflow 事件输出组件不存在。',
     workflowNameConflict: '已有同名 Workflow。',
     workflowNotFound: 'Workflow 不存在。',
     workflowLifecycleNotFound: 'Workflow 运行历史不存在。',
@@ -1404,8 +1376,6 @@ export const zhCN = {
       pythonPackageDependenciesRestartRequired: '重启 Agent Shell 以准备包依赖。',
       credentialMetadataInvalid: '打开该模型配置，重新填写或确认访问凭据，然后保存。',
       unknownBlockType: '这类配置已不受当前版本支持；请删除该旧记录，或使用当前页面重新建立所需配置。',
-      outputEventTypesInvalid: '重新打开事件输出编辑器，确认当前列出的全部事件都存在，再保存为当前结构。',
-      outputScriptInvalid: '脚本必须定义同步函数 output(event)，并返回字符串；修正后重新保存。',
       runtimeConfiguration: '先按上方位置检查并重新保存；如果仍然失败，请使用请求 ID 查看系统日志。',
     },
     failure: {
@@ -1480,8 +1450,6 @@ export const zhCN = {
         subagentNameDuplicate: '这个 Subagent 名称已被另一个 Subagent 使用。',
         subagentReferenceDuplicate: '当前 Agent 重复引用了同一个 Subagent 实体。',
         subagentNestedReferencesForbidden: '只有 Main Agent 可以引用 Subagent；Subagent 不能再配置子代理。',
-        outputEventTypesInvalid: '事件输出脚本集合缺少当前必需项目，或仍包含旧项目。',
-        outputScriptInvalid: '{event_name_label}的 Python 输出脚本无效。',
       },
       assembly: {
         mainAgentNotFound: '此前选择的 Main Agent 已不存在。',

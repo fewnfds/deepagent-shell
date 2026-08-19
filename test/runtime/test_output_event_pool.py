@@ -30,24 +30,13 @@ def _event(
 
 
 def _rectifier() -> OutputEventRectifier:
-    settings = config(mode="blocklist")
-    settings["event_outputs"]["reasoning"] = {
-        "enabled": True,
-        "output_source": output_source("<reasoning>{{message}}</reasoning>"),
-    }
-    settings["event_outputs"]["assistant_text"] = {
-        "enabled": True,
-        "output_source": output_source("<text>{{message}}</text>"),
-    }
-    settings["event_outputs"]["tool_call"] = {
-        "enabled": True,
-        "output_source": output_source("<call id={{tool_call_id}}>{{message}}</call>"),
-    }
-    settings["event_outputs"]["tool_result"] = {
-        "enabled": True,
-        "output_source": output_source("<result id={{tool_call_id}}>{{message}}</result>"),
-    }
-    return OutputEventRectifier(OutputProjector(settings))
+    output = output_renderer({
+        "reasoning": "<reasoning>{{message}}</reasoning>",
+        "assistant_text": "<text>{{message}}</text>",
+        "tool_call": "<call id={{tool_call_id}}>{{message}}</call>",
+        "tool_result": "<result id={{tool_call_id}}>{{message}}</result>",
+    })
+    return OutputEventRectifier(OutputProjector(output))
 
 
 def test_competing_streams_render_once_on_complete_blocks_in_source_order() -> None:
@@ -200,19 +189,16 @@ def test_tool_call_waits_for_an_outcome_within_the_current_cycle() -> None:
 
 
 def test_tool_pairing_isolated_by_workflow_source_for_reused_call_ids() -> None:
-    settings_a = config(mode="blocklist")
-    settings_b = config(mode="blocklist")
-    for settings, prefix in ((settings_a, "A"), (settings_b, "B")):
-        settings["event_outputs"]["tool_call"] = {
-            "enabled": True,
-            "output_source": output_source(f"{prefix}-call:{{{{message}}}}"),
-        }
-        settings["event_outputs"]["tool_result"] = {
-            "enabled": True,
-            "output_source": output_source(f"{prefix}-result:{{{{message}}}}"),
-        }
+    output_a = output_renderer({
+        "tool_call": "A-call:{{message}}",
+        "tool_result": "A-result:{{message}}",
+    })
+    output_b = output_renderer({
+        "tool_call": "B-call:{{message}}",
+        "tool_result": "B-result:{{message}}",
+    })
     pool = OutputEventRectifier(
-        WorkflowOutputProjector({"node-a": settings_a, "node-b": settings_b})
+        WorkflowOutputProjector({"node-a": output_a, "node-b": output_b})
     )
 
     def event(node_id: str, event_type: str, message: str, sequence: int) -> OutputEvent:
@@ -240,15 +226,10 @@ def test_tool_pairing_isolated_by_workflow_source_for_reused_call_ids() -> None:
 
 
 def test_complete_streams_are_isolated_by_workflow_source() -> None:
-    settings_a = config(mode="blocklist")
-    settings_b = config(mode="blocklist")
-    for settings, prefix in ((settings_a, "A"), (settings_b, "B")):
-        settings["event_outputs"]["assistant_text"] = {
-            "enabled": True,
-            "output_source": output_source(f"<{prefix}>{{{{message}}}}</{prefix}>"),
-        }
+    output_a = output_renderer({"assistant_text": "<A>{{message}}</A>"})
+    output_b = output_renderer({"assistant_text": "<B>{{message}}</B>"})
     pool = OutputEventRectifier(
-        WorkflowOutputProjector({"node-a": settings_a, "node-b": settings_b})
+        WorkflowOutputProjector({"node-a": output_a, "node-b": output_b})
     )
 
     def event(node_id: str, phase: str, message: str = "") -> OutputEvent:
@@ -277,18 +258,11 @@ def test_complete_streams_are_isolated_by_workflow_source() -> None:
 
 
 def test_pure_tool_output_does_not_require_reasoning_or_text() -> None:
-    settings = config(mode="blocklist")
-    settings["event_outputs"]["assistant_text"]["enabled"] = False
-    settings["event_outputs"]["reasoning"]["enabled"] = False
-    settings["event_outputs"]["tool_call"] = {
-        "enabled": True,
-        "output_source": output_source("CALL={{message}}"),
-    }
-    settings["event_outputs"]["tool_result"] = {
-        "enabled": True,
-        "output_source": output_source("RESULT={{message}}"),
-    }
-    pool = OutputEventRectifier(OutputProjector(settings))
+    output = output_renderer({
+        "tool_call": "CALL={{message}}",
+        "tool_result": "RESULT={{message}}",
+    })
+    pool = OutputEventRectifier(OutputProjector(output))
 
     assert pool.feed(
         _event(
@@ -312,15 +286,11 @@ def test_pure_tool_output_does_not_require_reasoning_or_text() -> None:
 
 def test_non_streaming_model_messages_use_the_same_tool_pairing_cycle() -> None:
     async def scenario() -> list[str]:
-        settings = config(mode="blocklist")
-        settings["event_outputs"]["tool_call"] = {
-            "enabled": True,
-            "output_source": output_source("<call id={{tool_call_id}}>{{message}}</call>"),
-        }
-        settings["event_outputs"]["tool_result"] = {
-            "enabled": True,
-            "output_source": output_source("<result id={{tool_call_id}}>{{message}}</result>"),
-        }
+        output = output_renderer({
+            "assistant_text": "{{message}}",
+            "tool_call": "<call id={{tool_call_id}}>{{message}}</call>",
+            "tool_result": "<result id={{tool_call_id}}>{{message}}</result>",
+        })
         first_response = AIMessage(
             content="",
             tool_calls=[
@@ -377,7 +347,7 @@ def test_non_streaming_model_messages_use_the_same_tool_pairing_cycle() -> None:
         execution = RunExecution(
             graph=EventGraph(events),
             input_state={"messages": []},
-            rectifier=OutputEventRectifier(OutputProjector(settings)),
+            rectifier=OutputEventRectifier(OutputProjector(output)),
             normalizer=V3EventNormalizer("Main Agent"),
             middleware_runtime=noop_middleware_runtime(),
             media_response=noop_media_response(),
@@ -396,23 +366,12 @@ def test_non_streaming_model_messages_use_the_same_tool_pairing_cycle() -> None:
 
 def test_next_model_start_drains_compat_bridge_order_before_the_new_call() -> None:
     async def scenario() -> list[str]:
-        settings = config(mode="blocklist")
-        settings["event_outputs"]["reasoning"] = {
-            "enabled": True,
-            "output_source": output_source("<reasoning>{{message}}</reasoning>"),
-        }
-        settings["event_outputs"]["assistant_text"] = {
-            "enabled": True,
-            "output_source": output_source("<text>{{message}}</text>"),
-        }
-        settings["event_outputs"]["tool_call"] = {
-            "enabled": True,
-            "output_source": output_source("<call>{{message}}</call>"),
-        }
-        settings["event_outputs"]["tool_result"] = {
-            "enabled": True,
-            "output_source": output_source("<result>{{message}}</result>"),
-        }
+        output = output_renderer({
+            "reasoning": "<reasoning>{{message}}</reasoning>",
+            "assistant_text": "<text>{{message}}</text>",
+            "tool_call": "<call>{{message}}</call>",
+            "tool_result": "<result>{{message}}</result>",
+        })
         events = [
             message_envelope(
                 {"event": "message-start", "role": "ai", "id": "message-1"}
@@ -513,7 +472,7 @@ def test_next_model_start_drains_compat_bridge_order_before_the_new_call() -> No
         execution = RunExecution(
             graph=EventGraph(events),
             input_state={"messages": []},
-            rectifier=OutputEventRectifier(OutputProjector(settings)),
+            rectifier=OutputEventRectifier(OutputProjector(output)),
             normalizer=V3EventNormalizer("Main Agent"),
             middleware_runtime=noop_middleware_runtime(),
             media_response=noop_media_response(),

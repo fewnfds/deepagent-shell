@@ -323,11 +323,10 @@ def test_projector_uses_event_scripts_without_a_separate_filter_layer() -> None:
         values={"tool_name": "commit"},
     )
 
-    settings = config(mode="blocklist")
-    settings["event_outputs"]["assistant_text"]["enabled"] = False
-    settings["event_outputs"]["tool_result"]["enabled"] = True
-    settings["event_outputs"]["tool_call"]["enabled"] = True
-    projector = OutputProjector(settings)
+    projector = OutputProjector(output_renderer({
+        "tool_result": "{{message}}",
+        "tool_call": "{{message}}",
+    }))
 
     assert projector.render(tool_result) == "<unsafe>"
     assert projector.render(tool_call) == "call"

@@ -137,7 +137,8 @@ def test_workflow_checkpointer_persists_state_without_turning_input_into_chat_st
                     "agent-1": BuiltAgent(
                         graph=agent_graph,
                         input_state={"messages": [], "shared_vars": {}},
-                        output_config={},
+                        event_output_id="",
+                        event_output_reference={},
                         agent_id=AGENT_ID,
                         agent_name="Checkpoint Agent",
                         subagent_profile_ids={},

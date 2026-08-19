@@ -18,8 +18,6 @@ const resolutionKeys: Record<string, string> = {
   'contract.subagent_description_required': 'subagentDescriptionRequired',
   'contract.subagent_name_duplicate': 'subagentNameDuplicate',
   'contract.subagent_reference_duplicate': 'subagentReferenceDuplicate',
-  'contract.output_event_types_invalid': 'outputEventTypesInvalid',
-  'contract.output_script_invalid': 'outputScriptInvalid',
   'contract.invalid_format': 'invalidFormat',
   'contract.provider_format_invalid': 'providerFormatInvalid',
   'contract.provider_unavailable': 'providerUnavailable',
@@ -97,11 +95,6 @@ export function useValidationIssuePresentation() {
     return te(key) ? t(key) : capabilityType
   }
 
-  function outputEventLabel(eventName: string): string {
-    const key = `editors.outputMode.events.${eventName}.label`
-    return te(key) ? t(key) : eventName
-  }
-
   function messageArgs(issue: ValidationIssue): Record<string, JsonPrimitive> {
     const args = { ...issue.message_args }
     for (const key of [
@@ -113,10 +106,6 @@ export function useValidationIssuePresentation() {
       const value = issue.message_args[key]
       if (typeof value !== 'string') continue
       args[`${key}_label`] = capabilityLabel(value)
-    }
-    const eventName = issue.message_args.event_name
-    if (typeof eventName === 'string') {
-      args.event_name_label = outputEventLabel(eventName)
     }
     return args
   }
@@ -143,10 +132,6 @@ export function useValidationIssuePresentation() {
       prefix = prefix ? `${prefix}.${token}` : token
       if (parentPrefix === 'capability_refs') {
         labels.push(capabilityLabel(token))
-        continue
-      }
-      if (parentPrefix === 'event_outputs') {
-        labels.push(outputEventLabel(token))
         continue
       }
       if (prefix === issue.path) {

@@ -206,6 +206,7 @@ class ConfigurationValidationService:
         block: dict[str, Any],
         *,
         stage: str,
+        check_dependencies: bool = False,
     ) -> ValidationReport:
         payload, storage_issue = self._stored_block_payload(block_type, block)
         if storage_issue is not None:
@@ -227,6 +228,7 @@ class ConfigurationValidationService:
             block_type,
             validated,
             owner_id=str(block.get("id", "")),
+            check_dependencies=check_dependencies,
         )
         return ValidationReport(stage=stage, issues=tuple(issues))
 
@@ -236,6 +238,7 @@ class ConfigurationValidationService:
         payload: dict[str, Any],
         *,
         owner_id: str,
+        check_dependencies: bool = False,
     ) -> list[ValidationIssue]:
         arguments = {
             "scope": "block",
@@ -243,13 +246,23 @@ class ConfigurationValidationService:
             "package_owner_id": owner_id,
             "owner_name": str(payload.get("name", "")),
             "path_prefix": "python_package",
-            "check_dependencies": False,
+            "check_dependencies": check_dependencies,
         }
         reference = payload.get("python_package", {})
         if not isinstance(reference, dict):
             reference = {}
         if block_type == "custom-middleware":
             return self._python_package_validation.middleware_issues(
+                reference,
+                **arguments,
+            )
+        if block_type == "agent-event-output":
+            return self._python_package_validation.agent_event_output_issues(
+                reference,
+                **arguments,
+            )
+        if block_type == "workflow-event-output":
+            return self._python_package_validation.workflow_event_output_issues(
                 reference,
                 **arguments,
             )
@@ -864,6 +877,18 @@ class ConfigurationValidationService:
             owner_name=owner_name,
             block_overrides=block_overrides,
         )
+        agent_event_output = selected.get("agent-event-output")
+        if agent_event_output is not None:
+            issues.extend(
+                self._python_package_validation.agent_event_output_issues(
+                    agent_event_output.get("python_package", {}),
+                    scope="main_agent",
+                    owner_id=owner_id,
+                    package_owner_id=str(agent_event_output.get("id", "")),
+                    owner_name=owner_name,
+                    path_prefix="capability_refs.agent-event-output.python_package",
+                )
+            )
         disabled_capabilities = frozenset(
             DEFAULT_MIDDLEWARE_CAPABILITY_TYPES.difference(references)
         )

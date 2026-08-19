@@ -14,9 +14,7 @@ from agent_shell.runtime.output_projection import OutputProjector, WorkflowOutpu
 from agent_shell.runtime.output_stream import V3EventNormalizer
 from agent_shell.runtime.stream_transformers import RawCustomEventTransformer
 from agent_shell.workflow.events import WorkflowCustomEventV1, WorkflowEventSourceV1
-from agent_shell.workflow_event_output import WORKFLOW_EVENT_NAMES
-
-from .support import config, noop_media_response, noop_middleware_runtime, output_source
+from .support import noop_media_response, noop_middleware_runtime, output_renderer
 
 
 class _State(TypedDict, total=False):
@@ -100,15 +98,7 @@ def test_agent_execution_projects_real_stream_writer_custom_event() -> None:
         rectifier=OutputEventRectifier(
             WorkflowOutputProjector(
                 {},
-                workflow_output_config={
-                    "event_outputs": {
-                        name: {
-                            "enabled": name == "custom",
-                            "output_source": output_source(),
-                        }
-                        for name in WORKFLOW_EVENT_NAMES
-                    }
-                },
+                workflow_output=output_renderer({"custom": "{{message}}"}),
             )
         ),
         normalizer=V3EventNormalizer("Main Agent"),
@@ -140,17 +130,13 @@ def test_agent_execution_projects_real_tool_result() -> None:
     builder.add_edge("call_tool", END)
     graph = builder.compile()
 
-    output_mode = config(mode="blocklist")
-    for event_output in output_mode["event_outputs"].values():
-        event_output["enabled"] = False
-    output_mode["event_outputs"]["tool_result"] = {
-        "enabled": True,
-        "output_source": output_source("tool={{tool_name}} output={{output}}"),
-    }
+    output = output_renderer({
+        "tool_result": "tool={{tool_name}} output={{output}}",
+    })
     execution = RunExecution(
         graph=graph,
         input_state={},
-        rectifier=OutputEventRectifier(OutputProjector(output_mode)),
+        rectifier=OutputEventRectifier(OutputProjector(output)),
         normalizer=V3EventNormalizer("Main Agent"),
         middleware_runtime=noop_middleware_runtime(),
         media_response=noop_media_response(),

@@ -5,6 +5,10 @@ from pathlib import Path
 from typing import Any
 
 from agent_shell.command_packages import resolve_command_package
+from agent_shell.event_output_packages import (
+    resolve_agent_event_output_package,
+    resolve_workflow_event_output_package,
+)
 from agent_shell.middleware_packages.packages import resolve_middleware_package
 from agent_shell.task_dispatcher_packages import resolve_task_dispatcher_package
 from agent_shell.registries.errors import ResourceScanError
@@ -33,6 +37,50 @@ class PythonPackageValidationService:
         return self._reference_issues(
             reference,
             resolver=resolve_middleware_package,
+            scope=scope,
+            owner_id=owner_id,
+            package_owner_id=package_owner_id,
+            owner_name=owner_name,
+            path_prefix=path_prefix,
+            check_dependencies=check_dependencies,
+        )
+
+    def agent_event_output_issues(
+        self,
+        reference: dict[str, Any],
+        *,
+        scope: str,
+        owner_id: str,
+        package_owner_id: str,
+        owner_name: str,
+        path_prefix: str,
+        check_dependencies: bool = True,
+    ) -> list[ValidationIssue]:
+        return self._reference_issues(
+            reference,
+            resolver=resolve_agent_event_output_package,
+            scope=scope,
+            owner_id=owner_id,
+            package_owner_id=package_owner_id,
+            owner_name=owner_name,
+            path_prefix=path_prefix,
+            check_dependencies=check_dependencies,
+        )
+
+    def workflow_event_output_issues(
+        self,
+        reference: dict[str, Any],
+        *,
+        scope: str,
+        owner_id: str,
+        package_owner_id: str,
+        owner_name: str,
+        path_prefix: str,
+        check_dependencies: bool = True,
+    ) -> list[ValidationIssue]:
+        return self._reference_issues(
+            reference,
+            resolver=resolve_workflow_event_output_package,
             scope=scope,
             owner_id=owner_id,
             package_owner_id=package_owner_id,

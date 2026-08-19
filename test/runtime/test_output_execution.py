@@ -5,19 +5,11 @@ from .support import *
 
 def test_execution_yields_each_completed_semantic_event_once() -> None:
     async def scenario() -> tuple[list[str], dict[str, int]]:
-        settings = config(mode="blocklist")
-        settings["event_outputs"]["assistant_text"] = {
-            "enabled": True,
-            "output_source": output_source("[T]{{message}}[/T]"),
-        }
-        settings["event_outputs"]["reasoning"] = {
-            "enabled": True,
-            "output_source": output_source("[R]{{message}}[/R]"),
-        }
-        settings["event_outputs"]["custom"] = {
-            "enabled": True,
-            "output_source": output_source("[C]{{message}}[/C]"),
-        }
+        output = output_renderer({
+            "assistant_text": "[T]{{message}}[/T]",
+            "reasoning": "[R]{{message}}[/R]",
+            "custom": "[C]{{message}}[/C]",
+        })
         events = [
             message_envelope(
                 {"event": "message-start", "role": "ai", "id": "message-1"}
@@ -71,7 +63,7 @@ def test_execution_yields_each_completed_semantic_event_once() -> None:
         execution = RunExecution(
             graph=EventGraph(events),
             input_state={"messages": []},
-            rectifier=OutputEventRectifier(OutputProjector(settings)),
+            rectifier=OutputEventRectifier(OutputProjector(output)),
             normalizer=V3EventNormalizer("Main Agent"),
             middleware_runtime=noop_middleware_runtime(),
             media_response=noop_media_response(),
@@ -91,24 +83,56 @@ def test_execution_yields_each_completed_semantic_event_once() -> None:
 
 def test_non_string_lifecycle_output_stays_behind_the_runtime_error_boundary() -> None:
     async def scenario() -> None:
-        settings = config(mode="blocklist")
-        settings["event_outputs"]["lifecycle"] = {
-            "enabled": True,
-            "output_source": "def output(event):\n    return event\n",
-        }
         execution = RunExecution(
             graph=EventGraph([]),
             input_state={"messages": []},
-            rectifier=OutputEventRectifier(OutputProjector(settings)),
+            rectifier=OutputEventRectifier(OutputProjector(lambda event: event)),
             normalizer=V3EventNormalizer("Main Agent"),
             middleware_runtime=noop_middleware_runtime(),
             media_response=noop_media_response(),
         )
         with pytest.raises(AgentRuntimeError) as captured:
             _ = [part async for part in execution.stream_text()]
-        assert captured.value.code == "agent_execution_failed"
+        assert captured.value.code == "event_output.execution_failed"
 
     asyncio.run(scenario())
+
+
+def test_unguarded_event_field_failure_keeps_the_original_diagnostic() -> None:
+    async def scenario() -> tuple[str, BaseException | None]:
+        class RecordingDiagnostics:
+            detail_exception: BaseException | None = None
+
+            def runtime_error(
+                self,
+                _exc,
+                *,
+                detail_exception: BaseException | None = None,
+                **_kwargs,
+            ) -> None:
+                self.detail_exception = detail_exception
+
+        def output(event: dict[str, object]) -> str:
+            return str(event["tool_name"])
+
+        diagnostics = RecordingDiagnostics()
+        execution = RunExecution(
+            graph=EventGraph([]),
+            input_state={"messages": []},
+            rectifier=OutputEventRectifier(OutputProjector(output)),
+            normalizer=V3EventNormalizer("Main Agent"),
+            middleware_runtime=noop_middleware_runtime(),
+            media_response=noop_media_response(),
+            runtime_diagnostics=diagnostics,  # type: ignore[arg-type]
+        )
+        with pytest.raises(AgentRuntimeError) as captured:
+            _ = [part async for part in execution.stream_text()]
+        return captured.value.code, diagnostics.detail_exception
+
+    code, detail_exception = asyncio.run(scenario())
+
+    assert code == "event_output.execution_failed"
+    assert isinstance(detail_exception, KeyError)
 
 
 def test_model_response_observer_keeps_full_safe_source_data_per_call() -> None:

@@ -42,7 +42,7 @@ WORKFLOW_COMPONENT_CATALOG = (
     {
         "type": "workflow-event-output",
         "terminology_key": "workflow-event-output",
-        "label": "Event Output",
+        "label": "Workflow Event Output",
         "order": 1,
         "icon_key": "braces",
         "editor_key": "workflow_event_output",

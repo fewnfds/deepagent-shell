@@ -109,6 +109,48 @@ def _executable_report(
     referenced_issues: list[ValidationIssue] = []
     component_reports: dict[tuple[str, str], ValidationReport] = {}
 
+    workflow_event_output_id = workflow.get("workflow_event_output_id")
+    if workflow_event_output_id is not None:
+        stored_output = blocks.get_block_internal(
+            "workflow-event-output",
+            str(workflow_event_output_id),
+        )
+        if stored_output is None:
+            referenced_issues.append(
+                ValidationIssue(
+                    code="workflow_event_output_not_found",
+                    scope="workflow",
+                    owner_id=str(workflow.get("id", "")),
+                    owner_name=str(workflow.get("name", "")),
+                    owner_type="workflow",
+                    path="workflow_event_output_id",
+                    message="The selected Workflow event output component does not exist.",
+                    message_key="errors.workflowEventOutputNotFound",
+                )
+            )
+        else:
+            output_report = configuration_validation.validate_stored_block(
+                "workflow-event-output",
+                stored_output,
+                stage=WORKFLOW_EXECUTABLE_STAGE,
+                check_dependencies=True,
+            )
+            for issue in output_report.issues:
+                referenced_issues.append(
+                    ValidationIssue(
+                        code=issue.code,
+                        scope="workflow",
+                        owner_id=str(workflow.get("id", "")),
+                        owner_name=str(workflow.get("name", "")),
+                        owner_type="workflow",
+                        path="workflow_event_output_id",
+                        message=issue.message,
+                        message_key=issue.message_key,
+                        message_args=issue.message_args,
+                        severity=issue.severity,
+                    )
+                )
+
     def component_report(
         block_type: str,
         reference: str,

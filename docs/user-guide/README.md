@@ -16,5 +16,5 @@ Agent Shell 通过管理台组合 Deep Agents 配置，并把启用的父图 Wor
 8. [查看日志中心与 Workflow 观测边界](runtime-observability.md)
 9. [管理数据、文件与系统设置](system-management.md)
 
-三个基础边界是：Main Agent 的必选组件包括模型和输出模式；客户端在每次请求中提交完整消息；
+三个基础边界是：Main Agent 的必选组件包括模型和 Agent 事件输出；客户端在每次请求中提交完整消息；
 `data/` 是需要备份和迁移的完整实例数据根。

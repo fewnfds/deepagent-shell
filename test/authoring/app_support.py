@@ -20,7 +20,7 @@ PUBLIC_TYPES = (
     "custom-tool",
     "skill",
     "custom-middleware",
-    "output-mode",
+    "agent-event-output",
     "exception-retry",
     "subagent",
     "summarization",
@@ -43,18 +43,6 @@ def subagent_payload(
             "capability_overrides": capability_overrides or [],
         },
     }
-
-OUTPUT_EVENT_TYPES = (
-    "assistant_text",
-    "reasoning",
-    "tool_call",
-    "tool_result",
-    "tool_error",
-    "subagent",
-    "custom",
-    "lifecycle",
-)
-
 
 def make_client(tmp_path: Path, monkeypatch) -> TestClient:
     monkeypatch.chdir(tmp_path)
@@ -88,15 +76,19 @@ def model_payload(name: str = "Local model") -> dict:
     }
 
 
-def output_mode_payload(name: str = "Development timeline") -> dict:
+def agent_event_output_payload(name: str = "Development timeline") -> dict:
     return {
         "name": name,
-        "event_outputs": {
-            event_type: {
-                "enabled": event_type != "reasoning",
-                "output_source": 'def output(event):\n    return event["message"]\n',
-            }
-            for event_type in OUTPUT_EVENT_TYPES
+        "python_package": {"folder": "", "editable_files": ["main.py"]},
+        "python_package_files": {
+            "template_key": "__empty__",
+            "revision": "",
+            "files": [
+                {
+                    "path": "main.py",
+                    "content": 'def output(event):\n    return event["message"]\n',
+                }
+            ],
         },
     }
 
@@ -113,7 +105,7 @@ def block_cases(tmp_path: Path) -> list[tuple[str, dict]]:
                 "name": "Reliability middleware",
             },
         ),
-        ("output-mode", output_mode_payload()),
+        ("agent-event-output", agent_event_output_payload()),
         (
             "exception-retry",
             {

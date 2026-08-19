@@ -70,13 +70,6 @@ describe('locale usage', () => {
     for (const policy of ['inherit', 'force-remove', 'top-level-only']) {
       expect(catalog.has(`agents.policy.${policy}`)).toBe(true)
     }
-    for (const event of [
-      'assistant_text', 'reasoning', 'tool_call', 'tool_result', 'tool_error',
-      'subagent', 'custom', 'lifecycle',
-    ]) {
-      expect(catalog.has(`editors.outputMode.events.${event}.label`)).toBe(true)
-      expect(catalog.has(`editors.outputMode.events.${event}.description`)).toBe(false)
-    }
   })
 
   it('defines every message key emitted by the backend', () => {

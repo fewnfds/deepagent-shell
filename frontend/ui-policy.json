@@ -422,10 +422,8 @@
           "src/editors/FilesystemEditor.vue",
           "src/editors/FilesystemPermissionsEditor.vue",
           "src/editors/ModelEditor.vue",
-          "src/editors/OutputModeEditor.vue",
           "src/editors/PromptCachingEditor.vue",
           "src/editors/SummarizationEditor.vue",
-          "src/editors/WorkflowEventOutputEditor.vue",
           "src/pages/ConfigLibraryPage.vue",
           "src/pages/StyleLabPage.vue",
           "src/pages/SystemSettingsPage.vue",
@@ -475,6 +473,8 @@
         "callers": [
           "src/editors/CommandEditor.vue",
           "src/editors/CustomMiddlewareEditor.vue",
+          "src/editors/AgentEventOutputEditor.vue",
+          "src/editors/WorkflowEventOutputEditor.vue",
           "src/editors/TaskDispatcherEditor.vue"
         ]
       },

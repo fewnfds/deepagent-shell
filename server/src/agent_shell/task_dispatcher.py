@@ -16,7 +16,6 @@ from langgraph.runtime import Runtime
 
 from agent_shell.python_packages.contracts import PythonPackageReference
 from agent_shell.runtime.context import WorkflowRuntimeContext
-from agent_shell.runtime.state import validate_workflow_state_update
 
 
 DispatchKey = Annotated[
@@ -120,7 +119,7 @@ async def run_task_dispatcher(
     runtime: Runtime[WorkflowRuntimeContext],
     allowed_dispatch_keys: Collection[str],
 ) -> TaskDispatcherResult:
-    from agent_shell.runtime.state import WorkflowState
+    from agent_shell.runtime.state import WorkflowState, validate_workflow_state_update
 
     original_state = _detached(state)
     script_state = _detached(state)

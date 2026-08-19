@@ -23,9 +23,6 @@ from agent_shell.validation.assembly import (
 )
 from agent_shell.validation.models import ValidationReport
 
-from .support import config
-
-
 class _ToolCapableFakeModel(FakeListChatModel):
     def bind_tools(self, tools, **kwargs):
         return self
@@ -154,17 +151,23 @@ def test_custom_package_middleware_is_the_shell_caller_tail_for_main_and_subagen
         blocks={},
         filesystem_mode="configured-shared",
     )
-    output_mode = {
-        "id": "output-id",
+    event_output = {
+        "id": "55555555-5555-4555-8555-555555555555",
         "name": "Output",
-        **config(mode="blocklist"),
+        "python_package": {
+            "folder": "55555555-5555-4555-8555-555555555555",
+            "editable_files": ["main.py"],
+        },
     }
     assembly = StaticAssembly(
         main_agent={"id": "main-id", "name": "Main Agent"},
-        references={"model": "model-id", "output-mode": "output-id"},
+        references={
+            "model": "model-id",
+            "agent-event-output": "55555555-5555-4555-8555-555555555555",
+        },
         blocks={
             "model": {"id": "model-id"},
-            "output-mode": output_mode,
+            "agent-event-output": event_output,
             "subagent": {
                 "instruction_override": None,
                 "task_description_override": "Delegate work.",

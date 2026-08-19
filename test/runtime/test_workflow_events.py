@@ -11,7 +11,7 @@ from agent_shell.workflow.events import (
     emit_workflow_custom_event,
 )
 
-from .support import config
+from .support import output_renderer
 
 
 MAIN_A = "11111111-1111-4111-8111-111111111111"
@@ -20,15 +20,8 @@ SUBAGENT = "33333333-3333-4333-8333-333333333333"
 SUBAGENT_B = "44444444-4444-4444-8444-444444444444"
 
 
-def _workflow_output_config(
-    event_name: str,
-    source: str = 'def output(event):\n    return event["message"]\n',
-) -> dict:
-    return {
-        "event_outputs": {
-            event_name: {"enabled": True, "output_source": source}
-        }
-    }
+def _workflow_output(event_name: str):
+    return output_renderer({event_name: "{{message}}"})
 
 
 def _assistant_event(node_id: str, message: str, sequence: int) -> OutputEvent:
@@ -44,14 +37,8 @@ def _assistant_event(node_id: str, message: str, sequence: int) -> OutputEvent:
 
 
 def test_workflow_output_uses_the_policy_frozen_for_each_node() -> None:
-    policy_a = config(
-        mode="blocklist",
-        source='def output(event):\n    return "A:" + event["message"]\n',
-    )
-    policy_b = config(
-        mode="blocklist",
-        source='def output(event):\n    return "B:" + event["message"]\n',
-    )
+    policy_a = output_renderer({"assistant_text": "A:{{message}}"})
+    policy_b = output_renderer({"assistant_text": "B:{{message}}"})
     rectifier = OutputEventRectifier(
         WorkflowOutputProjector({"agent-a": policy_a, "agent-b": policy_b})
     )
@@ -376,7 +363,7 @@ def test_script_custom_event_requires_the_workflow_event_output_component(
     blocked = OutputEventRectifier(WorkflowOutputProjector({}))
     allowed = OutputEventRectifier(
         WorkflowOutputProjector(
-            {}, workflow_output_config=_workflow_output_config("custom")
+            {}, workflow_output=_workflow_output("custom")
         )
     )
 
@@ -411,7 +398,7 @@ def test_registered_script_custom_event_uses_the_workflow_component_script() -> 
     )
     rectifier = OutputEventRectifier(
         WorkflowOutputProjector(
-            {}, workflow_output_config=_workflow_output_config("custom")
+            {}, workflow_output=_workflow_output("custom")
         )
     )
 
@@ -443,15 +430,12 @@ def test_workflow_event_output_script_selects_and_renders_non_agent_events() -> 
         values={"channel": "progress"},
     )
     blocked = OutputEventRectifier(
-        WorkflowOutputProjector({}, workflow_output_config=_workflow_output_config("values"))
+        WorkflowOutputProjector({}, workflow_output=_workflow_output("values"))
     )
     allowed = OutputEventRectifier(
         WorkflowOutputProjector(
             {},
-            workflow_output_config=_workflow_output_config(
-                "custom",
-                'def output(event):\n    return event["channel"] + ":" + event["message"]\n',
-            ),
+            workflow_output=lambda event: event["channel"] + ":" + event["message"],
         )
     )
 
@@ -501,17 +485,11 @@ def test_non_agent_raw_channels_default_to_string_while_agent_state_stays_intern
     configured = OutputEventRectifier(
         WorkflowOutputProjector(
             {},
-            workflow_output_config={
-                "event_outputs": {
-                    "updates": {
-                        "enabled": True,
-                        "output_source": (
-                            'def output(event):\n'
-                            '    return event["data"]["result"]\n'
-                        ),
-                    }
-                }
-            },
+            workflow_output=lambda event: (
+                event["data"]["result"]
+                if event["event_type"] == "updates"
+                else ""
+            ),
         )
     )
     assert configured.feed(script_output[0]) == ["ready"]
@@ -529,17 +507,7 @@ def test_workflow_event_output_script_receives_the_full_state_dict() -> None:
     )
     projector = WorkflowOutputProjector(
         {},
-        workflow_output_config={
-            "event_outputs": {
-                "values": {
-                    "enabled": True,
-                    "output_source": (
-                        'def output(event):\n'
-                        '    return str(event["data"]["shared_vars"]["answer"])\n'
-                    ),
-                }
-            }
-        },
+        workflow_output=lambda event: str(event["data"]["shared_vars"]["answer"]),
     )
 
     assert projector.render(values) == "42"

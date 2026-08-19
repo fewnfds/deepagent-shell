@@ -4,12 +4,12 @@ import { describe, expect, it } from 'vitest'
 import type { Component } from 'vue'
 
 import {
+  agentEventOutputAdapter,
   customToolAdapter,
   exceptionRetryAdapter,
   filesystemAdapter,
   filesystemPermissionsAdapter,
   modelAdapter,
-  outputModeAdapter,
   promptCachingAdapter,
   skillAdapter,
   summarizationAdapter,
@@ -17,9 +17,7 @@ import {
   type ExceptionRetryDefaults,
   type FilesystemDefaults,
   type FilesystemPermissionsDefaults,
-  type OutputModeDefaults,
   workflowEventOutputAdapter,
-  type WorkflowEventOutputDefaults,
   type PromptCachingDefaults,
   type SkillDefaults,
   type SummarizationDefaults,
@@ -28,11 +26,11 @@ import { zhCN } from '@/locales/zh-CN'
 
 import {
   CustomToolEditor,
+  AgentEventOutputEditor,
   ExceptionRetryEditor,
   FilesystemEditor,
   FilesystemPermissionsEditor,
   ModelEditor,
-  OutputModeEditor,
   PromptCachingEditor,
   SkillEditor,
   SummarizationEditor,
@@ -57,27 +55,6 @@ const filesystemDefaults: FilesystemDefaults = {
 const filesystemPermissionsDefaults: FilesystemPermissionsDefaults = {
   system_prompt: filesystemDefaults.system_prompt,
   tools: filesystemDefaults.tools,
-}
-const outputDefaults: OutputModeDefaults = {
-  events: [{ key: 'assistant_text', fields: ['message'] }],
-  default_value: {
-    event_outputs: {
-      assistant_text: {
-        enabled: true, output_source: 'def output(event):\n    return event["message"]\n',
-      },
-    },
-  },
-}
-const workflowEventOutputDefaults: WorkflowEventOutputDefaults = {
-  events: [{ key: 'values', fields: ['data'] }],
-  default_value: {
-    event_outputs: {
-      values: {
-        enabled: true,
-        output_source: 'def output(event):\n    return ',
-      },
-    },
-  },
 }
 const skillDefaults: SkillDefaults = {
   system_prompt: 'skill default',
@@ -283,43 +260,52 @@ describe('dedicated block editors', () => {
     )
     expect(filesystem.text()).not.toContain('内置文件工具')
 
-    const outputDraft = outputModeAdapter.blank(outputDefaults)
-    const output = mount(OutputModeEditor, {
-      props: { modelValue: outputDraft, defaults: outputDefaults },
-      global: { plugins: [localizedI18n] },
-    })
-    expect(output.find('[data-testid="output-filter-settings"]').exists()).toBe(false)
   })
 
-  it('inserts field buttons as Python dict expressions for each event script', async () => {
-    const outputDraft = outputModeAdapter.blank(outputDefaults)
-    outputDraft.event_outputs.assistant_text!.output_source = 'def output(event):\n    return '
-    const output = mount(OutputModeEditor, {
-      props: { modelValue: outputDraft, defaults: outputDefaults },
+  it('loads configuration-owned Python package templates for both event output editors', async () => {
+    const agentOutput = mount(AgentEventOutputEditor, {
+      props: {
+        modelValue: agentEventOutputAdapter.blank(),
+        catalog: [{
+          key: 'agent-default',
+          format_version: 1,
+          family: 'event-output',
+          adapter: 'agent-event-output',
+          name: 'Agent default',
+          revision: 'agent-revision',
+          files: [{ path: 'main.py', content: 'def output(event):\n    return ""\n', exists: true }],
+        }],
+      },
       global: { plugins: [localizedI18n] },
     })
-    await output.get('[data-testid="output-field"]').trigger('click')
-    expect(output.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({
-      event_outputs: {
-        assistant_text: {
-          output_source: 'def output(event):\n    return event["message"]',
-        },
+    await agentOutput.get('select').setValue('agent-default')
+    expect(agentOutput.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({
+      python_package_files: {
+        template_key: 'agent-default',
+        revision: 'agent-revision',
       },
     })
 
     const workflowOutput = mount(WorkflowEventOutputEditor, {
       props: {
-        modelValue: workflowEventOutputAdapter.blank(workflowEventOutputDefaults),
-        defaults: workflowEventOutputDefaults,
+        modelValue: workflowEventOutputAdapter.blank(),
+        catalog: [{
+          key: 'workflow-default',
+          format_version: 1,
+          family: 'event-output',
+          adapter: 'workflow-event-output',
+          name: 'Workflow default',
+          revision: 'workflow-revision',
+          files: [{ path: 'main.py', content: 'def output(event):\n    return ""\n', exists: true }],
+        }],
       },
       global: { plugins: [localizedI18n] },
     })
-    await workflowOutput.findAll('button').find((button) => button.text() === 'data')!.trigger('click')
+    await workflowOutput.get('select').setValue('workflow-default')
     expect(workflowOutput.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({
-      event_outputs: {
-        values: {
-          output_source: 'def output(event):\n    return event["data"]',
-        },
+      python_package_files: {
+        template_key: 'workflow-default',
+        revision: 'workflow-revision',
       },
     })
   })

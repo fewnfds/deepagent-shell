@@ -264,7 +264,7 @@ Agent 成功后，完整 reduced messages 写入 Lifecycle Store，parent State 
 继承 earlier messages；其 WIC 通过选择 causally visible invocation，再按 `result_ref` 从 Store 读取 artifact。
 
 Start/End 没有 script、configuration 或 business data transformation。Start 不把 client messages 注入 State；End 不负责自动取消 background task、删除 Lifecycle
-或拼接最终 Agent content。WIC 负责 input，Main Agent Output Mode 和可选 Workflow Event Output 负责 output。
+或拼接最终 Agent content。WIC 负责 input，Main Agent 的 Agent Event Output 和可选 Workflow Event Output 负责 output。
 
 Start 是 Graph entry，正式 Graph 恰有一个 Start 且至少有一条合法 outgoing Edge。End 是 LangGraph `END` 的显式 projection，不是普通 Node，
 也不是全 Graph cancel 或 automatic join operation。End 可以没有任何 incoming Edge。普通 reachable leaf 可以自然结束；有 loop 时让 exit path 连接 End。

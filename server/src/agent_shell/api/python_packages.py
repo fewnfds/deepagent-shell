@@ -14,6 +14,14 @@ def build_python_package_router(
     async def middleware_templates() -> dict[str, object]:
         return authoring.template_catalog("custom-middleware")
 
+    @router.get("/api/python-package-templates/agent-event-output")
+    async def agent_event_output_templates() -> dict[str, object]:
+        return authoring.template_catalog("agent-event-output")
+
+    @router.get("/api/python-package-templates/workflow-event-output")
+    async def workflow_event_output_templates() -> dict[str, object]:
+        return authoring.template_catalog("workflow-event-output")
+
     @router.get("/api/python-package-templates/command")
     async def command_templates() -> dict[str, object]:
         return authoring.template_catalog("command")
