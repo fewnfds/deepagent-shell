@@ -1,3 +1,22 @@
+"""Workflow Input Context Middleware example.
+
+The default policy gives a Main Agent the current Lifecycle request messages,
+keeps a Subagent's privately delegated messages, and appends a Task Dispatcher
+worker's ``workflow_task`` as a user message. Customize
+``build_workflow_input_messages`` to select, trim, reorder, or extend that
+Agent's private context.
+
+For upstream results, select records by explicit node or task identity from
+``state["workflow_state_snapshot"]["agent_invocations"]`` and pass the chosen
+record to ``load_invocation_artifact``. Do not depend on insertion order or
+automatically copy every upstream Agent's full output.
+
+The standard-library and Agent Shell/LangChain imports below need no package
+entry in requirements.txt. Add only direct third-party dependencies there and
+restart Agent Shell to prepare them. This is trusted server-side Python code;
+it does not run in a sandbox.
+"""
+
 from __future__ import annotations
 
 import json

@@ -31,7 +31,8 @@ def output(event):
 函数签名必须恰好是 `def output(event)`：不接受 `async def`、额外参数、默认参数、`*args` 或 `**kwargs`。脚本异常或
 返回非字符串会终止本次运行，并经过普通运行错误边界返回；普通 API 和日志摘要不包含脚本 traceback 或事件正文。
 扩展在受信任的服务进程内运行，不是 sandbox。可在配置目录的 `requirements.txt` 声明受支持的第三方依赖；依赖变更需
-重启服务准备，源码在下一次请求重新加载。
+重启服务准备，源码在下一次请求重新加载。`requirements.txt` 可以不存在或保持为空，表示没有额外依赖；只有 source 实际 import
+平台核心之外的 package 时才需要逐行声明 direct dependency。
 
 ## 公共 dict 字段
 
@@ -95,7 +96,7 @@ Agent 事件输出没有独立事件过滤配置。需要过滤时直接在 `out
   "name": "普通文本",
   "python_package": {
     "folder": "",
-    "editable_files": ["main.py"]
+    "editable_files": ["main.py", "requirements.txt"]
   },
   "python_package_files": {
     "template_key": "__empty__",
@@ -104,6 +105,10 @@ Agent 事件输出没有独立事件过滤配置。需要过滤时直接在 `out
       {
         "path": "main.py",
         "content": "def output(event):\n    if event[\"event_type\"] == \"assistant_text\":\n        return event[\"message\"]\n    return \"\"\n"
+      },
+      {
+        "path": "requirements.txt",
+        "content": ""
       }
     ]
   }

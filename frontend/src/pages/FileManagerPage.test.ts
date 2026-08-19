@@ -19,7 +19,7 @@ vi.mock('vue-i18n', async (importOriginal) => {
 })
 
 const fileScopeCatalog = {
-  scopes: ['files', 'skills', 'custom_tools', 'python_templates'] as FileManagerScope[],
+  scopes: ['files', 'skills', 'python_templates'] as FileManagerScope[],
 }
 
 async function openFilesRoot(wrapper: ReturnType<typeof mount>): Promise<void> {
@@ -56,7 +56,7 @@ describe('FileManagerPage', () => {
     await flushPromises()
 
     expect(wrapper.find('#file-manager-scope').exists()).toBe(false)
-    expect(wrapper.findAll('[data-testid="file-manager-roots"] tbody tr')).toHaveLength(4)
+    expect(wrapper.findAll('[data-testid="file-manager-roots"] tbody tr')).toHaveLength(3)
     expect(wrapper.find('[data-scope="config"]').exists()).toBe(false)
     expect(api.listManagedFiles).not.toHaveBeenCalled()
 

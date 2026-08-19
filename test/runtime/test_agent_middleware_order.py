@@ -186,7 +186,6 @@ def test_custom_package_middleware_is_the_shell_caller_tail_for_main_and_subagen
     )
     builder = AgentBuilder(
         SimpleNamespace(),
-        custom_tools_dir=tmp_path / "tools",
         python_packages_dir=tmp_path / "python-packages",
         runtime_dir=tmp_path / "runtime",
         skills_dir=tmp_path / "skills",

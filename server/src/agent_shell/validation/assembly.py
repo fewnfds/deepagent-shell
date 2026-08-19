@@ -23,6 +23,7 @@ class ResolvedSubagent:
     references: dict[str, str]
     blocks: dict[str, dict[str, Any]]
     filesystem_mode: FilesystemMode
+    tool_blocks: tuple[dict[str, Any], ...] = ()
     middleware_blocks: tuple[dict[str, Any], ...] = ()
     disabled_capabilities: frozenset[str] = frozenset()
 
@@ -36,4 +37,5 @@ class StaticAssembly:
     disabled_capabilities: frozenset[str]
     subagents: tuple[ResolvedSubagentEdge, ...]
     subagent_nodes: dict[SubagentNodeKey, ResolvedSubagent]
+    tool_blocks: tuple[dict[str, Any], ...] = ()
     middleware_blocks: tuple[dict[str, Any], ...] = ()

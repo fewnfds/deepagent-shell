@@ -21,16 +21,19 @@ export interface PythonPackageDraftState {
 
 export function blankPythonPackage(): PythonPackageDraftState {
   return {
-    python_package: { folder: '', editable_files: ['main.py'] },
+    python_package: { folder: '', editable_files: ['main.py', 'requirements.txt'] },
     python_package_files: {
       template_key: '',
-      files: [{ path: 'main.py', content: '', exists: false }],
+      files: [
+        { path: 'main.py', content: '', exists: false },
+        { path: 'requirements.txt', content: '', exists: false },
+      ],
       revision: '',
     },
     python_package_manifest: null,
     python_package_error: null,
     dependency_status: '',
-    editable_paths_source: 'main.py',
+    editable_paths_source: 'main.py\nrequirements.txt',
   }
 }
 
@@ -92,10 +95,22 @@ export function applyPythonPackageTemplate(
     Object.assign(target, blankPythonPackage())
     return
   }
-  target.python_package = { folder: '', editable_files: ['main.py'] }
+  const filesByPath = new Map(template.files.map((file) => [file.path, file]))
+  const packageFiles = [
+    filesByPath.get('main.py') ?? { path: 'main.py', content: '', exists: false },
+    filesByPath.get('requirements.txt') ?? {
+      path: 'requirements.txt',
+      content: '',
+      exists: false,
+    },
+  ]
+  target.python_package = {
+    folder: '',
+    editable_files: packageFiles.map((file) => file.path),
+  }
   target.python_package_files = {
     template_key: template.key,
-    files: template.files.filter((file) => file.path === 'main.py'),
+    files: packageFiles,
     revision: template.revision,
   }
   target.python_package_manifest = {
@@ -107,7 +122,7 @@ export function applyPythonPackageTemplate(
   }
   target.python_package_error = null
   target.dependency_status = ''
-  target.editable_paths_source = 'main.py'
+  target.editable_paths_source = packageFiles.map((file) => file.path).join('\n')
 }
 
 export function applyEmptyPythonPackageTemplate(target: PythonPackageDraftState): void {

@@ -1,3 +1,20 @@
+"""Built-in rule-based Command example.
+
+This editable example reads ``state["shared_vars"]["score"]`` and activates
+``matched`` when the numeric score is at least 60, otherwise
+``below_threshold``. It also writes ``shared_vars.last_route`` and emits a
+custom stream event before returning. Connect Branch Edges with those two
+branch keys; the names, score field, threshold, and State update are example
+policy rather than platform requirements.
+
+The stable package contract is a synchronous no-argument ``create_command()``
+factory returning an async ``command(state, runtime)``. The callable may use
+Workflow State, ``runtime.context``, ``runtime.store``, and
+``get_stream_writer()``. It returns ``activate`` and ``update`` data, not a
+LangGraph ``Command`` object. This package has no third-party dependencies, so
+``requirements.txt`` stays empty.
+"""
+
 from langgraph.config import get_stream_writer
 
 

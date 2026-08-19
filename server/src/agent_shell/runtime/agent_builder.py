@@ -25,7 +25,6 @@ from agent_shell.runtime.capabilities import (
     DeepAgentsWorkspace,
     build_deepagents_capabilities,
 )
-from agent_shell.runtime.capabilities.custom_tools import materialize_custom_tools
 from agent_shell.runtime.capabilities.exception_retry import (
     configure_model_for_retry,
     materialize_exception_retry,
@@ -67,6 +66,7 @@ from agent_shell.validation.capability_assembly import FilesystemMode
 from agent_shell.validation.service import ConfigurationValidationService
 from agent_shell.validation.assembly import StaticAssembly
 from agent_shell.python_requirements import parse_python_requirements
+from agent_shell.tool_packages import ToolPackageRuntime
 
 
 _OPENAI_COMPATIBLE_PROVIDERS = frozenset({"deepseek", "openai", "xai"})
@@ -132,6 +132,7 @@ class BuiltAgent:
     agent_name: str
     subagent_profile_ids: dict[str, str]
     middleware_runtime: MiddlewarePackageRuntime
+    tool_runtime: ToolPackageRuntime | None = None
     workspace: DeepAgentsWorkspace | None = None
 
 
@@ -140,7 +141,6 @@ class AgentBuilder:
         self,
         secrets: ProviderSecretResolver,
         *,
-        custom_tools_dir: Path,
         python_packages_dir: Path,
         runtime_dir: Path,
         skills_dir: Path,
@@ -149,19 +149,20 @@ class AgentBuilder:
         store: BaseStore,
     ) -> None:
         self._secrets = secrets
-        self._custom_tools_dir = custom_tools_dir
         self._python_packages_dir = python_packages_dir
         self._runtime_dir = runtime_dir
         self._skills_dir = skills_dir
         self._validation = validation
         self._provider_http_clients = provider_http_clients
         self._store = store
+        self._tool_runtime: ToolPackageRuntime | None = None
         self._middleware_runtime: MiddlewarePackageRuntime | None = None
 
     async def close_failed_build(self) -> None:
-        if self._middleware_runtime is None:
-            return
-        await self._middleware_runtime.close()
+        if self._tool_runtime is not None:
+            await self._tool_runtime.close()
+        if self._middleware_runtime is not None:
+            await self._middleware_runtime.close()
 
     def script_dependency_metadata(
         self,
@@ -263,22 +264,16 @@ class AgentBuilder:
             ) from exc
 
         tools: list[Any] = []
-        custom_tool = selected_blocks.get("custom-tool")
-        if custom_tool is not None and custom_tool["tools"]:
+        if self._tool_runtime is not None:
             try:
-                tools.extend(
-                    materialize_custom_tools(
-                        custom_tool["tools"],
-                        directory=self._custom_tools_dir,
-                    )
-                )
+                tools.extend(self._tool_runtime.tools_for(owner_id))
             except AgentRuntimeError as exc:
                 raise reported_error(
                     exc,
                     scope=scope,
                     owner_id=owner_id,
                     owner_name=owner_name,
-                    path="capability_refs.custom-tool",
+                    path="tool_refs",
                 ) from exc
 
         middleware: list[Any] = []
@@ -542,6 +537,14 @@ class AgentBuilder:
 
         main_agent_id = str(main_agent["id"])
         main_agent_name = str(main_agent["name"])
+        tool_runtime = ToolPackageRuntime.from_assembly(
+            assembly,
+            main_agent_id=main_agent_id,
+            request_id=request_id,
+            packages_dir=self._python_packages_dir,
+            runtime_root=self._runtime_dir,
+        )
+        self._tool_runtime = tool_runtime
         middleware_runtime = MiddlewarePackageRuntime.from_assembly(
             assembly,
             main_agent_id=main_agent_id,
@@ -732,6 +735,7 @@ class AgentBuilder:
             subagent_profile_ids={
                 node.name: node.key for node in assembly.subagent_nodes.values()
             },
+            tool_runtime=tool_runtime,
             middleware_runtime=middleware_runtime,
             workspace=materialized.workspace,
         )

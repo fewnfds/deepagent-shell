@@ -90,6 +90,12 @@ def main_agent_block_reference_owner(
     config_store: AgentConfigStore, block_type: str, block_id: str
 ) -> tuple[str, str] | None:
     for item in config_store.list_items(MAIN_AGENT_TABLE):
+        if block_type == "custom-tool" and any(
+            isinstance(reference, dict)
+            and reference.get("tool_id") == block_id
+            for reference in item.get("tool_refs", [])
+        ):
+            return "main_agent", str(item.get("name", ""))
         if block_type == "custom-middleware" and any(
             isinstance(reference, dict)
             and reference.get("middleware_id") == block_id
@@ -98,13 +104,16 @@ def main_agent_block_reference_owner(
             return "main_agent", str(item.get("name", ""))
         if capability_reference_id(item, block_type) == block_id:
             return "main_agent", str(item.get("name", ""))
-    if block_type == "custom-middleware":
+    if block_type in {"custom-tool", "custom-middleware"}:
         for item in config_store.list_items(SUBAGENT_TABLE):
             settings = item.get("settings", {})
-            if isinstance(settings, dict) and any(
-                isinstance(reference, dict)
-                and reference.get("middleware_id") == block_id
-                for reference in settings.get("middleware_refs", [])
+            if not isinstance(settings, dict):
+                continue
+            reference_key = "tool_refs" if block_type == "custom-tool" else "middleware_refs"
+            id_key = "tool_id" if block_type == "custom-tool" else "middleware_id"
+            if any(
+                isinstance(reference, dict) and reference.get(id_key) == block_id
+                for reference in settings.get(reference_key, [])
             ):
                 return "subagent", str(item.get("component_name", ""))
     return None

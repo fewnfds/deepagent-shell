@@ -42,13 +42,14 @@ describe('TaskDispatcherEditor', () => {
     expect(emitted).toMatchObject({
       python_package: {
         folder: '',
-        editable_files: ['main.py'],
+        editable_files: ['main.py', 'requirements.txt'],
       },
       python_package_files: {
         template_key: templateKey,
         revision: 'revision',
         files: [
           { path: 'main.py', content: source, exists: true },
+          { path: 'requirements.txt', content: '', exists: true },
         ],
       },
     })

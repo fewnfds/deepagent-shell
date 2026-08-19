@@ -9,7 +9,7 @@
 | 文件系统 | Agent workspace、映射、初始文件和文件工具 | 自选；未选时使用最小 Filesystem | 继承、自选或最小 |
 | 文件系统权限 | 路径权限与文件工具、提示词覆写 | 可选 | 继承、替换或关闭 |
 | 待办计划 | `write_todos` 与规划提示 | 可选 | 继承、替换或关闭 |
-| 自定义工具 | 选择 `data/resources/custom_tools/` 中的工具 | 可选 | 继承、替换或关闭 |
+| 自定义工具 | 一个 Python extension 导出一个 LangChain Tool | 通过有序引用装配 | Subagent 独立有序引用 |
 | Skill | 选择 `data/resources/skills/` 中的 Skill | 可选 | 继承、替换或关闭 |
 | 自定义 Middleware | 定义一个 LangChain Middleware | 通过有序引用装配 | Subagent 独立有序引用 |
 | Agent 事件输出 | 用文件化 Python 扩展把 v3 Agent 事件投影为响应文本 | 必选 | 只用于顶层 Main Agent |
@@ -30,6 +30,10 @@
 自定义 Middleware 组件保存一个配置独占的 Python 扩展引用，并只返回一个官方 LangChain `AgentMiddleware`。Main Agent 和
 Subagent 分别通过有序 `middleware_refs` 装配多个配置。格式、安全边界和依赖管理见
 [自定义 Middleware 扩展](middleware-packages.md)。
+
+Custom Tool 组件同样保存一个配置独占的 Python 扩展，但固定由同步 `create_tool()` 返回一个 LangChain `BaseTool`。Main Agent
+和 Subagent 分别通过有序 `tool_refs` 装配多个配置；一个配置不再保存 Tool name 列表。完整 contract 见
+[自定义工具](../wizard-pages/custom-tool-config.md)。
 
 Workflow Input Context 是重要的 Agent 上下文约定，但不是 catalog 组件。当前通过普通 Custom Middleware 实现：从
 `内置示例-workflow-input-context` 创建独立配置，再由 Main Agent 或 Subagent 的 `middleware_refs` 选择。完整原理和修改位置见
@@ -57,7 +61,7 @@ Command 组件保存一个 `workflow-node/command` Python 扩展引用和普通 
 Runtime Context 和完成 invocation 都带 task identity。
 完整规则和城市/乡镇示例见[任务分发](../wizard-pages/task-dispatcher-config.md)。
 
-这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。自定义 Middleware、Command Node、Task Dispatcher、
+这些自定义 Python 都运行在服务进程的受信任边界内，没有 sandbox。Custom Tool、自定义 Middleware、Command Node、Task Dispatcher、
 Agent 事件输出和 Workflow 事件输出从用户模板或内置示例
 创建配置独占的 Python 扩展，并在扩展目录可选的 `requirements.txt` 声明外部包；模板和示例本身不运行也不参与依赖。
 requirements 修改后重启生效；文件化扩展源码在下一次请求重新加载。

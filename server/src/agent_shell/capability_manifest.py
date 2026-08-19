@@ -91,7 +91,7 @@ CAPABILITY_MANIFESTS = (
     CapabilityManifest(
         "custom-tool", "custom-tool", "自定义工具", 6,
         "wrench", "custom_tool",
-        subagent_overrideable=True, required=False, subagent_policy="inherit",
+        subagent_overrideable=False, required=False, subagent_policy="force-remove",
     ),
     CapabilityManifest(
         "skill", "skill", "技能", 7, "sparkles",

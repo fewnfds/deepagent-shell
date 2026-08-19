@@ -16,7 +16,7 @@ PUBLIC_TYPES = tuple(manifest.type for manifest in CAPABILITY_MANIFESTS)
 MAIN_AGENT_TYPES = tuple(
     capability_type
     for capability_type in PUBLIC_TYPES
-    if capability_type not in {"filesystem", "custom-middleware"}
+    if capability_type not in {"filesystem", "custom-tool", "custom-middleware"}
 )
 OVERRIDEABLE_TYPES = tuple(
     manifest.type for manifest in CAPABILITY_MANIFESTS if manifest.subagent_overrideable
@@ -39,6 +39,7 @@ def subagent_payload(
         "description": description,
         "settings": {
             "capability_overrides": capability_overrides or [],
+            "tool_refs": [],
             "middleware_refs": [],
         },
     }
@@ -73,6 +74,25 @@ def make_client(tmp_path: Path, monkeypatch) -> TestClient:
         'def output(event):\n    return event["message"]\n',
         encoding="utf-8",
     )
+    tool_template = (
+        tmp_path
+        / "data"
+        / "templates"
+        / "agent"
+        / "custom_tool"
+        / "reference-tool"
+    )
+    tool_template.mkdir(parents=True, exist_ok=True)
+    (tool_template / "main.py").write_text(
+        "from langchain.tools import tool\n"
+        "@tool\n"
+        "def reference_tool(value: str) -> str:\n"
+        "    \"\"\"Return the supplied value.\"\"\"\n"
+        "    return value\n"
+        "def create_tool():\n"
+        "    return reference_tool\n",
+        encoding="utf-8",
+    )
     return ScopedAuthTestClient(create_app())
 
 
@@ -92,7 +112,7 @@ def block_payload(capability_type: str, name: str) -> dict:
             "response_format": None,
             "model_settings": {},
         },
-        "custom-tool": {"name": name, "tools": []},
+        "custom-tool": {"name": name},
         "custom-middleware": {"name": name},
         "agent-event-output": {"name": name},
         "filesystem": {"name": name},
@@ -128,12 +148,12 @@ def create_blocks(client: TestClient, suffix: str, types=PUBLIC_TYPES) -> dict[s
     blocks = {}
     for capability_type in types:
         payload = block_payload(capability_type, f"{capability_type}-{suffix}")
-        if capability_type in {"custom-middleware", "agent-event-output"}:
-            endpoint = (
-                "middleware"
-                if capability_type == "custom-middleware"
-                else "agent-event-output"
-            )
+        if capability_type in {"custom-tool", "custom-middleware", "agent-event-output"}:
+            endpoint = {
+                "custom-tool": "custom-tool",
+                "custom-middleware": "middleware",
+                "agent-event-output": "agent-event-output",
+            }[capability_type]
             selected = client.get(
                 f"/api/python-package-templates/{endpoint}"
             ).json()["catalog"][0]
@@ -164,16 +184,3 @@ def references(blocks: dict[str, dict], types=PUBLIC_TYPES) -> list[dict]:
         {"type": capability_type, "block_id": blocks[capability_type]["id"]}
         for capability_type in types
     ]
-
-
-def write_custom_tool(tmp_path: Path, resource_name: str, tool_name: str) -> None:
-    tools_dir = tmp_path / "data" / "resources" / "custom_tools"
-    tools_dir.mkdir(parents=True, exist_ok=True)
-    (tools_dir / f"{resource_name}.py").write_text(
-        "from langchain_core.tools import tool\n"
-        f"@tool({tool_name!r})\n"
-        f"def {resource_name}(value: str) -> str:\n"
-        '    """Test tool used by static assembly validation."""\n'
-        "    return value\n",
-        encoding="utf-8",
-    )

@@ -66,7 +66,6 @@ def test_agent_builder_disabled_capabilities_override_deep_agents_default_stack(
     )
     builder = AgentBuilder(
         SimpleNamespace(resolve_model=lambda _model_id: None),
-        custom_tools_dir=tmp_path / "tools",
         python_packages_dir=tmp_path / "python-packages",
         runtime_dir=tmp_path / "runtime",
         skills_dir=tmp_path / "skills",

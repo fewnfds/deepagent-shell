@@ -318,7 +318,7 @@ describe('dedicated block editors', () => {
     }])
 
     const tools = mountEditor(CustomToolEditor, { modelValue: customToolAdapter.blank() })
-    await tools.get('[data-action="refresh"]').trigger('click')
+    await tools.get('button').trigger('click')
     expect(tools.emitted('refresh')).toHaveLength(1)
   })
 
@@ -474,45 +474,51 @@ describe('dedicated block editors', () => {
     expect(editor.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({ ttl: '1h' })
   })
 
-  it('labels every custom tool identifier explicitly', () => {
+  it('applies a Custom Tool Python package template', async () => {
     const editor = mountEditor(CustomToolEditor, {
       modelValue: customToolAdapter.blank(),
       catalog: [
         {
-          name: 'safe_tool',
-          function: 'word_count',
-          tool_name: 'count_words',
-          filename: 'safe_tool.py',
-          description: 'Count words.',
+          format_version: 1,
+          key: 'word-count',
+          family: 'tool',
+          adapter: 'agent-tool',
+          name: 'word-count',
+          files: [
+            { path: 'main.py', content: 'def create_tool():\n    return tool\n' },
+            { path: 'requirements.txt', content: '' },
+          ],
+          revision: 'tool-revision',
         },
       ],
     })
 
-    const items = editor.findAll('[data-testid="custom-tool-item"]')
-    const identifiers = items[0]?.get('[data-testid="tool-identifiers"]').findAll('div').map((row) => [
-      row.get('dt').text(),
-      row.get('dd').text(),
-    ])
-    expect(identifiers).toEqual([
-      ['tool_name', 'count_words'],
-      ['function', 'word_count'],
-      ['resource_name', 'safe_tool'],
-      ['filename', 'safe_tool.py'],
-    ])
+    await editor.get('select').setValue('word-count')
+
+    expect(editor.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({
+      python_package_files: {
+        template_key: 'word-count',
+        revision: 'tool-revision',
+      },
+      python_package_manifest: {
+        family: 'tool',
+        adapter: 'agent-tool',
+      },
+    })
   })
 
   it('localizes structured resource scan errors without a string fallback', () => {
     const editor = mountEditor(CustomToolEditor, {
       modelValue: customToolAdapter.blank(),
       errors: {
-        'unsafe.py': {
-          message_key: 'resource.error.customTool.syntax',
-          message_args: { filename: 'unsafe.py' },
+        unsafe: {
+          message_key: 'resource.error.pythonPackage.syntax',
+          message_args: { line: 1 },
         },
       },
     })
 
-    expect(editor.text()).toContain('resource.error.customTool.syntax')
-    expect(editor.text()).toContain('unsafe.py')
+    expect(editor.text()).toContain('resource.error.pythonPackage.syntax')
+    expect(editor.text()).toContain('unsafe')
   })
 })

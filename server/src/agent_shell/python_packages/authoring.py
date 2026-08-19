@@ -40,6 +40,14 @@ class PackageAdapterSpec:
 
 
 PACKAGE_COMPONENT_SPECS: dict[str, PackageAdapterSpec] = {
+    "custom-tool": PackageAdapterSpec(
+        template_parts=("agent", "custom_tool"),
+        example_parts=("agent-components", "custom-tool"),
+        family="tool",
+        adapter="agent-tool",
+        factory_name="create_tool",
+        factory_parameters=(),
+    ),
     "agent-event-output": PackageAdapterSpec(
         template_parts=("agent", "agent_event_output"),
         example_parts=("agent-components", "agent-event-output"),
@@ -237,6 +245,8 @@ def _write_editable_files(folder: Path, entries: list[dict[str, str]]) -> None:
                 f"{item['path']} is a directory, not a text file.",
             )
         if not target.exists() and item["content"] == "":
+            if item["path"] == "requirements.txt":
+                _write_bytes_atomic(target, b"")
             continue
         if target.is_file() and item["content"] == "":
             try:
@@ -498,6 +508,14 @@ class PythonPackageAuthoringService:
                 "python_package_template_invalid",
                 "The empty Python package template does not have a revision.",
             )
+
+        # Keep the dependency file visible in a newly generated empty package.
+        # It is intentionally empty until the author adds third-party packages.
+        if template is None and not any(
+            item["path"] == "requirements.txt" for item in entries
+        ):
+            entries.append({"path": "requirements.txt", "content": ""})
+
         folder_name = owner_id
         adapter_root = self._adapter_root(spec)
         adapter_root.mkdir(parents=True, exist_ok=True)

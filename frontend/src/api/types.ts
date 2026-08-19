@@ -76,15 +76,7 @@ export interface ModelProviderCatalog {
   providers: ModelProviderCatalogItem[]
 }
 
-export interface CustomToolResource {
-  name: string
-  function: string
-  tool_name: string | null
-  description: string
-  filename: string
-}
-
-export type FileManagerScope = 'files' | 'skills' | 'custom_tools' | 'python_templates'
+export type FileManagerScope = 'files' | 'skills' | 'python_templates'
 type ManagedFileKind = 'directory' | 'file' | 'unsupported'
 
 export interface ManagedFileScopeCatalog {
@@ -200,8 +192,8 @@ export interface PythonPackageReference {
 export interface PythonPackageManifest {
   format_version: 1
   id: string
-  family: 'workflow-node' | 'middleware' | 'event-output'
-  adapter: 'command' | 'task-dispatcher' | 'agent-middleware' | 'agent-event-output' | 'workflow-event-output'
+  family: 'workflow-node' | 'middleware' | 'event-output' | 'tool'
+  adapter: 'command' | 'task-dispatcher' | 'agent-middleware' | 'agent-event-output' | 'workflow-event-output' | 'agent-tool'
   folder: string
 }
 
@@ -221,8 +213,8 @@ export interface PythonPackageFiles {
 export interface PythonPackageTemplate {
   format_version: 1
   key: string
-  family: 'workflow-node' | 'middleware' | 'event-output'
-  adapter: 'command' | 'task-dispatcher' | 'agent-middleware' | 'agent-event-output' | 'workflow-event-output'
+  family: 'workflow-node' | 'middleware' | 'event-output' | 'tool'
+  adapter: 'command' | 'task-dispatcher' | 'agent-middleware' | 'agent-event-output' | 'workflow-event-output' | 'agent-tool'
   name: string
   files: PythonPackageFile[]
   revision: string
@@ -425,9 +417,14 @@ export interface MiddlewareReference {
   middleware_id: string
 }
 
+export interface ToolReference {
+  tool_id: string
+}
+
 export interface MainAgentPayload {
   name: string
   capability_refs: CapabilityReference[]
+  tool_refs: ToolReference[]
   middleware_refs: MiddlewareReference[]
   subagents: SubagentReference[]
 }
@@ -442,6 +439,7 @@ export interface CapabilityOverride {
 
 export interface SubagentSettings {
   capability_overrides: CapabilityOverride[]
+  tool_refs: ToolReference[]
   middleware_refs: MiddlewareReference[]
 }
 

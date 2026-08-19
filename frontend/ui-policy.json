@@ -472,10 +472,32 @@
         "reason": "Owns template selection and ordered private package text-file editing without changing package identity",
         "callers": [
           "src/editors/CommandEditor.vue",
+          "src/editors/CustomToolEditor.vue",
           "src/editors/CustomMiddlewareEditor.vue",
           "src/editors/AgentEventOutputEditor.vue",
           "src/editors/WorkflowEventOutputEditor.vue",
           "src/editors/TaskDispatcherEditor.vue"
+        ]
+      },
+      {
+        "name": "ReferenceCardsEditor",
+        "path": "src/components/ReferenceCardsEditor.vue",
+        "kind": "domain-composition",
+        "reason": "Owns the single ordered three-column reference card recipe shared by Tool, Middleware and Subagent selectors",
+        "callers": [
+          "src/components/MiddlewareReferencesEditor.vue",
+          "src/components/SubagentReferencesEditor.vue",
+          "src/components/ToolReferencesEditor.vue"
+        ]
+      },
+      {
+        "name": "ToolReferencesEditor",
+        "path": "src/components/ToolReferencesEditor.vue",
+        "kind": "domain-composition",
+        "reason": "Owns ordered Custom Tool references for Main Agent and Subagent configurations",
+        "callers": [
+          "src/pages/MainAgentPage.vue",
+          "src/pages/SubagentPage.vue"
         ]
       },
       {

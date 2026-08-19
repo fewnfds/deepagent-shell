@@ -527,8 +527,8 @@ export const en: MessageSchema = {
       description: 'The write_todos planning tool and its prompt text',
     },
     'custom-tool': {
-      label: 'Custom tools',
-      description: 'Select Agent tools from the local static scan',
+      label: 'Custom Tool',
+      description: 'One configuration-owned Python extension that exports one LangChain Tool',
     },
     skill: {
       label: 'Skills',
@@ -736,9 +736,7 @@ export const en: MessageSchema = {
       modelSettingsHint: 'Model binding parameters as a JSON object; do not enter secrets or duplicate the two fields above.',
     },
     customTool: {
-      namePlaceholder: 'For example: Writing tool set',
-      catalogTitle: 'Local tool scan',
-      emptyCatalog: 'No custom tool is currently available.',
+      namePlaceholder: 'For example: Word count',
     },
     pythonPackage: {
       title: 'Python extension',
@@ -1289,6 +1287,12 @@ export const en: MessageSchema = {
       noReferences: 'No Middleware is attached.',
       reference: 'Middleware configuration',
     },
+    tool: {
+      referencesTitle: 'Custom Tool order',
+      addReference: 'Add Custom Tool',
+      noReferences: 'No Custom Tool is attached.',
+      reference: 'Custom Tool configuration',
+    },
     workspace: {
       title: 'File workspace',
     },
@@ -1341,7 +1345,6 @@ export const en: MessageSchema = {
       providerUnavailable: 'Select an adapter from the Provider list supported by this version, then save again.',
       baseUrlInvalid: 'Change {field} to an HTTP(S) address without a username, password, query, or fragment, then save again.',
       credentialMasked: 'Re-enter the real credential. Asterisks or bullet masking text cannot be saved as a credential.',
-      customToolNameFormatInvalid: 'Start the name with an ASCII letter or underscore, then use only ASCII letters, digits, underscores, or hyphens, and save again.',
       pythonPackageFolderFormatInvalid: 'Reload the configuration so its extension code directory reference can be restored.',
       outputFilterFieldFormatInvalid: 'Start each field level with a letter or underscore, then use only letters, digits, or underscores, with at most one dot separator, and save again.',
       numberGreaterThan: 'Set {field} to a value greater than {gt}, then save again.',
@@ -1432,7 +1435,6 @@ export const en: MessageSchema = {
         providerUnavailable: '{field} is not a Provider adapter supported by this version.',
         baseUrlInvalid: '{field} must be a valid HTTP(S) address without a username, password, query, or fragment.',
         credentialMasked: 'A credential cannot be replaced with asterisks or bullet masking text.',
-        customToolNameFormatInvalid: '{field} must start with an ASCII letter or underscore and then contain only ASCII letters, digits, underscores, or hyphens.',
         pythonPackageFolderFormatInvalid: '{field} must be an extension code directory owned by this configuration.',
         outputFilterFieldFormatInvalid: 'Each level of {field} must start with a letter or underscore and then contain only letters, digits, or underscores, with at most one dot separator.',
         numberGreaterThan: '{field} must be greater than {gt}.',

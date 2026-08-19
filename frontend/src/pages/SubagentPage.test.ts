@@ -14,11 +14,54 @@ import {
   resetAgentPageTestState,
   service,
   subagentManifest,
+  toolManifest,
 } from './agentPages.testSupport'
 
 beforeEach(resetAgentPageTestState)
 
 describe('Subagent authoring page', () => {
+  it('orders independent Custom Tool references in three-column cards', async () => {
+    const firstId = '00000000-0000-0000-0000-000000000061'
+    const secondId = '00000000-0000-0000-0000-000000000062'
+    const api = service({
+      getCatalog: vi.fn(async () => ({
+        block_types: [modelManifest, promptManifest, toolManifest],
+        editor_defaults: {},
+      })),
+      listBlocks: vi.fn(async (type) => (
+        type === 'custom-tool'
+          ? [{ id: firstId, name: 'First Tool' }, { id: secondId, name: 'Second Tool' }]
+          : [{ id: `00000000-0000-0000-0000-${type === 'model' ? '000000000001' : '000000000002'}`, name: `${type} block` }]
+      )),
+    })
+
+    for (const mountPage of [mountMainAgentPage, mountSubagentPage]) {
+      const { wrapper } = await mountPage(api)
+      const add = wrapper.get('[data-action="add-tool-reference"]')
+      await add.trigger('click')
+      await add.trigger('click')
+      const rows = wrapper.findAll('[data-testid="tool-reference-row"]')
+      expect(rows).toHaveLength(2)
+      expect(rows.every((row) => row.classes().includes('col-md-6'))).toBe(true)
+      expect(rows.every((row) => row.classes().includes('col-lg-4'))).toBe(true)
+      await rows[0]!.get('[data-testid="tool-reference"]').setValue(firstId)
+      await rows[1]!.get('[data-testid="tool-reference"]').setValue(secondId)
+      await rows[0]!.get('[data-action="move-tool-reference-down"]').trigger('click')
+      await buttonByText(wrapper, 'common.save').trigger('click')
+      await flushPromises()
+      wrapper.unmount()
+    }
+
+    expect(api.createMainAgent).toHaveBeenCalledWith(expect.objectContaining({
+      tool_refs: [{ tool_id: secondId }, { tool_id: firstId }],
+    }))
+    expect(api.createSubagent).toHaveBeenCalledWith(expect.objectContaining({
+      settings: expect.objectContaining({
+        tool_refs: [{ tool_id: secondId }, { tool_id: firstId }],
+      }),
+    }))
+  })
+
   it('orders independent Middleware references for Main Agent and Subagent', async () => {
     const firstId = '00000000-0000-0000-0000-000000000071'
     const secondId = '00000000-0000-0000-0000-000000000072'
@@ -195,6 +238,7 @@ describe('Subagent authoring page', () => {
           { type: 'model', mode: 'replace', block_id: '00000000-0000-0000-0000-000000000001' },
           { type: 'system-prompt', mode: 'disabled', block_id: '' },
         ],
+        tool_refs: [],
         middleware_refs: [],
       },
     })

@@ -261,7 +261,8 @@ function payloadFromDraft(type: ManagedComponentType, value: BlockDraftBase): Bl
 
 function usesPythonExtension(type: ManagedComponentType): boolean {
   return (
-    type === 'custom-middleware'
+    type === 'custom-tool'
+    || type === 'custom-middleware'
     || type === 'agent-event-output'
     || type === 'workflow-event-output'
     || type === 'command'
@@ -622,7 +623,7 @@ async function refreshResource(): Promise<void> {
   loadingResource.value = true
   try {
     if (activeType.value === 'custom-tool') {
-      const result = await managementApi.listCustomTools()
+      const result = await managementApi.listCustomToolTemplates()
       customTools.value = result.catalog
       customToolErrors.value = result.errors
     } else if (activeType.value === 'custom-middleware') {

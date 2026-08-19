@@ -21,7 +21,6 @@ from agent_shell.api.agent_configs import (
     main_agent_block_reference_owner,
 )
 from agent_shell.capability_manifest import CAPABILITY_BY_TYPE
-from agent_shell.registries.custom_tools import scan_custom_tools
 from agent_shell.registries.skills import scan_skills
 from agent_shell.provider_http import ProviderHttpClients
 from agent_shell.provider_integrations import bundled_provider_ids
@@ -69,7 +68,6 @@ WORKFLOW_COMPONENT_CATALOG = (
 def build_router(
     block_store: BlockStore,
     config_store: AgentConfigStore,
-    custom_tools_dir: Path,
     skills_dir: Path,
     secret_resolver: ProviderSecretResolver,
     validation: ConfigurationValidationService,
@@ -378,10 +376,6 @@ def build_router(
                 )
             model_ids.append(item["id"])
         return model_ids
-
-    @router.get("/api/tools/custom")
-    async def custom_tools() -> dict:
-        return scan_custom_tools(custom_tools_dir)
 
     @router.get("/api/skills")
     async def skills() -> dict:

@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import PageShell from '@/components/PageShell.vue'
 import MiddlewareReferencesEditor from '@/components/MiddlewareReferencesEditor.vue'
+import ToolReferencesEditor from '@/components/ToolReferencesEditor.vue'
 import RecordPicker from '@/components/RecordPicker.vue'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
 import { useConfigurationValidation } from '@/composables/useConfigurationValidation'
@@ -68,6 +69,7 @@ const nonGeneralCapabilityTypes = new Set<CapabilityType>([
   'filesystem',
   'filesystem-permissions',
   'subagent',
+  'custom-tool',
   'custom-middleware',
 ])
 const generalManifests = computed(() => manifests.value.filter(
@@ -243,7 +245,9 @@ async function loadWorkspace(): Promise<void> {
     profiles.value = profileItems.map(normalizeSubagent)
     const entries = await Promise.all(manifests.value
       .filter((manifest) => (
-        manifest.subagent_overrideable || manifest.type === 'custom-middleware'
+        manifest.subagent_overrideable
+        || manifest.type === 'custom-middleware'
+        || manifest.type === 'custom-tool'
       ))
       .map(async (manifest) => [
         manifest.type,
@@ -488,6 +492,12 @@ watch(
             </div>
           </div>
         </section>
+
+        <ToolReferencesEditor
+          v-model:references="form.settings.tool_refs"
+          id-prefix="subagent-tool"
+          :tools="capabilityBlocks('custom-tool')"
+        />
 
         <MiddlewareReferencesEditor
           v-model:references="form.settings.middleware_refs"

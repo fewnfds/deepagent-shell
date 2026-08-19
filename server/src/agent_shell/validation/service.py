@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from pathlib import Path
 from typing import Any
 
 from pydantic import ValidationError
@@ -20,10 +19,6 @@ from agent_shell.contracts import (
     FilesystemToolConfigs,
     MainAgentProfile,
     SubagentProfile,
-)
-from agent_shell.registries.custom_tools import (
-    resolve_custom_tool_file,
-    scan_custom_tool_file,
 )
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.blocks import BlockStore
@@ -63,13 +58,10 @@ class ConfigurationValidationService:
         blocks: BlockStore,
         agent_configs: AgentConfigStore,
         python_package_validation: PythonPackageValidationService,
-        *,
-        custom_tools_dir: Path,
     ) -> None:
         self._blocks = blocks
         self._agent_configs = agent_configs
         self._python_package_validation = python_package_validation
-        self._custom_tools_dir = custom_tools_dir
 
     def validate_main_agent(
         self,
@@ -251,6 +243,11 @@ class ConfigurationValidationService:
         reference = payload.get("python_package", {})
         if not isinstance(reference, dict):
             reference = {}
+        if block_type == "custom-tool":
+            return self._python_package_validation.tool_issues(
+                reference,
+                **arguments,
+            )
         if block_type == "custom-middleware":
             return self._python_package_validation.middleware_issues(
                 reference,
@@ -601,6 +598,67 @@ class ConfigurationValidationService:
                 issues.append(issue)
         return selected, issues
 
+    def _load_tool_references(
+        self,
+        references: list[dict[str, Any]],
+        *,
+        scope: str,
+        owner_id: str,
+        owner_name: str,
+        path_prefix: str,
+        block_overrides: dict[tuple[str, str], dict[str, Any]] | None = None,
+    ) -> tuple[tuple[dict[str, Any], ...], list[ValidationIssue]]:
+        selected: list[dict[str, Any]] = []
+        issues: list[ValidationIssue] = []
+        for index, reference in enumerate(references):
+            block_id = str(reference.get("tool_id", ""))
+            path = f"{path_prefix}[{index}].tool_id"
+            override_key = ("custom-tool", block_id)
+            prospective = bool(block_overrides and override_key in block_overrides)
+            block = (
+                block_overrides[override_key]
+                if prospective
+                else self._blocks.get_block_internal("custom-tool", block_id)
+            )
+            if block is None:
+                issues.append(
+                    ValidationIssue(
+                        code="assembly.reference_not_found",
+                        scope=scope,
+                        owner_id=owner_id,
+                        owner_name=owner_name,
+                        path=path,
+                        message="The referenced custom-tool configuration does not exist.",
+                        message_key="validation.issue.assembly.referenceNotFound",
+                        message_args={"capability_type": "custom-tool"},
+                    )
+                )
+                continue
+            selected.append(block)
+            issue = self._block_contract_issue(
+                "custom-tool",
+                block,
+                scope=scope,
+                owner_id=owner_id,
+                owner_name=owner_name,
+                path=path,
+                stored=not prospective,
+            )
+            if issue is not None:
+                issues.append(issue)
+                continue
+            issues.extend(
+                self._python_package_validation.tool_issues(
+                    block.get("python_package", {}),
+                    scope=scope,
+                    owner_id=owner_id,
+                    package_owner_id=str(block.get("id", "")),
+                    owner_name=owner_name,
+                    path_prefix=f"{path_prefix}[{index}].python_package",
+                )
+            )
+        return tuple(selected), issues
+
     def _load_middleware_references(
         self,
         references: list[dict[str, Any]],
@@ -717,30 +775,7 @@ class ConfigurationValidationService:
             if manifest is None or block is None:
                 continue
             names = list(manifest.tool_names)
-            if capability_type == "custom-tool":
-                names = []
-                resources = block.get("tools", [])
-                if not isinstance(resources, list):
-                    resources = []
-                for resource_name in resources:
-                    if not isinstance(resource_name, str):
-                        continue
-                    try:
-                        resource_path = resolve_custom_tool_file(
-                            resource_name,
-                            self._custom_tools_dir,
-                        )
-                        if resource_path is None:
-                            continue
-                        metadata = scan_custom_tool_file(resource_path)
-                    except ValueError:
-                        # Missing or currently invalid user resources are dynamic
-                        # request-preparation failures, not save/start blockers.
-                        continue
-                    tool_name = metadata.get("tool_name")
-                    if isinstance(tool_name, str) and tool_name:
-                        names.append(tool_name)
-            elif capability_type == "filesystem":
+            if capability_type == "filesystem":
                 continue
             for name in names:
                 previous = seen.get(name)
@@ -892,6 +927,15 @@ class ConfigurationValidationService:
         disabled_capabilities = frozenset(
             DEFAULT_MIDDLEWARE_CAPABILITY_TYPES.difference(references)
         )
+        tool_blocks, tool_issues = self._load_tool_references(
+            list(main_agent.get("tool_refs", [])),
+            scope="main_agent",
+            owner_id=owner_id,
+            owner_name=owner_name,
+            path_prefix="tool_refs",
+            block_overrides=block_overrides,
+        )
+        issues.extend(tool_issues)
         middleware_blocks, middleware_issues = self._load_middleware_references(
             list(main_agent.get("middleware_refs", [])),
             scope="main_agent",
@@ -985,6 +1029,14 @@ class ConfigurationValidationService:
                     block_overrides=block_overrides,
                 )
             )
+            child_tool_blocks, child_tool_issues = self._load_tool_references(
+                settings["tool_refs"],
+                scope="subagent",
+                owner_id=profile_id,
+                owner_name=str(profile["name"]),
+                path_prefix="settings.tool_refs",
+                block_overrides=block_overrides,
+            )
 
             subagent_name = str(profile["name"])
             child_blocks, child_issues, child_filesystem_mode = (
@@ -1008,6 +1060,7 @@ class ConfigurationValidationService:
             )
             if child_tool_issue is not None:
                 child_issues.append(child_tool_issue)
+            child_issues.extend(child_tool_issues)
             child_issues.extend(child_middleware_issues)
             issues.extend(child_issues)
             if child_issues:
@@ -1019,6 +1072,7 @@ class ConfigurationValidationService:
                 description=str(profile["description"]),
                 references=child_references,
                 blocks=child_blocks,
+                tool_blocks=child_tool_blocks,
                 middleware_blocks=child_middleware_blocks,
                 filesystem_mode=child_filesystem_mode,
                 disabled_capabilities=frozenset(child_disabled_capabilities),
@@ -1075,6 +1129,7 @@ class ConfigurationValidationService:
             main_agent=main_agent,
             references=references,
             blocks=selected,
+            tool_blocks=tool_blocks,
             middleware_blocks=middleware_blocks,
             filesystem_mode=filesystem_mode,
             disabled_capabilities=disabled_capabilities,
@@ -1142,6 +1197,13 @@ class ConfigurationValidationService:
                 and item.get("block_id") == block_id
                 for item in references
             )
+            if block_type == "custom-tool":
+                tool_refs = main_agent.get("tool_refs", [])
+                direct = isinstance(tool_refs, list) and any(
+                    isinstance(item, dict)
+                    and item.get("tool_id") == block_id
+                    for item in tool_refs
+                )
             if block_type == "custom-middleware":
                 middleware_refs = main_agent.get("middleware_refs", [])
                 direct = isinstance(middleware_refs, list) and any(
@@ -1209,6 +1271,14 @@ class ConfigurationValidationService:
             if not isinstance(settings, dict):
                 continue
             selections = settings.get("capability_overrides", [])
+            if block_type == "custom-tool":
+                tool_refs = settings.get("tool_refs", [])
+                if isinstance(tool_refs, list) and any(
+                    isinstance(item, dict)
+                    and item.get("tool_id") == block_id
+                    for item in tool_refs
+                ):
+                    return True
             if block_type == "custom-middleware":
                 middleware_refs = settings.get("middleware_refs", [])
                 if isinstance(middleware_refs, list) and any(

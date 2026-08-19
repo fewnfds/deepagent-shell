@@ -21,7 +21,7 @@ const api = vi.hoisted(() => ({
   saveBlock: vi.fn(),
   validateDraft: vi.fn(),
   validateRepository: vi.fn(),
-  listCustomTools: vi.fn(),
+  listCustomToolTemplates: vi.fn(),
   listMiddlewareTemplates: vi.fn(),
   listAgentEventOutputTemplates: vi.fn(),
   listWorkflowEventOutputTemplates: vi.fn(),
@@ -177,7 +177,7 @@ beforeEach(() => {
   }))
   api.validateDraft.mockResolvedValue({ valid: true, stage: 'draft_validation', issues: [] })
   api.validateRepository.mockResolvedValue({ valid: true, stage: 'repository_load', issues: [] })
-  api.listCustomTools.mockResolvedValue({ catalog: [], errors: {} })
+  api.listCustomToolTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listMiddlewareTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listAgentEventOutputTemplates.mockResolvedValue({ catalog: [], errors: {} })
   api.listWorkflowEventOutputTemplates.mockResolvedValue({ catalog: [], errors: {} })
@@ -350,7 +350,7 @@ describe('ComponentsPage', () => {
     await flushPromises()
 
     expect(api.listSkills).toHaveBeenCalledOnce()
-    expect(api.listCustomTools).not.toHaveBeenCalled()
+    expect(api.listCustomToolTemplates).not.toHaveBeenCalled()
     expect(api.listMiddlewareTemplates).not.toHaveBeenCalled()
     wrapper.unmount()
   })

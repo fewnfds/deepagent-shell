@@ -11,6 +11,7 @@ from agent_shell.event_output_packages import (
 )
 from agent_shell.middleware_packages.packages import resolve_middleware_package
 from agent_shell.task_dispatcher_packages import resolve_task_dispatcher_package
+from agent_shell.tool_packages import resolve_tool_package
 from agent_shell.registries.errors import ResourceScanError
 from agent_shell.validation.models import ValidationIssue
 
@@ -37,6 +38,28 @@ class PythonPackageValidationService:
         return self._reference_issues(
             reference,
             resolver=resolve_middleware_package,
+            scope=scope,
+            owner_id=owner_id,
+            package_owner_id=package_owner_id,
+            owner_name=owner_name,
+            path_prefix=path_prefix,
+            check_dependencies=check_dependencies,
+        )
+
+    def tool_issues(
+        self,
+        reference: dict[str, Any],
+        *,
+        scope: str,
+        owner_id: str,
+        package_owner_id: str,
+        owner_name: str,
+        path_prefix: str,
+        check_dependencies: bool = True,
+    ) -> list[ValidationIssue]:
+        return self._reference_issues(
+            reference,
+            resolver=resolve_tool_package,
             scope=scope,
             owner_id=owner_id,
             package_owner_id=package_owner_id,

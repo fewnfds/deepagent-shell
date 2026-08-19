@@ -85,10 +85,71 @@ def test_repository_workflow_input_context_example_is_in_middleware_catalog(
     assert template["key"] == "内置示例-workflow-input-context"
     assert template["name"] == "内置示例-workflow-input-context"
     assert {file["path"] for file in template["files"]} == {
-        "README.md",
         "main.py",
         "requirements.txt",
     }
+
+
+def test_repository_custom_tool_example_is_in_package_catalog(
+    tmp_path: Path,
+) -> None:
+    repository = Path(__file__).parents[2]
+    service = PythonPackageAuthoringService(
+        templates_root=tmp_path / "templates",
+        examples_root=repository / "examples",
+        instances_root=tmp_path / "instances",
+        runtime_root=tmp_path / "runtime",
+    )
+
+    response = service.template_catalog("custom-tool")
+    assert response["errors"] == {}
+    template = response["catalog"][0]
+
+    assert template["key"] == "内置示例-default"
+    assert template["family"] == "tool"
+    assert template["adapter"] == "agent-tool"
+    assert {file["path"] for file in template["files"]} == {
+        "main.py",
+        "requirements.txt",
+    }
+
+
+def test_empty_python_extension_adds_visible_requirements_file(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = make_client(tmp_path, monkeypatch)
+    response = client.post(
+        "/api/blocks/custom-tool",
+        json={
+            "name": "Empty dependency tool",
+            "python_package": {"folder": "", "editable_files": ["main.py"]},
+            "python_package_files": {
+                "template_key": "__empty__",
+                "revision": "",
+                "files": [{
+                    "path": "main.py",
+                    "content": (
+                        "from langchain.tools import tool\n"
+                        "@tool\n"
+                        "def identity(value: str) -> str:\n"
+                        "    \"\"\"Return value.\"\"\"\n"
+                        "    return value\n"
+                        "def create_tool():\n"
+                        "    return identity\n"
+                    ),
+                }],
+            },
+        },
+    )
+    assert response.status_code == 200, response.text
+    created = response.json()
+    assert created["python_package"]["editable_files"] == [
+        "main.py", "requirements.txt"
+    ]
+    assert [file["path"] for file in created["python_package_files"]["files"]] == [
+        "main.py", "requirements.txt"
+    ]
+    assert created["python_package_files"]["files"][-1]["content"] == ""
 
 
 def test_manifest_free_template_creates_owned_package_and_keeps_missing_file_warning(

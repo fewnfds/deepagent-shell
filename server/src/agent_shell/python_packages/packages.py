@@ -20,13 +20,14 @@ from agent_shell.python_packages.dependencies import (
 from agent_shell.registries.errors import ResourceScanError
 
 
-PythonPackageFamily = Literal["workflow-node", "middleware", "event-output"]
+PythonPackageFamily = Literal["workflow-node", "middleware", "event-output", "tool"]
 PythonPackageAdapter = Literal[
     "command",
     "task-dispatcher",
     "agent-middleware",
     "agent-event-output",
     "workflow-event-output",
+    "agent-tool",
 ]
 _TEMPLATE_KEY = re.compile(r"^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$")
 
@@ -45,6 +46,7 @@ class _ManifestBase(BaseModel):
             "agent-middleware": "middleware",
             "agent-event-output": "event-output",
             "workflow-event-output": "event-output",
+            "agent-tool": "tool",
         }[self.adapter]
         if self.family != expected:
             raise ValueError("adapter does not belong to the declared family")

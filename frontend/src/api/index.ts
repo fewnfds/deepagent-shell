@@ -14,7 +14,6 @@ import type {
   CatalogResponse,
   ConfigurationValidationSettings,
   PythonPackageTemplate,
-  CustomToolResource,
   DraftValidationRequest,
   EventFeedFilters,
   EventFeedResponse,
@@ -106,8 +105,8 @@ export const managementApi = {
     return managementRequest('/api/model-providers')
   },
 
-  listCustomTools(): Promise<ResourceCatalog<CustomToolResource>> {
-    return managementRequest('/api/tools/custom')
+  listCustomToolTemplates(): Promise<ResourceCatalog<PythonPackageTemplate>> {
+    return managementRequest('/api/python-package-templates/custom-tool')
   },
 
   listMiddlewareTemplates(): Promise<ResourceCatalog<PythonPackageTemplate>> {

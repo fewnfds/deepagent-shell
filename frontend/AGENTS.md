@@ -1,93 +1,35 @@
 # 前端开发入口
 
-本目录是唯一前端源码。所有页面、组件、布局、主题、图标和样式改动先读取本文件，再读取
-`ui-policy.json`；后端字段、权限、UUID、引用、路径和校验仍以后端 contract 为准。
-
-## 唯一 UI 栈
-
-- Vue 3 + Vite + Vue Router + vue-i18n；视觉只使用 AdminLTE 4.1、Bootstrap 5.3、官方
-  `@adminlte/vue@0.3.0` 白名单组件和 Bootstrap Icons。
-- 只做命名导入，不 `app.use(AdminLteVue)`，不导入 `@adminlte/vue/plugins`，不安装 Nuxt、第二套 UI、
-  Chart、Table、Editor、Calendar、Map、Scrollbar 等 optional plugin。
-- 禁止 Element Plus、第二套 UI、旧主题 token、旧 CSS 和迁移例外重新进入依赖、源码或测试环境；
-  `ui-policy.json` 的 migration 数组必须保持为空。
-- `OK / Close / Open / Light / Dark` 等简单基础英文可以使用；核心业务字段、动作、错误和安全提示继续
-  使用现有 locale。不能为了形式上的完全 i18n 再造包装层。
-
-## i18n 现行规范
-
-- 管理台提供中文、English 和变量名三层视图。中文与 English 是面向用户的自然语言；变量名视图只用于
-  Debug，不作为第三份人工翻译维护，而是从中文目录的 key 结构自动生成并随目录同步。
-- 变量名视图按稳定 contract 由近到远显示：后端 validation path、API/Pydantic payload 字段、后端错误码
-  或枚举值优先；确实没有后端身份的标题、动作和说明显示完整 locale key。
-- “变量名”不得使用 Vue/TypeScript/Node 或 Python 函数内部的局部变量名。前端字段绑定与后端 wire 字段命名
-  不同时，必须显示 wire 字段；不能为了变量视图新增后端内部实现反射或另一套 schema API。
-- 日期和数字在变量名视图中使用英文格式。语言偏好继续保存在浏览器；变量名视图的文档语言按英文处理，
-  避免把 Debug locale 标识直接传给 `Intl`。
-- 新增普通文案时同时维护中文与 English 并保持 key 完全一致；字段组件收到真实 payload path 时，变量名视图
-  直接显示该 path，其他调用点只有在能证明后端字段身份时才增加显式 wire 字段映射。
-
-## 写代码前的固定顺序
-
-1. 判断任务属于 API/领域、页面编排、产品行为 host 还是壳层/主题。
-2. 读取 `ui-policy.json` 中对应组件、class recipe、图标和路径例外。
-3. `ui-patterns/README.md` 是唯一渐进式范式索引；按需求只读取它命中的 pattern 和参考页，不通过全仓搜索随机模仿。
-4. 直接复用索引指向的批准组件或 recipe。没有匹配项时停止新增视觉能力，向用户说明真实场景并申请批准。
-5. 获批后更新 `ui-policy.json` 中实际需要的组件、class、图标或路径白名单，再实现。只有形成跨页面、
-   长期有效的设计原则或架构边界时才更新 UI contract；局部列宽、间距、颜色、对齐和页面微调不写入
-   Agent 提示词。
-
-`ui-policy.json` 只承担静态门禁，Style Lab 只承担渲染验收；二者不是另一套渐进式写法说明。
-
-正常复用批准项、修复 bug、机械模板绑定和 API 调整不需要重复审批。
-
-## 责任和文件边界
-
-- 页面拥有本页请求、状态和任务编排；`api/` 负责 transport；`domain/` 负责机械字段映射；后端拥有全部
-  领域与安全判断。
-- 前端信息架构按用户任务组织，禁止按 JSON/object/schema 的嵌套层级机械生成视觉层级。标题默认使用
-  普通 heading；只有具有独立状态、操作或可移动边界的内容才使用 Card。
-- Card 是主要内容单位，但必须作为当前路径最外层的原子任务；Card 内只放字段、普通列表行和操作，
-  不再套子 Card 或伪 Card。Accordion 作为完整模块时不再套 Card；作为 Card 内列表时必须使用 flush
-  结构直接继承边界，不套 `card-body` 或逐项伪 Card。
-- 同一集合只使用一个 Card，重复条目用 `list-group-flush / list-group-item` 继承主体分隔线；同级项目仅在
-  各自具有独立任务、状态或操作时使用并列 Card，外面不再增加“总览”父 Card。
-- 组件 editor 的普通配置默认直接平铺，不折叠进 Accordion；文件工具等独立项目使用并列原子 Card。
-  新增、刷新、恢复默认和删除等局部动作默认靠右，选项 Button 群按内容自然平铺。
-- 同一内容路径只允许一个主要视觉容器拥有边界。Card、Accordion、bordered panel 或重复项不能因为
-  “需要显示这一层名称”而互相嵌套；详细判定和文案价值测试见 UI contract 第 4 节。
-- 自有组件只允许是产品行为 host（鉴权、焦点、Toast/确认、Validation）或有真实领域交互的稳定组合。
-  不建立 Button/Input/Card wrapper、schema form、页面 builder、组件 registry 或 Storybook。
-- 页面和 editor 不写 `<style>`、`style=`、硬编码颜色、未知 class 或动态视觉 class。唯一项目样式入口是
-  policy 指定的 `src/styles/management-console.css`；确有缺口必须先批准并记录。
-- 数值输入需要声明单位时，使用 Bootstrap `input-group`，在输入框后以 `input-group-text` 显示单位，并通过
-  `aria-describedby` 关联；单位不得写入标题、label 括号、帮助备注或 tooltip。
-- 页面与章节层级使用 heading。真实表单中将 switch 与 label-input 并排时，在 Bootstrap `row` 标记
-  `data-ui-control-row`，各控制列标题统一使用 `.form-label`；不得把无标题的居中 switch 列塞入该行。
-  `list-group-item` 等重复列表行、卡片/分组标题和独立 switch 不使用这条规则，不得为了视觉对齐补 `.form-label`。
-- 图标只用 policy 中批准的 Bootstrap Icons。icon-only button 必须有清楚的可访问名称，简单英文可接受。
-- 未经用户明确要求，页面不得增加裸超链接。产品说明、连接参考和外部服务入口写入 `docs/` 说明书；真实站内
-  导航或下载等产品动作使用已有导航、按钮或菜单范式。
-- 右侧操作必须位于 flex 父级，并在最终 DOM 的直接 flex item 上使用 `ms-auto`；不得只依赖
-  `justify-content-between`，也不得假设 AdminLTE 组件会把对齐 class 转发到目标节点。实现后检查目标是否确实贴近
-  容器右边界，无法直接控制时先使用普通布局容器承接组件。
-- 不 patch/fork `node_modules`。上游成品不合格时使用官方 Bootstrap/AdminLTE 结构和现有产品行为层。
+`frontend/` 是唯一前端源码。修改本目录时先读取本文件和 `ui-policy.json`；字段、UUID、引用、
+权限、路径、保存与运行校验以后端 contract 为权威。
 
 ## 按任务读取
 
-- 只改 API 或字段映射：读取相关 `api/`、`domain/`、后端 schema 和直接测试，不扩大到视觉层。
-- 改表单或页面：读取 `.docs/management-console-ui-contract.md` 对应章节、policy 和同 archetype 页面。
-- 改壳层、主题、Modal、Toast、确认或导航：完整读取 UI contract、policy 和对应集成测试。
-- 改运行、构建、依赖或发布入口：同时读取 `../docs/development-and-release.md`。
+- API、payload 或字段映射：读取相关 `api/`、`domain/`、后端 schema 和直接测试。
+- 页面、表单、组件、布局、样式或可访问性：读取 `.docs/management-console-ui-contract.md` 的相关章节，
+  再按 `ui-patterns/README.md` 索引复用同类 pattern 和参考页。
+- 壳层、主题、Modal、Toast、确认或导航：完整读取 UI contract，并核对 `ui-policy.json` 中的受控路径。
+- 构建、依赖、运行或发布入口：读取 `../docs/development-and-release.md`。
 
-## 最小验证
+## 硬边界
 
-在 `frontend/` 内先运行：
+- 唯一视觉栈是 Vue 3、AdminLTE 4.1、Bootstrap 5.3、`@adminlte/vue` 和 Bootstrap Icons；
+  Workflow editor 只使用已有的 `@vue-flow/core`。禁止引入第二套 UI、Nuxt 或 optional plugin。
+- `ui-policy.json` 是组件、class、图标、样式入口和依赖的静态权威；正常复用批准项不需再次审批，
+  新视觉能力必须先获得用户批准并更新 policy。
+- 页面拥有展示、草稿状态、机械 payload 和请求编排；后端拥有领域、安全和最终校验。
+- 不复制后端 schema，不为旧字段增加兼容映射，不用前端判断修补后端错误。
+- 自有组件只承载真实产品行为或稳定领域组合；不建立基础控件 wrapper、schema form、页面 builder、
+  动态组件 registry 或 Storybook。
+- 页面和 editor 不写 `<style>`、内联 `style`、硬编码颜色或 policy 未批准的视觉 class；
+  不 patch 或 fork `node_modules`。
+- 详细的信息架构、Card、表单、i18n、布局和可访问性规则只维护在 UI contract，
+  不在本文件重复或记录局部页面调整。
 
-```powershell
-npm run ui:check
-```
+## 验证
 
-再按直接风险选择一项：`npm run typecheck`、相关 `npm test -- <file>` 或明确需要的 `npm run build`。
-视觉判断使用隔离 Debug + 浏览器查看受影响主题/宽度；按钮、表单和业务路径优先用自动化脚本，不靠浏览器
-逐个点击回归。最终收口才运行 Goal 指定的完整门禁。
+完成一批相关修改后，先复核 diff，并按直接风险选择 `npm run ui:check`、`npm run typecheck`、
+相关 `npm test -- <file>` 或 `npm run build` 中最接近的一项；不固定串联全部门禁。
+
+除非用户明确要求，否则禁止启动 Debug 服务、打开浏览器或执行浏览器验证。需要真实运行时必须使用
+隔离 data 和临时 loopback 端口。

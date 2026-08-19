@@ -108,11 +108,14 @@ describe('CommandEditor', () => {
 
     const emitted = wrapper.emitted('update:modelValue')?.at(-1)?.[0]
     expect(emitted).toMatchObject({
-      python_package: { folder: '', editable_files: ['main.py'] },
+      python_package: { folder: '', editable_files: ['main.py', 'requirements.txt'] },
       python_package_files: {
         template_key: '__empty__',
         revision: '',
-        files: [{ path: 'main.py', content: '', exists: false }],
+        files: [
+          { path: 'main.py', content: '', exists: false },
+          { path: 'requirements.txt', content: '', exists: false },
+        ],
       },
     })
   })

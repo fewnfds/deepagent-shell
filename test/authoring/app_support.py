@@ -41,6 +41,8 @@ def subagent_payload(
         "description": description,
         "settings": {
             "capability_overrides": capability_overrides or [],
+            "tool_refs": [],
+            "middleware_refs": [],
         },
     }
 
@@ -93,12 +95,41 @@ def agent_event_output_payload(name: str = "Development timeline") -> dict:
     }
 
 
+def custom_tool_payload(name: str = "Word count") -> dict:
+    return {
+        "name": name,
+        "python_package": {
+            "folder": "",
+            "editable_files": ["main.py", "requirements.txt"],
+        },
+        "python_package_files": {
+            "template_key": "__empty__",
+            "revision": "",
+            "files": [
+                {
+                    "path": "main.py",
+                    "content": (
+                        "from langchain.tools import tool\n"
+                        "@tool\n"
+                        "def word_count(text: str) -> int:\n"
+                        "    \"\"\"Count words.\"\"\"\n"
+                        "    return len(text.split())\n"
+                        "def create_tool():\n"
+                        "    return word_count\n"
+                    ),
+                },
+                {"path": "requirements.txt", "content": ""},
+            ],
+        },
+    }
+
+
 def block_cases(tmp_path: Path) -> list[tuple[str, dict]]:
     mapped = tmp_path / "mapped"
     mapped.mkdir()
     return [
         ("model", model_payload()),
-        ("custom-tool", {"name": "Writing tools", "tools": ["word_count"]}),
+        ("custom-tool", custom_tool_payload()),
         (
             "custom-middleware",
             {

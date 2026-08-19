@@ -9,6 +9,7 @@ import type {
   DraftValidationRequest as ApiDraftValidationRequest,
   MainAgent,
   MiddlewareReference as ApiMiddlewareReference,
+  ToolReference as ApiToolReference,
   MainAgentPayload as ApiMainAgentPayload,
   SavedBlock,
   Subagent,
@@ -26,6 +27,7 @@ type AgentCatalog = CatalogResponse
 export type StoredBlock = SavedBlock
 export type SubagentReference = ApiSubagentReference
 export type MiddlewareReference = ApiMiddlewareReference
+export type ToolReference = ApiToolReference
 
 export interface MainAgentProfile extends Omit<MainAgent, 'subagents'> {
   id: string
@@ -94,6 +96,10 @@ export function blankMiddlewareReference(): MiddlewareReference {
   return { middleware_id: '' }
 }
 
+export function blankToolReference(): ToolReference {
+  return { tool_id: '' }
+}
+
 export function normalizeSubagentReference(value: unknown): SubagentReference {
   const source = record(value)
   return { subagent_id: text(source.subagent_id) }
@@ -104,6 +110,7 @@ export function blankMainAgent(): MainAgentProfile {
     id: '',
     name: '',
     capability_refs: [],
+    tool_refs: [],
     middleware_refs: [],
     subagents: [],
   }
@@ -113,6 +120,7 @@ export function normalizeMainAgent(value: unknown): MainAgentProfile {
   const source = record(value)
   const references = Array.isArray(source.capability_refs) ? source.capability_refs : []
   const subagents = Array.isArray(source.subagents) ? source.subagents : []
+  const toolRefs = Array.isArray(source.tool_refs) ? source.tool_refs : []
   const middlewareRefs = Array.isArray(source.middleware_refs) ? source.middleware_refs : []
   return {
     id: text(source.id),
@@ -120,6 +128,10 @@ export function normalizeMainAgent(value: unknown): MainAgentProfile {
     capability_refs: references.map((item) => {
       const reference = record(item)
       return { type: text(reference.type), block_id: text(reference.block_id) }
+    }),
+    tool_refs: toolRefs.map((item) => {
+      const reference = record(item)
+      return { tool_id: text(reference.tool_id) }
     }),
     middleware_refs: middlewareRefs.map((item) => {
       const reference = record(item)
@@ -134,6 +146,9 @@ export function mainAgentPayload(value: MainAgentProfile): MainAgentPayload {
     name: value.name.trim(),
     capability_refs: value.capability_refs
       .map((reference) => ({ type: reference.type, block_id: reference.block_id })),
+    tool_refs: value.tool_refs.map((reference) => ({
+      tool_id: reference.tool_id,
+    })),
     middleware_refs: value.middleware_refs.map((reference) => ({
       middleware_id: reference.middleware_id,
     })),
@@ -160,6 +175,7 @@ export function blankSubagent(): SubagentProfile {
     description: '',
     settings: {
       capability_overrides: [],
+      tool_refs: [],
       middleware_refs: [],
     },
   }
@@ -174,6 +190,9 @@ export function normalizeSubagent(value: unknown): SubagentProfile {
   const middlewareRefs = Array.isArray(settings.middleware_refs)
     ? settings.middleware_refs
     : []
+  const toolRefs = Array.isArray(settings.tool_refs)
+    ? settings.tool_refs
+    : []
   return {
     id: text(source.id),
     component_name: text(source.component_name),
@@ -187,6 +206,10 @@ export function normalizeSubagent(value: unknown): SubagentProfile {
           mode: text(override.mode) as StoredOverrideMode,
           block_id: text(override.block_id),
         }
+      }),
+      tool_refs: toolRefs.map((item) => {
+        const reference = record(item)
+        return { tool_id: text(reference.tool_id) }
       }),
       middleware_refs: middlewareRefs.map((item) => {
         const reference = record(item)
@@ -226,6 +249,9 @@ export function subagentPayload(value: SubagentProfile): SubagentPayload {
     settings: {
       capability_overrides: value.settings.capability_overrides
         .map((selection) => ({ ...selection })),
+      tool_refs: value.settings.tool_refs.map((reference) => ({
+        tool_id: reference.tool_id,
+      })),
       middleware_refs: value.settings.middleware_refs.map((reference) => ({
         middleware_id: reference.middleware_id,
       })),

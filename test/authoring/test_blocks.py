@@ -275,7 +275,7 @@ def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) 
         if block_type == "subagent":
             assert created["instruction_override"] is None
             assert created["task_description_override"] is None
-        if block_type in {"custom-middleware", "agent-event-output"}:
+        if block_type in {"custom-tool", "custom-middleware", "agent-event-output"}:
             assert created["python_package"]["folder"] == created["id"]
         if block_type == "todo-list":
             assert created["system_prompt_override"] == payload[
@@ -291,7 +291,7 @@ def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) 
         update_payload = {**payload, "name": f"{payload['name']} updated"}
         if block_type == "model":
             update_payload["credential"] = None
-        if block_type in {"custom-middleware", "agent-event-output"}:
+        if block_type in {"custom-tool", "custom-middleware", "agent-event-output"}:
             update_payload = {
                 "name": f"{payload['name']} updated",
                 "python_package": created["python_package"],

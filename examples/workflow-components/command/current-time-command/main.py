@@ -1,3 +1,18 @@
+"""Built-in Command example.
+
+This Command reads the service-local current time once, activates one Branch
+Edge by the seconds digit, and writes the same ISO-8601 value to
+``shared_vars.current_time``. Connect Branch Edges with keys ``first`` for
+digits 0-3, ``second`` for digits 4-6, and ``last`` for digits 7-9. The value
+is kept to second precision and uses the runtime host's local timezone.
+
+The platform contract is ``create_command()`` returning an async
+``command(state, runtime)``. The branch names and State field in this example
+are application choices and should be changed to match the Workflow. The
+package uses only the Python standard library, so ``requirements.txt`` stays
+empty.
+"""
+
 from datetime import datetime
 
 

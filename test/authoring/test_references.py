@@ -3,212 +3,146 @@ from __future__ import annotations
 from .reference_support import *
 
 
-def test_default_deep_agent_tool_conflict_is_rejected_at_save(
+def test_main_agent_uses_ordered_custom_tool_references(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
-    write_custom_tool(tmp_path, "read_file", "read_file")
     blocks = create_blocks(
         client,
-        "default-tool-conflict",
+        "tool-list",
         ("model", "agent-event-output", "custom-tool"),
     )
-    selected = client.put(
-        f"/api/blocks/custom-tool/{blocks['custom-tool']['id']}",
-        json={"name": blocks["custom-tool"]["name"], "tools": ["read_file"]},
+    second = create_blocks(client, "second-tool", ("custom-tool",))["custom-tool"]
+
+    response = client.post(
+        "/api/main-agents",
+        json={
+            "name": "Tool list",
+            "capability_refs": references(
+                blocks,
+                ("model", "agent-event-output"),
+            ),
+            "tool_refs": [
+                {"tool_id": second["id"]},
+                {"tool_id": blocks["custom-tool"]["id"]},
+            ],
+        },
     )
-    assert selected.status_code == 200, selected.text
+
+    assert response.status_code == 200, response.text
+    assert response.json()["tool_refs"] == [
+        {"tool_id": second["id"]},
+        {"tool_id": blocks["custom-tool"]["id"]},
+    ]
+
+
+def test_custom_tool_is_not_a_single_capability_or_subagent_override(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = make_client(tmp_path, monkeypatch)
+    blocks = create_blocks(
+        client,
+        "tool-contract",
+        ("model", "agent-event-output", "custom-tool"),
+    )
 
     main_agent = client.post(
         "/api/main-agents",
         json={
-            "name": "Default tool conflict",
+            "name": "Old tool selection",
             "capability_refs": references(
                 blocks,
                 ("model", "agent-event-output", "custom-tool"),
             ),
         },
     )
-
-    assert main_agent.status_code == 422
-    issues = main_agent.json()["detail"]["validation"]["issues"]
-    assert any(
-        issue["code"] == "assembly.tool_name_conflict"
-        and issue["path"] == "tools.read_file"
-        for issue in issues
-    )
-
-
-def test_minimal_filesystem_allows_non_read_file_tool_names(
-    tmp_path: Path, monkeypatch
-) -> None:
-    client = make_client(tmp_path, monkeypatch)
-    write_custom_tool(tmp_path, "workspace_list", "ls")
-    blocks = create_blocks(
-        client,
-        "minimal-filesystem",
-        ("model", "agent-event-output", "custom-tool"),
-    )
-    selected = client.put(
-        f"/api/blocks/custom-tool/{blocks['custom-tool']['id']}",
-        json={"name": blocks["custom-tool"]["name"], "tools": ["workspace_list"]},
-    )
-    assert selected.status_code == 200, selected.text
-
-    main_agent = client.post(
-        "/api/main-agents",
-        json={
-            "name": "Minimal filesystem",
-            "capability_refs": references(
-                blocks,
-                ("model", "agent-event-output", "custom-tool"),
-            ),
-        },
-    )
-
-    assert main_agent.status_code == 200, main_agent.text
-
-
-def test_block_update_rejects_new_conflict_in_referencing_main_agent(
-    tmp_path: Path, monkeypatch
-) -> None:
-    client = make_client(tmp_path, monkeypatch)
-    write_custom_tool(tmp_path, "safe_tool", "safe_tool")
-    write_custom_tool(tmp_path, "write_todos", "write_todos")
-    blocks = create_blocks(
-        client,
-        "impact",
-        ("model", "agent-event-output", "todo-list", "custom-tool"),
-    )
-    safe = client.put(
-        f"/api/blocks/custom-tool/{blocks['custom-tool']['id']}",
-        json={"name": blocks["custom-tool"]["name"], "tools": ["safe_tool"]},
-    )
-    assert safe.status_code == 200, safe.text
-    main_agent = client.post(
-        "/api/main-agents",
-        json={
-            "name": "Protected Main Agent",
-            "capability_refs": references(
-                blocks,
-                ("model", "agent-event-output", "todo-list", "custom-tool"),
-            ),
-        },
-    )
-    assert main_agent.status_code == 200, main_agent.text
-
-    rejected = client.put(
-        f"/api/blocks/custom-tool/{blocks['custom-tool']['id']}",
-        json={"name": blocks["custom-tool"]["name"], "tools": ["write_todos"]},
-    )
-
-    assert rejected.status_code == 422
-    issues = rejected.json()["detail"]["validation"]["issues"]
-    assert any(issue["code"] == "assembly.tool_name_conflict" for issue in issues)
-    stored = client.get(
-        f"/api/blocks/custom-tool/{blocks['custom-tool']['id']}"
-    ).json()
-    assert stored["tools"] == ["safe_tool"]
-
-def test_static_tool_conflicts_use_ast_declared_name_not_resource_filename(
-    tmp_path: Path, monkeypatch
-) -> None:
-    client = make_client(tmp_path, monkeypatch)
-    write_custom_tool(tmp_path, "write_todos", "renamed_runtime_tool")
-    blocks = create_blocks(
-        client,
-        "declared-tool-name",
-        ("model", "agent-event-output", "todo-list", "custom-tool"),
-    )
-    selected = client.put(
-        f"/api/blocks/custom-tool/{blocks['custom-tool']['id']}",
-        json={"name": blocks["custom-tool"]["name"], "tools": ["write_todos"]},
-    )
-    assert selected.status_code == 200, selected.text
-
-    main_agent = client.post(
-        "/api/main-agents",
-        json={
-            "name": "No false tool conflict",
-            "capability_refs": references(
-                blocks,
-                ("model", "agent-event-output", "todo-list", "custom-tool"),
-            ),
-        },
-    )
-
-    assert main_agent.status_code == 200, main_agent.text
-
-def test_override_update_rejects_new_conflict_in_bound_subagent(
-    tmp_path: Path, monkeypatch
-) -> None:
-    client = make_client(tmp_path, monkeypatch)
-    write_custom_tool(tmp_path, "safe_tool", "safe_tool")
-    write_custom_tool(tmp_path, "write_todos", "write_todos")
-    blocks = create_blocks(
-        client,
-        "override-impact",
-        ("model", "agent-event-output", "todo-list", "subagent"),
-    )
-    delegation = client.put(
-        f"/api/blocks/subagent/{blocks['subagent']['id']}",
-        json={"name": blocks["subagent"]["name"]},
-    )
-    assert delegation.status_code == 200, delegation.text
-    safe_tool = client.post(
-        "/api/blocks/custom-tool",
-        json={"name": "Safe child tools", "tools": ["safe_tool"]},
-    ).json()
-    conflict_tool = client.post(
-        "/api/blocks/custom-tool",
-        json={"name": "Conflicting child tools", "tools": ["write_todos"]},
-    ).json()
     subagent = client.post(
         "/api/subagents",
         json=subagent_payload(
-            "Bound Subagent",
-            name="worker",
-            description="Handle delegated work.",
-            capability_overrides=[
-                {"type": "custom-tool", "mode": "replace", "block_id": safe_tool["id"]}
-            ],
-        ),
-    )
-    assert subagent.status_code == 200, subagent.text
-    main_agent = client.post(
-        "/api/main-agents",
-        json={
-            "name": "Delegating Main Agent",
-            "capability_refs": references(
-                blocks,
-                ("model", "agent-event-output", "todo-list", "subagent"),
-            ),
-            "subagents": [{"subagent_id": subagent.json()["id"]}],
-        },
-    )
-    assert main_agent.status_code == 200, main_agent.text
-
-    rejected = client.put(
-        f"/api/subagents/{subagent.json()['id']}",
-        json=subagent_payload(
-            "Bound Subagent",
-            name="worker",
-            description="Handle delegated work.",
+            "Old tool override",
             capability_overrides=[
                 {
                     "type": "custom-tool",
                     "mode": "replace",
-                    "block_id": conflict_tool["id"],
+                    "block_id": blocks["custom-tool"]["id"],
                 }
             ],
         ),
     )
 
-    assert rejected.status_code == 422
-    issues = rejected.json()["detail"]["validation"]["issues"]
-    assert any(issue["code"] == "assembly.tool_name_conflict" for issue in issues)
-    stored = client.get(f"/api/subagents/{subagent.json()['id']}").json()
-    assert stored["settings"]["capability_overrides"][0]["block_id"] == safe_tool["id"]
+    assert main_agent.status_code == 422
+    assert subagent.status_code == 422
+    assert main_agent.json()["detail"]["validation"]["issues"][0]["code"].startswith(
+        "contract."
+    )
+    assert subagent.json()["detail"]["validation"]["issues"][0]["code"].startswith(
+        "contract."
+    )
+
+
+def test_missing_custom_tool_reference_is_reported(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = make_client(tmp_path, monkeypatch)
+    blocks = create_blocks(
+        client,
+        "missing-tool",
+        ("model", "agent-event-output"),
+    )
+
+    response = client.post(
+        "/api/main-agents",
+        json={
+            "name": "Missing tool",
+            "capability_refs": references(
+                blocks,
+                ("model", "agent-event-output"),
+            ),
+            "tool_refs": [
+                {"tool_id": "00000000-0000-0000-0000-000000000099"}
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+    issue = response.json()["detail"]["validation"]["issues"][0]
+    assert issue["code"] == "assembly.reference_not_found"
+    assert issue["path"] == "tool_refs[0].tool_id"
+
+
+def test_main_agent_and_subagent_have_independent_tool_lists(
+    tmp_path: Path, monkeypatch
+) -> None:
+    client = make_client(tmp_path, monkeypatch)
+    blocks = create_blocks(
+        client,
+        "tool-owners",
+        ("model", "agent-event-output", "subagent", "custom-tool"),
+    )
+    child_tool = create_blocks(client, "child-tool", ("custom-tool",))["custom-tool"]
+    child_payload = subagent_payload("Tool worker")
+    child_payload["settings"]["tool_refs"] = [{"tool_id": child_tool["id"]}]
+    child = client.post("/api/subagents", json=child_payload)
+    assert child.status_code == 200, child.text
+
+    response = client.post(
+        "/api/main-agents",
+        json={
+            "name": "Independent tools",
+            "capability_refs": references(
+                blocks,
+                ("model", "agent-event-output", "subagent"),
+            ),
+            "tool_refs": [{"tool_id": blocks["custom-tool"]["id"]}],
+            "subagents": [{"subagent_id": child.json()["id"]}],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    stored_child = client.get(f"/api/subagents/{child.json()['id']}").json()
+    assert stored_child["settings"]["tool_refs"] == [{"tool_id": child_tool["id"]}]
+
+
 def test_generic_draft_validation_covers_each_target_without_writing(
     tmp_path: Path, monkeypatch
 ) -> None:

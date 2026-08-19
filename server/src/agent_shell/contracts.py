@@ -27,10 +27,6 @@ from agent_shell.capability_manifest import (
 from agent_shell.command import CommandBlock
 from agent_shell.model_provider_contracts import validate_provider_settings
 from agent_shell.provider_integrations import bundled_provider_ids
-from agent_shell.registries.custom_tools import (
-    CUSTOM_TOOL_RESOURCE_NAME_MAX_LENGTH,
-    CUSTOM_TOOL_RESOURCE_NAME_PATTERN,
-)
 from agent_shell.registries.skills import SKILL_NAME_MAX_LENGTH, skill_name_issue
 from agent_shell.task_dispatcher import TaskDispatcherBlock
 from agent_shell.workflow_event_output import WorkflowEventOutputBlock
@@ -46,14 +42,6 @@ TASK_DESCRIPTION_FIELDS = ("available_agents",)
 
 
 BlockName = Annotated[str, Field(min_length=1, max_length=120)]
-Identifier = Annotated[
-    str,
-    Field(
-        min_length=1,
-        max_length=CUSTOM_TOOL_RESOURCE_NAME_MAX_LENGTH,
-        pattern=CUSTOM_TOOL_RESOURCE_NAME_PATTERN,
-    ),
-]
 SkillName = Annotated[
     str,
     Field(min_length=1, max_length=SKILL_NAME_MAX_LENGTH),
@@ -295,12 +283,7 @@ class ModelBlock(StrictBlock):
         return value
 
 class CustomToolBlock(StrictBlock):
-    tools: list[Identifier] = Field(default_factory=list, max_length=200)
-
-    @field_validator("tools")
-    @classmethod
-    def unique_tools(cls, values: list[str]) -> list[str]:
-        return list(dict.fromkeys(values))
+    python_package: PythonPackageReference
 
 
 class CustomMiddlewareBlock(StrictBlock):
@@ -775,9 +758,9 @@ class CapabilityReference(BaseModel):
         manifest = CAPABILITY_BY_TYPE.get(value)
         if manifest is None:
             raise ValueError(f"unknown Main Agent capability: {value}")
-        if value == "custom-middleware":
+        if value in {"custom-middleware", "custom-tool"}:
             raise ValueError(
-                "custom-middleware must be selected through middleware_refs"
+                f"{value} must be selected through its ordered reference list"
             )
         return value
 
@@ -788,8 +771,15 @@ class MiddlewareReference(BaseModel):
     middleware_id: RequiredReference
 
 
+class ToolReference(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    tool_id: RequiredReference
+
+
 class MainAgentProfile(StrictBlock):
     capability_refs: list[CapabilityReference] = Field(default_factory=list, max_length=100)
+    tool_refs: list[ToolReference] = Field(default_factory=list, max_length=100)
     middleware_refs: list[MiddlewareReference] = Field(default_factory=list, max_length=100)
     subagents: list[SubagentReference] = Field(default_factory=list, max_length=100)
 
@@ -798,6 +788,9 @@ class MainAgentProfile(StrictBlock):
         capability_types = [item.type for item in self.capability_refs]
         if len(capability_types) != len(set(capability_types)):
             raise ValueError("Main Agent capability_refs must contain at most one item per type")
+        tool_ids = [item.tool_id for item in self.tool_refs]
+        if len(tool_ids) != len(set(tool_ids)):
+            raise ValueError("Main Agent tool_refs must not contain duplicates")
         middleware_ids = [item.middleware_id for item in self.middleware_refs]
         if len(middleware_ids) != len(set(middleware_ids)):
             raise ValueError("Main Agent middleware_refs must not contain duplicates")
@@ -817,7 +810,7 @@ class CapabilityOverride(BaseModel):
         manifest = CAPABILITY_BY_TYPE.get(value)
         if (
             manifest is None
-            or value == "custom-middleware"
+            or value in {"custom-middleware", "custom-tool"}
             or not manifest.subagent_overrideable
         ):
             raise ValueError(f"capability is not overrideable by Subagent: {value}")
@@ -841,6 +834,7 @@ class SubagentSettings(BaseModel):
     capability_overrides: list[CapabilityOverride] = Field(
         default_factory=list, max_length=100
     )
+    tool_refs: list[ToolReference] = Field(default_factory=list, max_length=100)
     middleware_refs: list[MiddlewareReference] = Field(default_factory=list, max_length=100)
 
     @model_validator(mode="after")
@@ -850,6 +844,9 @@ class SubagentSettings(BaseModel):
             raise ValueError(
                 "Subagent capability_overrides must contain at most one item per type"
             )
+        tool_ids = [item.tool_id for item in self.tool_refs]
+        if len(tool_ids) != len(set(tool_ids)):
+            raise ValueError("Subagent tool_refs must not contain duplicates")
         middleware_ids = [item.middleware_id for item in self.middleware_refs]
         if len(middleware_ids) != len(set(middleware_ids)):
             raise ValueError("Subagent middleware_refs must not contain duplicates")

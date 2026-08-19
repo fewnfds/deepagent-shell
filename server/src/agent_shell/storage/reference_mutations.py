@@ -14,6 +14,17 @@ def detach_agent_block_references(
             if not isinstance(record, dict):
                 continue
             if key == "main_agents":
+                if block_type == "custom-tool":
+                    tool_refs = record.get("tool_refs")
+                    if isinstance(tool_refs, list):
+                        record["tool_refs"] = [
+                            item
+                            for item in tool_refs
+                            if not (
+                                isinstance(item, dict)
+                                and item.get("tool_id") in block_ids
+                            )
+                        ]
                 if block_type == "custom-middleware":
                     middleware_refs = record.get("middleware_refs")
                     if isinstance(middleware_refs, list):
@@ -63,6 +74,17 @@ def detach_agent_block_references(
                         if not (
                             isinstance(item, dict)
                             and item.get("middleware_id") in block_ids
+                        )
+                    ]
+            if block_type == "custom-tool" and isinstance(settings, dict):
+                tool_refs = settings.get("tool_refs")
+                if isinstance(tool_refs, list):
+                    settings["tool_refs"] = [
+                        item
+                        for item in tool_refs
+                        if not (
+                            isinstance(item, dict)
+                            and item.get("tool_id") in block_ids
                         )
                     ]
 

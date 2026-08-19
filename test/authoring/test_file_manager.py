@@ -69,7 +69,6 @@ def test_file_manager_completes_common_file_and_text_workflows(
         "scopes": [
             "files",
             "skills",
-            "custom_tools",
             "python_templates",
         ]
     }

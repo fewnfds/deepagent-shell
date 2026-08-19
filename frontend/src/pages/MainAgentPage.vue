@@ -7,6 +7,7 @@ import PageShell from '@/components/PageShell.vue'
 import MiddlewareReferencesEditor from '@/components/MiddlewareReferencesEditor.vue'
 import RecordPicker from '@/components/RecordPicker.vue'
 import SubagentReferencesEditor from '@/components/SubagentReferencesEditor.vue'
+import ToolReferencesEditor from '@/components/ToolReferencesEditor.vue'
 import ValidationChecklist from '@/components/ValidationChecklist.vue'
 import { useConfigurationValidation } from '@/composables/useConfigurationValidation'
 import { useManagementError } from '@/composables/useManagementError'
@@ -54,7 +55,7 @@ let profileLoadSequence = 0
 const obsoleteReferences = computed(() => {
   const supported = new Set<string>(
     manifests.value
-      .filter((manifest) => manifest.type !== 'custom-middleware')
+      .filter((manifest) => !['custom-middleware', 'custom-tool'].includes(manifest.type))
       .map((manifest) => manifest.type),
   )
   return form.value.capability_refs
@@ -64,6 +65,7 @@ const obsoleteReferences = computed(() => {
 const workspaceCapabilityTypes = new Set<CapabilityType>([
   'filesystem',
   'filesystem-permissions',
+  'custom-tool',
   'custom-middleware',
 ])
 const generalManifests = computed(() => manifests.value.filter(
@@ -413,6 +415,12 @@ watch(
             </div>
           </div>
         </section>
+
+        <ToolReferencesEditor
+          v-model:references="form.tool_refs"
+          id-prefix="main-agent-tool"
+          :tools="capabilityBlocks('custom-tool')"
+        />
 
         <MiddlewareReferencesEditor
           v-model:references="form.middleware_refs"

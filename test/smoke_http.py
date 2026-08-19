@@ -101,7 +101,32 @@ def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> d
             "response_format": None,
             "model_settings": {},
         },
-        "custom-tool": {"name": name, "tools": []},
+        "custom-tool": {
+            "name": name,
+            "python_package": {
+                "folder": "",
+                "editable_files": ["main.py", "requirements.txt"],
+            },
+            "python_package_files": {
+                "template_key": "__empty__",
+                "revision": "",
+                "files": [
+                    {
+                        "path": "main.py",
+                        "content": (
+                            "from langchain.tools import tool\n"
+                            "@tool\n"
+                            "def smoke_tool(value: str) -> str:\n"
+                            "    \"\"\"Return the supplied value.\"\"\"\n"
+                            "    return value\n"
+                            "def create_tool():\n"
+                            "    return smoke_tool\n"
+                        ),
+                    },
+                    {"path": "requirements.txt", "content": ""},
+                ],
+            },
+        },
         "agent-event-output": {
             "name": name,
             "python_package": {
@@ -274,7 +299,7 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
         _request(client, "GET", "/v1/unknown", headers=inference, expected=404)
         catalog = _request(client, "GET", "/api/catalog", headers=management).json()
         assert tuple(item["type"] for item in catalog["block_types"]) == CAPABILITY_TYPES
-        _request(client, "GET", "/api/tools/custom", headers=management)
+        _request(client, "GET", "/api/python-package-templates/custom-tool", headers=management)
         _request(client, "GET", "/api/python-package-templates/middleware", headers=management)
         _request(client, "GET", "/api/python-package-templates/agent-event-output", headers=management)
         _request(client, "GET", "/api/python-package-templates/workflow-event-output", headers=management)
@@ -340,7 +365,7 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
                 provider_secret,
                 update=True,
             )
-            if capability_type == "agent-event-output":
+            if capability_type in {"custom-tool", "agent-event-output"}:
                 update_payload["python_package"] = created["python_package"]
                 update_payload["python_package_files"] = created[
                     "python_package_files"

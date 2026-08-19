@@ -80,8 +80,23 @@ describe('block adapters', () => {
   it('keeps the configuration extension reference and file payload mechanical', () => {
     const toolDraft = customToolAdapter.blank()
     toolDraft.name = ' Tools '
-    toolDraft.tools = ['one', ' one ', '', 'two']
-    expect(customToolAdapter.toPayload(toolDraft)).toEqual({ name: 'Tools', tools: ['one', 'two'] })
+    toolDraft.python_package.editable_files = ['main.py', 'requirements.txt']
+    toolDraft.python_package_files.files = [
+      { path: 'main.py', content: 'def create_tool():\n    return tool\n' },
+      { path: 'requirements.txt', content: '' },
+    ]
+    expect(customToolAdapter.toPayload(toolDraft)).toEqual({
+      name: 'Tools',
+      python_package: { folder: '', editable_files: ['main.py', 'requirements.txt'] },
+      python_package_files: {
+        template_key: '',
+        revision: '',
+        files: [
+          { path: 'main.py', content: 'def create_tool():\n    return tool\n' },
+          { path: 'requirements.txt', content: '' },
+        ],
+      },
+    })
 
     const middlewareDraft = customMiddlewareAdapter.fromApi({
       id: 'middleware-id',
@@ -157,9 +172,23 @@ describe('block adapters', () => {
     expect(model.model_settings).toBe('{}')
     expect(model).not.toHaveProperty('legacy_parameter')
 
-    expect(customToolAdapter.fromApi({
-      id: 'tools', name: 'Tools', tools: ['kept', 42], legacy: true,
-    } as never)).toEqual({ id: 'tools', name: 'Tools', tools: ['kept'] })
+    const malformedTool = customToolAdapter.fromApi({
+      id: 'tools', name: 'Tools',
+      python_package: {
+        folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        editable_files: ['main.py', 42],
+      },
+      python_package_files: {
+        files: ['invalid'],
+        revision: 7,
+      },
+    } as never)
+    expect(malformedTool.python_package).toEqual({
+      folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', editable_files: ['main.py'],
+    })
+    expect(malformedTool.python_package_files).toMatchObject({
+      files: [{ path: 'main.py', content: '', exists: false }], revision: '',
+    })
 
     const middleware = customMiddlewareAdapter.fromApi({
       id: 'middleware', name: 'Middleware',

@@ -93,7 +93,6 @@ def create_app(
                 "Restrict the management settings file to the service account.",
             )
         environment_permissions = (environment_permission,)
-    custom_tools_dir = settings.resolved_custom_tools_dir()
     python_templates_dir = settings.resolved_python_templates_dir()
     python_package_instances_dir = settings.resolved_python_package_instances_dir()
     skills_dir = settings.resolved_skills_dir()
@@ -147,7 +146,6 @@ def create_app(
         block_store,
         config_store,
         python_package_validation,
-        custom_tools_dir=custom_tools_dir,
     )
     api_server_store = ApiServerStore(database, configuration, event_logger)
     try:
@@ -191,7 +189,6 @@ def create_app(
         {
             "files": settings.resolved_files_dir(),
             "skills": skills_dir,
-            "custom_tools": custom_tools_dir,
             "python_templates": python_templates_dir,
         },
         settings.resolved_runtime_dir() / "tmp",
@@ -199,7 +196,6 @@ def create_app(
     system_settings = SystemSettingsService(settings, api_server_store.api_key, configuration)
     agent_runtime = RequestSnapshotRuntime(
         configuration,
-        custom_tools_dir=custom_tools_dir,
         python_packages_dir=python_package_instances_dir,
         runtime_dir=runtime_dir,
         skills_dir=skills_dir,
@@ -476,7 +472,6 @@ def create_app(
         build_router(
             block_store,
             config_store,
-            custom_tools_dir,
             skills_dir,
             secret_resolver,
             configuration_validation,

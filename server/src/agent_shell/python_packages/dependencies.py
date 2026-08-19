@@ -349,6 +349,7 @@ def prepare_windows_dependencies(
     )
     from agent_shell.middleware_packages.packages import resolve_middleware_package
     from agent_shell.task_dispatcher_packages import resolve_task_dispatcher_package
+    from agent_shell.tool_packages import resolve_tool_package
     from agent_shell.storage.file_config import FileConfigRepository
 
     manifest = _runtime_manifest(runtime_root)
@@ -418,6 +419,10 @@ def prepare_windows_dependencies(
             for reference in agent.get("capability_refs", []):
                 if isinstance(reference, dict) and reference.get("type") == component_type:
                     found.add(str(reference.get("block_id", "")))
+            if component_type == "custom-tool":
+                for reference in agent.get("tool_refs", []):
+                    if isinstance(reference, dict):
+                        found.add(str(reference.get("tool_id", "")))
             if component_type == "custom-middleware":
                 for reference in agent.get("middleware_refs", []):
                     if isinstance(reference, dict):
@@ -440,6 +445,10 @@ def prepare_windows_dependencies(
                     and override.get("mode") == "replace"
                 ):
                     found.add(str(override.get("block_id", "")))
+            if component_type == "custom-tool" and isinstance(settings, dict):
+                for reference in settings.get("tool_refs", []):
+                    if isinstance(reference, dict):
+                        found.add(str(reference.get("tool_id", "")))
             if component_type == "custom-middleware" and isinstance(settings, dict):
                 for reference in settings.get("middleware_refs", []):
                     if isinstance(reference, dict):
@@ -448,6 +457,11 @@ def prepare_windows_dependencies(
 
     records: list[dict[str, object]] = []
     resolver_specs = {
+        "custom-tool": (
+            resolve_tool_package,
+            "tool",
+            "agent-tool",
+        ),
         "agent-event-output": (
             resolve_agent_event_output_package,
             "event-output",

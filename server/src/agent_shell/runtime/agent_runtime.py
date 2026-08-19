@@ -21,6 +21,7 @@ from agent_shell.event_output_packages import (
     EventOutputPackageRuntime,
 )
 from agent_shell.task_dispatcher_packages import TaskDispatcherPackageRuntime
+from agent_shell.tool_packages import ToolPackageRuntime
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.diagnostics import (
     RuntimeDiagnosticContext,
@@ -70,7 +71,9 @@ class RunExecution:
     normalizer: V3EventNormalizer
     middleware_runtime: MiddlewarePackageRuntime | None
     media_response: MainAgentMediaResponse
+    tool_runtime: ToolPackageRuntime | None = None
     middleware_runtimes: tuple[MiddlewarePackageRuntime, ...] = ()
+    tool_runtimes: tuple[ToolPackageRuntime, ...] = ()
     command_runtime: CommandPackageRuntime | None = None
     task_dispatcher_runtime: TaskDispatcherPackageRuntime | None = None
     event_output_runtimes: tuple[EventOutputPackageRuntime, ...] = ()
@@ -161,6 +164,13 @@ class RunExecution:
                 if runtime is not None
             )
             for runtime in runtimes:
+                await runtime.close()
+            tool_runtimes = tuple(
+                runtime
+                for runtime in (self.tool_runtime, *self.tool_runtimes)
+                if runtime is not None
+            )
+            for runtime in tool_runtimes:
                 await runtime.close()
             if self.command_runtime is not None:
                 await self.command_runtime.close()
@@ -743,6 +753,7 @@ class AgentRuntime:
             graph=effective_graph,
             input_state=effective_input_state,
             middleware_runtime=(built.middleware_runtime if built is not None else None),
+            tool_runtime=(built.tool_runtime if built is not None else None),
             media_response=MainAgentMediaResponse(self._media_outputs, request_id),
             rectifier=OutputEventRectifier(projector),
             normalizer=V3EventNormalizer(
@@ -768,6 +779,10 @@ class AgentRuntime:
             event_observers=tuple(observers),
             middleware_runtimes=tuple(
                 agent.middleware_runtime
+                for _, agent in workflow_agents[1:]
+            ),
+            tool_runtimes=tuple(
+                agent.tool_runtime
                 for _, agent in workflow_agents[1:]
             ),
             command_runtime=command_runtime,
@@ -1308,6 +1323,7 @@ class AgentRuntime:
             )
         except asyncio.CancelledError:
             for _, agent in built_agents:
+                await agent.tool_runtime.close()
                 await agent.middleware_runtime.close()
             await close_workflow_package_runtimes()
             self._finish_run_observation(
@@ -1325,6 +1341,7 @@ class AgentRuntime:
             raise
         except Exception as exc:
             for _, agent in built_agents:
+                await agent.tool_runtime.close()
                 await agent.middleware_runtime.close()
             await close_workflow_package_runtimes()
             error_code = (

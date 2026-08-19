@@ -10,6 +10,10 @@ def build_python_package_router(
 ) -> APIRouter:
     router = APIRouter()
 
+    @router.get("/api/python-package-templates/custom-tool")
+    async def custom_tool_templates() -> dict[str, object]:
+        return authoring.template_catalog("custom-tool")
+
     @router.get("/api/python-package-templates/middleware")
     async def middleware_templates() -> dict[str, object]:
         return authoring.template_catalog("custom-middleware")

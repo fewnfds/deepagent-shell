@@ -49,16 +49,19 @@ Provider 和 Provider-specific field 以 Model page 及 backend validation 为�
 ## Agent Event Output
 
 Main Agent 的 required reference 包含一个 `agent-event-output` package。先从 template catalog 选择源码，或使用 `__empty__`
-提交完整 `main.py`：
+提交完整 `main.py` 和空的 `requirements.txt`：
 
 ```json
 {
   "name": "Primary agent output",
-  "python_package": {"folder": "", "editable_files": ["main.py"]},
+  "python_package": {"folder": "", "editable_files": ["main.py", "requirements.txt"]},
   "python_package_files": {
     "template_key": "__empty__",
     "revision": "",
-    "files": [{"path": "main.py", "content": "<complete source>"}]
+    "files": [
+      {"path": "main.py", "content": "<complete source>"},
+      {"path": "requirements.txt", "content": ""}
+    ]
   }
 }
 ```
@@ -132,6 +135,9 @@ Content-Type: application/json
     {"type": "model", "block_id": "<model UUID>"},
     {"type": "agent-event-output", "block_id": "<agent-event-output UUID>"}
   ],
+  "tool_refs": [
+    {"tool_id": "<custom-tool UUID>"}
+  ],
   "middleware_refs": [
     {"middleware_id": "<WIC UUID>"}
   ],
@@ -141,6 +147,10 @@ Content-Type: application/json
 
 `middleware_refs` 有顺序：LangChain 的 `before_*` hook 正序执行，`after_*` 逆序执行，`wrap_*` 按列表嵌套。
 多个 Middleware 改写 `messages` 时，list order 决定组合方式。
+
+`tool_refs` 也有顺序；每个引用对应一个独立 Custom Tool Python extension。Main Agent 与 Subagent 分别维护自己的 Tool 列表，
+不会通过 capability override 继承、替换或关闭。扩展的 `create_tool()` 返回一个 LangChain `BaseTool`，最后按这个列表传给
+`create_deep_agent(tools=...)`。
 
 ## 可选 Subagent
 
@@ -155,13 +165,14 @@ POST /api/subagents
   "description": "Researches the delegated question and returns concise evidence with sources.",
   "settings": {
     "capability_overrides": [],
+    "tool_refs": [],
     "middleware_refs": []
   }
 }
 ```
 
 然后把 `{"subagent_id":"<UUID>"}` 加入 Main Agent 的 `subagents`。Subagent 默认继承 Main Agent 的 inheritable capability；不同的
-Model、system prompt、Tool 或 Filesystem Permissions 通过 `replace`/`disabled` override 表达。Main Agent 引用 `subagent` delegation capability component 后，
+Model、system prompt 或 Filesystem Permissions 通过 `replace`/`disabled` override 表达，Tool 通过自己的 `settings.tool_refs` 独立装配。Main Agent 引用 `subagent` delegation capability component 后，
 `task` Tool description 与 routing prompt 来自当前业务配置。
 
 Subagent 的 `name` 是 Model-visible routing name；清楚描述 delegation timing、职责和 return content 有助于 Model routing。当前 contract 只支持

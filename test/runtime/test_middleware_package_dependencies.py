@@ -39,6 +39,33 @@ def write_package(root: Path, owner_id: str, package_id: str) -> tuple[str, Path
     return folder_name, folder
 
 
+def write_tool_package(root: Path, owner_id: str) -> tuple[str, Path]:
+    folder = root / "agent-tool" / owner_id
+    folder.mkdir(parents=True)
+    (folder / "package.json").write_text(
+        json.dumps(
+            {
+                "format_version": 1,
+                "id": owner_id,
+                "family": "tool",
+                "adapter": "agent-tool",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (folder / "main.py").write_text(
+        "from langchain.tools import tool\n"
+        "@tool\n"
+        "def dependency_tool(value: str) -> str:\n"
+        "    \"\"\"Return a value.\"\"\"\n"
+        "    return value\n"
+        "def create_tool():\n"
+        "    return dependency_tool\n",
+        encoding="utf-8",
+    )
+    return owner_id, folder
+
+
 def write_runtime_manifest(runtime_root: Path) -> None:
     manifest = runtime_root / "app" / "runtime-manifest.json"
     manifest.parent.mkdir(parents=True)
@@ -105,6 +132,9 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
         "idna==3.10\n", encoding="utf-8"
     )
     (folder / "requirements.txt").write_text("Pillow==12.0.0\n", encoding="utf-8")
+    tool_owner_id = "56565656-5656-4656-8656-565656565656"
+    tool_folder_name, tool_folder = write_tool_package(packages, tool_owner_id)
+    (tool_folder / "requirements.txt").write_text("idna==3.10\n", encoding="utf-8")
     invalid_owner_id = "12121212-1212-4212-8212-121212121212"
     invalid_package_id = "34343434-3434-4434-8434-343434343434"
     invalid_folder_name, invalid_folder = write_package(
@@ -123,6 +153,17 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
         },
     )
     block_store.save_block(
+        "custom-tool",
+        tool_owner_id,
+        {
+            "name": "dependency tool",
+            "python_package": {
+                "folder": tool_folder_name,
+                "editable_files": ["main.py", "requirements.txt"],
+            },
+        },
+    )
+    block_store.save_block(
         "custom-middleware",
         invalid_owner_id,
         {
@@ -137,6 +178,7 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
         {
             "name": "Main",
             "capability_refs": [],
+            "tool_refs": [{"tool_id": tool_owner_id}],
             "middleware_refs": [
                 {"middleware_id": owner_id},
                 {"middleware_id": invalid_owner_id},
@@ -176,6 +218,7 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
         calls.append(arguments)
         target = Path(arguments[arguments.index("--target") + 1])
         (target / "PIL").mkdir()
+        (target / "idna").mkdir()
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(dependencies.subprocess, "run", successful_install)
@@ -184,11 +227,15 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
     assert "resource.error.pythonPackage.syntax" in output
     assert "Python requirements:" in output
     assert "Pillow==12.0.0" in output
+    assert "idna==3.10" in output
 
     state = dependencies.load_dependency_state(runtime_root)
     assert state is not None
     assert state["status"] == "ready"
-    assert set(state["records"]) == {f"python-package:{owner_id}"}
+    assert set(state["records"]) == {
+        f"python-package:{owner_id}",
+        f"python-package:{tool_owner_id}",
+    }
     assert f"python-package:{unused_owner_id}" not in state["records"]
     assert f"python-package:{invalid_owner_id}" not in state["records"]
     assert all(item["status"] == "ready" for item in state["records"].values())

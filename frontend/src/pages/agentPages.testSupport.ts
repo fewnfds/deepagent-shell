@@ -92,6 +92,16 @@ export const middlewareManifest: CapabilityManifest = {
   subagent_policy: 'force-remove',
 }
 
+export const toolManifest: CapabilityManifest = {
+  ...modelManifest,
+  type: 'custom-tool',
+  terminology_key: 'custom-tool',
+  order: 6,
+  subagent_overrideable: false,
+  required: false,
+  subagent_policy: 'force-remove',
+}
+
 export const agentEventOutputManifest: CapabilityManifest = {
   ...modelManifest,
   type: 'agent-event-output',
@@ -116,6 +126,7 @@ export function service(overrides: Partial<AgentAuthoringService> = {}): AgentAu
     id: '00000000-0000-0000-0000-000000000010',
     name: 'Shared name',
     capability_refs: [],
+    tool_refs: [],
     middleware_refs: [],
     subagents: [],
   }
@@ -126,6 +137,7 @@ export function service(overrides: Partial<AgentAuthoringService> = {}): AgentAu
     description: 'Handles delegated work.',
     settings: {
       capability_overrides: [],
+      tool_refs: [],
       middleware_refs: [],
     },
   }

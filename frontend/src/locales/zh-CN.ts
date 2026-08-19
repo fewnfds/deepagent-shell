@@ -526,7 +526,7 @@ export const zhCN = {
     },
     'custom-tool': {
       label: '自定义工具',
-      description: '从本地静态扫描结果选择 Agent 工具',
+      description: '由一个配置独占的 Python 扩展导出一个 LangChain Tool',
     },
     skill: {
       label: 'Skill',
@@ -734,9 +734,7 @@ export const zhCN = {
       modelSettingsHint: '模型绑定参数 JSON 对象；不要填写密钥或重复上面两个字段。',
     },
     customTool: {
-      namePlaceholder: '例如：写作工具集',
-      catalogTitle: '本地工具扫描',
-      emptyCatalog: '当前没有可选择的自定义工具。',
+      namePlaceholder: '例如：字数统计',
     },
     pythonPackage: {
       title: 'Python 扩展',
@@ -1287,6 +1285,12 @@ export const zhCN = {
       noReferences: '尚未装配 Middleware。',
       reference: 'Middleware 配置',
     },
+    tool: {
+      referencesTitle: 'Custom Tool 排列',
+      addReference: '添加 Custom Tool',
+      noReferences: '尚未装配 Custom Tool。',
+      reference: 'Custom Tool 配置',
+    },
     workspace: {
       title: '文件工作区',
     },
@@ -1339,7 +1343,6 @@ export const zhCN = {
       providerUnavailable: '从当前版本支持的 Provider 列表中重新选择适配器，然后重新保存。',
       baseUrlInvalid: '将{field}改为不含用户名、密码、查询参数或片段的 HTTP(S) 地址，然后重新保存。',
       credentialMasked: '请重新填写真实访问凭据；星号或圆点遮罩文本不能作为凭据保存。',
-      customToolNameFormatInvalid: '名称必须以英文字母或下划线开头，后续只能使用英文字母、数字、下划线或连字符，然后重新保存。',
       pythonPackageFolderFormatInvalid: '请重新载入配置，以恢复其扩展代码目录引用。',
       outputFilterFieldFormatInvalid: '字段名的每一层都必须以字母或下划线开头，后续只能使用字母、数字或下划线，最多包含一层点号分隔，然后重新保存。',
       numberGreaterThan: '将{field}调整为大于 {gt} 的值后重新保存。',
@@ -1430,7 +1433,6 @@ export const zhCN = {
         providerUnavailable: '{field}不是当前版本支持的 Provider 适配器。',
         baseUrlInvalid: '{field}必须是有效的 HTTP(S) 地址，不能包含用户名、密码、查询参数或片段。',
         credentialMasked: '访问凭据不能使用星号或圆点遮罩文本代替。',
-        customToolNameFormatInvalid: '{field}必须以英文字母或下划线开头，后续只能使用英文字母、数字、下划线或连字符。',
         pythonPackageFolderFormatInvalid: '{field}必须是当前配置拥有的扩展代码目录。',
         outputFilterFieldFormatInvalid: '{field}的每一层都必须以字母或下划线开头，后续只能使用字母、数字或下划线，最多包含一层点号分隔。',
         numberGreaterThan: '{field}必须大于 {gt}。',

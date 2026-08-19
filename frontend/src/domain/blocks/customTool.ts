@@ -1,35 +1,36 @@
+import type { PythonPackageTemplate } from '@/api'
+
 import {
-  cleanName,
-  identity,
-  stringList,
-  uniqueStrings,
-  type BlockDraftBase,
-  type BlockPayloadBase,
-} from './shared'
+  blankPythonPackage,
+  pythonPackageFromApi,
+  pythonPackagePayload,
+  type PythonPackageDraftState,
+} from './pythonPackage'
+import { cleanName, identity, isRecord, type BlockDraftBase, type BlockPayloadBase } from './shared'
 
-export interface CustomToolDraft extends BlockDraftBase {
-  tools: string[]
-}
+export interface CustomToolDraft extends BlockDraftBase, PythonPackageDraftState {}
+export type CustomToolCatalogItem = PythonPackageTemplate
 
-type CustomToolApiRecord = CustomToolDraft
-interface CustomToolPayload extends BlockPayloadBase { tools: string[] }
-
-export interface CustomToolCatalogItem {
-  name: string
-  function?: string
-  tool_name?: string | null
-  filename?: string
-  description?: string
+interface CustomToolPayload extends BlockPayloadBase {
+  python_package: PythonPackageDraftState['python_package']
+  python_package_files: PythonPackageDraftState['python_package_files']
 }
 
 export const customToolAdapter = {
   blank(): CustomToolDraft {
-    return { id: '', name: '', tools: [] }
+    return { id: '', name: '', ...blankPythonPackage() }
   },
-  fromApi(value: CustomToolApiRecord): CustomToolDraft {
-    return { ...identity(value), tools: stringList(value.tools) }
+  fromApi(value: unknown): CustomToolDraft {
+    const source = isRecord(value) ? value : {}
+    return {
+      ...identity(source),
+      ...pythonPackageFromApi(source),
+    }
   },
   toPayload(value: CustomToolDraft): CustomToolPayload {
-    return { name: cleanName(value.name), tools: uniqueStrings(value.tools) }
+    return {
+      name: cleanName(value.name),
+      ...pythonPackagePayload(value),
+    }
   },
 }

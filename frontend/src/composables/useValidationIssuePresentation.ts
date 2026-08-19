@@ -23,7 +23,6 @@ const resolutionKeys: Record<string, string> = {
   'contract.provider_unavailable': 'providerUnavailable',
   'contract.base_url_invalid': 'baseUrlInvalid',
   'contract.credential_masked': 'credentialMasked',
-  'contract.custom_tool_name_format_invalid': 'customToolNameFormatInvalid',
   'contract.python_package_folder_format_invalid': 'pythonPackageFolderFormatInvalid',
   'contract.output_filter_field_format_invalid': 'outputFilterFieldFormatInvalid',
   'contract.number_greater_than': 'numberGreaterThan',

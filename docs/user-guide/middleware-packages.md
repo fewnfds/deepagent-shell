@@ -73,7 +73,8 @@ python_package:
 YAML 不保存源码、requirements、manifest 投影、模板引用、revision 或绝对路径。复制组件配置时会复制一份新的配置扩展；删除组件
 配置时会删除其扩展代码目录。
 
-新配置编辑器同时读取对应类别的用户模板和内置示例。用户可以选择任一来源，或【套用空模板】得到空的 `main.py` 草稿；最终保存只接受包含
+新配置编辑器同时读取对应类别的用户模板和内置示例。用户可以选择任一来源，或【套用空模板】得到空的 `main.py` 和
+`requirements.txt` 草稿；最终保存只接受包含
 对应 adapter 要求的有效工厂。用户可以在两行高的文件清单中逐行增加
 包内相对路径，编辑器按该顺序显示文本文件内容；
 首次保存才创建配置扩展。已有配置每次打开都从自己的扩展代码目录读取文件，保存操作更新原目录，不提供改指向另一模板或配置扩展的字段。
@@ -159,6 +160,9 @@ Agent 的有序 `middleware_refs` 决定位置。完整说明见 [Workflow Input
 
 Python 名称仍需显式 `import`。本地模块使用正常相对导入，例如 `from .helpers import build_route`。非核心直接依赖逐行写入配置扩展
 的可选 `requirements.txt`。
+
+`requirements.txt` 可以不存在，也可以是空文件；两者都表示没有额外依赖。只有 source 实际 import 平台核心之外的 third-party
+package 时才需要新增或填写它，并将文件列入 package 的可编辑文件。模板和配置 extension 不会因为缺少这个占位文件而失效。
 
 启动器只从启用 Workflow 可达的 Command Node、Task Dispatcher、Main Agent 和其 Subagent 引用中收集配置扩展 requirements。静态模板和
 未被运行配置触达的扩展不进入依赖指纹，也不影响全局依赖。依赖层生成在

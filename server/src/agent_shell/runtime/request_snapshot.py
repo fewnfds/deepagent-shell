@@ -247,7 +247,6 @@ class RequestSnapshotRuntime:
         self,
         configuration: FileConfigRepository,
         *,
-        custom_tools_dir: Path,
         python_packages_dir: Path,
         runtime_dir: Path,
         skills_dir: Path,
@@ -259,7 +258,6 @@ class RequestSnapshotRuntime:
         runtime_diagnostics: RuntimeDiagnostics,
     ) -> None:
         self._configuration = configuration
-        self._custom_tools_dir = custom_tools_dir
         self._python_packages_dir = python_packages_dir
         self._runtime_dir = runtime_dir
         self._skills_dir = skills_dir
@@ -284,13 +282,11 @@ class RequestSnapshotRuntime:
             blocks,
             configs,
             python_package_validation,
-            custom_tools_dir=self._custom_tools_dir,
         )
         def runtime_factory() -> AgentRuntime:
             return AgentRuntime(
                 AgentBuilder(
                     secrets,
-                    custom_tools_dir=self._custom_tools_dir,
                     python_packages_dir=self._python_packages_dir,
                     runtime_dir=self._runtime_dir,
                     skills_dir=self._skills_dir,

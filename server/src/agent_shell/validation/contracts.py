@@ -121,15 +121,6 @@ def _specific_contract_identity(
         )
     if (
         error_type == "string_pattern_mismatch"
-        and owner_type == "custom-tool"
-        and path.startswith("tools[")
-    ):
-        return (
-            "contract.custom_tool_name_format_invalid",
-            "validation.issue.contract.customToolNameFormatInvalid",
-        )
-    if (
-        error_type == "string_pattern_mismatch"
         and owner_type
         in {
             "custom-middleware",

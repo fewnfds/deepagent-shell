@@ -1,6 +1,6 @@
 # 编写 Python extension
 
-本章覆盖 Agent Event Output、Workflow Event Output、Command、Task Dispatcher 和 Custom Middleware 的 file-based Python package，以及 instance directory 和 dependency 规则。
+本章覆盖 Custom Tool、Agent Event Output、Workflow Event Output、Command、Task Dispatcher 和 Custom Middleware 的 file-based Python package，以及 instance directory 和 dependency 规则。
 
 ## Event output package
 
@@ -22,7 +22,7 @@ Runtime 会把所属范围内的每种 `event_type` 交给同一个 `output(even
 
 ## 创建 file-based Python package
 
-Command Node、Task Dispatcher、Custom Middleware 和两类 Event Output 都使用 configuration-owned Python package。创建 Event Output 的最小 body
+Custom Tool、Command Node、Task Dispatcher、Custom Middleware 和两类 Event Output 都使用 configuration-owned Python package。创建 Event Output 的最小 body
 如下；只需替换 endpoint 和 `main.py` contract：
 
 ```http
@@ -32,13 +32,14 @@ POST /api/blocks/agent-event-output
   "name": "Review command",
   "python_package": {
     "folder": "",
-    "editable_files": ["main.py"]
+    "editable_files": ["main.py", "requirements.txt"]
   },
   "python_package_files": {
     "template_key": "__empty__",
     "revision": "",
     "files": [
-      {"path": "main.py", "content": "<complete source>"}
+      {"path": "main.py", "content": "<complete source>"},
+      {"path": "requirements.txt", "content": ""}
     ]
   }
 }
@@ -53,6 +54,7 @@ contract 的 source 时也可以使用 `__empty__`。
 data/config/python_package_instances/
   command/<configuration-uuid>/
   task-dispatcher/<configuration-uuid>/
+  agent-tool/<configuration-uuid>/
   agent-middleware/<configuration-uuid>/
   agent-event-output/<configuration-uuid>/
   workflow-event-output/<configuration-uuid>/
@@ -62,12 +64,16 @@ frontend 和 Management API 只是创建、查看及保存这些 file 的入口�
 `main.py`、`requirements.txt`、local module 和 test file；不必为了修改 extension source 而改动 `frontend/`。直接新增的 local file 可以使用
 relative import；把 package-relative path 加入 editor file list 后，该 file 也会显示在 component editor 中。
 
+`requirements.txt` 是扩展生成时应一并提供的可见文件；内容为空表示该 extension 没有额外 third-party dependency。内置示例和 `__empty__`
+模板都提供这个空文件。只有当 source import 了平台核心之外的 package 时，AI 才应在同一 package 中填写或修改
+`requirements.txt`，逐行写入普通 PyPI requirement，并在 `editable_files` 与 `python_package_files.files` 中一起提交该文件。
+
 不要修改 Agent Shell 管理的 `package.json`，也不要移动、重命名 extension directory，或让一个 configuration 引用另一个 configuration 的 directory。
 
 这些 code 在 service process 的 trusted boundary 执行，没有 sandbox。Python source change 会在下一次请求时重新加载；`requirements.txt` change 在
 service restart 后生效。component editor page 若早于 external change 打开，其 revision 会过期；reload 后才能从页面保存，否则服务端拒绝覆盖。
 
-Command 和 Task Dispatcher 的 factory、return structure 及 Edge key 见[创建 Workflow Graph](03-workflow-graph.md)。Custom Middleware
+Custom Tool 固定使用同步无参 `create_tool()`，并返回一个 LangChain `BaseTool`；推荐返回 `@tool` 装饰后的函数。Command 和 Task Dispatcher 的 factory、return structure 及 Edge key 见[创建 Workflow Graph](03-workflow-graph.md)。Custom Middleware
 factory 的 return type 是官方 LangChain `AgentMiddleware`；完整 contract 见[File-based Python extension](../middleware-packages.md)。
 
 ## 从 Workflow Node 写出 event
@@ -115,6 +121,7 @@ Deep Agents 用法的起点：
 | `command(state, runtime)` / `dispatch(state, runtime)` | LangGraph Node；`state` 与 `langgraph.runtime.Runtime` | State、`runtime.context`、`runtime.store`、custom stream、execution identity，以及 Shell Context 中的 background Run command |
 | Custom Tool callable | LangChain Tool；Tool argument 与可选 `ToolRuntime` | Agent State、Runtime Context、Store、custom stream 和 Tool return value |
 | `AgentMiddleware` runtime hook | LangChain Agent Middleware；hook 的 `state`、`runtime` 或 `request` | Agent lifecycle、Model request、Tool call、State update 和 custom stream |
+| `create_tool()` | Agent construction stage；同步无参 factory | 返回一个 `BaseTool`；Tool invocation 的 Runtime 能力写在 Tool callable 参数中，不注入 factory |
 | `create_command()` / `create_dispatcher()` / `create_middleware()` | request-scoped construction stage | Shell 提供的 factory argument 和 local package；此时还没有 Node/Tool Runtime |
 | Agent Event Output / Workflow Event Output 的 `output(event)` | Agent Shell output projection stage；稳定 `event` dict | event filtering 与 string rendering；不处于 LangGraph Node Runtime |
 
@@ -173,6 +180,9 @@ URL、local path、`.pth` 和只有 source distribution 的 dependency 会被拒
 
 dependency 只从 enabled Workflow 可达的 Command、Task Dispatcher、Main Agent 和 Subagent configuration 收集。最可靠的闭环是：声明 direct dependency ->
 restart -> GET component 确认 `dependency_status` -> invoke 一次真实 Workflow。library 的 official docs 说明用法，这套实例 evidence 说明它在当前 environment 可用。
+
+因此 AI 编写 Workflow 时可以理解并处理依赖：先根据实际 import 判断是否需要 third-party package；不需要时保持 `requirements.txt` 为空，
+需要时将 direct dependency 和源码作为同一份 package payload 保存。不能因为某个 package 被核心 runtime 间接安装，就省略自己的依赖声明。
 
 下一步：[使用 background Run](05-background-runs.md)覆盖 asynchronous subtask；[Validation、enabled 与真实 invocation](06-validation-and-references.md)
 覆盖普通 Workflow 的完成阶段。

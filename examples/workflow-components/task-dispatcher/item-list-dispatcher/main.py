@@ -1,3 +1,23 @@
+"""Built-in item-list Task Dispatcher example.
+
+This editable example reads ``state["shared_vars"]["items"]`` as a non-empty
+list of objects such as ``{"id": "item-1", "value": 42}`` and creates one
+task per item. Each task uses a stable ``item:<id>`` task ID, the ``item``
+dispatch key, and ``{"item": item}`` as its JSON payload. The dispatcher also
+writes ``shared_vars.dispatched_count``. These input fields, IDs, payload shape,
+and dispatch key are example policy; change them for the Workflow and provide
+matching Dispatch Edges. The target Agent consumes private ``workflow_task``
+according to its own Workflow Input Context.
+
+The stable package contract is a synchronous no-argument
+``create_dispatcher()`` factory returning an async ``dispatch(state, runtime)``.
+It may use Workflow State, ``runtime.context``, and ``runtime.store`` and must
+return 1-1000 tasks with unique IDs, a valid dispatch key, and JSON-object
+payloads, plus an optional State ``update``. It does not return LangGraph
+``Send`` or ``Command`` objects. This package uses only the standard library,
+so ``requirements.txt`` stays empty.
+"""
+
 from typing import Any
 
 
