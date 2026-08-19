@@ -1,11 +1,12 @@
-# 配置 Agent Filesystem 与 Agent
+# 配置 Agent
 
-每个 Main Agent 可选择一份项目 Filesystem 或使用最小 Filesystem；Subagent 可继承、选择自己的项目 Filesystem 或回到最小 Filesystem。只有包含 Agent Node 时，才需要后续的
-Model、Output Mode、Workflow Input Context（WIC）Middleware 和 Main Agent；没有 Agent Node 的 Graph 不需要额外创建这些对象。
+只有包含 Agent Node 时，才需要 Model、Filesystem、Output Mode、Workflow Input Context（WIC）Middleware 和 Main Agent；没有 Agent Node 的 Graph 不需要额外创建这些对象。其他装配项均为选配。
 
 ## Filesystem
 
-不创建、不选择项目 Filesystem 时，Agent 自动使用空的 request-scoped `StateBackend`，并只暴露 `read_file`；这就是最小 Filesystem。只有需要 mapped route、initial file 或更多 Filesystem Tool 时才创建 component：
+每个 Main Agent 可选择一个 Filesystem；Subagent 可额外选择继承。
+不创建、不选择 Filesystem 时，Agent 自动使用 empty request-scoped `StateBackend`，并只暴露 `read_file` tool；这就是最小 Filesystem（deepagent 默认最小装配）。
+只有需要 mapped route、initial file 或更多 Filesystem Tool 时才创建 component：
 
 ```http
 POST /api/blocks/filesystem
@@ -18,6 +19,8 @@ Content-Type: application/json
 保存响应中的 `id`，并把它作为 Main Agent 或 Subagent 的 `filesystem` capability ref。
 
 ## Model
+
+强烈建议用户自行创建，并做好基本参数适配（temperature、top_p 等），AI 需要特殊参数时可复制配置，例如需要特殊 response_format。
 
 `credential` 是 management-only 的 write-only input。创建 Model 时在 HTTPS 或本机 loopback 连接中提交真实 Provider Key；
 服务端会把它写入 `agent-shell.env` 的独立 environment variable，并在 Model YAML 中只保存 variable reference。响应不会回显 plaintext。不要把 Key 写进
@@ -51,6 +54,9 @@ Main Agent 的 required reference 包含完整 Output Mode。`GET /api/catalog` 
 ```http
 POST /api/blocks/output-mode
 ```
+
+可通过简单的python函数进行
+
 
 若只需要最终 Assistant text，可以保留全部 event key，但只启用 `assistant_text`：
 
