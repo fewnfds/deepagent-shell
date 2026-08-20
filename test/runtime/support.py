@@ -126,7 +126,7 @@ class EventGraph:
     async def astream_events(
         self, _input, *, config: dict, version: str, transformers: tuple = ()
     ):
-        assert config == {"recursion_limit": 100}
+        assert config == {"recursion_limit": 1_000_000}
         assert version == "v3"
         assert transformers
         return EventRun(self._events)

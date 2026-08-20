@@ -29,7 +29,7 @@ from agent_shell.workflow_contracts import WorkflowDefinition, WorkflowRole
 class WorkflowBulkDelete(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ids: list[str] = Field(min_length=1, max_length=1000)
+    ids: list[str] = Field(min_length=1)
 
 
 def _validated(payload: dict) -> dict:

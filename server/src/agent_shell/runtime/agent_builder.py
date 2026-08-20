@@ -18,7 +18,7 @@ from agent_shell.contracts import (
     FilesystemPermissionsBlock,
     SkillBlock,
 )
-from agent_shell.provider_http import PROVIDER_HTTP_TIMEOUT, ProviderHttpClients
+from agent_shell.provider_http import ProviderHttpClients, provider_http_timeout
 from agent_shell.provider_secrets import ProviderCredentialError, ProviderSecretResolver
 from agent_shell.runtime.capabilities import (
     DeepAgentsCapabilityError,
@@ -66,6 +66,7 @@ from agent_shell.validation.capability_assembly import FilesystemMode
 from agent_shell.validation.service import ConfigurationValidationService
 from agent_shell.validation.assembly import StaticAssembly
 from agent_shell.python_requirements import parse_python_requirements
+from agent_shell.storage.runtime_policy import RUNTIME_POLICY_DEFAULTS, RuntimePolicyStore
 from agent_shell.tool_packages import ToolPackageRuntime
 
 
@@ -93,7 +94,13 @@ def _build_chat_model(
                 credential or "agent-shell-no-credential"
             )
         if provider in _OPENAI_COMPATIBLE_PROVIDERS:
-            kwargs.setdefault("timeout", PROVIDER_HTTP_TIMEOUT)
+            timeout_factory = getattr(provider_http_clients, "timeout", None)
+            kwargs.setdefault(
+                "timeout",
+                timeout_factory()
+                if callable(timeout_factory)
+                else provider_http_timeout(),
+            )
             kwargs.update(
                 {
                     "default_headers": {
@@ -147,6 +154,7 @@ class AgentBuilder:
         validation: ConfigurationValidationService,
         provider_http_clients: ProviderHttpClients,
         store: BaseStore,
+        runtime_policy: RuntimePolicyStore | None = None,
     ) -> None:
         self._secrets = secrets
         self._python_packages_dir = python_packages_dir
@@ -154,6 +162,7 @@ class AgentBuilder:
         self._skills_dir = skills_dir
         self._validation = validation
         self._provider_http_clients = provider_http_clients
+        self._runtime_policy = runtime_policy
         self._store = store
         self._tool_runtime: ToolPackageRuntime | None = None
         self._middleware_runtime: MiddlewarePackageRuntime | None = None
@@ -493,7 +502,12 @@ class AgentBuilder:
     ) -> BuiltAgent:
         # Validate the immutable request snapshot before any selected user module
         # can be imported or any optional capability can be materialized.
-        messages = validate_client_messages(raw_messages)
+        messages = validate_client_messages(
+            raw_messages,
+            self._runtime_policy.snapshot()
+            if self._runtime_policy is not None
+            else RUNTIME_POLICY_DEFAULTS,
+        )
         assembly = self.resolve(main_agent_id)
         return await self.build_resolved(
             assembly,

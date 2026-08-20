@@ -8,7 +8,6 @@ from .support import *
 from .support import _build_chat_model
 from langchain_core.messages import AIMessageChunk
 from agent_shell.model_provider_contracts import _SETTINGS_BY_PROVIDER
-from agent_shell.provider_http import PROVIDER_HTTP_TIMEOUT
 from agent_shell.provider_integrations import bundled_provider_integrations
 from agent_shell.runtime import agent_builder
 from agent_shell.runtime.context import WorkflowRuntimeContext
@@ -140,7 +139,7 @@ def test_agent_execution_closes_v3_stream_when_consumer_is_cancelled() -> None:
                 self, _input, *, config: dict, version: str, transformers: tuple = ()
             ):
                 assert version == "v3"
-                assert config == {"recursion_limit": 100}
+                assert config == {"recursion_limit": 1_000_000}
                 assert transformers
                 return self.run
 
@@ -230,7 +229,7 @@ def test_agent_execution_times_out_and_closes_v3_stream(monkeypatch, tmp_path) -
                 transformers: tuple = (),
                 context=None,
             ):
-                assert config["recursion_limit"] == 100
+                assert config["recursion_limit"] == 1_000_000
                 assert len(config["callbacks"]) == 1
                 config["callbacks"][0].on_tool_start(
                     {"name": "waiting-tool"},

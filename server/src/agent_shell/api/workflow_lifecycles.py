@@ -232,8 +232,8 @@ def build_workflow_lifecycle_router(
     @router.get("/api/workflow-lifecycles")
     async def list_workflow_lifecycles(
         page: int = Query(default=1, ge=1),
-        page_size: int = Query(default=10, ge=1, le=100),
-        query: str = Query(default="", max_length=200),
+        page_size: int = Query(default=10, ge=1),
+        query: str = Query(default=""),
     ) -> dict[str, object]:
         records, total = await lifecycle_service.list_records_page(
             limit=page_size,
@@ -270,11 +270,11 @@ def build_workflow_lifecycle_router(
     @router.get("/api/workflow-lifecycles/{lifecycle_id}/events")
     async def list_workflow_lifecycle_events(
         lifecycle_id: str,
-        run_id: str | None = Query(default=None, max_length=64),
-        node_invocation_id: str | None = Query(default=None, max_length=320),
-        event_type: str | None = Query(default=None, max_length=64),
+        run_id: str | None = Query(default=None),
+        node_invocation_id: str | None = Query(default=None),
+        event_type: str | None = Query(default=None),
         after_sequence: int = Query(default=0, ge=0),
-        limit: int = Query(default=1000, ge=1, le=5000),
+        limit: int = Query(default=1000, ge=1),
     ) -> dict[str, object]:
         await require_lifecycle(lifecycle_id)
         if run_id is not None:

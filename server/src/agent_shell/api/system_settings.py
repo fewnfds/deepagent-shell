@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
 from agent_shell.api.errors import management_error
+from agent_shell.storage.runtime_policy import RuntimePolicyStore
 from agent_shell.system_settings import SystemSettingsError, SystemSettingsService
 
 
@@ -53,8 +54,22 @@ class SystemSettingsUpdate(BaseModel):
     langsmith_workspace_id: str | None = None
     langsmith_api_key: OptionalSecretUpdate
     management_token: ManagementPasswordUpdate
-    cors_origins: list[str] = Field(max_length=100)
-    trusted_proxy_cidrs: list[str] = Field(max_length=100)
+    cors_origins: list[str]
+    trusted_proxy_cidrs: list[str]
+
+
+class RuntimePolicyUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    chat_completion_body_bytes: int = Field(ge=1)
+    content_blocks: int = Field(ge=1)
+    decoded_block_bytes: int = Field(ge=1)
+    decoded_total_bytes: int = Field(ge=1)
+    media_output_bytes: int = Field(ge=1)
+    text_edit_bytes: int = Field(ge=1)
+    provider_timeout_seconds: int = Field(ge=1)
+    provider_connect_timeout_seconds: int = Field(ge=1)
+    provider_catalog_timeout_seconds: int = Field(ge=1)
 
 
 def _raise_settings_error(error: SystemSettingsError) -> NoReturn:
@@ -72,7 +87,10 @@ def _with_active_url(payload: dict, request: Request) -> dict:
     return {**payload, "active_management_url": f"{base}/admin"}
 
 
-def build_system_settings_router(settings: SystemSettingsService) -> APIRouter:
+def build_system_settings_router(
+    settings: SystemSettingsService,
+    runtime_policy: RuntimePolicyStore,
+) -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/system/settings")
@@ -94,5 +112,21 @@ def build_system_settings_router(settings: SystemSettingsService) -> APIRouter:
         except SystemSettingsError as exc:
             _raise_settings_error(exc)
         return _with_active_url(result, request)
+
+    @router.get("/api/system/runtime-policy")
+    async def get_runtime_policy() -> dict[str, object]:
+        return runtime_policy.public()
+
+    @router.put("/api/system/runtime-policy")
+    async def update_runtime_policy(payload: RuntimePolicyUpdate) -> dict[str, object]:
+        try:
+            return runtime_policy.update(payload.model_dump())
+        except ValueError as exc:
+            raise management_error(
+                422,
+                code="runtime_policy_invalid",
+                message_key="errors.systemSettingsInvalid",
+                message=str(exc),
+            ) from exc
 
     return router

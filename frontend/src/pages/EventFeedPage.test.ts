@@ -19,21 +19,17 @@ function api() {
     downloadEvent: vi.fn(async () => new Blob(['{}'])),
     getRuntimeDiagnostics: vi.fn(async () => ({
       retention_limit: 20,
-      max_retention_limit: 10_000,
     })),
     updateRuntimeDiagnosticRetention: vi.fn(async (retentionLimit: number) => ({
       retention_limit: retentionLimit,
-      max_retention_limit: 10_000,
     })),
     getSystemLogSettings: vi.fn(async () => ({
       max_size_mib: 5,
       min_size_mib: 1,
-      max_size_mib_limit: 1024,
     })),
     updateSystemLogSettings: vi.fn(async (maxSizeMib: number) => ({
       max_size_mib: maxSizeMib,
       min_size_mib: 1,
-      max_size_mib_limit: 1024,
     })),
     deleteMatchingEventFeed: vi.fn(async () => ({ deleted: 0 })),
     watchApiServerEvents: vi.fn(() => vi.fn()),

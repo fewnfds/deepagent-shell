@@ -12,12 +12,9 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from agent_shell.runtime.errors import AgentRuntimeError
+from agent_shell.storage.runtime_policy import RUNTIME_POLICY_DEFAULTS, RuntimePolicy
 
 
-MAX_CHAT_COMPLETION_BODY_BYTES = 64 * 1024 * 1024
-MAX_CONTENT_BLOCKS = 4096
-MAX_DECODED_BLOCK_BYTES = 24 * 1024 * 1024
-MAX_DECODED_TOTAL_BYTES = 48 * 1024 * 1024
 MAX_URL_CHARS = 8192
 MAX_FILE_ID_CHARS = 2048
 
@@ -42,15 +39,16 @@ _MEDIA_TYPES = frozenset({"image", "audio", "video", "file"})
 @dataclass(slots=True)
 class _ValidationBudget:
     enforce_limits: bool
+    policy: RuntimePolicy
     blocks: int = 0
     decoded_bytes: int = 0
 
     def add_block(self, path: str) -> None:
         self.blocks += 1
-        if self.enforce_limits and self.blocks > MAX_CONTENT_BLOCKS:
+        if self.enforce_limits and self.blocks > self.policy.content_blocks:
             _invalid(
                 "input_content_parts_too_many",
-                f"messages content may not exceed {MAX_CONTENT_BLOCKS} blocks.",
+                f"messages content may not exceed {self.policy.content_blocks} blocks.",
                 path,
             )
 
@@ -62,7 +60,7 @@ class _ValidationBudget:
                 path,
             )
         if self.enforce_limits:
-            maximum_encoded = ((MAX_DECODED_BLOCK_BYTES + 2) // 3) * 4
+            maximum_encoded = ((self.policy.decoded_block_bytes + 2) // 3) * 4
             if len(value) > maximum_encoded:
                 _invalid(
                     "input_content_block_too_large",
@@ -77,14 +75,14 @@ class _ValidationBudget:
                 f"{path} must contain canonical base64 data.",
                 status_code=422,
             ) from exc
-        if self.enforce_limits and len(decoded) > MAX_DECODED_BLOCK_BYTES:
+        if self.enforce_limits and len(decoded) > self.policy.decoded_block_bytes:
             _invalid(
                 "input_content_block_too_large",
-                f"{path} may not decode to more than {MAX_DECODED_BLOCK_BYTES} bytes.",
+                f"{path} may not decode to more than {self.policy.decoded_block_bytes} bytes.",
                 path,
             )
         self.decoded_bytes += len(decoded)
-        if self.enforce_limits and self.decoded_bytes > MAX_DECODED_TOTAL_BYTES:
+        if self.enforce_limits and self.decoded_bytes > self.policy.decoded_total_bytes:
             _invalid(
                 "input_content_total_too_large",
                 "messages contain too much decoded base64 media.",
@@ -357,6 +355,7 @@ def _validate_messages(
     *,
     require_non_empty: bool,
     enforce_limits: bool,
+    policy: RuntimePolicy,
 ) -> list[dict[str, Any]]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)) or (
         require_non_empty and not value
@@ -366,7 +365,7 @@ def _validate_messages(
             "messages must be a non-empty array.",
             status_code=422,
         )
-    budget = _ValidationBudget(enforce_limits=enforce_limits)
+    budget = _ValidationBudget(enforce_limits=enforce_limits, policy=policy)
     messages: list[dict[str, Any]] = []
     for index, raw_item in enumerate(value):
         if not isinstance(raw_item, Mapping):
@@ -423,12 +422,25 @@ def _validate_messages(
     return messages
 
 
-def validate_client_messages(value: object) -> list[dict[str, Any]]:
-    return _validate_messages(value, require_non_empty=True, enforce_limits=True)
+def validate_client_messages(
+    value: object,
+    policy: RuntimePolicy = RUNTIME_POLICY_DEFAULTS,
+) -> list[dict[str, Any]]:
+    return _validate_messages(
+        value,
+        require_non_empty=True,
+        enforce_limits=True,
+        policy=policy,
+    )
 
 
 def validate_prepared_messages(value: object) -> list[dict[str, Any]]:
-    return _validate_messages(value, require_non_empty=False, enforce_limits=False)
+    return _validate_messages(
+        value,
+        require_non_empty=False,
+        enforce_limits=False,
+        policy=RUNTIME_POLICY_DEFAULTS,
+    )
 
 
 def client_messages_sha(messages: list[dict[str, Any]]) -> str:

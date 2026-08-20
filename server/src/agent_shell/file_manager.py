@@ -12,8 +12,8 @@ import tempfile
 from typing import Any
 from zipfile import ZIP_DEFLATED, ZipFile
 
+from agent_shell.storage.runtime_policy import RUNTIME_POLICY_DEFAULTS, RuntimePolicyStore
 
-TEXT_EDIT_MAX_BYTES = 2 * 1024 * 1024
 RELATIVE_PATH_MAX_LENGTH = 4096
 _TEMPORARY_PREFIX = ".agent-shell-write-"
 _WINDOWS_INVALID_CHARACTERS = set('<>:"/\\|?*')
@@ -52,9 +52,22 @@ class FileManagerError(RuntimeError):
 
 
 class FileManagerService:
-    def __init__(self, scopes: dict[str, Path], temporary_directory: Path) -> None:
+    def __init__(
+        self,
+        scopes: dict[str, Path],
+        temporary_directory: Path,
+        runtime_policy: RuntimePolicyStore | None = None,
+    ) -> None:
         self._scopes = {name: path.resolve() for name, path in scopes.items()}
         self._temporary_directory = temporary_directory.resolve()
+        self._runtime_policy = runtime_policy
+
+    def _text_edit_max_bytes(self) -> int:
+        return (
+            self._runtime_policy.snapshot().text_edit_bytes
+            if self._runtime_policy is not None
+            else RUNTIME_POLICY_DEFAULTS.text_edit_bytes
+        )
 
     def list_scopes(self) -> dict[str, list[str]]:
         return {"scopes": list(self._scopes)}
@@ -511,13 +524,14 @@ class FileManagerService:
             content = target.read_bytes()
         except OSError as exc:
             raise self._operation_failed() from exc
-        if len(content) > TEXT_EDIT_MAX_BYTES:
+        max_bytes = self._text_edit_max_bytes()
+        if len(content) > max_bytes:
             raise FileManagerError(
                 413,
                 "text_file_too_large",
                 "errors.textFileTooLarge",
                 "The file is too large for the text editor.",
-                {"max_bytes": TEXT_EDIT_MAX_BYTES},
+                {"max_bytes": max_bytes},
             )
         try:
             text = content.decode("utf-8")
@@ -555,13 +569,14 @@ class FileManagerService:
                 "The file changed after it was opened.",
             )
         encoded = content.encode("utf-8")
-        if len(encoded) > TEXT_EDIT_MAX_BYTES:
+        max_bytes = self._text_edit_max_bytes()
+        if len(encoded) > max_bytes:
             raise FileManagerError(
                 413,
                 "text_file_too_large",
                 "errors.textFileTooLarge",
                 "The file is too large for the text editor.",
-                {"max_bytes": TEXT_EDIT_MAX_BYTES},
+                {"max_bytes": max_bytes},
             )
         descriptor, temporary_name = tempfile.mkstemp(
             prefix=_TEMPORARY_PREFIX,

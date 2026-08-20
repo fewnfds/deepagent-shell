@@ -86,11 +86,9 @@ const controlsError = ref('')
 const stale = ref(false)
 const retentionDrafts = ref({ runtime: 20 })
 const savedRetentions = ref({ runtime: 20 })
-const maxRetention = ref(1)
 const systemLogSizeDraft = ref(5)
 const savedSystemLogSize = ref(5)
 const systemLogSizeMin = ref(1)
-const systemLogSizeMax = ref(1024)
 const savingControl = ref('')
 
 function describeFailure(error: unknown): string {
@@ -279,11 +277,9 @@ async function loadControls(): Promise<void> {
     }
     retentionDrafts.value = loadedRetentions
     savedRetentions.value = { ...loadedRetentions }
-    maxRetention.value = diagnostics.max_retention_limit
     systemLogSizeDraft.value = systemLog.max_size_mib
     savedSystemLogSize.value = systemLog.max_size_mib
     systemLogSizeMin.value = systemLog.min_size_mib
-    systemLogSizeMax.value = systemLog.max_size_mib_limit
     controlsReady.value = true
   } catch (error) {
     controlsError.value = describeFailure(error)
@@ -320,7 +316,6 @@ async function saveRetention(source: 'runtime'): Promise<void> {
     const result = await api.updateRuntimeDiagnosticRetention(value)
     retentionDrafts.value[source] = result.retention_limit
     savedRetentions.value[source] = result.retention_limit
-    maxRetention.value = result.max_retention_limit
     notify({
       tone: 'success',
       title: t('eventFeed.feedback.retentionSaved', { count: result.retention_limit }),
@@ -351,7 +346,6 @@ async function saveSystemLogSettings(): Promise<void> {
     systemLogSizeDraft.value = result.max_size_mib
     savedSystemLogSize.value = result.max_size_mib
     systemLogSizeMin.value = result.min_size_mib
-    systemLogSizeMax.value = result.max_size_mib_limit
     notify({
       tone: 'success',
       title: t('eventFeed.feedback.systemLogSizeSaved', { count: result.max_size_mib }),
@@ -413,7 +407,6 @@ onMounted(() => { void loadControls() })
                 :id="`retention-${source}`"
                 v-model.number="retentionDrafts[source]"
                 class="form-control"
-                :max="maxRetention"
                 min="1"
                 required
                 step="1"
@@ -431,7 +424,6 @@ onMounted(() => { void loadControls() })
                 id="system-log-max-size"
                 v-model.number="systemLogSizeDraft"
                 class="form-control"
-                :max="systemLogSizeMax"
                 :min="systemLogSizeMin"
                 required
                 step="1"

@@ -239,3 +239,44 @@ def test_permission_failure_leaves_existing_settings_unchanged(
     assert response.status_code == 500
     assert response.json()["detail"]["code"] == "system_settings_write_failed"
     assert system_path.read_text(encoding="utf-8") == original
+
+
+def test_runtime_policy_is_discoverable_and_persists_without_product_maximums(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, client = _client(tmp_path, monkeypatch)
+
+    current = client.get("/api/system/runtime-policy")
+
+    assert current.status_code == 200
+    assert current.json()["chat_completion_body_bytes"] == 64 * 1024 * 1024
+    assert current.json()["defaults"]["provider_timeout_seconds"] == 600
+    assert current.json()["minimums"]["content_blocks"] == 1
+    assert current.json()["configurable"] is True
+
+    update = {
+        key: value
+        for key, value in current.json().items()
+        if key not in {"defaults", "minimums", "configurable"}
+    }
+    update.update(
+        {
+            "chat_completion_body_bytes": 256 * 1024 * 1024,
+            "content_blocks": 100_000,
+            "provider_timeout_seconds": 3600,
+        }
+    )
+    saved = client.put("/api/system/runtime-policy", json=update)
+
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["chat_completion_body_bytes"] == 256 * 1024 * 1024
+    assert saved.json()["content_blocks"] == 100_000
+    assert saved.json()["provider_timeout_seconds"] == 3600
+    document = yaml.safe_load(
+        (tmp_path / "data" / "config" / "system.yaml").read_text(encoding="utf-8")
+    )
+    assert document["runtime_policy"]["provider_timeout_seconds"] == 3600
+
+    invalid = {**update, "content_blocks": 0}
+    rejected = client.put("/api/system/runtime-policy", json=invalid)
+    assert rejected.status_code == 422

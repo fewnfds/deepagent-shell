@@ -4,7 +4,6 @@ from agent_shell.storage.file_config import FileConfigRepository
 
 
 DEFAULT_HISTORY_RETENTION_LIMIT = 20
-MAX_HISTORY_RETENTION_LIMIT = 10_000
 HISTORY_TYPES = frozenset(
     {"runtime_diagnostics"}
 )
@@ -35,7 +34,7 @@ class HistoryRetentionStore:
 
     def set_limit_in(self, _connection, history_type: str, retention_limit: int) -> None:
         history_type = self._type(history_type)
-        if not 1 <= retention_limit <= MAX_HISTORY_RETENTION_LIMIT:
+        if retention_limit < 1:
             raise ValueError("history retention limit is out of range")
         self._repository.update_system(lambda system: system.setdefault("history_retention", {}).__setitem__(history_type, retention_limit))
 

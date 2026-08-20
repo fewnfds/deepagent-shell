@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type {
   ApiServerSettings,
   ApiServerSettingsUpdate,
+  RuntimePolicySettings,
+  RuntimePolicyUpdate,
   SystemSettings,
   SystemSettingsUpdate,
 } from '@/api'
@@ -51,13 +53,41 @@ function validationSettingsApi() {
     getValidationSettings: vi.fn().mockResolvedValue({
       debounce_ms: 1000,
       min_debounce_ms: 100,
-      max_debounce_ms: 10_000,
     }),
     updateValidationSettings: vi.fn().mockResolvedValue({
       debounce_ms: 1000,
       min_debounce_ms: 100,
-      max_debounce_ms: 10_000,
     }),
+  }
+}
+
+const runtimePolicyValues: RuntimePolicySettings['defaults'] = {
+  chat_completion_body_bytes: 64 * 1024 * 1024,
+  content_blocks: 4096,
+  decoded_block_bytes: 24 * 1024 * 1024,
+  decoded_total_bytes: 48 * 1024 * 1024,
+  media_output_bytes: 64 * 1024 * 1024,
+  text_edit_bytes: 2 * 1024 * 1024,
+  provider_timeout_seconds: 600,
+  provider_connect_timeout_seconds: 5,
+  provider_catalog_timeout_seconds: 15,
+}
+
+function runtimePolicyApi() {
+  const settings: RuntimePolicySettings = {
+    ...runtimePolicyValues,
+    defaults: { ...runtimePolicyValues },
+    minimums: Object.fromEntries(
+      Object.keys(runtimePolicyValues).map((key) => [key, 1]),
+    ) as RuntimePolicySettings['minimums'],
+    configurable: true,
+  }
+  return {
+    getRuntimePolicy: vi.fn().mockResolvedValue(settings),
+    updateRuntimePolicy: vi.fn().mockImplementation(async (payload: RuntimePolicyUpdate) => ({
+      ...settings,
+      ...payload,
+    })),
   }
 }
 
@@ -65,6 +95,7 @@ describe('SystemSettingsPage', () => {
   it('loads and saves typed system settings without filling secret values', async () => {
     const api = {
       ...validationSettingsApi(),
+      ...runtimePolicyApi(),
       getSystemSettings: vi.fn().mockResolvedValue(currentSettings),
       getApiServer: vi.fn().mockResolvedValue(currentApiServerSettings),
       updateSystemSettings: vi.fn().mockResolvedValue({
@@ -77,10 +108,10 @@ describe('SystemSettingsPage', () => {
     await flushPromises()
 
     const cards = wrapper.findAll('[data-testid^="system-card-"]')
-    expect(cards).toHaveLength(5)
+    expect(cards).toHaveLength(6)
     expect(cards.every((card) => !card.classes().includes('card-primary'))).toBe(true)
     expect(cards.map((card) => card.get('.card-header i').classes().find((name) => name.startsWith('bi-'))))
-      .toEqual(['bi-hdd-network', 'bi-key', 'bi-sliders', 'bi-gear', 'bi-shield-lock'])
+      .toEqual(['bi-hdd-network', 'bi-key', 'bi-sliders', 'bi-sliders', 'bi-gear', 'bi-shield-lock'])
     expect(cards.every((card) => card.get('.card-title').element.tagName === 'H2')).toBe(true)
 
     const saveButtons = wrapper.findAll('button').filter((button) => button.text() === 'common.save')
@@ -112,6 +143,7 @@ describe('SystemSettingsPage', () => {
   it('converts edited number, switch, secret and multiline fields into the backend payload', async () => {
     const api = {
       ...validationSettingsApi(),
+      ...runtimePolicyApi(),
       getSystemSettings: vi.fn().mockResolvedValue(currentSettings),
       getApiServer: vi.fn().mockResolvedValue(currentApiServerSettings),
       updateSystemSettings: vi.fn().mockImplementation(async (payload: SystemSettingsUpdate) => ({
@@ -167,6 +199,7 @@ describe('SystemSettingsPage', () => {
   it('reveals only newly entered credentials and clears edited API keys through the unified save', async () => {
     const api = {
       ...validationSettingsApi(),
+      ...runtimePolicyApi(),
       getSystemSettings: vi.fn().mockResolvedValue(currentSettings),
       getApiServer: vi.fn().mockResolvedValue(currentApiServerSettings),
       updateSystemSettings: vi.fn().mockResolvedValue(currentSettings),

@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type {
   ApiServerSettings,
   ConfigurationValidationSettings,
+  RuntimePolicySettings,
+  RuntimePolicyUpdate,
   SystemSettings,
 } from '@/api'
 import { i18n } from '@/locales'
@@ -38,11 +40,30 @@ const apiServerSettings: ApiServerSettings = {
   runtime: 'model_streaming',
 }
 
+const runtimePolicyValues: RuntimePolicySettings['defaults'] = {
+  chat_completion_body_bytes: 64 * 1024 * 1024,
+  content_blocks: 4096,
+  decoded_block_bytes: 24 * 1024 * 1024,
+  decoded_total_bytes: 48 * 1024 * 1024,
+  media_output_bytes: 64 * 1024 * 1024,
+  text_edit_bytes: 2 * 1024 * 1024,
+  provider_timeout_seconds: 600,
+  provider_connect_timeout_seconds: 5,
+  provider_catalog_timeout_seconds: 15,
+}
+const runtimePolicySettings: RuntimePolicySettings = {
+  ...runtimePolicyValues,
+  defaults: { ...runtimePolicyValues },
+  minimums: Object.fromEntries(
+    Object.keys(runtimePolicyValues).map((key) => [key, 1]),
+  ) as RuntimePolicySettings['minimums'],
+  configurable: true,
+}
+
 function validationSettings(debounceMs: number): ConfigurationValidationSettings {
   return {
     debounce_ms: debounceMs,
     min_debounce_ms: 100,
-    max_debounce_ms: 10_000,
   }
 }
 
@@ -56,6 +77,8 @@ describe('SystemSettingsPage', () => {
       saveApiServer: vi.fn(async () => apiServerSettings),
       getValidationSettings: vi.fn(async () => validationSettings(1000)),
       updateValidationSettings: vi.fn(async (value: number) => validationSettings(value)),
+      getRuntimePolicy: vi.fn(async () => runtimePolicySettings),
+      updateRuntimePolicy: vi.fn(async (payload: RuntimePolicyUpdate) => ({ ...runtimePolicySettings, ...payload })),
     }
     const wrapper = mount(SystemSettingsPage, {
       props: { api },
@@ -74,6 +97,9 @@ describe('SystemSettingsPage', () => {
     await flushPromises()
 
     expect(api.updateValidationSettings).toHaveBeenCalledWith(500)
+    expect(api.updateRuntimePolicy).toHaveBeenCalledWith(expect.objectContaining({
+      provider_timeout_seconds: 600,
+    }))
     wrapper.unmount()
   })
 
@@ -86,6 +112,8 @@ describe('SystemSettingsPage', () => {
       saveApiServer: vi.fn(async () => apiServerSettings),
       getValidationSettings: vi.fn(async () => validationSettings(1000)),
       updateValidationSettings: vi.fn(async (value: number) => validationSettings(value)),
+      getRuntimePolicy: vi.fn(async () => runtimePolicySettings),
+      updateRuntimePolicy: vi.fn(async (payload: RuntimePolicyUpdate) => ({ ...runtimePolicySettings, ...payload })),
     }
     const wrapper = mount(SystemSettingsPage, {
       props: { api },
@@ -106,6 +134,8 @@ describe('SystemSettingsPage', () => {
       'api_key',
       'max_initial_messages',
       'debounce_ms',
+      'chat_completion_body_bytes',
+      'provider_timeout_seconds',
       'cors_origins',
       'trusted_proxy_cidrs',
     ]) {

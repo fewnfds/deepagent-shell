@@ -14,10 +14,7 @@ from agent_shell.event_feed import (
     EventLevel,
     EventSource,
 )
-from agent_shell.storage.system_log_settings import (
-    MAX_SYSTEM_LOG_MAX_SIZE_MIB,
-    MIN_SYSTEM_LOG_MAX_SIZE_MIB,
-)
+from agent_shell.storage.system_log_settings import MIN_SYSTEM_LOG_MAX_SIZE_MIB
 
 
 class EventFeedDeleteMatching(BaseModel):
@@ -27,16 +24,13 @@ class EventFeedDeleteMatching(BaseModel):
     ended_at: datetime
     source: list[EventSource] = Field(default_factory=list)
     level: list[EventLevel] = Field(default_factory=list)
-    query: str = Field(default="", max_length=200)
+    query: str = ""
 
 
 class SystemLogSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    max_size_mib: int = Field(
-        ge=MIN_SYSTEM_LOG_MAX_SIZE_MIB,
-        le=MAX_SYSTEM_LOG_MAX_SIZE_MIB,
-    )
+    max_size_mib: int = Field(ge=MIN_SYSTEM_LOG_MAX_SIZE_MIB)
 
 
 def _time_window(started_at: datetime, ended_at: datetime) -> tuple[datetime, datetime]:
@@ -75,10 +69,10 @@ def build_event_feed_router(
         started_at: datetime = Query(),
         ended_at: datetime = Query(),
         page: int = Query(default=1, ge=1),
-        page_size: int = Query(default=50, ge=1, le=100),
+        page_size: int = Query(default=50, ge=1),
         source: list[EventSource] = Query(default=[]),
         level: list[EventLevel] = Query(default=[]),
-        query: str = Query(default="", max_length=200),
+        query: str = Query(default=""),
     ) -> dict[str, object]:
         started_at, ended_at = _time_window(started_at, ended_at)
         return service.list_events(

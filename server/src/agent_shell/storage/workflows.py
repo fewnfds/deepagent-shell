@@ -27,7 +27,7 @@ class WorkflowStore:
             "workflow_event_output_id": record.get("workflow_event_output_id"),
             "recursion_limit": int(record["recursion_limit"]),
             "execution_timeout_seconds": int(record["execution_timeout_seconds"]),
-            "max_concurrency": int(record.get("max_concurrency", 16)),
+            "max_concurrency": int(record.get("max_concurrency", 100)),
             "enabled": bool(record["enabled"]),
         }
 

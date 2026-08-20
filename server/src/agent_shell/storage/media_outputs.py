@@ -13,9 +13,9 @@ from uuid import uuid4
 
 from agent_shell.storage.database import SQLiteDatabase
 from agent_shell.storage.permissions import secure_directory, secure_file
+from agent_shell.storage.runtime_policy import RUNTIME_POLICY_DEFAULTS, RuntimePolicyStore
 
 
-MAX_MEDIA_OUTPUT_BYTES = 64 * 1024 * 1024
 _LOGGER = logging.getLogger(__name__)
 _MEDIA_LABELS = {
     "image": "图片",
@@ -59,8 +59,14 @@ class MediaProjection:
 class MediaOutputStore:
     """Persist private response media and clean up finalized request assets."""
 
-    def __init__(self, database: SQLiteDatabase, root: Path) -> None:
+    def __init__(
+        self,
+        database: SQLiteDatabase,
+        root: Path,
+        runtime_policy: RuntimePolicyStore | None = None,
+    ) -> None:
         self._database = database
+        self._runtime_policy = runtime_policy
         self.root = root.resolve()
         self.directory_permission = secure_directory(self.root)
         with self._database.transaction() as connection:
@@ -93,16 +99,20 @@ class MediaOutputStore:
             return None
         return _MIME_EXTENSIONS.get(mime_type, ".bin")
 
-    @staticmethod
-    def _decode(encoded: str) -> bytes | None:
-        maximum_encoded = ((MAX_MEDIA_OUTPUT_BYTES + 2) // 3) * 4
+    def _decode(self, encoded: str) -> bytes | None:
+        maximum_bytes = (
+            self._runtime_policy.snapshot().media_output_bytes
+            if self._runtime_policy is not None
+            else RUNTIME_POLICY_DEFAULTS.media_output_bytes
+        )
+        maximum_encoded = ((maximum_bytes + 2) // 3) * 4
         if len(encoded) > maximum_encoded:
             return None
         try:
             value = base64.b64decode(encoded, validate=True)
         except (binascii.Error, ValueError):
             return None
-        return value if len(value) <= MAX_MEDIA_OUTPUT_BYTES else None
+        return value if len(value) <= maximum_bytes else None
 
     @staticmethod
     def _safe_filename(value: object) -> str:

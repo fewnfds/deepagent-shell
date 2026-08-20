@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from agent_shell.api.errors import management_error
 from agent_shell.contracts import MANAGED_COMPONENT_MODELS
 from agent_shell.storage.validation_settings import (
-    MAX_VALIDATION_DEBOUNCE_MS,
     MIN_VALIDATION_DEBOUNCE_MS,
     ConfigurationValidationSettingsStore,
 )
@@ -20,7 +19,7 @@ class DraftValidationTarget(BaseModel):
 
     kind: Literal["block", "main_agent", "subagent"]
     type: str = ""
-    id: str = Field(default="", max_length=120)
+    id: str = ""
 
 
 class DraftValidationRequest(BaseModel):
@@ -35,7 +34,6 @@ class ConfigurationValidationSettingsUpdate(BaseModel):
 
     debounce_ms: int = Field(
         ge=MIN_VALIDATION_DEBOUNCE_MS,
-        le=MAX_VALIDATION_DEBOUNCE_MS,
     )
 
 

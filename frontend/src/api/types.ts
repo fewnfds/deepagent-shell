@@ -160,8 +160,27 @@ export interface SystemSettingsUpdate {
 export interface ConfigurationValidationSettings {
   debounce_ms: number
   min_debounce_ms: number
-  max_debounce_ms: number
 }
+
+export interface RuntimePolicyValues {
+  chat_completion_body_bytes: number
+  content_blocks: number
+  decoded_block_bytes: number
+  decoded_total_bytes: number
+  media_output_bytes: number
+  text_edit_bytes: number
+  provider_timeout_seconds: number
+  provider_connect_timeout_seconds: number
+  provider_catalog_timeout_seconds: number
+}
+
+export interface RuntimePolicySettings extends RuntimePolicyValues {
+  defaults: RuntimePolicyValues
+  minimums: RuntimePolicyValues
+  configurable: boolean
+}
+
+export type RuntimePolicyUpdate = RuntimePolicyValues
 
 export interface SkillResource {
   name: string
@@ -565,7 +584,6 @@ export interface EventFeedFilters {
 export interface SystemLogSettings {
   max_size_mib: number
   min_size_mib: number
-  max_size_mib_limit: number
 }
 
 export interface RuntimeDiagnosticEntry {
@@ -593,7 +611,6 @@ export interface RuntimeDiagnosticEntry {
 
 export interface RuntimeDiagnostics {
   retention_limit: number
-  max_retention_limit: number
 }
 
 export type ManagementEvent =

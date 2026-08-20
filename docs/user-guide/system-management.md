@@ -39,7 +39,7 @@ data/
 Python templates scope 用于在 `workflow/command/`、`workflow/task_dispatcher/`、`agent/custom_tool/` 或 `agent/custom_middleware/` 类别中建档静态代码模板。
 项目源码不携带实例 data，也不会自动生成默认模板；空模板目录不会影响运行中的配置扩展。
 
-- 文本编辑上限 2 MiB，并使用 revision 防止静默覆盖；
+- 文本编辑默认上限为 2 MiB，可在【系统 / 系统配置】调整，并使用 revision 防止静默覆盖；
 - 文件操作不跟随符号链接或 Windows reparse point；
 - 页面不能访问 `config/`（包括配置扩展目录）、`state/`、`logs/`、外部映射或其他宿主路径；
 - 递归删除没有回收站。
@@ -51,6 +51,11 @@ LangSmith tracing、Endpoint、Project、可选 Workspace ID 与 write-only API 
 CIDR。secret 只显示是否配置，不回显明文。启用 LangSmith 或修改连接字段时，系统会在保存前验证 API Key、
 Endpoint 区域和 Workspace ID 是否匹配；验证失败时不保存本次修改。
 
+“输入与资源策略”集中设置 Chat 请求体、content block 数量、单个/合计输入媒体、单个输出媒体、在线编辑文件以及
+Provider 总超时、连接超时和模型目录超时。后端通过 `/api/system/runtime-policy` 返回当前值、默认值和最小值；
+这些字段只有正数约束，没有额外产品最大值。当前默认分别为 64 MiB、4096、24 MiB、48 MiB、64 MiB、2 MiB、
+600 秒、5 秒和 15 秒。
+
 LangSmith 配置项含义如下：
 
 - 启用：控制是否向 LangSmith 发送 trace；
@@ -59,7 +64,7 @@ LangSmith 配置项含义如下：
 - Workspace ID：API Key 可访问多个 Workspace 时填写，否则留空；
 - API Key：只写 secret；已配置的值不会回显，留空保存时保留原值。
 
-API Key 和消息上限立即生效；host、端口、远程访问、管理密码、LangSmith、CORS 和可信代理重启后生效。
+API Key、消息上限和输入与资源策略立即生效；host、端口、远程访问、管理密码、LangSmith、CORS 和可信代理重启后生效。
 
 【系统 / 拦截消息】管理 Chat Completions 入站拦截。开关立即生效并持久化；开启后，请求在进入 Workflow
 之前直接收到 OpenAI-compatible 的“消息已拦截”回复。页面只展示进程内最新一条原始 JSON，正文不写入 SQLite、

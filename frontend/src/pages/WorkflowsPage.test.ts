@@ -29,9 +29,9 @@ const workflow: Workflow = {
   workflow_role: 'parent',
   description: 'Runs the research agent.',
   workflow_event_output_id: null,
-  recursion_limit: 100,
-  execution_timeout_seconds: 600,
-  max_concurrency: 16,
+  recursion_limit: 1_000_000,
+  execution_timeout_seconds: 1_200,
+  max_concurrency: 100,
   enabled: true,
 }
 const eventOutput: SavedBlock = { id: 'event-output-1', name: 'Public events' }
@@ -139,9 +139,9 @@ describe('WorkflowsPage', () => {
       workflow_role: 'child',
       description: '',
       workflow_event_output_id: null,
-      recursion_limit: 100,
-      execution_timeout_seconds: 600,
-      max_concurrency: 16,
+      recursion_limit: 1_000_000,
+      execution_timeout_seconds: 1_200,
+      max_concurrency: 100,
     })
     wrapper.unmount()
   })
@@ -177,9 +177,9 @@ describe('WorkflowsPage', () => {
       workflow_role: 'parent',
       description: workflow.description,
       workflow_event_output_id: eventOutput.id,
-      recursion_limit: 100,
-      execution_timeout_seconds: 600,
-      max_concurrency: 16,
+      recursion_limit: 1_000_000,
+      execution_timeout_seconds: 1_200,
+      max_concurrency: 100,
     })
     wrapper.unmount()
   })

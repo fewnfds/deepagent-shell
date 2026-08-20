@@ -4,7 +4,6 @@ from agent_shell.storage.file_config import FileConfigRepository
 
 
 MIN_VALIDATION_DEBOUNCE_MS = 100
-MAX_VALIDATION_DEBOUNCE_MS = 10_000
 
 
 class ConfigurationValidationSettingsStore:
@@ -16,11 +15,11 @@ class ConfigurationValidationSettingsStore:
         return self._response(value)
 
     def update(self, debounce_ms: int) -> dict[str, int]:
-        if not MIN_VALIDATION_DEBOUNCE_MS <= debounce_ms <= MAX_VALIDATION_DEBOUNCE_MS:
+        if debounce_ms < MIN_VALIDATION_DEBOUNCE_MS:
             raise ValueError("configuration validation debounce is out of range")
         self._repository.update_system(lambda system: system.setdefault("configuration_validation", {}).__setitem__("debounce_ms", debounce_ms))
         return self._response(debounce_ms)
 
     @staticmethod
     def _response(debounce_ms: int) -> dict[str, int]:
-        return {"debounce_ms": debounce_ms, "min_debounce_ms": MIN_VALIDATION_DEBOUNCE_MS, "max_debounce_ms": MAX_VALIDATION_DEBOUNCE_MS}
+        return {"debounce_ms": debounce_ms, "min_debounce_ms": MIN_VALIDATION_DEBOUNCE_MS}

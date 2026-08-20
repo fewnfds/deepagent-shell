@@ -4,13 +4,12 @@ from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
 
 from agent_shell.runtime.diagnostics import RuntimeDiagnostics
-from agent_shell.storage.history_retention import MAX_HISTORY_RETENTION_LIMIT
 
 
 class RuntimeDiagnosticsRetentionUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    retention_limit: int = Field(ge=1, le=MAX_HISTORY_RETENTION_LIMIT)
+    retention_limit: int = Field(ge=1)
 
 
 def build_runtime_diagnostics_router(

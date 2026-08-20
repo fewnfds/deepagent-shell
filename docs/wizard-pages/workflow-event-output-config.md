@@ -44,7 +44,7 @@ def output(event):
 | `debug` | `channel`, `data_json` | LangGraph debug payload，通常为 `dict` |
 | `other` | `channel`, `data_json` | 当前未归入上述 method 的原始 payload；`channel` 保留原 method 名 |
 
-`channel` 对已知 State 类事件等于事件 method；`data_json` 是用于显示和简单拼接的有界 JSON 文本。要访问完整 State、消息
+`channel` 对已知 State 类事件等于事件 method；`data_json` 是用于显示和简单拼接的 JSON 文本。要访问完整 State、消息
 对象、`Command` 或其他 Python 值，应使用 `event["data"]`。这些对象来自锁定 LangChain/LangGraph 版本的 v3 语义 payload，
 不保证本身 JSON-compatible；本页外层 `event` dict 和字段名才是 Agent Shell 的稳定输出脚本 contract。
 

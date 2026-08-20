@@ -116,7 +116,9 @@ $python = Join-Path (Join-Path ..\runtime\app $pythonHome) python.exe
 & ..\runtime\bootstrap\uv.exe sync --python $python --extra dev --frozen --no-python-downloads
 ```
 
-之后的日常定向 pytest 直接使用项目 `.venv`，避免
+之后的日常定向 pytest 直接使用项目 `.venv`。测试会在 session startup 校验
+`agent_shell` 的实际来源必须是当前仓库的 `server/src/agent_shell`；如果系统 Python 或用户级
+editable 安装把其他项目注入 `sys.path`，测试会立即失败，不会静默执行错误源码。避免
 每轮测试都让 `uv` 重复检查环境。pytest 临时文件使用 Windows 系统临时目录，不在源码目录设置 `basetemp`；同时禁用
 pytest cache provider，避免生成仓库内 `.pytest_cache`。不要为一次局部改动运行完整 `test/`。大量 TestClient 用例会
 分别创建隔离 data root 和 SQLite，Windows 杀毒软件与目录索引会放大这类全量运行的磁盘成本。

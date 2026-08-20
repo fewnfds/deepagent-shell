@@ -5,7 +5,7 @@ import {
   LteInput,
   LteTextarea,
 } from '@adminlte/vue'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import {
@@ -13,6 +13,8 @@ import {
   type ApiServerSettings,
   type ApiServerSettingsUpdate,
   type ConfigurationValidationSettings,
+  type RuntimePolicySettings,
+  type RuntimePolicyUpdate,
   type SystemSettings,
   type SystemSettingsUpdate,
 } from '@/api'
@@ -29,6 +31,8 @@ interface SystemSettingsApi {
   saveApiServer(payload: ApiServerSettingsUpdate): Promise<ApiServerSettings>
   getValidationSettings(): Promise<ConfigurationValidationSettings>
   updateValidationSettings(debounceMs: number): Promise<ConfigurationValidationSettings>
+  getRuntimePolicy(): Promise<RuntimePolicySettings>
+  updateRuntimePolicy(payload: RuntimePolicyUpdate): Promise<RuntimePolicySettings>
 }
 
 const props = defineProps<{ api?: SystemSettingsApi }>()
@@ -40,6 +44,7 @@ const validationSettingsController = useConfigurationValidationSettings()
 
 const settings = ref<SystemSettings | null>(null)
 const apiServerSettings = ref<ApiServerSettings | null>(null)
+const runtimePolicy = ref<RuntimePolicySettings | null>(null)
 const loading = ref(true)
 const saving = ref(false)
 const pageError = ref('')
@@ -61,9 +66,35 @@ const showApiKey = ref(false)
 const maxInitialMessages = ref(1000)
 const validationDebounceMs = ref(1000)
 const validationDebounceMin = ref(100)
-const validationDebounceMax = ref(10_000)
 const corsOrigins = ref('')
 const trustedProxies = ref('')
+const runtimePolicyDraft = reactive<RuntimePolicyUpdate>({
+  chat_completion_body_bytes: 64 * 1024 * 1024,
+  content_blocks: 4096,
+  decoded_block_bytes: 24 * 1024 * 1024,
+  decoded_total_bytes: 48 * 1024 * 1024,
+  media_output_bytes: 64 * 1024 * 1024,
+  text_edit_bytes: 2 * 1024 * 1024,
+  provider_timeout_seconds: 600,
+  provider_connect_timeout_seconds: 5,
+  provider_catalog_timeout_seconds: 15,
+})
+const runtimePolicyFields: Array<{
+  key: keyof RuntimePolicyUpdate
+  labelKey: string
+  unit: string
+  step: number
+}> = [
+  { key: 'chat_completion_body_bytes', labelKey: 'systemSettings.runtimePolicy.chatBody', unit: 'bytes', step: 1024 },
+  { key: 'content_blocks', labelKey: 'systemSettings.runtimePolicy.contentBlocks', unit: '', step: 1 },
+  { key: 'decoded_block_bytes', labelKey: 'systemSettings.runtimePolicy.mediaBlock', unit: 'bytes', step: 1024 },
+  { key: 'decoded_total_bytes', labelKey: 'systemSettings.runtimePolicy.mediaTotal', unit: 'bytes', step: 1024 },
+  { key: 'media_output_bytes', labelKey: 'systemSettings.runtimePolicy.mediaOutput', unit: 'bytes', step: 1024 },
+  { key: 'text_edit_bytes', labelKey: 'systemSettings.runtimePolicy.textEdit', unit: 'bytes', step: 1024 },
+  { key: 'provider_timeout_seconds', labelKey: 'systemSettings.runtimePolicy.providerTimeout', unit: 's', step: 1 },
+  { key: 'provider_connect_timeout_seconds', labelKey: 'systemSettings.runtimePolicy.providerConnectTimeout', unit: 's', step: 1 },
+  { key: 'provider_catalog_timeout_seconds', labelKey: 'systemSettings.runtimePolicy.providerCatalogTimeout', unit: 's', step: 1 },
+]
 
 const apiKeyPlaceholder = computed(() => apiServerSettings.value?.api_key.configured
   ? t('common.configuredSecretPlaceholder')
@@ -94,18 +125,22 @@ const settingsValid = computed(() => {
   })()
   const langsmithApiKeyAvailable = Boolean(langsmithApiKey.value)
     || (!langsmithApiKeyDirty.value && Boolean(settings.value?.langsmith_api_key.configured))
+  const runtimePolicyValid = runtimePolicy.value !== null
+    && runtimePolicyFields.every(({ key }) => {
+      const value = Number(runtimePolicyDraft[key])
+      return Number.isInteger(value) && value >= runtimePolicy.value!.minimums[key]
+    })
   return Number.isInteger(normalizedPort)
     && normalizedPort >= 1
     && normalizedPort <= 65_535
     && Number.isInteger(normalizedMessageLimit)
     && normalizedMessageLimit >= 1
-    && normalizedMessageLimit <= 10_000
     && Number.isInteger(normalizedValidationDebounce)
     && normalizedValidationDebounce >= validationDebounceMin.value
-    && normalizedValidationDebounce <= validationDebounceMax.value
     && endpointValid
     && Boolean(langsmithProject.value.trim())
     && (!langsmithTracingEnabled.value || langsmithApiKeyAvailable)
+    && runtimePolicyValid
 })
 
 function lines(value: string): string[] {
@@ -141,8 +176,14 @@ function applyApiServerSettings(value: ApiServerSettings): void {
 function applyValidationSettings(value: ConfigurationValidationSettings): void {
   validationDebounceMs.value = value.debounce_ms
   validationDebounceMin.value = value.min_debounce_ms
-  validationDebounceMax.value = value.max_debounce_ms
   validationSettingsController.apply(value)
+}
+
+function applyRuntimePolicy(value: RuntimePolicySettings): void {
+  runtimePolicy.value = value
+  for (const { key } of runtimePolicyFields) {
+    runtimePolicyDraft[key] = value[key]
+  }
 }
 
 async function load(): Promise<void> {
@@ -153,14 +194,17 @@ async function load(): Promise<void> {
       loadedSystemSettings,
       loadedApiServerSettings,
       loadedValidationSettings,
+      loadedRuntimePolicy,
     ] = await Promise.all([
       api.getSystemSettings(),
       api.getApiServer(),
       api.getValidationSettings(),
+      api.getRuntimePolicy(),
     ])
     applySystemSettings(loadedSystemSettings)
     applyApiServerSettings(loadedApiServerSettings)
     applyValidationSettings(loadedValidationSettings)
+    applyRuntimePolicy(loadedRuntimePolicy)
   } catch (error) {
     pageError.value = managementError.describe(error).display
   } finally {
@@ -190,6 +234,7 @@ async function save(): Promise<void> {
       savedSystemSettings,
       savedApiServerSettings,
       savedValidationSettings,
+      savedRuntimePolicy,
     ] = await Promise.all([
       api.updateSystemSettings({
         host: host.value.trim(),
@@ -211,10 +256,12 @@ async function save(): Promise<void> {
         max_initial_messages: Number(maxInitialMessages.value),
       }),
       api.updateValidationSettings(Number(validationDebounceMs.value)),
+      api.updateRuntimePolicy({ ...runtimePolicyDraft }),
     ])
     applySystemSettings(savedSystemSettings)
     applyApiServerSettings(savedApiServerSettings)
     applyValidationSettings(savedValidationSettings)
+    applyRuntimePolicy(savedRuntimePolicy)
     notify({ tone: 'success', title: t('systemSettings.saved') })
   } catch (error) {
     pageError.value = managementError.describe(error).display
@@ -234,7 +281,7 @@ onMounted(() => { void load() })
         {{ t('common.refresh') }}
       </LteButton>
       <LteButton
-        :disabled="loading || !settings || !apiServerSettings || saving || !settingsValid"
+        :disabled="loading || !settings || !apiServerSettings || !runtimePolicy || saving || !settingsValid"
         theme="primary"
         type="button"
         @click="save"
@@ -263,7 +310,7 @@ onMounted(() => { void load() })
     </div>
 
     <form
-      v-else-if="settings && apiServerSettings"
+      v-else-if="settings && apiServerSettings && runtimePolicy"
       id="system-settings-form"
       data-testid="system-settings-form"
       @submit.prevent="save"
@@ -396,7 +443,6 @@ onMounted(() => { void load() })
                   id="max-initial-messages"
                   v-model.number="maxInitialMessages"
                   class="form-control"
-                  max="10000"
                   min="1"
                   required
                   step="1"
@@ -415,7 +461,6 @@ onMounted(() => { void load() })
                     v-model.number="validationDebounceMs"
                     aria-describedby="configuration-validation-debounce-unit"
                     class="form-control"
-                    :max="validationDebounceMax"
                     :min="validationDebounceMin"
                     required
                     step="100"
@@ -425,6 +470,40 @@ onMounted(() => { void load() })
                 </div>
               </FormField>
 
+            </div>
+          </section>
+
+          <section class="card mb-3" data-testid="system-card-runtime-policy">
+            <header class="card-header">
+              <h2 class="card-title">
+                <i class="bi bi-sliders me-2" aria-hidden="true" />
+                {{ t('systemSettings.runtimePolicy.title') }}
+              </h2>
+            </header>
+            <div class="card-body">
+              <div class="row g-3">
+                <div
+                  v-for="field in runtimePolicyFields"
+                  :key="field.key"
+                  class="col-md-6"
+                >
+                  <label class="form-label" :for="`runtime-policy-${field.key}`">
+                    {{ fieldLabel(field.labelKey, field.key) }}
+                  </label>
+                  <div class="input-group">
+                    <input
+                      :id="`runtime-policy-${field.key}`"
+                      v-model.number="runtimePolicyDraft[field.key]"
+                      class="form-control"
+                      :min="runtimePolicy.minimums[field.key]"
+                      required
+                      :step="field.step"
+                      type="number"
+                    >
+                    <span v-if="field.unit" class="input-group-text">{{ field.unit }}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
 

@@ -456,7 +456,15 @@ def test_chat_completion_body_limit_runs_before_workflow_resolution(
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
         workflow = create_workflow(client)
-        monkeypatch.setattr(api_server, "MAX_CHAT_COMPLETION_BODY_BYTES", 128)
+        current = client.get("/api/system/runtime-policy").json()
+        update = {
+            key: value
+            for key, value in current.items()
+            if key not in {"defaults", "minimums", "configurable"}
+        }
+        update["chat_completion_body_bytes"] = 128
+        saved = client.put("/api/system/runtime-policy", json=update)
+        assert saved.status_code == 200, saved.text
         response = client.post(
             "/v1/chat/completions",
             json={

@@ -59,6 +59,7 @@ from agent_shell.storage.history_retention import HistoryRetentionStore
 from agent_shell.storage.media_outputs import MediaOutputStore
 from agent_shell.storage.runtime_diagnostic_details import RuntimeDiagnosticDetailStore
 from agent_shell.storage.runtime_diagnostics import RuntimeDiagnosticStore
+from agent_shell.storage.runtime_policy import RuntimePolicyStore
 from agent_shell.storage.system_log_settings import MIB_BYTES, SystemLogSettingsStore
 from agent_shell.storage.validation_settings import ConfigurationValidationSettingsStore
 from agent_shell.storage.workflows import WorkflowStore
@@ -110,7 +111,12 @@ def create_app(
     )
     database = SQLiteDatabase(settings.resolved_database_path())
     configuration = FileConfigRepository(settings.data_root)
-    media_outputs = MediaOutputStore(database, settings.resolved_media_outputs_dir())
+    runtime_policy = RuntimePolicyStore(configuration)
+    media_outputs = MediaOutputStore(
+        database,
+        settings.resolved_media_outputs_dir(),
+        runtime_policy,
+    )
     system_log_settings = SystemLogSettingsStore(configuration)
     event_logger = SecurityEventLogger(
         logs_dir,
@@ -184,7 +190,7 @@ def create_app(
         system_log_settings,
     )
     secret_resolver = ProviderSecretResolver(configuration)
-    provider_http_clients = ProviderHttpClients()
+    provider_http_clients = ProviderHttpClients(runtime_policy)
     file_manager = FileManagerService(
         {
             "files": settings.resolved_files_dir(),
@@ -192,6 +198,7 @@ def create_app(
             "python_templates": python_templates_dir,
         },
         settings.resolved_runtime_dir() / "tmp",
+        runtime_policy,
     )
     system_settings = SystemSettingsService(settings, api_server_store.api_key, configuration)
     agent_runtime = RequestSnapshotRuntime(
@@ -205,6 +212,7 @@ def create_app(
         workflow_lifecycle=workflow_lifecycle,
         background_tasks=background_tasks,
         runtime_diagnostics=runtime_diagnostics,
+        runtime_policy=runtime_policy,
     )
 
     frontend_dir = Path(__file__).resolve().parents[3] / "runtime" / "frontend_dist"
@@ -438,6 +446,7 @@ def create_app(
     app.state.api_server_store = api_server_store
     app.state.message_interception = message_interception
     app.state.media_outputs = media_outputs
+    app.state.runtime_policy = runtime_policy
     app.state.provider_http_clients = provider_http_clients
     app.state.event_feed = event_feed
     app.state.workflow_checkpoints = workflow_checkpoints
@@ -478,6 +487,7 @@ def create_app(
             provider_http_clients,
             workflow_store,
             python_package_authoring,
+            runtime_policy,
         )
     )
     app.include_router(
@@ -521,7 +531,7 @@ def create_app(
     )
     app.include_router(build_file_manager_router(file_manager))
     app.include_router(build_provider_integrations_router())
-    app.include_router(build_system_settings_router(system_settings))
+    app.include_router(build_system_settings_router(system_settings, runtime_policy))
     app.include_router(
         build_api_server_router(
             api_server_store,
@@ -530,6 +540,7 @@ def create_app(
             settings,
             api_server_events,
             message_interception,
+            runtime_policy,
         )
     )
 

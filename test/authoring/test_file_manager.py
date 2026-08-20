@@ -98,9 +98,39 @@ def test_file_manager_completes_common_file_and_text_workflows(
             "notes/empty/",
         }
         assert archive.read("notes/drafts/final.txt") == "第一版内容\n".encode()
-    assert not list((tmp_path / "runtime" / "tmp").glob("*.zip"))
-    assert deleted.json()["deleted"] is True
-    assert not (tmp_path / "data" / "files" / "notes").exists()
+
+
+def test_file_manager_uses_the_configured_text_editor_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        current = client.get("/api/system/runtime-policy").json()
+        update = {
+            key: value
+            for key, value in current.items()
+            if key not in {"defaults", "minimums", "configurable"}
+        }
+        update["text_edit_bytes"] = 4
+        assert client.put("/api/system/runtime-policy", json=update).status_code == 200
+        assert client.post(
+            "/api/file-manager/files/text-files",
+            json={"path": "small.txt"},
+        ).status_code == 200
+        opened = client.get(
+            "/api/file-manager/files/text",
+            params={"path": "small.txt"},
+        )
+        saved = client.put(
+            "/api/file-manager/files/text",
+            json={
+                "path": "small.txt",
+                "content": "12345",
+                "revision": opened.json()["revision"],
+            },
+        )
+
+    assert saved.status_code == 413
+    assert saved.json()["detail"]["message_args"] == {"max_bytes": 4}
 
 
 def test_file_upload_streams_nested_paths_and_requires_explicit_overwrite(

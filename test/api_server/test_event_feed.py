@@ -115,7 +115,6 @@ def test_runtime_diagnostic_settings_have_no_capture_switch(
 
     assert settings.json() == {
         "retention_limit": 20,
-        "max_retention_limit": 10_000,
     }
     assert removed.status_code == 404
     assert listing["items"] == []

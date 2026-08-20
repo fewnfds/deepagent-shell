@@ -36,6 +36,37 @@ def _assistant_event(node_id: str, message: str, sequence: int) -> OutputEvent:
     )
 
 
+def test_workflow_custom_events_have_no_product_byte_ceiling() -> None:
+    source = WorkflowEventSourceV1(
+        source_type="agent",
+        workflow_node_id="agent-a",
+        agent_profile_id=MAIN_A,
+    )
+    event = WorkflowCustomEventV1(
+        source=source,
+        channel="large.payload",
+        data={"value": "x" * 1_100_000},
+    )
+    normalizer = V3EventNormalizer(
+        "main",
+        workflow_mode=True,
+        workflow_sources={"agent-a": source},
+    )
+
+    normalized = normalizer.feed(
+        {
+            "method": "custom",
+            "params": {
+                "namespace": "agent-a",
+                "data": event.model_dump(mode="json"),
+            },
+        }
+    )
+
+    assert len(normalized) == 1
+    assert len(normalized[0].values["data_json"]) > 1_000_000
+
+
 def test_workflow_output_uses_the_policy_frozen_for_each_node() -> None:
     policy_a = output_renderer({"assistant_text": "A:{{message}}"})
     policy_b = output_renderer({"assistant_text": "B:{{message}}"})

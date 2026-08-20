@@ -4,10 +4,7 @@ from collections.abc import Callable
 import sqlite3
 
 from agent_shell.storage.database import SQLiteDatabase
-from agent_shell.storage.history_retention import (
-    HistoryRetentionStore,
-    MAX_HISTORY_RETENTION_LIMIT,
-)
+from agent_shell.storage.history_retention import HistoryRetentionStore
 
 
 _TABLE = "runtime_diagnostic_events"
@@ -185,7 +182,6 @@ class RuntimeDiagnosticStore:
             "retention_limit": self._history_retention.get_limit(
                 "runtime_diagnostics"
             ),
-            "max_retention_limit": MAX_HISTORY_RETENTION_LIMIT,
         }
 
     def set_retention(self, retention_limit: int) -> dict[str, int]:
@@ -196,7 +192,6 @@ class RuntimeDiagnosticStore:
             self._prune(connection, retention_limit)
         return {
             "retention_limit": retention_limit,
-            "max_retention_limit": MAX_HISTORY_RETENTION_LIMIT,
         }
 
 

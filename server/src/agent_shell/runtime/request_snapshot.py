@@ -25,6 +25,7 @@ from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.file_config import FileConfigRepository
 from agent_shell.storage.media_outputs import MediaOutputStore
+from agent_shell.storage.runtime_policy import RuntimePolicyStore
 from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.validation.assembly import StaticAssembly
 from agent_shell.validation.service import ConfigurationValidationService
@@ -256,6 +257,7 @@ class RequestSnapshotRuntime:
         workflow_lifecycle: WorkflowLifecycleService,
         background_tasks: BackgroundTaskManager,
         runtime_diagnostics: RuntimeDiagnostics,
+        runtime_policy: RuntimePolicyStore,
     ) -> None:
         self._configuration = configuration
         self._python_packages_dir = python_packages_dir
@@ -267,6 +269,7 @@ class RequestSnapshotRuntime:
         self._workflow_lifecycle = workflow_lifecycle
         self._background_tasks = background_tasks
         self._runtime_diagnostics = runtime_diagnostics
+        self._runtime_policy = runtime_policy
 
     def capture(self) -> RequestRuntimeSnapshot:
         repository = self._configuration.clone()
@@ -293,6 +296,7 @@ class RequestSnapshotRuntime:
                     validation=validation,
                     provider_http_clients=self._provider_http_clients,
                     store=self._workflow_lifecycle.store,
+                    runtime_policy=self._runtime_policy,
                 ),
                 self._media_outputs,
                 python_packages_dir=self._python_packages_dir,
@@ -301,6 +305,7 @@ class RequestSnapshotRuntime:
                 workflow_checkpoints=self._workflow_checkpoints,
                 workflow_lifecycle=self._workflow_lifecycle,
                 runtime_diagnostics=self._runtime_diagnostics,
+                runtime_policy=self._runtime_policy,
             )
 
         runtime = runtime_factory()

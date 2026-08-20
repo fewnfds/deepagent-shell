@@ -16,7 +16,6 @@ from langgraph.types import Command
 from pydantic import ValidationError
 
 from agent_shell.workflow.events import (
-    MAX_WORKFLOW_CUSTOM_EVENT_BYTES,
     WORKFLOW_CUSTOM_EVENT_SCHEMA,
     WorkflowCustomEventV1,
     WorkflowEventSourceV1,
@@ -32,18 +31,6 @@ def _json_text(value: object) -> str:
         return json.dumps(value, ensure_ascii=False, separators=(",", ":"), default=str)
     except (TypeError, ValueError):
         return json.dumps(str(value), ensure_ascii=False)
-
-
-def _bounded_json_text(value: object) -> str:
-    text = _json_text(value)
-    encoded = text.encode("utf-8")
-    if len(encoded) <= MAX_WORKFLOW_CUSTOM_EVENT_BYTES:
-        return text
-    suffix = b"...[truncated]"
-    prefix = encoded[: MAX_WORKFLOW_CUSTOM_EVENT_BYTES - len(suffix)].decode(
-        "utf-8", errors="ignore"
-    )
-    return prefix + suffix.decode("ascii")
 
 
 def _timestamp(value: object) -> str:
@@ -360,7 +347,7 @@ class V3EventNormalizer:
             source = workflow_event.source
             channel = workflow_event.channel
             custom_data = workflow_event.data
-        serialized = _bounded_json_text(custom_data)
+        serialized = _json_text(custom_data)
         source_agent_name = (
             self._subagent_for_namespace(namespace)
             or self._workflow_agent_name(node="", namespace=namespace)
@@ -434,7 +421,7 @@ class V3EventNormalizer:
         timestamp: str,
         namespace: str,
     ) -> OutputEvent:
-        serialized = _bounded_json_text(data)
+        serialized = _json_text(data)
         values = (
             {
                 "status": str(data.get("event") or "running"),

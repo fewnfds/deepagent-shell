@@ -28,6 +28,7 @@ from agent_shell.provider_secrets import ProviderCredentialError, ProviderSecret
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.workflows import WorkflowStore
+from agent_shell.storage.runtime_policy import RuntimePolicyStore
 from agent_shell.validation.models import validation_failure_detail
 from agent_shell.validation.service import ConfigurationValidationService
 from agent_shell.python_packages.authoring import (
@@ -74,6 +75,7 @@ def build_router(
     provider_http_clients: ProviderHttpClients,
     workflow_store: WorkflowStore,
     python_package_authoring: PythonPackageAuthoringService,
+    runtime_policy: RuntimePolicyStore,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -314,7 +316,7 @@ def build_router(
             response = await provider_http_clients.async_client.get(
                 f"{base_url}/models",
                 headers=headers,
-                timeout=15,
+                timeout=runtime_policy.snapshot().provider_catalog_timeout_seconds,
             )
             if (
                 response.status_code == 403

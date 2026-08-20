@@ -16,11 +16,11 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from agent_shell.api.errors import management_error
 from agent_shell.runtime.agent_runtime import RunExecution
 from agent_shell.runtime.errors import AgentRuntimeError
-from agent_shell.runtime.input_messages import MAX_CHAT_COMPLETION_BODY_BYTES
 from agent_shell.runtime.request_snapshot import RequestSnapshotRuntime
 from agent_shell.security import ApiKeyPolicyError, validate_api_key_policy
 from agent_shell.settings import Settings, bearer_token_is_valid
 from agent_shell.storage.api_server import ApiServerStore
+from agent_shell.storage.runtime_policy import RuntimePolicyStore
 from agent_shell.storage.workflows import WorkflowStore
 
 
@@ -72,7 +72,7 @@ class ApiServerSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     api_key: ApiKeyCommand = Field(default_factory=ApiKeyCommand)
-    max_initial_messages: int | None = Field(default=None, ge=1, le=10_000)
+    max_initial_messages: int | None = Field(default=None, ge=1)
 
 
 class MessageInterceptionUpdate(BaseModel):
@@ -385,6 +385,7 @@ def build_api_server_router(
     settings: Settings,
     events: ApiServerEventHub,
     message_interception: MessageInterceptionState,
+    runtime_policy: RuntimePolicyStore,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -506,12 +507,13 @@ def build_api_server_router(
         if not server_settings["enabled"]:
             return _openai_error(503, "api_server_stopped", "The API server is stopped.")
         try:
-            body = await _read_bounded_body(request, MAX_CHAT_COMPLETION_BODY_BYTES)
+            body_limit = runtime_policy.snapshot().chat_completion_body_bytes
+            body = await _read_bounded_body(request, body_limit)
         except _BodyTooLarge:
             return _openai_error(
                 413,
                 "input_body_too_large",
-                f"The request body may not exceed {MAX_CHAT_COMPLETION_BODY_BYTES} bytes.",
+                f"The request body may not exceed {body_limit} bytes.",
             )
         try:
             raw_json = body.decode("utf-8")

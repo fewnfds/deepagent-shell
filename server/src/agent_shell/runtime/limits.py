@@ -11,8 +11,8 @@ from agent_shell.redaction import redact_for_boundary
 from agent_shell.runtime.errors import AgentRuntimeError
 
 
-GRAPH_RECURSION_LIMIT = 100
-WORKFLOW_MAX_CONCURRENCY = 16
+GRAPH_RECURSION_LIMIT = 1_000_000
+WORKFLOW_MAX_CONCURRENCY = 100
 
 
 def _provider_error(exc: Exception) -> AgentRuntimeError:

@@ -12,6 +12,8 @@ from agent_shell.runtime.media_response import MainAgentMediaResponse
 from agent_shell.runtime.output_stream import MainAgentMediaBlock
 from agent_shell.storage.database import SQLiteDatabase
 from agent_shell.storage.media_outputs import MediaOutputStore, MediaProjection
+from agent_shell.storage.file_config import FileConfigRepository
+from agent_shell.storage.runtime_policy import RuntimePolicyStore
 
 
 def test_database_initialization_drops_obsolete_history_tables(tmp_path: Path) -> None:
@@ -86,6 +88,36 @@ def test_failed_file_cleanup_keeps_asset_index_for_retry(
         ).fetchone()
     assert removed is None
     assert not target.exists()
+
+
+def test_media_output_store_uses_the_configured_byte_limit(tmp_path: Path) -> None:
+    data_root = tmp_path / "data"
+    repository = FileConfigRepository(data_root)
+    policy = RuntimePolicyStore(repository)
+    current = policy.public()
+    update = {
+        key: value
+        for key, value in current.items()
+        if key not in {"defaults", "minimums", "configurable"}
+    }
+    update["media_output_bytes"] = 4
+    policy.update(update)
+    database = SQLiteDatabase(data_root / "state" / "agent-shell.sqlite3")
+    store = MediaOutputStore(database, data_root / "media" / "outputs", policy)
+
+    projection = store.persist(
+        request_id="request-1",
+        message_id="message-1",
+        block_index=0,
+        block={
+            "type": "image",
+            "mime_type": "image/png",
+            "base64": base64.b64encode(b"12345").decode("ascii"),
+        },
+    )
+
+    assert projection.asset is None
+    assert projection.structured_block["reason"] == "content_invalid"
 
 
 def test_cancelled_projection_waits_for_persistence_without_publishing() -> None:

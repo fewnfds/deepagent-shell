@@ -48,6 +48,7 @@ from agent_shell.runtime.output_stream import (
 )
 from agent_shell.runtime.stream_transformers import RawCustomEventTransformer
 from agent_shell.storage.media_outputs import MediaOutputStore
+from agent_shell.storage.runtime_policy import RUNTIME_POLICY_DEFAULTS, RuntimePolicyStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.runtime.workflow_checkpoints import WorkflowCheckpointService
 from agent_shell.runtime.workflow_lifecycle import WorkflowLifecycleService
@@ -60,7 +61,7 @@ from agent_shell.workflow_event_output import WorkflowEventOutputBlock
 from langgraph.errors import GraphRecursionError
 from langgraph.prebuilt import ToolCallTransformer
 
-EXECUTION_TIMEOUT_SECONDS = 600
+EXECUTION_TIMEOUT_SECONDS = 1_200
 
 
 @dataclass(slots=True)
@@ -512,6 +513,7 @@ class AgentRuntime:
         workflow_checkpoints: WorkflowCheckpointService | None = None,
         workflow_lifecycle: WorkflowLifecycleService,
         runtime_diagnostics: RuntimeDiagnostics | None = None,
+        runtime_policy: RuntimePolicyStore | None = None,
     ) -> None:
         self._builder = builder
         self._media_outputs = media_outputs
@@ -521,6 +523,14 @@ class AgentRuntime:
         self._workflow_checkpoints = workflow_checkpoints
         self._workflow_lifecycle = workflow_lifecycle
         self._runtime_diagnostics = runtime_diagnostics
+        self._runtime_policy = runtime_policy
+
+    def _input_policy(self):
+        return (
+            self._runtime_policy.snapshot()
+            if self._runtime_policy is not None
+            else RUNTIME_POLICY_DEFAULTS
+        )
 
     async def _finish_parent_lifecycle(
         self,
@@ -830,7 +840,7 @@ class AgentRuntime:
         initial_workflow_task: Mapping[str, Any] | None = None,
         background_runtime: Any | None = None,
     ) -> RunExecution:
-        messages = validate_client_messages(raw_messages)
+        messages = validate_client_messages(raw_messages, self._input_policy())
         mapped_directory_paths_by_filesystem = (
             await self._resolved_mapped_directory_paths_by_filesystem(
                 lifecycle_id,
@@ -933,7 +943,7 @@ class AgentRuntime:
             for node in document.definition.nodes
             if node.type == "task-dispatcher"
         ]
-        messages = validate_client_messages(raw_messages)
+        messages = validate_client_messages(raw_messages, self._input_policy())
         messages_sha = client_messages_sha(messages)
         assemblies: dict[str, StaticAssembly] = {}
 

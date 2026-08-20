@@ -16,6 +16,6 @@ class WorkflowDefinition(BaseModel):
     workflow_role: WorkflowRole
     description: Annotated[str, Field(max_length=2_000)] = ""
     workflow_event_output_id: RequiredReference | None = None
-    recursion_limit: Annotated[int, Field(ge=1, le=100_000)] = 100
-    execution_timeout_seconds: Annotated[int, Field(ge=1, le=86_400)] = 600
-    max_concurrency: Annotated[int, Field(ge=1, le=256)] = 16
+    recursion_limit: Annotated[int, Field(ge=1)] = 1_000_000
+    execution_timeout_seconds: Annotated[int, Field(ge=1)] = 1_200
+    max_concurrency: Annotated[int, Field(ge=1)] = 100

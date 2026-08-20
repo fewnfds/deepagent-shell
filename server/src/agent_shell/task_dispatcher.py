@@ -52,7 +52,7 @@ class TaskDispatchItem(BaseModel):
 class TaskDispatcherResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    tasks: list[TaskDispatchItem] = Field(min_length=1, max_length=1000)
+    tasks: list[TaskDispatchItem] = Field(min_length=1)
     update: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("tasks")

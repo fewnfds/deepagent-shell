@@ -474,10 +474,7 @@ class FilesystemSystemPromptOverride(BaseModel):
 
 
 class FilesystemPermissionsBlock(StrictBlock):
-    permissions: list[FilesystemPermissionEntry] = Field(
-        default_factory=list,
-        max_length=500,
-    )
+    permissions: list[FilesystemPermissionEntry] = Field(default_factory=list)
     system_prompt_override: FilesystemSystemPromptOverride | None = None
     tool_overrides: FilesystemToolOverrides = Field(
         default_factory=FilesystemToolOverrides
@@ -492,9 +489,9 @@ class FilesystemPermissionsBlock(StrictBlock):
 
 
 class FilesystemBlock(StrictBlock):
-    mapped_directories: list[MappedDirectory] = Field(default_factory=list, max_length=100)
-    virtual_directories: list[VirtualDirectorySource] = Field(default_factory=list, max_length=100)
-    virtual_files: list[VirtualFileSource] = Field(default_factory=list, max_length=100)
+    mapped_directories: list[MappedDirectory] = Field(default_factory=list)
+    virtual_directories: list[VirtualDirectorySource] = Field(default_factory=list)
+    virtual_files: list[VirtualFileSource] = Field(default_factory=list)
     system_prompt_override: PromptOverrideText | None = None
     tool_token_limit_before_evict: Annotated[int, Field(ge=1)] | None = 20_000
     human_message_token_limit_before_evict: Annotated[int, Field(ge=1)] | None = 50_000
@@ -637,7 +634,7 @@ class FilesystemBlock(StrictBlock):
 
 
 class SkillBlock(StrictBlock):
-    skills: list[SkillName] = Field(default_factory=list, max_length=200)
+    skills: list[SkillName] = Field(default_factory=list)
     system_prompt_enabled: bool = True
     instruction_override: PromptOverrideText | None = None
 
@@ -778,10 +775,10 @@ class ToolReference(BaseModel):
 
 
 class MainAgentProfile(StrictBlock):
-    capability_refs: list[CapabilityReference] = Field(default_factory=list, max_length=100)
-    tool_refs: list[ToolReference] = Field(default_factory=list, max_length=100)
-    middleware_refs: list[MiddlewareReference] = Field(default_factory=list, max_length=100)
-    subagents: list[SubagentReference] = Field(default_factory=list, max_length=100)
+    capability_refs: list[CapabilityReference] = Field(default_factory=list)
+    tool_refs: list[ToolReference] = Field(default_factory=list)
+    middleware_refs: list[MiddlewareReference] = Field(default_factory=list)
+    subagents: list[SubagentReference] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_profile(self) -> "MainAgentProfile":
@@ -831,11 +828,9 @@ class CapabilityOverride(BaseModel):
 class SubagentSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    capability_overrides: list[CapabilityOverride] = Field(
-        default_factory=list, max_length=100
-    )
-    tool_refs: list[ToolReference] = Field(default_factory=list, max_length=100)
-    middleware_refs: list[MiddlewareReference] = Field(default_factory=list, max_length=100)
+    capability_overrides: list[CapabilityOverride] = Field(default_factory=list)
+    tool_refs: list[ToolReference] = Field(default_factory=list)
+    middleware_refs: list[MiddlewareReference] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_overrides(self) -> "SubagentSettings":

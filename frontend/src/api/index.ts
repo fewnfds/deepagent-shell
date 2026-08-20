@@ -13,6 +13,8 @@ import type {
   ManagedComponentType,
   CatalogResponse,
   ConfigurationValidationSettings,
+  RuntimePolicySettings,
+  RuntimePolicyUpdate,
   PythonPackageTemplate,
   DraftValidationRequest,
   EventFeedFilters,
@@ -253,6 +255,17 @@ export const managementApi = {
 
   updateSystemSettings(payload: SystemSettingsUpdate): Promise<SystemSettings> {
     return managementRequest('/api/system/settings', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+  },
+
+  getRuntimePolicy(): Promise<RuntimePolicySettings> {
+    return managementRequest('/api/system/runtime-policy')
+  },
+
+  updateRuntimePolicy(payload: RuntimePolicyUpdate): Promise<RuntimePolicySettings> {
+    return managementRequest('/api/system/runtime-policy', {
       method: 'PUT',
       body: JSON.stringify(payload),
     })

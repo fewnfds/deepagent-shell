@@ -38,5 +38,6 @@ cd server
 ```
 
 `.venv` 首次准备必须显式使用项目自带的 uv 与 CPython，避免 PATH 上其他软件的 uv 选择用户目录解释器。
+测试启动时会校验 `agent_shell` 实际来自当前仓库；系统 Python 的用户级 editable package 不会被静默接受。
 完整命令见[开发与发布](../docs/development-and-release.md)。其余说明见根 [README](../README.md)和
 [用户指南](../docs/user-guide/README.md)。

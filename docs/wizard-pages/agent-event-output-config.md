@@ -66,7 +66,7 @@ def output(event):
 | `tool_result` | `tool_name`, `tool_call_id`, `status`, `output` | 工具返回的 Python 值，可能是 `str`、`dict`、`list`、`tuple`、`ToolMessage` 或 `Command` 中的值；`output` 是规范化文本 |
 | `tool_error` | `tool_name`, `tool_call_id`, `status`, `error_code` | 失败的工具事件或无效 tool-call content block `dict` |
 | `subagent` | `subagent_name`, `tool_call_id`, `status` | Subagent lifecycle envelope `dict`；某些完成事件为 `None` |
-| `custom` | `channel`, `data_json` | custom event 的原始 Python payload；`data_json` 是有界 JSON 文本 |
+| `custom` | `channel`, `data_json` | custom event 的原始 Python payload；`data_json` 是 JSON 文本 |
 | `lifecycle` | `status`, `finish_reason`, `error_code` | lifecycle envelope `dict`，或 Shell 构造的状态 `dict` |
 
 `assistant_text` 和 `reasoning` 的 token delta 会先缓冲。脚本只在完整语义 block 到达时执行一次，不能依赖每个 token

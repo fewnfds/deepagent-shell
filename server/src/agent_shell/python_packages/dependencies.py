@@ -75,8 +75,6 @@ def read_package_requirements(folder: Path) -> PackageRequirements:
     except PythonRequirementsError as exc:
         key = {
             "duplicate": "requirementsDuplicate",
-            "too_large": "requirementsTooLarge",
-            "too_many": "requirementsTooMany",
         }.get(exc.code, "requirementsInvalid")
         details = {"line": exc.line} if exc.line else {}
         if exc.package:
@@ -282,12 +280,8 @@ def _ensure_uv(runtime_root: Path, manifest: dict[str, Any]) -> Path:
     extracted.mkdir()
     try:
         digest = sha256()
-        total = 0
-        with urlopen(url, timeout=60) as response, archive.open("wb") as stream:
+        with urlopen(url) as response, archive.open("wb") as stream:
             while chunk := response.read(1024 * 1024):
-                total += len(chunk)
-                if total > 128 * 1024 * 1024:
-                    raise ValueError("The uv download exceeds 128 MiB.")
                 digest.update(chunk)
                 stream.write(chunk)
         if digest.hexdigest().lower() != expected_hash:

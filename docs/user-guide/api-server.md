@@ -28,6 +28,10 @@ Content-Type: application/json
 构造 Main Agent、Subagent、各自 Filesystem、权限、Middleware、组件和 Provider secret view。构造完成后关闭请求配置快照，
 运行中的图不再回读配置。
 
+Chat 请求体、content block、输入媒体单项/合计和输出媒体边界由【系统 / 系统配置】的输入与资源策略决定；
+API 返回后端当前生效值和默认值，前端不复制隐藏上限。策略只有正数约束，没有额外产品最大值，实际仍受 Provider、
+内存、磁盘和网络能力影响。
+
 当前可执行 Node class 为 Start、Agent、Command、任务分发和 End，Edge class 为 normal、branch 与 dispatch；一张图可以包含多个 Agent node，并可串联、
 fan-out、fan-in 或形成 LangGraph 支持的循环。画布 Start/End 直接映射 LangGraph 官方 `START/END`，normal edge 映射
 `StateGraph.add_edge()`；Command 脚本读取完整 Workflow State 和 Runtime Context，返回 State partial update 与零个、一个或多个
@@ -37,7 +41,7 @@ fan-out、fan-in 或形成 LangGraph 支持的循环。画布 Start/End 直接�
 Lifecycle Store；Runtime Context 只携带定位输入所需的 lifecycle/run/invocation 身份。只有已装配的
 `before_agent`/`abefore_agent` Middleware 决定如何读取、切割并写入 Agent state。
 
-每个 Workflow 显式配置 `recursion_limit` 和 `execution_timeout_seconds`。前者传给 LangGraph Runnable config，后者限制
+每个 Workflow 显式配置 `recursion_limit`、`execution_timeout_seconds` 和 `max_concurrency`。默认值分别是 `1,000,000`、`1,200` 秒和 `100`；这些运行值只有正数约束，没有额外的产品上限。`recursion_limit` 传给 LangGraph Runnable config，`execution_timeout_seconds` 限制
 整个 parent/child Run 的事件流消费时间；后台 Agent 继承启动它的父 Workflow 配置，后台 Workflow 使用自己的配置。
 
 `stream=false` 返回标准 `chat.completion` JSON。`stream=true` 返回 `chat.completion.chunk` SSE，并以

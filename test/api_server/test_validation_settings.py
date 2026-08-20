@@ -18,7 +18,7 @@ def test_configuration_validation_settings_are_persistent_and_bounded(
             "/api/validation/settings",
             json={"debounce_ms": 99},
         )
-        too_large = client.put(
+        large = client.put(
             "/api/validation/settings",
             json={"debounce_ms": 10_001},
         )
@@ -27,10 +27,9 @@ def test_configuration_validation_settings_are_persistent_and_bounded(
     assert initial.json() == {
         "debounce_ms": 1000,
         "min_debounce_ms": 100,
-        "max_debounce_ms": 10_000,
     }
     assert saved.status_code == 200
     assert saved.json()["debounce_ms"] == 500
     assert reloaded.json()["debounce_ms"] == 500
     assert too_small.status_code == 422
-    assert too_large.status_code == 422
+    assert large.status_code == 200

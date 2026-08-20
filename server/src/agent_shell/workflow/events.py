@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
@@ -10,7 +9,6 @@ from agent_shell.workflow.contracts import NodeId
 
 
 WORKFLOW_CUSTOM_EVENT_SCHEMA = "agent-shell.workflow.custom-event.v1"
-MAX_WORKFLOW_CUSTOM_EVENT_BYTES = 1_000_000
 
 
 class WorkflowEventSourceV1(BaseModel):
@@ -51,18 +49,6 @@ class WorkflowCustomEventV1(BaseModel):
     ]
     data: JsonValue
 
-    @model_validator(mode="after")
-    def validate_size(self) -> "WorkflowCustomEventV1":
-        encoded = json.dumps(
-            self.model_dump(mode="json"),
-            ensure_ascii=False,
-            separators=(",", ":"),
-        ).encode("utf-8")
-        if len(encoded) > MAX_WORKFLOW_CUSTOM_EVENT_BYTES:
-            raise ValueError("workflow custom event exceeds the size limit")
-        return self
-
-
 def emit_workflow_custom_event(event: WorkflowCustomEventV1) -> None:
     """Write a server-owned custom event from inside a LangGraph node or tool."""
 
@@ -72,7 +58,6 @@ def emit_workflow_custom_event(event: WorkflowCustomEventV1) -> None:
 
 
 __all__ = [
-    "MAX_WORKFLOW_CUSTOM_EVENT_BYTES",
     "WORKFLOW_CUSTOM_EVENT_SCHEMA",
     "WorkflowCustomEventV1",
     "WorkflowEventSourceV1",

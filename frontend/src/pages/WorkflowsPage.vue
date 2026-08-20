@@ -39,9 +39,9 @@ function blankWorkflow(): WorkflowPayload {
     workflow_role: props.workflowRole,
     description: '',
     workflow_event_output_id: null,
-    recursion_limit: 100,
-    execution_timeout_seconds: 600,
-    max_concurrency: 16,
+    recursion_limit: 1_000_000,
+    execution_timeout_seconds: 1_200,
+    max_concurrency: 100,
   }
 }
 
@@ -205,7 +205,7 @@ const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
       <div class="row g-3" data-ui-control-row>
         <div class="col-lg-4">
           <FormField field-path="recursion_limit" label-key="workflows.fields.recursionLimit">
-            <input v-model.number="form.recursion_limit" class="form-control" min="1" max="100000" step="1" type="number" required>
+            <input v-model.number="form.recursion_limit" class="form-control" min="1" step="1" type="number" required>
           </FormField>
         </div>
         <div class="col-lg-4">

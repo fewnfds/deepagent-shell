@@ -35,7 +35,6 @@ class PythonPackageReference(BaseModel):
     editable_files: list[str] = Field(
         default_factory=lambda: ["main.py"],
         min_length=1,
-        max_length=50,
     )
 
     @field_validator("editable_files")

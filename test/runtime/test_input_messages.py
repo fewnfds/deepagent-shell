@@ -4,12 +4,12 @@ import base64
 
 import pytest
 
-from agent_shell.runtime import input_messages
 from agent_shell.runtime.errors import AgentRuntimeError
 from agent_shell.runtime.input_messages import (
     client_messages_sha,
     validate_client_messages,
 )
+from agent_shell.storage.runtime_policy import RuntimePolicy
 
 
 def encoded(value: bytes) -> str:
@@ -99,9 +99,7 @@ def test_invalid_content_parts_fail_before_provider(part: dict, code: str) -> No
     assert error.value.code == code
 
 
-def test_system_media_and_oversized_decoded_media_are_rejected(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_system_media_and_configured_decoded_media_limit_are_rejected() -> None:
     image_part = {
         "type": "image",
         "base64": encoded(b"abc"),
@@ -111,9 +109,11 @@ def test_system_media_and_oversized_decoded_media_are_rejected(
         validate_client_messages([{"role": "system", "content": [image_part]}])
     assert system_error.value.code == "input_system_content_unsupported"
 
-    monkeypatch.setattr(input_messages, "MAX_DECODED_BLOCK_BYTES", 2)
     with pytest.raises(AgentRuntimeError) as size_error:
-        validate_client_messages([{"role": "user", "content": [image_part]}])
+        validate_client_messages(
+            [{"role": "user", "content": [image_part]}],
+            RuntimePolicy(decoded_block_bytes=2),
+        )
     assert size_error.value.code == "input_content_block_too_large"
 
 
