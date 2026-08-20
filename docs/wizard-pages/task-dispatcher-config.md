@@ -52,7 +52,7 @@ def create_dispatcher():
 - `state` 是 detached 可变副本；`runtime` 是 LangGraph 注入的官方 `Runtime[WorkflowRuntimeContext]`。Lifecycle Store 使用
   `runtime.store`，后台 Run 命令使用 `runtime.context.background_runs`。不要把 Runtime 或 commands 写入 State/Store/checkpoint。
 - 示例中的 `shared_vars.items` 不是固定来源；可以按当前 Workflow 从完整 State、Runtime Context 或 Store 选择任务材料。
-- `tasks` 必须有 1–1000 项；同一次调用中的 `task_id` 唯一，并应来自稳定业务身份。
+- `tasks` 必须至少有 1 项，当前不设置产品数量上限；同一次调用中的 `task_id` 唯一，并应来自稳定业务身份。
 - `dispatch_key` 必须与同源 Dispatch Edge 完全一致；同一个 key 只能连接一个目标。
 - `payload` 必须是严格 JSON 对象，不能包含 Python 对象或 `NaN`、`Infinity` 等非有限数；worker 所需的本批数据都应放在这里。
 - `update` 可以更新任意已声明 Workflow State channel，但每个值必须符合该 channel 的现有类型；它只更新父 State，

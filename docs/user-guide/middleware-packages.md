@@ -124,7 +124,7 @@ def create_dispatcher():
     return dispatch
 ```
 
-`tasks` 接受 1–1000 个具有唯一稳定 `task_id` 的 JSON payload；`dispatch_key` 与画布同源 Dispatch Edge 匹配。
+`tasks` 接受至少 1 个具有唯一稳定 `task_id` 的 JSON payload，当前不设置产品数量上限；`dispatch_key` 与画布同源 Dispatch Edge 匹配。
 compiler 为每项构造 Shell-owned `WorkflowTaskContext`，再映射为 LangGraph `Send`。包不接触 Node ID，也不直接返回
 `Send`/`Command`。worker 子图通过私有 State 的 `workflow_task` 读取任务。完整规则与内置示例见
 [任务分发](../wizard-pages/task-dispatcher-config.md)。payload 拒绝 Python 对象和非有限数；`update` 仍可写任意已声明

@@ -14,4 +14,4 @@
 | 自定义 Middleware | 从本地包加载的官方 LangChain `AgentMiddleware` |
 | Task Dispatcher | 从 Workflow State/Context 生成动态任务，并由 LangGraph `Send` 分发到 Agent Node 的画布节点 |
 | Agent 事件输出 | Main Agent 拥有的 v3 运行事件到响应文本投影规则；Workflow 按稳定 node/Agent 来源选择规则 |
-| Workflow 执行历史 | TBD；当前不收集多 Agent、多脚本 node 或并发运行树 |
+| Workflow 执行历史 | Workflow Lifecycle 下的 Run、结构事件、checkpoint/Store 摘要与关联诊断；只服务管理端 Debug，不提供 Resume |

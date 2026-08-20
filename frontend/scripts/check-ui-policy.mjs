@@ -179,6 +179,17 @@ function checkWorkspace(root, policyPath) {
         else if (!adminImportAllowed(name, file)) addError(file, `AdminLTE import "${name}" is not approved for this path`, line)
       }
     }
+
+    if ((policy.icons.staticSourcePaths ?? []).includes(file)) {
+      function visitIconLiteral(node) {
+        if (ts.isStringLiteralLike(node) && /^bi-[a-z0-9-]+$/.test(node.text)) {
+          const line = sourceLine(source, node.getStart(sourceFile)) + sourceLine(source, sourceOffset) - 1
+          validateIcon(file, node.text, line)
+        }
+        ts.forEachChild(node, visitIconLiteral)
+      }
+      visitIconLiteral(sourceFile)
+    }
   }
 
   function allowedClassesFor(file) {

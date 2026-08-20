@@ -249,7 +249,7 @@ def create_dispatcher():
 
 Graph 中对应的 Dispatch Edge 使用 `source_handle: "dispatch"` 和 `dispatch_key: "item"`。`dispatch` 可以按业务需要从完整 `state`、
 `runtime.context` 或 `runtime.store` 选择 task；task source、granularity、target key、payload 和 parent State `update` 都由当前 Workflow
-决定。当前 contract 接受每次 invocation 产生的 1–1000 个 task；`task_id` 在本 batch 唯一并来自 stable business identity；`payload` 是 strict JSON object；
+决定。当前 contract 接受每次 invocation 产生的至少 1 个 task，且不设置产品数量上限；`task_id` 在本 batch 唯一并来自 stable business identity；`payload` 是 strict JSON object；
 `update` 可以更新任意已声明的 top-level State channel。script 不 import 或返回 `Send`。
 
 当前 contract 不接受空 `tasks`；如果数据可能为空，建议由 upstream Command Node 绕过 Task Dispatcher。Agent Shell 会为每个

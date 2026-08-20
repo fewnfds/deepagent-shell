@@ -9,15 +9,15 @@
 - `/api/health`、`/api/readiness`：存活与就绪状态；
 - `/api/catalog`、`/api/blocks/*`：组件目录与 CRUD；
 - `/api/main-agents`、`/api/subagents`：Agent 配置；
-- `/api/tools/custom`、`/api/middlewares/custom`、`/api/skills`：用户资源发现；
+- `/api/blocks/custom-tool`、`/api/blocks/custom-middleware`、`/api/skills`：用户资源发现；
 - `/api/file-manager/*`、`/api/system/settings`：数据与实例设置；
 - `/api/message-interception`：管理入站消息拦截并读取进程内最新请求；
 - `/api/event-feed`：系统日志与请求级运行错误诊断；
 - `/v1/models`、`/v1/chat/completions`：OpenAI-compatible 推理接口。
 
-每个推理请求从单次 SQLite 快照解析配置，再通过 `deepagents.create_deep_agent()` 构造 Main Agent 和
-同步 Subagent。用户资源文件在装配时重新校验和物化。多轮消息由客户端提交；当前不提供 Workflow 执行历史、
-聊天记忆或 checkpoint/resume。
+每个推理请求从一次不可变配置快照解析当前 Workflow，再通过 `deepagents.create_deep_agent()` 构造 Main Agent 和
+同步 Subagent。用户资源文件在装配时重新校验和物化。客户端每次提交完整 `messages[]`，系统不跨请求累积产品聊天历史。
+Workflow Lifecycle 保存 Run/Event 结构历史并使用官方 checkpoint，但这些数据只服务管理端 Debug；当前没有 Resume 执行入口。
 
 ## 运行与开发
 

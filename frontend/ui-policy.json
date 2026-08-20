@@ -334,10 +334,11 @@
     "allowed": [
       "archive", "arrow-clockwise", "arrow-down", "arrow-right", "arrow-up", "book", "boxes", "check-circle", "check-lg", "chevron-left", "circle",
       "chevron-right", "circle-half", "copy", "download", "exclamation-triangle", "eye", "eye-slash",
-      "file-earmark", "floppy", "folder", "gear", "hdd-network", "house", "info-circle", "key", "list", "moon-fill", "pencil",
+      "diagram-3", "file-earmark", "floppy", "folder", "gear", "hdd-network", "house", "info-circle", "key", "list", "moon-fill", "node-plus", "pencil",
       "play-fill", "plus-lg", "robot", "search", "sliders", "stop-fill", "sun-fill", "three-dots",
       "shield-lock", "translate", "trash", "upload", "x-circle", "x-lg"
     ],
+    "staticSourcePaths": ["src/navigation.ts"],
     "dynamicAllowedPaths": []
   },
   "localComponents": {

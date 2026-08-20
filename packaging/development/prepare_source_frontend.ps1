@@ -140,11 +140,16 @@ if (
 New-Item -ItemType Directory -Force -Path $runtime | Out-Null
 $temporaryManifest = "$manifestPath.$PID.tmp"
 try {
-    [ordered]@{
+    $manifestJson = [ordered]@{
         schema = 1
         source_sha256 = $sourceFingerprint
         dependencies_sha256 = $dependencyFingerprint
-    } | ConvertTo-Json | Set-Content -LiteralPath $temporaryManifest -Encoding utf8
+    } | ConvertTo-Json
+    [System.IO.File]::WriteAllText(
+        $temporaryManifest,
+        ($manifestJson + "`n"),
+        [System.Text.UTF8Encoding]::new($false)
+    )
     Move-Item -LiteralPath $temporaryManifest -Destination $manifestPath -Force
 }
 finally {

@@ -2,7 +2,7 @@
 
 ## 认证
 
-- 管理密码保护 `/admin` 与 `/api/*`；
+- 管理密码保护 `/api/*`；`/admin` 静态应用壳可以匿名加载，但其数据和操作都通过受保护的 management API；
 - API Key 保护 `/v1/*`；
 - 两者都必须是无空格的可打印 ASCII，均为 write-only；
 - `/api/health` 用于存活探测，`/api/readiness` 返回分层就绪状态。
@@ -48,7 +48,8 @@ Middleware 包没有 sandbox，以 Agent Shell 服务进程权限运行。它可
 多个包的文件或变量冲突。
 
 项目 filesystem 的 mapped directories 可读写宿主真实目录。只映射 Agent 确实需要的路径；写入、编辑
-和递归删除工具按最小权限启用。Agent 看到的 Skill namespace 始终只读。文件管理页面只访问四个 data scope，不代表
+和递归删除工具按最小权限启用。Agent 看到的 Skill namespace 始终只读。文件管理页面只访问 `files`、`skills`、
+`python_templates` 三个 data scope，不代表
 自定义代码或 mapped directory 具有相同限制。
 
 ## 容量与保留
