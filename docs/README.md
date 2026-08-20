@@ -23,4 +23,5 @@ AI 或自动化程序通过 management API 配置实例时，从 [AI Workflow �
 ## 安装与维护
 
 - [源码运行、Debug 与版本](development-and-release.md)
+- [LangChain 系依赖升级](langchain-dependency-upgrades.md)
 - [Deep Agents runtime 基线](deep-agents-migration.md)

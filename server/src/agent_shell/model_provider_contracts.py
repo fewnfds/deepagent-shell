@@ -19,6 +19,7 @@ class ProviderSettings(BaseModel):
 
 
 class OpenAIProviderSettings(ProviderSettings):
+    use_responses_api: StrictBoolean | None = None
     temperature: FiniteFloat | None = None
     max_completion_tokens: PositiveInteger | None = None
     top_p: FiniteFloat | None = None

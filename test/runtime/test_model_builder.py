@@ -54,6 +54,7 @@ def test_model_builder_uses_the_configured_provider_timeout(
 
     assert captured["timeout"].read == 123
     assert captured["timeout"].connect == 7
+    assert captured["use_responses_api"] is False
 def test_model_builder_never_reads_an_unrelated_environment_key(
     monkeypatch, provider_http_clients
 ) -> None:
@@ -70,6 +71,24 @@ def test_model_builder_never_reads_an_unrelated_environment_key(
     )
 
     assert model.openai_api_key.get_secret_value() == "agent-shell-no-credential"
+    assert model.use_responses_api is False
+
+
+def test_model_builder_uses_the_selected_openai_connection_type(
+    provider_http_clients,
+) -> None:
+    model = _build_chat_model(
+        {
+            "provider": "openai",
+            "model": "gpt-5",
+            "base_url": "https://api.openai.com/v1",
+            "provider_settings": {"use_responses_api": True},
+        },
+        "provider-secret",
+        provider_http_clients,
+    )
+
+    assert model.use_responses_api is True
 
 def test_deepseek_provider_adapter_preserves_streamed_reasoning_blocks(
     provider_http_clients,
@@ -114,7 +133,12 @@ def test_deepseek_provider_adapter_preserves_streamed_reasoning_blocks(
     [
         (
             "openai",
-            {"max_completion_tokens": 100, "stop_sequences": ["END"], "reasoning_effort": "high"},
+            {
+                "max_completion_tokens": 100,
+                "stop_sequences": ["END"],
+                "reasoning_effort": "high",
+                "use_responses_api": True,
+            },
             "secret",
         ),
         (

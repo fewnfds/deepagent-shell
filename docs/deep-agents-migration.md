@@ -1,6 +1,6 @@
 # Deep Agents runtime 基线
 
-Agent Shell 使用锁定版本的 `deepagents.create_deep_agent()` 构造 Main Agent。直接 Subagent 通过 Deep Agents 官方
+Agent Shell 使用锁定的 `deepagents==0.7.7` 和 `deepagents.create_deep_agent()` 构造 Main Agent。直接 Subagent 通过 Deep Agents 官方
 dictionary 配置交给 `SubAgentMiddleware`，由 Deep Agents 构造和调度；Shell 只在外层画布 Main Agent node 建立
 invocation identity 和父子 State 输入输出边界，不实现委派调度或第二套 Agent loop。
 
@@ -25,6 +25,10 @@ model/tool/agent Hook。需要 checkpoint 的业务数据通过官方 state upda
 - Subagent 能力按 inherit/replace/disabled 解析，并投影为官方 `CompiledSubAgent` 字典 spec；
 - 同一次 Workflow 请求共享 Deep Agents StateBackend 文件状态；每个 Main Agent/Subagent 按自己的 Filesystem、
   `filesystem-permissions` 与 file-tool override 构造 backend 路由视图；
+- Deep Agents 将摘要前的原始消息写入默认 backend 的保留
+  `/conversation_history/{session_uuid}.md`；该 session UUID 只隔离并行 Agent 的内部归档，Shell 不读取、命名或把它映射为
+  Lifecycle/thread 对话历史；
+- `glob` 未以 `/` 锚定的模式递归匹配虚拟文件树，例如 `*.py`；`/*.py` 才只匹配虚拟根目录；
 - Summarization 与 Prompt Caching 是两个独立 capability，每个身份显式物化自己的官方 middleware；
 - Agent Shell 传给 `create_deep_agent(middleware=...)` 的 caller 列表中，Shell 预设 Middleware 在前；每个
   `custom-middleware` 配置只产生一个 Middleware，用户有序 `middleware_refs` 的顺序保持不变并统一位于末尾；
@@ -36,7 +40,7 @@ model/tool/agent Hook。需要 checkpoint 的业务数据通过官方 state upda
 - 旧版本的 `output-mode` 内联事件脚本不再属于当前 contract；当前配置库不会迁移或兼容该结构，需按
   `agent-event-output` 的 configuration-owned Python package 重新创建并引用。
 
-### Middleware 禁用装配查证表（deepagents 0.7.5）
+### Middleware 禁用装配查证表（deepagents 0.7.7）
 
 以下是当前 Agent Shell 装配中会使用“同名、无行为 replacement”的能力。replacement 是通过
 `create_deep_agent(middleware=...)` 的官方同名覆盖规则生效的；它会替换默认实例，但不会让该名称从最终
@@ -77,5 +81,5 @@ Agent Protocol 地址、认证和后台 task state。
 仍由现有 Workflow runtime 构造，并为每个并发 child 新建独立 `AgentRuntime`/`AgentBuilder`。child 共享官方 Store 与
 checkpointer 服务，但不共享 Builder 的 Middleware package runtime，也不向 parent stream 转发事件。
 
-升级 Deep Agents 时重新核对 `create_deep_agent` constructor、dictionary SubAgent 字段、默认 Middleware、backend/state
-transfer、StateGraph subgraph 组合和 v3 事件 namespace，并只为 Shell 自有转换保留行为测试。
+更新 Deep Agents 版本时重新核对 `create_deep_agent` constructor、dictionary SubAgent 字段、默认 Middleware、backend/state
+transfer、摘要归档的 session 隔离、`glob` 语义、StateGraph subgraph 组合和 v3 事件 namespace，并只为 Shell 自有转换保留行为测试。

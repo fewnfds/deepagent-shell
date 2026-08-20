@@ -7,7 +7,6 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain.agents.middleware.types import ToolCallRequest
 from langchain.agents.middleware.types import ModelRequest, ModelResponse
 
-from agent_shell.redaction import redact_for_boundary
 from agent_shell.runtime.errors import AgentRuntimeError
 
 
@@ -28,15 +27,9 @@ def _provider_error(exc: Exception) -> AgentRuntimeError:
             status_code = status
             break
         current = current.__cause__ or current.__context__
-    detail = redact_for_boundary("http-error", str(exc).strip())
-    message = (
-        detail
-        if isinstance(detail, str) and detail
-        else "The model provider request failed."
-    )
     return AgentRuntimeError(
         "provider_request_failed",
-        message,
+        "The model provider request failed.",
         status_code=status_code,
     )
 

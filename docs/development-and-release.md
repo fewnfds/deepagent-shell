@@ -58,16 +58,17 @@ git pull --ff-only
 | --- | --- |
 | 内置 CPython | `3.12.13` |
 | runtime/CI uv | `0.12.2` |
-| Deep Agents | `0.7.5` |
+| Deep Agents | `0.7.7` |
 | FastAPI / Uvicorn | `0.141.1` / `0.52.1` |
-| LangChain adapters | Anthropic `1.5.6`；DeepSeek `1.1.0`；Google GenAI `4.3.3`；Google Vertex AI `3.2.4`；OpenAI `1.5.0`；xAI `1.3.0` |
-| LangChain core/graph | `langchain 1.3.15`；`langchain-core 1.5.4`；`langgraph 1.2.11` |
+| LangChain adapters | Anthropic `1.6.0`；DeepSeek `1.1.0`；Google GenAI `4.3.4`；Google Vertex AI `3.2.4`；OpenAI `1.6.0`；xAI `1.3.0` |
+| LangChain core/graph | `langchain 1.3.15`；`langchain-core 1.6.0`；`langgraph 1.2.11`；LangSmith `0.11.1` |
 | 其他边界 | `packaging 26.3`；`websockets 15.0.1`；dev-only `httpx2/httpcore2 2.9.1` |
 
 截至本基线，`uv lock --dry-run --upgrade` 不再产生可解析的锁变化。`uv tree --outdated` 仍可能显示
 `websockets 17`、`protobuf 7`、`pydantic-core 2.48` 或 `pyarrow 25`，但它们分别受 LangGraph/Google
 依赖范围或当前 Provider 组合约束；不得为了消除提示而放宽上游边界、删除 Provider 或改业务源码。新的
-依赖升级应从重新运行上述 dry-run 开始，并按单一影响面批量推进。
+依赖升级应从重新运行上述 dry-run 开始，并按单一影响面批量推进。LangChain 系的版本边界、LangSmith
+`>=0.11.1,<0.12` 的理由和下一次复核步骤见[LangChain 系依赖升级](langchain-dependency-upgrades.md)。
 
 ## 前端 Debug
 

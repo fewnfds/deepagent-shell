@@ -174,6 +174,17 @@ function setProviderSetting(key: string, value: ModelProviderSettingInput): void
   draft.provider_settings = { ...draft.provider_settings, [key]: value }
 }
 
+function openAIConnectionType(): 'compatible' | 'responses' {
+  return draft.provider_settings.use_responses_api === true ? 'responses' : 'compatible'
+}
+
+function setOpenAIConnectionType(event: Event): void {
+  setProviderSetting(
+    'use_responses_api',
+    (event.target as HTMLSelectElement).value === 'responses',
+  )
+}
+
 function setBoolean(key: string, event: Event): void {
   const value = (event.target as HTMLSelectElement).value
   setProviderSetting(key, value === '' ? '' : value === 'true')
@@ -258,6 +269,23 @@ function setBooleanNumber(key: string, event: Event): void {
               <p v-if="selectedProviderId === 'google_vertexai'" class="small text-body-secondary mb-0 mt-2">
                 {{ t('editors.model.vertexCredentialHint') }}
               </p>
+            </FormField>
+          </div>
+          <div v-if="selectedProviderId === 'openai'" class="col-md-6">
+            <FormField
+              field-path="provider_settings.use_responses_api"
+              :hint="t('editors.model.connectionTypeHint')"
+              :label-key="'editors.model.connectionTypeLabel'"
+            >
+              <select
+                class="form-select"
+                data-testid="openai-connection-type"
+                :value="openAIConnectionType()"
+                @change="setOpenAIConnectionType"
+              >
+                <option value="compatible">{{ t('editors.model.connectionTypes.compatible') }}</option>
+                <option value="responses">{{ t('editors.model.connectionTypes.responses') }}</option>
+              </select>
             </FormField>
           </div>
           <div class="col-md-6">

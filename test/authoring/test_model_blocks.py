@@ -74,7 +74,11 @@ def test_model_provider_is_required_and_limited_to_release_bundle(
 @pytest.mark.parametrize(
     ("provider", "provider_settings", "credential"),
     [
-        ("openai", {"max_completion_tokens": 512}, "secret"),
+        (
+            "openai",
+            {"max_completion_tokens": 512, "use_responses_api": True},
+            "secret",
+        ),
         ("anthropic", {"max_tokens_to_sample": 512, "effort": "high"}, "secret"),
         ("google_genai", {"max_tokens": 512, "retries": 2}, "secret"),
         (
@@ -192,6 +196,7 @@ def test_model_parameters_reject_non_finite_numbers_before_storage(
         ("service_tier", 1),
         ("logprobs", "false"),
         ("top_logprobs", -1),
+        ("use_responses_api", 1),
     ],
 )
 def test_model_parameters_reject_wrong_types_and_impossible_values_before_storage(

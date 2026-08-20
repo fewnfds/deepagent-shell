@@ -246,7 +246,7 @@ def test_custom_package_middleware_is_the_shell_caller_tail_for_main_and_subagen
     assert delegation_input[-2:] == main_packages
 
 
-def test_task_description_override_keeps_middleware_private_state_keys(
+def test_task_description_override_keeps_shell_middleware_private_state_keys(
     monkeypatch,
 ) -> None:
     class PackageState(TypedDict):
@@ -279,6 +279,6 @@ def test_task_description_override_keeps_middleware_private_state_keys(
 
     assert isinstance(result, CapturingSubAgentMiddleware)
     assert captured["task_description"] == "Delegate to {available_agents}."
-    assert captured["private_state_keys"] == frozenset(
-        {"_summarization_event", "jump_to", "private_value"}
-    )
+    private_state_keys = captured["private_state_keys"]
+    assert "private_value" in private_state_keys
+    assert "public_value" not in private_state_keys

@@ -50,7 +50,7 @@
   读取 Agent 独立的只读 `/skills/` 视图。
 - 选择项目 Filesystem：使用配置的共享 workspace，并按 `tool_configs` 开放 `ls`、`read_file`、
   `write_file`、`edit_file`、`delete`、`glob`、`grep`。`read_file` 固定可见；`execute` 固定不可见；
-  `delete` 默认关闭。
+  `delete` 默认关闭。`glob` 未以 `/` 开头的模式递归匹配整个虚拟文件树，例如 `*.py`；`/*.py` 才只匹配虚拟根目录。
 
 同一个 Workflow Run 中的 Main Agent 与同步 Subagent 按 Deep Agents 官方行为共享普通 StateBackend 文件状态；每个 Agent
 按自己的有效 Filesystem 构造初始文件和 mapped route 视图，Subagent 可继承、选择自己的项目 Filesystem 或回到最小 Filesystem。
@@ -70,6 +70,8 @@ workspace 使用不同路径权限、文件工具或文件系统提示词时，�
 虚拟目录必须以 `/` 开头和结尾；虚拟文件以 `/` 开头且文件名与来源相同。不允许 `..`、重叠 route、
 重复目标、文件/目录冲突、符号链接、junction 或其他 reparse point。以下 namespace 保留：
 `/large_tool_results/`、`/conversation_history/`、`/skills/`、`/memory/`、`/memories/`。
+Deep Agents 在 `/conversation_history/{session_uuid}.md` 保存摘要前的原始消息；session UUID 只用于隔离运行时内部摘要会话，
+不对应产品的 Lifecycle、thread 或用户对话历史。
 
 `system_prompt_override=null` 使用当前 Deep Agents 默认行为；工具 `description_override=null` 保留默认说明。
 `tool_token_limit_before_evict` 为正整数或 `null`，`null` 关闭大工具结果卸载；

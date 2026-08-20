@@ -154,6 +154,45 @@ def test_agents_share_state_backend_but_keep_independent_mapped_routes(
     assert main_result.file_data["content"] == "main route"
     assert child_result.file_data["content"] == "child route"
 
+
+def test_configured_workspace_route_preserves_recursive_glob_contract(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    nested = workspace / "nested"
+    nested.mkdir(parents=True)
+    (workspace / "top.py").write_text("top", encoding="utf-8")
+    (nested / "child.py").write_text("child", encoding="utf-8")
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+    filesystem = FilesystemBlock.model_validate(
+        {
+            "name": "Workspace",
+            "mapped_directories": [
+                {"virtual_path": "/workspace/", "local_path": str(workspace)}
+            ],
+        }
+    )
+
+    capabilities = build_deepagents_capabilities(
+        filesystem,
+        None,
+        filesystem_mode="configured-shared",
+        skills_dir=skills_dir,
+    )
+
+    recursive = capabilities.backend.glob("*.py", "/workspace/")
+    top_level = capabilities.backend.glob("/*.py", "/workspace/")
+
+    assert recursive.error is None
+    assert top_level.error is None
+    assert {match["path"] for match in recursive.matches} == {
+        "/workspace/top.py",
+        "/workspace/nested/child.py",
+    }
+    assert {match["path"] for match in top_level.matches} == {"/workspace/top.py"}
+
+
 def test_filesystem_permissions_atomically_override_tools_prompt_and_paths(
     tmp_path: Path,
 ) -> None:

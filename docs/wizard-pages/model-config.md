@@ -30,14 +30,16 @@
 - `base_url` 必须是无 userinfo、query、fragment 的 HTTP(S) URL；
 - `credential` 是 write-only。编辑时留空会在 Provider 与 Base URL 未变时保留已有值；改变连接而未填
   新 Key 会清除已有值；Vertex AI 固定使用 ADC；
-- `provider_settings` 只接受当前 Provider 白名单中的原生参数，切换 Provider 会清空该对象；
+- `provider_settings` 只接受当前 Provider 白名单中的原生参数，切换 Provider 会清空该对象；OpenAI 的
+  `use_responses_api` 为 `false` 或缺省时使用 OpenAI-compatible Chat Completions，只有选择官方
+  OpenAI Responses API 时才设为 `true`；
 - `tool_choice` 可以是字符串、布尔值、JSON 对象或 `null`；
 - `response_format` 为 JSON Schema 对象或 `null`，非空时要求 `title` 和 `description`；
 - `model_settings` 为 bind 阶段 JSON 对象，不能包含 `tools`、`tool_choice` 或 `response_format`。
 
 当前 Provider 参数：
 
-- OpenAI：`temperature`, `max_completion_tokens`, `top_p`, `stop_sequences`, `presence_penalty`,
+- OpenAI：`use_responses_api`, `temperature`, `max_completion_tokens`, `top_p`, `stop_sequences`, `presence_penalty`,
   `frequency_penalty`, `seed`, `timeout`, `max_retries`, `stream_usage`, `streaming`, `reasoning_effort`,
   `service_tier`, `logprobs`, `top_logprobs`；
 - DeepSeek/xAI：同上，token 字段为 `max_tokens`；

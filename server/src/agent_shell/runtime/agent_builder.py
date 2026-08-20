@@ -110,6 +110,9 @@ def _build_chat_model(
                     "http_async_client": provider_http_clients.async_client,
                 }
             )
+        if provider == "openai":
+            # Chat Completions is the explicit default for arbitrary gateway URLs.
+            kwargs.setdefault("use_responses_api", False)
         return init_chat_model(
             model=str(block["model"]),
             model_provider=provider,

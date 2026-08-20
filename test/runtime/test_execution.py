@@ -497,7 +497,7 @@ def test_runtime_boundaries_classify_provider_and_tool_failures() -> None:
     assert tool_error.value.code == "tool_execution_failed"
     assert provider_error.value.code == "provider_request_failed"
     assert "private failure details" not in tool_error.value.safe_message
-    assert provider_error.value.safe_message == "private failure details"
+    assert provider_error.value.safe_message == "The model provider request failed."
 
 
 def test_provider_error_boundary_preserves_status_and_redacts_message() -> None:
@@ -513,9 +513,7 @@ def test_provider_error_boundary_preserves_status_and_redacts_message() -> None:
         ProviderErrorBoundaryMiddleware().wrap_model_call(None, fail)
 
     assert captured.value.status_code == 429
-    assert "quota exceeded" in captured.value.safe_message
-    assert "C:\\private" not in captured.value.safe_message
-    assert "token-value" not in captured.value.safe_message
+    assert captured.value.safe_message == "The model provider request failed."
     assert isinstance(captured.value.__cause__, RateLimitError)
 
 def test_tool_error_boundary_preserves_successful_result() -> None:

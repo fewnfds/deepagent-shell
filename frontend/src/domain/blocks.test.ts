@@ -60,15 +60,18 @@ describe('block adapters', () => {
     expect(draft.credential_secret).toBe('')
     expect(draft.credential_status).toBe('masked')
     expect(draft.provider_settings.stop_sequences).toBe('["END"]')
+    expect(draft.provider_settings.use_responses_api).toBeUndefined()
 
     draft.name = '  Updated model  '
     draft.credential_secret = 'secret'
     draft.provider_settings.temperature = ''
     draft.provider_settings.stop_sequences = 'not-json-yet'
+    draft.provider_settings.use_responses_api = true
     const payload = modelAdapter.toPayload(draft)
     expect(payload).toMatchObject({
       name: 'Updated model', credential: 'secret', provider_settings: {
         stop_sequences: 'not-json-yet',
+        use_responses_api: true,
       },
       tool_choice: 'auto', response_format: {
         title: 'Result', description: 'Structured result', type: 'object',

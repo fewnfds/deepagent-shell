@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import json
 
 from agent_shell.runtime.diagnostics import RuntimeDiagnosticContext
 from agent_shell.runtime.errors import AgentRuntimeError
+from agent_shell.runtime.limits import ProviderErrorBoundaryMiddleware
 
 from .support import *
 
@@ -193,6 +195,40 @@ def test_runtime_diagnostic_detail_keeps_full_exception_out_of_summary(
     assert deleted.json() == {"deleted": 1}
     assert missing.status_code == 404
     assert list((tmp_path / "data" / "logs" / "diagnostics").glob("*.log")) == []
+
+
+def test_provider_error_detail_is_management_only(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    raw_provider_response = "<html>gateway body: request was rejected</html>"
+    with make_client(tmp_path, monkeypatch) as client:
+        def fail(_request):
+            raise ValueError(raw_provider_response)
+
+        with pytest.raises(AgentRuntimeError) as captured:
+            ProviderErrorBoundaryMiddleware().wrap_model_call(None, fail)
+        client.app.state.runtime_diagnostics.runtime_error(
+            captured.value,
+            code=captured.value.code,
+            component="workflow_runtime",
+            context=RuntimeDiagnosticContext(request_id="request-provider-detail"),
+        )
+
+        listing = client.get(
+            "/api/event-feed",
+            params=event_feed_params(
+                source="runtime", query="request-provider-detail"
+            ),
+        ).json()
+        item = listing["items"][0]
+        download = client.get(
+            f"/api/event-feed/runtime/{item['id']}/download"
+        )
+
+    assert raw_provider_response not in json.dumps(listing)
+    assert item["summary"] == "The model provider request failed."
+    assert download.status_code == 200
+    assert raw_provider_response in download.content.decode("utf-8")
 
 
 def test_runtime_diagnostic_keeps_structured_entry_when_detail_write_fails(

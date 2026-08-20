@@ -339,6 +339,17 @@ describe('dedicated block editors', () => {
     expect(settings[2]?.find('textarea').exists()).toBe(true)
   })
 
+  it('selects OpenAI-compatible Chat Completions by default and can opt into Responses', async () => {
+    const editor = mountEditor(ModelEditor, { modelValue: modelAdapter.blank() })
+    const connectionType = editor.get('[data-testid="openai-connection-type"]')
+
+    expect((connectionType.element as HTMLSelectElement).value).toBe('compatible')
+    await connectionType.setValue('responses')
+    expect(editor.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({
+      provider_settings: { use_responses_api: true },
+    })
+  })
+
   it('emits an updated draft when a visible field changes', async () => {
     const editor = mountEditor(SystemPromptEditor, { modelValue: systemPromptAdapter.blank() })
     expect(editor.get('.card-header').text()).toBe('capabilities.system-prompt.label')
@@ -420,6 +431,7 @@ describe('dedicated block editors', () => {
     ])
 
     await select.setValue('google_vertexai')
+    expect(editor.find('[data-testid="openai-connection-type"]').exists()).toBe(false)
     expect(editor.find('[data-provider-setting="max_completion_tokens"]').exists()).toBe(false)
     expect(editor.find('[data-provider-setting="max_tokens"]').exists()).toBe(true)
     expect(editor.find('[data-provider-setting="thinking_budget"]').exists()).toBe(true)
