@@ -71,4 +71,4 @@ Invoke-RestMethod "$baseUrl/api/readiness" -Headers $managementHeaders
 5. 422 响应中的 structured issue/path 会指出不符合的 field；删除 field 或降低 constraint 不会替代对应修正。
 6. 只要响应含 `X-Request-ID` 或 `request_id`，保留它用于诊断，但不要记录请求中的 secret 或用户隐私。
 
-下一步：[配置代理组件](02-components-and-agents.md)。
+下一步：[配置 Agent](02-components-and-agents.md)。

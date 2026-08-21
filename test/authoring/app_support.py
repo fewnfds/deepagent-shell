@@ -8,24 +8,11 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from agent_shell.app import create_app
+from agent_shell.capability_manifest import CAPABILITY_MANIFESTS
 from support import ScopedAuthTestClient, configure_scope_tokens
 
 
-PUBLIC_TYPES = (
-    "model",
-    "system-prompt",
-    "filesystem",
-    "filesystem-permissions",
-    "todo-list",
-    "custom-tool",
-    "skill",
-    "custom-middleware",
-    "agent-event-output",
-    "exception-retry",
-    "subagent",
-    "summarization",
-    "prompt-caching",
-)
+PUBLIC_TYPES = tuple(manifest.type for manifest in CAPABILITY_MANIFESTS)
 
 
 def subagent_payload(
@@ -92,66 +79,61 @@ def model_payload(name: str = "Local model") -> dict:
     }
 
 
-def agent_event_output_payload(name: str = "Development timeline") -> dict:
+def python_component_payload(
+    client: TestClient,
+    component_type: str,
+    name: str,
+) -> dict:
+    endpoint = {
+        "custom-tool": "custom-tool",
+        "custom-middleware": "middleware",
+        "agent-event-output": "agent-event-output",
+    }[component_type]
+    selected = client.get(
+        f"/api/python-package-templates/{endpoint}"
+    ).json()["catalog"][0]
     return {
         "name": name,
-        "python_package": {"folder": "", "editable_files": ["main.py"]},
-        "python_package_files": {
-            "template_key": "__empty__",
-            "revision": "",
-            "files": [
-                {
-                    "path": "main.py",
-                    "content": 'def output(event):\n    return event["message"]\n',
-                }
-            ],
+        "python_package": {"folder": ""},
+        "python_package_template": {
+            "key": selected["key"],
+            "revision": selected["revision"],
         },
     }
 
 
-def custom_tool_payload(name: str = "Word count") -> dict:
-    return {
-        "name": name,
-        "python_package": {
-            "folder": "",
-            "editable_files": ["main.py", "requirements.txt"],
-        },
-        "python_package_files": {
-            "template_key": "__empty__",
-            "revision": "",
-            "files": [
-                {
-                    "path": "main.py",
-                    "content": (
-                        "from langchain.tools import tool\n"
-                        "@tool\n"
-                        "def word_count(text: str) -> int:\n"
-                        "    \"\"\"Count words.\"\"\"\n"
-                        "    return len(text.split())\n"
-                        "def create_tool():\n"
-                        "    return word_count\n"
-                    ),
-                },
-                {"path": "requirements.txt", "content": ""},
-            ],
-        },
-    }
-
-
-def block_cases(tmp_path: Path) -> list[tuple[str, dict]]:
+def block_cases(client: TestClient, tmp_path: Path) -> list[tuple[str, dict]]:
     mapped = tmp_path / "mapped"
     mapped.mkdir()
     write_skill_template(tmp_path)
     return [
-        ("model", model_payload()),
-        ("custom-tool", custom_tool_payload()),
         (
-            "custom-middleware",
+            "model-requirement",
             {
-                "name": "Reliability middleware",
+                "name": "Local model requirement",
+                "description": "Use a local model suitable for general agent work.",
             },
         ),
-        ("agent-event-output", agent_event_output_payload()),
+        (
+            "custom-tool",
+            python_component_payload(client, "custom-tool", "Word count"),
+        ),
+        (
+            "custom-middleware",
+            python_component_payload(
+                client,
+                "custom-middleware",
+                "Reliability middleware",
+            ),
+        ),
+        (
+            "agent-event-output",
+            python_component_payload(
+                client,
+                "agent-event-output",
+                "Development timeline",
+            ),
+        ),
         (
             "exception-retry",
             {

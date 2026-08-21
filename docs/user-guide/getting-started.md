@@ -30,7 +30,7 @@ Windows 源码 Clone 从项目根运行：
 2. 在【模型 / 模型连接】创建本机连接，在【代理组件 / 模型要求】创建名称和说明，再在【代理 / Main Agent】中选择模型要求、
    Agent 事件输出和其他能力；需要把客户端多轮消息整理到 Agent 初始上下文时，从
    `内置示例-workflow-input-context` 创建 Custom Middleware 并装配到 Agent。
-3. 在【模型 / 模型映射】为模型要求选择本机模型连接，在【工作流 / 父图】新建记录；点击【编辑图】进入全屏画布。
+3. 在【模型 / 模型映射】为模型要求选择本机模型连接，在【工作流 / 父图】新建记录；点击【编辑 Flow】进入全屏画布。
 4. 添加 Agent 节点，选择 Main Agent，连接 `Start -> Agent -> End` 并保存。
 5. 启用 Workflow，在首页设置 API Key 并启动 API Server。
 6. 调用 `/v1/models` 确认名称，再使用该名称调用 `/v1/chat/completions`。

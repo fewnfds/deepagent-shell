@@ -27,6 +27,10 @@ class ModelConnectionNameConflictError(ValueError):
     """The requested instance model connection name is already in use."""
 
 
+class ModelCredentialReferenceMissingError(ValueError):
+    """A stored credential reference has no corresponding environment value."""
+
+
 def _credential_reference(record: dict[str, Any]) -> str | None:
     credential = record.get("credential")
     if not isinstance(credential, dict) or set(credential) != {"reference"}:
@@ -97,6 +101,8 @@ class ModelResourceSnapshot:
                 continue
             resolved = deepcopy(item)
             reference = _credential_reference(item)
+            if reference is not None and self._environment.get(reference) is None:
+                raise ModelCredentialReferenceMissingError(reference)
             resolved["credential"] = (
                 self._environment.get(reference) if reference is not None else None
             )
@@ -453,6 +459,7 @@ class ModelResourceStore:
 
 __all__ = [
     "ModelConnectionNameConflictError",
+    "ModelCredentialReferenceMissingError",
     "ModelResourceSnapshot",
     "ModelResourceStore",
 ]

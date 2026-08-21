@@ -23,7 +23,7 @@ from agent_shell.workflow_event_output import WorkflowEventOutputBlock
 
 def test_manifest_matches_current_blocks_and_form_order() -> None:
     assert [manifest.type for manifest in CAPABILITY_MANIFESTS] == [
-        "model",
+        "model-requirement",
         "system-prompt",
         "filesystem",
         "filesystem-permissions",
@@ -127,7 +127,6 @@ def test_editor_defaults_are_derived_from_current_authoring_contracts() -> None:
     assert defaults["workflow_event_output"] == {}
     reference = {
         "folder": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-        "editable_files": ["main.py"],
     }
     assert AgentEventOutputBlock.model_validate(
         {"name": "Agent output", "python_package": reference}

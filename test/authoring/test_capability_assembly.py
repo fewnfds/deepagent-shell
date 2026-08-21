@@ -9,7 +9,7 @@ from agent_shell.validation.capability_assembly import (
 def test_effective_capability_subject_reports_required_and_filesystem_mode() -> None:
     subject = CapabilityAssemblySubject(
         references={"skill": "skill-id"},
-        required_types=frozenset({"model", "agent-event-output"}),
+        required_types=frozenset({"model-requirement", "agent-event-output"}),
         scope="route",
         owner_id="router-id",
         owner_name="research-route",
@@ -37,7 +37,7 @@ def test_filesystem_mode_uses_final_effective_selection() -> None:
         scope="subagent",
     )
     default = CapabilityAssemblySubject(
-        references={"model": "model-id"},
+        references={"model-requirement": "requirement-id"},
         scope="subagent",
     )
 

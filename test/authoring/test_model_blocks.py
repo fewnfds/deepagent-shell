@@ -20,7 +20,7 @@ def test_model_request_settings_accept_only_current_json_shapes(
         )
     ):
         payload = {**model_payload(f"Invalid request settings {index}"), **update}
-        response = client.post("/api/blocks/model", json=payload)
+        response = client.post("/api/model-connections", json=payload)
         assert response.status_code == 422, response.text
 
 
@@ -32,15 +32,10 @@ def test_model_request_settings_must_be_explicitly_present(
     for field in ("tool_choice", "response_format", "model_settings"):
         payload = model_payload(f"Missing {field}")
         payload.pop(field)
-        response = client.post("/api/blocks/model", json=payload)
+        response = client.post("/api/model-connections", json=payload)
 
         assert response.status_code == 422, response.text
-        issues = response.json()["detail"]["validation"]["issues"]
-        assert any(
-            issue["code"] == "contract.field_required"
-            and issue["path"] == field
-            for issue in issues
-        )
+        assert response.json()["detail"]["code"] == "model_connection_invalid"
 
 
 def test_model_provider_is_required_and_limited_to_release_bundle(
@@ -61,13 +56,13 @@ def test_model_provider_is_required_and_limited_to_release_bundle(
     openrouter = model_payload("OpenRouter Provider")
     openrouter["provider"] = "openrouter"
 
-    assert client.post("/api/blocks/model", json=missing).status_code == 422
-    assert client.post("/api/blocks/model", json=unsupported).status_code == 422
-    assert client.post("/api/blocks/model", json=aliased).status_code == 422
-    response = client.post("/api/blocks/model", json=deepseek)
+    assert client.post("/api/model-connections", json=missing).status_code == 422
+    assert client.post("/api/model-connections", json=unsupported).status_code == 422
+    assert client.post("/api/model-connections", json=aliased).status_code == 422
+    response = client.post("/api/model-connections", json=deepseek)
     assert response.status_code == 200, response.text
     assert response.json()["provider"] == "deepseek"
-    response = client.post("/api/blocks/model", json=openrouter)
+    response = client.post("/api/model-connections", json=openrouter)
     assert response.status_code == 422
 
 
@@ -105,7 +100,7 @@ def test_model_provider_settings_use_each_official_constructor_contract(
         credential=credential,
     )
 
-    response = client.post("/api/blocks/model", json=payload)
+    response = client.post("/api/model-connections", json=payload)
 
     assert response.status_code == 200, response.text
     assert response.json()["provider_settings"] == provider_settings
@@ -135,7 +130,7 @@ def test_model_provider_settings_reject_cross_provider_parameters(
         credential=credential,
     )
 
-    response = client.post("/api/blocks/model", json=payload)
+    response = client.post("/api/model-connections", json=payload)
 
     assert response.status_code == 422
 
@@ -144,7 +139,7 @@ def test_model_parameters_reject_non_finite_numbers_before_storage(
     tmp_path: Path, monkeypatch
 ) -> None:
     client = make_client(tmp_path, monkeypatch)
-    created = client.post("/api/blocks/model", json=model_payload("Valid model"))
+    created = client.post("/api/model-connections", json=model_payload("Valid model"))
     assert created.status_code == 200, created.text
 
     for index, literal in enumerate(("NaN", "Infinity", "-Infinity", "1e999")):
@@ -153,7 +148,7 @@ def test_model_parameters_reject_non_finite_numbers_before_storage(
             '"temperature":0', f'"temperature":{literal}'
         )
         response = client.post(
-            "/api/blocks/model",
+            "/api/model-connections",
             content=raw,
             headers={"Content-Type": "application/json"},
         )
@@ -165,11 +160,11 @@ def test_model_parameters_reject_non_finite_numbers_before_storage(
         '"temperature":0', '"temperature":NaN'
     )
     updated = client.put(
-        f"/api/blocks/model/{created.json()['id']}",
+        f"/api/model-connections/{created.json()['id']}",
         content=raw_update,
         headers={"Content-Type": "application/json"},
     )
-    listed = client.get("/api/blocks/model")
+    listed = client.get("/api/model-connections")
 
     assert updated.status_code == 422, updated.text
     assert listed.status_code == 200, listed.text
@@ -209,7 +204,7 @@ def test_model_parameters_reject_wrong_types_and_impossible_values_before_storag
     payload = model_payload(f"Invalid {field}")
     payload["provider_settings"][field] = invalid
 
-    response = client.post("/api/blocks/model", json=payload)
+    response = client.post("/api/model-connections", json=payload)
 
     assert response.status_code == 422, response.text
-    assert client.get("/api/blocks/model").json() == []
+    assert client.get("/api/model-connections").json() == []

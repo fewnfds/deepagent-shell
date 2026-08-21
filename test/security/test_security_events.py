@@ -50,7 +50,7 @@ def _model(credential: str | None) -> dict:
     }
 
 
-def test_lifecycle_configuration_and_secret_events_are_metadata_only(
+def test_lifecycle_configuration_events_and_model_secrets_are_metadata_only(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -61,18 +61,24 @@ def test_lifecycle_configuration_and_secret_events_are_metadata_only(
 
     with ScopedAuthTestClient(create_app()) as client:
         created = client.post(
-            "/api/blocks/model",
+            "/api/model-connections",
             json=_model(secret),
             headers={"X-Request-ID": request_id},
         )
         assert created.status_code == 200
         block_id = created.json()["id"]
         rotated = client.put(
-            f"/api/blocks/model/{block_id}",
+            f"/api/model-connections/{block_id}",
             json=_model(replacement),
             headers={"X-Request-ID": request_id},
         )
         assert rotated.status_code == 200
+        configured = client.post(
+            "/api/blocks/system-prompt",
+            json={"name": "Event prompt", "system_prompt": "Be precise."},
+            headers={"X-Request-ID": request_id},
+        )
+        assert configured.status_code == 200
 
     log_path = runtime / "logs" / "security-events.jsonl"
     raw = log_path.read_text(encoding="utf-8")
@@ -85,18 +91,12 @@ def test_lifecycle_configuration_and_secret_events_are_metadata_only(
     assert "security_configuration_loaded" in names
     assert "service_started" in names
     assert "configuration_updated" in names
-    assert "provider_secret_rotated" in names
-    assert "provider_secret_cleared" not in names
     assert "cache_invalidated" not in names
     assert names[-1] == "service_stopped"
     request_records = [
         record
         for record in records
-        if record["event"]
-        in {
-            "configuration_updated",
-            "provider_secret_rotated",
-        }
+        if record["event"] == "configuration_updated"
     ]
     assert request_records
     assert all(record["request_id"] == request_id for record in request_records)
@@ -123,7 +123,7 @@ def test_event_logger_reuses_redaction_and_rejects_unregistered_metadata(
                 "action": "updated",
                 "entity": "block",
                 "entity_id": "safe-id",
-                "capability_type": "model",
+                "capability_type": "model-requirement",
                 "api_key": "unregistered-secret-sentinel",
             },
         )
@@ -153,12 +153,16 @@ def test_event_persistence_failure_does_not_reverse_committed_configuration(
     )
 
     with ScopedAuthTestClient(create_app()) as client:
-        created = client.post("/api/blocks/model", json=_model(None))
+        created = client.post(
+            "/api/blocks/system-prompt",
+            json={"name": "Committed prompt", "system_prompt": "Persist this."},
+        )
         assert created.status_code == 200
         block_id = created.json()["id"]
-        assert [item["id"] for item in client.get("/api/blocks/model").json()] == [
-            block_id
-        ]
+        assert [
+            item["id"]
+            for item in client.get("/api/blocks/system-prompt").json()
+        ] == [block_id]
 
         diagnostics = client.get(
             "/api/event-feed",
@@ -190,7 +194,7 @@ def test_event_log_enforces_one_file_without_backups(tmp_path: Path) -> None:
                 "action": "updated",
                 "entity": "block",
                 "entity_id": f"block-{index:02d}",
-                "capability_type": "model",
+                "capability_type": "model-requirement",
             },
         )
 
@@ -212,13 +216,17 @@ def test_event_feed_filters_persisted_system_operations_and_management_errors(
 
     with ScopedAuthTestClient(create_app()) as client:
         created = client.post(
-            "/api/blocks/model",
-            json=_model(None),
+            "/api/blocks/system-prompt",
+            json={"name": "Event prompt", "system_prompt": "Be precise."},
             headers={"X-Request-ID": operation_request_id},
         )
         rejected = client.post(
-            "/api/blocks/model",
-            json={"credential": "must-never-enter-event-feed"},
+            "/api/blocks/system-prompt",
+            json={
+                "name": "Invalid prompt",
+                "system_prompt": "",
+                "credential": "must-never-enter-event-feed",
+            },
             headers={"X-Request-ID": error_request_id},
         )
         operation_logs = client.get(
@@ -258,7 +266,7 @@ def test_event_feed_filters_persisted_system_operations_and_management_errors(
         "code": "configuration_validation_failed",
         "issue_count": expected_issue_count,
         "method": "POST",
-        "path": "/api/blocks/model",
+        "path": "/api/blocks/system-prompt",
         "status_code": 422,
     }
     assert "must-never-enter-event-feed" not in json.dumps(error)

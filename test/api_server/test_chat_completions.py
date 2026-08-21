@@ -206,14 +206,10 @@ def test_chat_materializes_command_package_before_compiling_workflow(
             "/api/blocks/command",
             json={
                 "name": "Always run",
-                "python_package": {"folder": "", "editable_files": ["main.py"]},
-                "python_package_files": {
-                    "template_key": selected["key"],
+                "python_package": {"folder": ""},
+                "python_package_template": {
+                    "key": selected["key"],
                     "revision": selected["revision"],
-                    "files": [
-                        {"path": file["path"], "content": file["content"]}
-                        for file in selected["files"] if file["path"] == "main.py"
-                    ],
                 },
             },
         )
@@ -410,14 +406,10 @@ def test_workflow_agent_middleware_injects_frozen_client_messages(
             "/api/blocks/custom-middleware",
             json={
                 "name": "Request message injection",
-                "python_package": {"folder": "", "editable_files": ["main.py"]},
-                "python_package_files": {
-                    "template_key": selected["key"],
+                "python_package": {"folder": ""},
+                "python_package_template": {
+                    "key": selected["key"],
                     "revision": selected["revision"],
-                    "files": [
-                        {"path": file["path"], "content": file["content"]}
-                        for file in selected["files"] if file["path"] == "main.py"
-                    ],
                 },
             },
         )

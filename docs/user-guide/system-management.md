@@ -10,6 +10,8 @@ data/
     active-configuration-repository.json
     system.yaml
     agent-shell.env
+    model-connections/<uuid>.yaml
+    model-bindings.yaml
   configuration-repositories/<repository-uuid>/
     repository.json
     components/ agents/ workflows/
@@ -18,19 +20,25 @@ data/
   state/agent-shell.sqlite3*
   files/
   skills-template/
-  templates/{workflow/command,workflow/task_dispatcher,agent/custom_tool,agent/custom_middleware}/
+  templates/
+    agent/{custom_tool,custom_middleware,agent_event_output}/
+    workflow/{command,task_dispatcher,workflow_event_output}/
   logs/security-events.jsonl
   logs/diagnostics/*.log
 ```
 
 它包含管理密码、API Key、Provider credential、Workflow、Agent/组件配置、用户文件和历史，应作为敏感数据
-整体备份。可装配配置文件位于 `data/configuration-repositories/`；`data/config/` 只保存系统配置、secret env 与 active pointer。SQLite 保存官方 LangGraph checkpoint、Lifecycle Run Registry/Event Journal、
+整体备份。可装配配置文件位于 `data/configuration-repositories/`；`data/config/` 保存系统配置、secret env、active pointer、实例模型连接和模型映射。SQLite 保存官方 LangGraph checkpoint、Lifecycle Run Registry/Event Journal、
 结构化 runtime 失败诊断和媒体元数据。迁移时先完全停止服务，
 再复制完整 `data/`，包括 SQLite WAL/SHM。外部 filesystem 映射需要单独迁移并更新路径。
 
 静态 Python 模板保存在 `data/templates/`，配置独占的 Python 扩展及其可选 `requirements.txt` 保存在
 `data/configuration-repositories/<repository-uuid>/python_package_instances/`。两者都属于需备份的 data；Windows 生成的共享依赖位于
 `runtime/python_packages/`，属于可重建运行态，不进入备份。模板不运行且不参与依赖。
+
+模型连接是实例私有资源：Provider、endpoint、具体 model 和请求参数保存在
+`data/config/model-connections/<uuid>.yaml`，credential value 保存在 `data/config/agent-shell.env`。
+`data/config/model-bindings.yaml` 按 Configuration Repository 保存模型要求到本机连接的映射。模型连接和映射都不进入配置 Bundle。
 
 ## 文件管理
 
@@ -50,7 +58,8 @@ Configuration Repository 中的 Component、Agent、Workflow 和配置私有包�
 - 系统设置、env secret、模型连接和模型映射只通过对应页面管理；
 - 递归删除没有回收站。
 
-`data/templates/` 用于按 `workflow/command/`、`workflow/task_dispatcher/`、`agent/custom_tool/` 等类别维护静态 Python 模板。
+`data/templates/` 用于按 `agent/custom_tool/`、`agent/custom_middleware/`、`agent/agent_event_output/`、
+`workflow/command/`、`workflow/task_dispatcher/` 和 `workflow/workflow_event_output/` 六个类别维护静态 Python 模板。
 创建 Python-backed Component 时选择一份合法模板；保存后形成配置独占的完整文件目录。
 
 ## 系统设置

@@ -16,27 +16,21 @@ from typing import Any
 from uuid import UUID
 
 import httpx
+import yaml
 
+from agent_shell.capability_manifest import CAPABILITY_MANIFESTS
 from agent_shell.storage.api_server import ApiServerStore
+from agent_shell.storage.configuration_mutations import ConfigurationMutationCoordinator
 from agent_shell.storage.database import SQLiteDatabase
+from agent_shell.storage.environment import (
+    InstanceEnvironmentStore,
+    SYSTEM_SETTINGS_ENVIRONMENT_OWNER,
+    parse_environment_text,
+)
 from agent_shell.storage.file_config import FileConfigRepository
 
 
-CAPABILITY_TYPES = (
-    "model",
-    "system-prompt",
-    "filesystem",
-    "filesystem-permissions",
-    "todo-list",
-    "custom-tool",
-    "skill",
-    "custom-middleware",
-    "agent-event-output",
-    "exception-retry",
-    "subagent",
-    "summarization",
-    "prompt-caching",
-)
+CAPABILITY_TYPES = tuple(manifest.type for manifest in CAPABILITY_MANIFESTS)
 CRUD_CAPABILITY_TYPES = tuple(
     capability_type
     for capability_type in CAPABILITY_TYPES
@@ -67,7 +61,12 @@ def _port() -> int:
         return int(listener.getsockname()[1])
 
 
-def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> dict:
+def _model_connection_payload(
+    name: str,
+    secret: str | None,
+    *,
+    update: bool,
+) -> dict:
     model_parameters = dict.fromkeys(MODEL_PARAMETER_NAMES)
     if update:
         model_parameters.update(
@@ -89,63 +88,29 @@ def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> d
                 "top_logprobs": 5,
             }
         )
+    return {
+        "name": name,
+        "provider": "openai",
+        "base_url": "https://provider.example.invalid/v1",
+        "credential": secret,
+        "model": "smoke-model",
+        "provider_settings": model_parameters,
+        "tool_choice": None,
+        "response_format": None,
+        "model_settings": {},
+    }
+
+
+def _payload(
+    capability_type: str,
+    name: str,
+    *,
+    template: dict[str, str] | None = None,
+) -> dict:
     payloads = {
-        "model": {
+        "model-requirement": {
             "name": name,
-            "provider": "openai",
-            "base_url": "https://provider.example.invalid/v1",
-            "credential": None if update else secret,
-            "model": "smoke-model",
-            "provider_settings": model_parameters,
-            "tool_choice": None,
-            "response_format": None,
-            "model_settings": {},
-        },
-        "custom-tool": {
-            "name": name,
-            "python_package": {
-                "folder": "",
-                "editable_files": ["main.py", "requirements.txt"],
-            },
-            "python_package_files": {
-                "template_key": "__empty__",
-                "revision": "",
-                "files": [
-                    {
-                        "path": "main.py",
-                        "content": (
-                            "from langchain.tools import tool\n"
-                            "@tool\n"
-                            "def smoke_tool(value: str) -> str:\n"
-                            "    \"\"\"Return the supplied value.\"\"\"\n"
-                            "    return value\n"
-                            "def create_tool():\n"
-                            "    return smoke_tool\n"
-                        ),
-                    },
-                    {"path": "requirements.txt", "content": ""},
-                ],
-            },
-        },
-        "agent-event-output": {
-            "name": name,
-            "python_package": {
-                "folder": "",
-                "editable_files": ["main.py"],
-            },
-            "python_package_files": {
-                "template_key": "__empty__",
-                "revision": "",
-                "files": [{
-                    "path": "main.py",
-                    "content": (
-                        'def output(event):\n'
-                        '    if event["event_type"] == "assistant_text":\n'
-                        '        return event["message"]\n'
-                        '    return ""\n'
-                    ),
-                }],
-            },
+            "description": "Use the model connection selected for this instance.",
         },
         "filesystem": {"name": name},
         "filesystem-permissions": {
@@ -171,6 +136,14 @@ def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> d
             "retry_on": ["transport_error", "timeout", "rate_limit", "server_error"],
         },
     }
+    if capability_type in {"custom-tool", "agent-event-output"}:
+        if template is None:
+            raise AssertionError(f"missing Python template for {capability_type}")
+        return {
+            "name": name,
+            "python_package": {"folder": ""},
+            "python_package_template": template,
+        }
     return payloads[capability_type]
 
 
@@ -222,19 +195,60 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
     management_token = secrets.token_urlsafe(32)
     api_key = secrets.token_urlsafe(32)
     provider_secret = "smoke-provider-" + secrets.token_urlsafe(24)
-    environment = {
+    process_environment = {
         key: value
         for key, value in os.environ.items()
         if not key.upper().startswith("AGENT_SHELL_")
     }
-    configuration = FileConfigRepository(data_dir)
+    mutations = ConfigurationMutationCoordinator()
+    instance_environment = InstanceEnvironmentStore(
+        data_dir / "config" / "agent-shell.env",
+        mutations=mutations,
+    )
+    configuration = FileConfigRepository(
+        data_dir,
+        mutations=mutations,
+        environment=instance_environment,
+    )
     skill_template = data_dir / "skills-template" / "fixture-skill"
     skill_template.mkdir(parents=True, exist_ok=True)
     (skill_template / "SKILL.md").write_text(
         "---\nname: fixture-skill\ndescription: Exercise the process smoke.\n---\n",
         encoding="utf-8",
     )
-    configuration.set_secret("AGENT_SHELL_MANAGEMENT_TOKEN", management_token)
+    tool_template = (
+        data_dir / "templates" / "agent" / "custom_tool" / "smoke-tool"
+    )
+    tool_template.mkdir(parents=True, exist_ok=True)
+    (tool_template / "main.py").write_text(
+        "from langchain.tools import tool\n"
+        "@tool\n"
+        "def smoke_tool(value: str) -> str:\n"
+        "    \"\"\"Return the supplied value.\"\"\"\n"
+        "    return value\n"
+        "def create_tool():\n"
+        "    return smoke_tool\n",
+        encoding="utf-8",
+    )
+    output_template = (
+        data_dir
+        / "templates"
+        / "agent"
+        / "agent_event_output"
+        / "smoke-output"
+    )
+    output_template.mkdir(parents=True, exist_ok=True)
+    (output_template / "main.py").write_text(
+        'def output(event):\n'
+        '    if event["event_type"] == "assistant_text":\n'
+        '        return event["message"]\n'
+        '    return ""\n',
+        encoding="utf-8",
+    )
+    instance_environment.patch(
+        SYSTEM_SETTINGS_ENVIRONMENT_OWNER,
+        set_values={"AGENT_SHELL_MANAGEMENT_TOKEN": management_token},
+    )
     configuration.update_system(
         lambda system: system["settings"].update(
             {
@@ -245,7 +259,10 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
         )
     )
     ApiServerStore(
-        SQLiteDatabase(database_path), configuration
+        SQLiteDatabase(database_path),
+        configuration,
+        instance_environment,
+        mutations,
     ).update_settings(
         api_key_operation="replace",
         api_key=api_key,
@@ -266,7 +283,7 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
             str(data_dir),
         ],
         cwd=repo_root / "server",
-        env=environment,
+        env=process_environment,
         stdout=output,
         stderr=subprocess.STDOUT,
         creationflags=creationflags,
@@ -284,7 +301,15 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
             except httpx.HTTPError:
                 pass
             if process.poll() is not None:
-                raise AssertionError("server exited before health became available")
+                output.flush()
+                startup_output = output_path.read_text(
+                    encoding="utf-8",
+                    errors="replace",
+                )
+                raise AssertionError(
+                    "server exited before health became available:\n"
+                    + startup_output
+                )
             if time.monotonic() >= deadline:
                 raise AssertionError("server did not become healthy")
             time.sleep(0.1)
@@ -308,9 +333,19 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
         _request(client, "GET", "/v1/unknown", headers=inference, expected=404)
         catalog = _request(client, "GET", "/api/catalog", headers=management).json()
         assert tuple(item["type"] for item in catalog["block_types"]) == CAPABILITY_TYPES
-        _request(client, "GET", "/api/python-package-templates/custom-tool", headers=management)
+        tool_templates = _request(
+            client,
+            "GET",
+            "/api/python-package-templates/custom-tool",
+            headers=management,
+        ).json()
         _request(client, "GET", "/api/python-package-templates/middleware", headers=management)
-        _request(client, "GET", "/api/python-package-templates/agent-event-output", headers=management)
+        output_templates = _request(
+            client,
+            "GET",
+            "/api/python-package-templates/agent-event-output",
+            headers=management,
+        ).json()
         _request(client, "GET", "/api/python-package-templates/workflow-event-output", headers=management)
         _request(client, "GET", "/api/skills", headers=management)
         readiness = _request(
@@ -338,6 +373,31 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
             "https://console.example.invalid"
         )
 
+        template_by_type = {
+            "custom-tool": {
+                "key": tool_templates["catalog"][0]["key"],
+                "revision": tool_templates["catalog"][0]["revision"],
+            },
+            "agent-event-output": {
+                "key": output_templates["catalog"][0]["key"],
+                "revision": output_templates["catalog"][0]["revision"],
+            },
+        }
+        model_connection = _request(
+            client,
+            "POST",
+            "/api/model-connections",
+            headers={**management, "X-Request-ID": f"smoke-{mode}"},
+            json_body=_model_connection_payload(
+                f"{mode}-model-connection",
+                provider_secret,
+                update=False,
+            ),
+        ).json()
+        UUID(model_connection["id"])
+        assert model_connection["credential"] == {"status": "masked"}
+        assert provider_secret not in json.dumps(model_connection)
+
         blocks: dict[str, dict] = {}
         for capability_type in CRUD_CAPABILITY_TYPES:
             created = _request(
@@ -348,14 +408,11 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
                 json_body=_payload(
                     capability_type,
                     f"{mode}-{capability_type}",
-                    provider_secret,
-                    update=False,
+                    template=template_by_type.get(capability_type),
                 ),
             ).json()
             UUID(created["id"])
             assert provider_secret not in json.dumps(created)
-            if capability_type == "model":
-                assert created["provider_settings"] == {}
             blocks[capability_type] = created
             listed = _request(
                 client, "GET", f"/api/blocks/{capability_type}", headers=management
@@ -368,22 +425,21 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
                 headers=management,
             ).json()
             assert fetched["id"] == created["id"]
-            update_payload = _payload(
-                capability_type,
-                f"{mode}-{capability_type}-updated",
-                provider_secret,
-                update=True,
-            )
             if capability_type in {"custom-tool", "agent-event-output"}:
-                update_payload["python_package"] = created["python_package"]
-                update_payload["python_package_files"] = created[
-                    "python_package_files"
-                ]
-            if capability_type == "skill":
+                update_payload = {
+                    "name": f"{mode}-{capability_type}-updated",
+                    "python_package": created["python_package"],
+                }
+            elif capability_type == "skill":
                 update_payload = {
                     "name": f"{mode}-{capability_type}-updated",
                     "skill_package": created["skill_package"],
                 }
+            else:
+                update_payload = _payload(
+                    capability_type,
+                    f"{mode}-{capability_type}-updated",
+                )
             updated = _request(
                 client,
                 "PUT",
@@ -392,29 +448,35 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
                 json_body=update_payload,
             ).json()
             assert updated["id"] == created["id"]
-            if capability_type == "model":
-                assert updated["provider_settings"]["stop_sequences"] == [
-                    "END",
-                    "STOP",
-                ]
-                assert updated["provider_settings"]["streaming"] is True
-                assert updated["provider_settings"]["stream_usage"] is True
 
-        cleared_model_payload = _payload(
-            "model",
-            f"{mode}-model-updated",
-            provider_secret,
+        updated_model_payload = _model_connection_payload(
+            f"{mode}-model-connection-updated",
+            None,
             update=True,
         )
-        cleared_model_payload["provider_settings"] = {}
-        cleared_model = _request(
+        updated_model = _request(
             client,
             "PUT",
-            f"/api/blocks/model/{blocks['model']['id']}",
+            f"/api/model-connections/{model_connection['id']}",
             headers=management,
-            json_body=cleared_model_payload,
+            json_body=updated_model_payload,
         ).json()
-        assert cleared_model["provider_settings"] == {}
+        assert updated_model["provider_settings"]["stop_sequences"] == [
+            "END",
+            "STOP",
+        ]
+        assert updated_model["provider_settings"]["streaming"] is True
+        assert updated_model["provider_settings"]["stream_usage"] is True
+        _request(
+            client,
+            "PUT",
+            (
+                "/api/model-requirements/"
+                f"{blocks['model-requirement']['id']}/binding"
+            ),
+            headers=management,
+            json_body={"connection_id": model_connection["id"]},
+        )
 
         main_agent = _request(
             client,
@@ -424,7 +486,10 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
             json_body={
                 "name": f"{mode}-main-agent",
                 "capability_refs": [
-                    {"type": "model", "block_id": blocks["model"]["id"]},
+                    {
+                        "type": "model-requirement",
+                        "block_id": blocks["model-requirement"]["id"],
+                    },
                     {
                         "type": "agent-event-output",
                         "block_id": blocks["agent-event-output"]["id"],
@@ -478,14 +543,19 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
             json_body=updated_subagent,
         )
 
-        model_id = blocks["model"]["id"]
-        model_path = configuration.config_root / "components" / "model" / f"{model_id}.yaml"
+        model_id = model_connection["id"]
+        model_path = (
+            data_dir / "config" / "model-connections" / f"{model_id}.yaml"
+        )
         model_text = model_path.read_text(encoding="utf-8")
         assert provider_secret not in model_text
-        model_secret_name = f"AGENT_SHELL_MODEL_{model_id.replace('-', '').upper()}_API_KEY"
-        assert f"credential: ${model_secret_name}" in model_text
-        environment_text = (data_dir / "config" / "agent-shell.env").read_text(encoding="utf-8")
-        assert f"{model_secret_name}={provider_secret}" in environment_text
+        model_document = yaml.safe_load(model_text)
+        model_secret_name = model_document["payload"]["credential"]["reference"]
+        environment_path = data_dir / "config" / "agent-shell.env"
+        environment_values = parse_environment_text(
+            environment_path.read_text(encoding="utf-8")
+        )
+        assert environment_values[model_secret_name] == provider_secret
         with closing(sqlite3.connect(database_path)) as connection, connection:
             tables = {
                 row[0]
@@ -512,6 +582,12 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
             f"/api/subagents/{subagent['id']}",
             headers=management,
         )
+        _request(
+            client,
+            "DELETE",
+            f"/api/model-connections/{model_id}",
+            headers=management,
+        )
         for capability_type, block in blocks.items():
             _request(
                 client,
@@ -519,12 +595,11 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
                 f"/api/blocks/{capability_type}/{block['id']}",
                 headers=management,
             )
-        assert provider_secret not in (
-            data_dir / "config" / "agent-shell.env"
-        ).read_text(encoding="utf-8")
-        assert f"{model_secret_name}=" not in (
-            data_dir / "config" / "agent-shell.env"
-        ).read_text(encoding="utf-8")
+        final_environment = parse_environment_text(
+            environment_path.read_text(encoding="utf-8")
+        )
+        assert provider_secret not in final_environment.values()
+        assert model_secret_name not in final_environment
         return {
             "mode": mode,
             "capability_count": len(blocks),

@@ -35,10 +35,7 @@ def _write_tool_package(
     return {
         "id": owner_id,
         "name": "Tool package",
-        "python_package": {
-            "folder": owner_id,
-            "editable_files": ["main.py", "requirements.txt"],
-        },
+        "python_package": {"folder": owner_id},
     }
 
 

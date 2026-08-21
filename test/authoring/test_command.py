@@ -175,7 +175,7 @@ def test_command_package_loads_local_modules_and_materializes_async_route(
     command = runtime.command_for(
         "command-node",
         COMMAND_ID,
-        {"folder": folder_name, "editable_files": ["main.py"]},
+        {"folder": folder_name},
     )
 
     result = asyncio.run(

@@ -127,7 +127,9 @@ def create_main_agent(
     output_response = client.post(
         "/api/blocks/agent-event-output",
         json=agent_event_output_payload(
-            "Published output", include_lifecycle=False
+            client,
+            "Published output",
+            include_lifecycle=False,
         ),
     )
     assert output_response.status_code == 200, output_response.text
@@ -247,20 +249,48 @@ def subagent_payload(
     }
 
 
-def _python_output_payload(name: str, source: str) -> dict[str, object]:
+def _python_output_payload(
+    client: TestClient,
+    component_type: str,
+    name: str,
+    source: str,
+) -> dict[str, object]:
+    category = (
+        ("agent", "agent_event_output")
+        if component_type == "agent-event-output"
+        else ("workflow", "workflow_event_output")
+    )
+    template_key = "test-output-" + str(abs(hash(source)))
+    package_dir = Path.cwd().joinpath(
+        "data",
+        "templates",
+        *category,
+        template_key,
+    )
+    package_dir.mkdir(parents=True, exist_ok=True)
+    (package_dir / "main.py").write_text(source, encoding="utf-8")
+    selected = next(
+        item
+        for item in client.get(
+            f"/api/python-package-templates/{component_type}"
+        ).json()["catalog"]
+        if item["key"] == template_key
+    )
     return {
         "name": name,
-        "python_package": {"folder": "", "editable_files": ["main.py"]},
-        "python_package_files": {
-            "template_key": "__empty__",
-            "revision": "",
-            "files": [{"path": "main.py", "content": source}],
+        "python_package": {"folder": ""},
+        "python_package_template": {
+            "key": selected["key"],
+            "revision": selected["revision"],
         },
     }
 
 
 def agent_event_output_payload(
-    name: str = "Visible timeline", *, include_lifecycle: bool = True
+    client: TestClient,
+    name: str = "Visible timeline",
+    *,
+    include_lifecycle: bool = True,
 ) -> dict[str, object]:
     lifecycle_branch = (
         '    if event["event_type"] == "lifecycle":\n'
@@ -269,6 +299,8 @@ def agent_event_output_payload(
         else ""
     )
     return _python_output_payload(
+        client,
+        "agent-event-output",
         name,
         'def output(event):\n'
         '    if event["event_type"] == "assistant_text":\n'
@@ -279,11 +311,17 @@ def agent_event_output_payload(
 
 
 def workflow_event_output_payload(
+    client: TestClient,
     name: str = "Visible workflow events",
     *,
     source: str = 'def output(event):\n    return ""\n',
 ) -> dict[str, object]:
-    return _python_output_payload(name, source)
+    return _python_output_payload(
+        client,
+        "workflow-event-output",
+        name,
+        source,
+    )
 
 
 def capability_reference_id(main_agent: dict, capability_type: str) -> str:

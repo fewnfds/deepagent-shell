@@ -107,7 +107,7 @@ def test_validation_issue_rejects_non_primitive_message_arguments() -> None:
             {
                 "name": "Invalid reference",
                 "capability_refs": [
-                    {"type": "model", "block_id": "not-a-uuid"}
+                    {"type": "model-requirement", "block_id": "not-a-uuid"}
                 ],
             },
         ),
@@ -120,7 +120,7 @@ def test_validation_issue_rejects_non_primitive_message_arguments() -> None:
                 "settings": {
                     "capability_overrides": [
                         {
-                            "type": "model",
+                            "type": "model-requirement",
                             "mode": "replace",
                             "block_id": "not-a-uuid",
                         }

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from agent_shell.storage.file_config import FileConfigRepository
-from agent_shell.storage.model_connections import ModelResourceSnapshot, ModelResourceStore
+from agent_shell.storage.model_connections import (
+    ModelCredentialReferenceMissingError,
+    ModelResourceSnapshot,
+    ModelResourceStore,
+)
 
 
 class ProviderCredentialError(RuntimeError):
@@ -12,7 +16,7 @@ class ProviderCredentialError(RuntimeError):
 
 
 class ProviderSecretResolver:
-    """The only service allowed to return provider credential plaintext."""
+    """Runtime-facing resolver for model connection credentials."""
 
     def __init__(
         self,
@@ -33,6 +37,11 @@ class ProviderSecretResolver:
     def _stored_model(self, block_id: str) -> dict:
         try:
             return self._connections.resolve_connection(block_id)
+        except ModelCredentialReferenceMissingError as exc:
+            raise ProviderCredentialError(
+                "provider_secret_reference_missing",
+                "The model credential reference is missing.",
+            ) from exc
         except KeyError as exc:
             raise ProviderCredentialError(
                 "model_connection_not_found",

@@ -46,7 +46,7 @@ Content-Type: application/json
 }
 ```
 
-Provider 和 Provider-specific field 以 Model page 及 backend validation 为准。OpenAI Model 的
+Provider 和 Provider-specific field 以【模型 / 模型连接】页及 backend validation 为准。OpenAI Model 的
 `provider_settings.use_responses_api` 默认是 `false`，即 OpenAI-compatible Chat Completions；只有
 直连的 endpoint 支持官方 OpenAI Responses API 时才设为 `true`。示例中的 model ID 不是当前实例可用
 Model 的事实来源。

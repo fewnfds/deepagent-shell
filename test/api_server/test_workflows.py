@@ -36,7 +36,7 @@ def test_workflow_event_output_is_a_reusable_component_reference(
     with make_client(tmp_path, monkeypatch) as client:
         output = client.post(
             "/api/blocks/workflow-event-output",
-            json=workflow_event_output_payload("Public workflow events"),
+            json=workflow_event_output_payload(client, "Public workflow events"),
         )
         assert output.status_code == 200, output.text
         workflow = create_workflow(client, name="Event Workflow")
@@ -70,7 +70,7 @@ def test_workflow_validation_reports_a_missing_event_output_reference(
         main_agent = create_main_agent(client)
         output = client.post(
             "/api/blocks/workflow-event-output",
-            json=workflow_event_output_payload("Missing during validation"),
+            json=workflow_event_output_payload(client, "Missing during validation"),
         )
         assert output.status_code == 200, output.text
         workflow = create_workflow(client, name="Missing event output")
@@ -487,15 +487,10 @@ def test_workflow_publish_reports_broken_router_package_without_missing_referenc
             "/api/blocks/command",
             json={
                 "name": "Broken router package",
-                "python_package": {"folder": "", "editable_files": ["main.py"]},
-                "python_package_files": {
-                    "template_key": selected["key"],
+                "python_package": {"folder": ""},
+                "python_package_template": {
+                    "key": selected["key"],
                     "revision": selected["revision"],
-                    "files": [
-                        file
-                        for file in selected["files"]
-                        if file["path"] == "main.py"
-                    ],
                 },
             },
         )

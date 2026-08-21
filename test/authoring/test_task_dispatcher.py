@@ -251,7 +251,7 @@ def test_task_dispatcher_package_materializes_async_dispatch(tmp_path: Path) -> 
     dispatch = runtime.dispatcher_for(
         "dispatcher-node",
         DISPATCHER_ID,
-        {"folder": folder_name, "editable_files": ["main.py"]},
+        {"folder": folder_name},
     )
 
     result = asyncio.run(
@@ -435,13 +435,10 @@ def test_builtin_dispatcher_example_creates_owned_python_package(
         "/api/blocks/task-dispatcher",
         json={
             "name": "Item tasks",
-            "python_package": {"folder": "", "editable_files": ["main.py"]},
-            "python_package_files": {
-                "template_key": selected["key"],
+            "python_package": {"folder": ""},
+            "python_package_template": {
+                "key": selected["key"],
                 "revision": selected["revision"],
-                "files": [
-                    next(file for file in selected["files"] if file["path"] == "main.py")
-                ],
             },
         },
     )

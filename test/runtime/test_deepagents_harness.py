@@ -5,6 +5,8 @@ from langgraph.store.memory import InMemoryStore
 from agent_shell.capability_manifest import DEFAULT_MIDDLEWARE_CAPABILITY_TYPES
 from agent_shell.runtime import agent_builder, deepagents_harness
 from agent_shell.runtime.agent_builder import AgentBuilder
+from agent_shell.storage.environment import EnvironmentSnapshot
+from agent_shell.storage.model_connections import ModelResourceSnapshot
 
 
 def test_harness_profile_registration_uses_configured_model_identity(
@@ -72,10 +74,45 @@ def test_agent_builder_disabled_capabilities_override_deep_agents_default_stack(
         validation=object(),
         provider_http_clients=object(),
         store=InMemoryStore(),
+        model_resources=ModelResourceSnapshot.capture(
+            [
+                {
+                    "id": "22222222-2222-4222-8222-222222222222",
+                    "name": "Harness model",
+                    "provider": "openai",
+                    "base_url": "https://provider.example/v1",
+                    "credential": None,
+                    "model": "gpt-5.3-codex",
+                    "provider_settings": {},
+                    "tool_choice": None,
+                    "response_format": None,
+                    "model_settings": {},
+                }
+            ],
+            EnvironmentSnapshot.capture({}),
+            {
+                "33333333-3333-4333-8333-333333333333": {
+                    "11111111-1111-4111-8111-111111111111": (
+                        "22222222-2222-4222-8222-222222222222"
+                    )
+                }
+            },
+        ),
+        repository_id="33333333-3333-4333-8333-333333333333",
     )
     profile = builder._materialize_profile(
-        {"model": "model-id"},
-        {"model": {"provider": "openai", "model": "gpt-5.3-codex"}},
+        {
+            "model-requirement": (
+                "11111111-1111-4111-8111-111111111111"
+            )
+        },
+        {
+            "model-requirement": {
+                "id": "11111111-1111-4111-8111-111111111111",
+                "name": "Harness requirement",
+                "description": "Use the harness model.",
+            }
+        },
         filesystem_mode="default-shared",
         scope="main_agent",
         owner_id="main-id",

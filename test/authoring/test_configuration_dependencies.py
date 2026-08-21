@@ -10,7 +10,7 @@ def test_configuration_dependency_owner_enumerates_declared_references() -> None
     ids = {
         "main": "11111111-1111-4111-8111-111111111111",
         "subagent": "22222222-2222-4222-8222-222222222222",
-        "model": "33333333-3333-4333-8333-333333333333",
+        "model_requirement": "33333333-3333-4333-8333-333333333333",
         "tool": "44444444-4444-4444-8444-444444444444",
         "middleware": "55555555-5555-4555-8555-555555555555",
         "filesystem": "66666666-6666-4666-8666-666666666666",
@@ -26,7 +26,10 @@ def test_configuration_dependency_owner_enumerates_declared_references() -> None
                 "id": ids["main"],
                 "name": "Main",
                 "capability_refs": [
-                    {"type": "model", "block_id": ids["model"]}
+                    {
+                        "type": "model-requirement",
+                        "block_id": ids["model_requirement"],
+                    }
                 ],
                 "tool_refs": [{"tool_id": ids["tool"]}],
                 "middleware_refs": [
@@ -103,7 +106,13 @@ def test_configuration_dependency_owner_enumerates_declared_references() -> None
     }
 
     assert references == {
-        ("main_agent", "capability_refs[0].block_id", "component", "model", ids["model"]),
+        (
+            "main_agent",
+            "capability_refs[0].block_id",
+            "component",
+            "model-requirement",
+            ids["model_requirement"],
+        ),
         ("main_agent", "tool_refs[0].tool_id", "component", "custom-tool", ids["tool"]),
         (
             "main_agent",

@@ -156,17 +156,16 @@ def test_custom_package_middleware_is_the_shell_caller_tail_for_main_and_subagen
         "name": "Output",
         "python_package": {
             "folder": "55555555-5555-4555-8555-555555555555",
-            "editable_files": ["main.py"],
         },
     }
     assembly = StaticAssembly(
         main_agent={"id": "main-id", "name": "Main Agent"},
         references={
-            "model": "model-id",
+            "model-requirement": "model-requirement-id",
             "agent-event-output": "55555555-5555-4555-8555-555555555555",
         },
         blocks={
-            "model": {"id": "model-id"},
+            "model-requirement": {"id": "model-requirement-id"},
             "agent-event-output": event_output,
             "subagent": {
                 "instruction_override": None,

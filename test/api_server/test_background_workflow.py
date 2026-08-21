@@ -21,6 +21,7 @@ def test_frozen_snapshot_runs_child_workflow_silently_with_independent_checkpoin
             workflow_role="child",
         )
         event_output = workflow_event_output_payload(
+            client,
             "Exploding child output",
             source=(
                 "def output(event):\n"

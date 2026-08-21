@@ -78,14 +78,10 @@ def test_middleware_template_catalog_and_private_package_creation(
             "/api/blocks/custom-middleware",
             json={
                 "name": "Request label",
-                "python_package": {"folder": "", "editable_files": ["main.py"]},
-                "python_package_files": {
-                    "template_key": selected["key"],
+                "python_package": {"folder": ""},
+                "python_package_template": {
+                    "key": selected["key"],
                     "revision": selected["revision"],
-                    "files": [
-                        {"path": file["path"], "content": file["content"]}
-                        for file in selected["files"] if file["path"] == "main.py"
-                    ],
                 },
             },
         )
@@ -94,36 +90,26 @@ def test_middleware_template_catalog_and_private_package_creation(
     assert [item["key"] for item in catalog.json()["catalog"]] == ["request-label"]
     assert "dependency_status" not in catalog.json()["catalog"][0]
     assert created.status_code == 200, created.text
-    assert created.json()["python_package"]["editable_files"] == ["main.py"]
+    assert created.json()["python_package"] == {"folder": created.json()["id"]}
 
 
-def test_middleware_can_be_created_from_empty_template_selection(
+def test_middleware_requires_a_template_selection(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    source = (
-        "from langchain.agents.middleware import AgentMiddleware\n"
-        "def create_middleware(agent):\n"
-        "    return AgentMiddleware()\n"
-    )
     with make_client(tmp_path, monkeypatch) as client:
         created = client.post(
             "/api/blocks/custom-middleware",
             json={
                 "name": "From empty template",
-                "python_package": {"folder": "", "editable_files": ["main.py"]},
-                "python_package_files": {
-                    "template_key": "__empty__",
-                    "revision": "",
-                    "files": [{"path": "main.py", "content": source}],
-                },
+                "python_package": {"folder": ""},
             },
         )
 
-    assert created.status_code == 200, created.text
-    assert created.json()["python_package"]["folder"] == created.json()["id"]
+    assert created.status_code == 422, created.text
+    assert created.json()["detail"]["code"] == "python_package_template_required"
 
 
-def test_missing_private_middleware_is_rejected_when_projected(
+def test_missing_private_middleware_is_rejected_when_inspected(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source = (
@@ -138,14 +124,10 @@ def test_missing_private_middleware_is_rejected_when_projected(
             "/api/blocks/custom-middleware",
             json={
                 "name": "Missing package",
-                "python_package": {"folder": "", "editable_files": ["main.py"]},
-                "python_package_files": {
-                    "template_key": selected["key"],
+                "python_package": {"folder": ""},
+                "python_package_template": {
+                    "key": selected["key"],
                     "revision": selected["revision"],
-                    "files": [
-                        {"path": file["path"], "content": file["content"]}
-                        for file in selected["files"] if file["path"] == "main.py"
-                    ],
                 },
             },
         )
@@ -156,7 +138,12 @@ def test_missing_private_middleware_is_rejected_when_projected(
             / "agent-middleware"
             / folder
         )
-        response = client.get(f"/api/blocks/custom-middleware/{created.json()['id']}")
+        assert client.get(
+            f"/api/blocks/custom-middleware/{created.json()['id']}"
+        ).status_code == 200
+        response = client.get(
+            f"/api/blocks/custom-middleware/{created.json()['id']}/python-package"
+        )
 
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "python_package_not_found"
@@ -179,7 +166,7 @@ def test_package_materializes_official_langchain_middleware(tmp_path: Path) -> N
                 name="Main",
                 packages=((
                     OWNER_ID,
-                    {"folder": folder_name, "editable_files": ["main.py"]},
+                    {"folder": folder_name},
                 ),),
             )
         ],
@@ -218,7 +205,7 @@ def test_package_factory_can_request_runtime_context_by_name(tmp_path: Path) -> 
                 name="Main",
                 packages=((
                     OWNER_ID,
-                    {"folder": folder_name, "editable_files": ["main.py"]},
+                    {"folder": folder_name},
                 ),),
             )
         ],
@@ -268,8 +255,8 @@ def test_package_runtime_preserves_ordered_middleware_references(tmp_path: Path)
                 type="main_agent",
                 name="Main",
                 packages=(
-                    (second_id, {"folder": second_folder, "editable_files": ["main.py"]}),
-                    (first_id, {"folder": first_folder, "editable_files": ["main.py"]}),
+                    (second_id, {"folder": second_folder}),
+                    (first_id, {"folder": first_folder}),
                 ),
             )
         ],
@@ -301,7 +288,7 @@ def test_package_runtime_rejects_multiple_middleware_result(tmp_path: Path) -> N
                 name="Main",
                 packages=((
                     OWNER_ID,
-                    {"folder": folder_name, "editable_files": ["main.py"]},
+                    {"folder": folder_name},
                 ),),
             )
         ],
@@ -336,7 +323,7 @@ def test_async_agent_runtime_rejects_sync_only_middleware_hooks(tmp_path: Path) 
                 name="Main",
                 packages=((
                     OWNER_ID,
-                    {"folder": folder_name, "editable_files": ["main.py"]},
+                    {"folder": folder_name},
                 ),),
             )
         ],

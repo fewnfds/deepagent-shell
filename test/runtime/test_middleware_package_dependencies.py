@@ -159,7 +159,7 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
         owner_id,
         {
             "name": "middleware",
-            "python_package": {"folder": folder_name, "editable_files": ["main.py"]},
+            "python_package": {"folder": folder_name},
         },
     )
     block_store.save_block(
@@ -167,10 +167,7 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
         tool_owner_id,
         {
             "name": "dependency tool",
-            "python_package": {
-                "folder": tool_folder_name,
-                "editable_files": ["main.py", "requirements.txt"],
-            },
+            "python_package": {"folder": tool_folder_name},
         },
     )
     block_store.save_block(
@@ -178,7 +175,7 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
         invalid_owner_id,
         {
             "name": "invalid middleware",
-            "python_package": {"folder": invalid_folder_name, "editable_files": ["main.py"]},
+            "python_package": {"folder": invalid_folder_name},
         },
     )
     main_agent_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"

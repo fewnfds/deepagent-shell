@@ -88,9 +88,12 @@ def test_prompt_templates_accept_escaped_literal_braces(
         "    return AgentMiddleware()\n"
     )
     (template / "main.py").write_text(valid_source, encoding="utf-8")
-    selected = client.get(
-        "/api/python-package-templates/middleware"
-    ).json()["catalog"][0]
+    invalid_syntax = template.parent / "invalid-syntax"
+    invalid_syntax.mkdir()
+    (invalid_syntax / "main.py").write_text("middleware = (", encoding="utf-8")
+    missing_output = template.parent / "missing-output"
+    missing_output.mkdir()
+    (missing_output / "main.py").write_text("value = object()\n", encoding="utf-8")
     assert (
         client.post(
             "/api/blocks/custom-tool",
@@ -98,36 +101,16 @@ def test_prompt_templates_accept_escaped_literal_braces(
         ).status_code
         == 422
     )
-    assert (
-        client.post(
-            "/api/blocks/custom-middleware",
-            json={
-                "name": "bad syntax",
-                "python_package": {"folder": "", "editable_files": ["main.py"]},
-                "python_package_files": {
-                    "template_key": selected["key"],
-                    "revision": selected["revision"],
-                    "files": [{"path": "main.py", "content": "middleware = ("}],
-                },
-            },
-        ).status_code
-        == 422
-    )
-    assert (
-        client.post(
-            "/api/blocks/custom-middleware",
-            json={
-                "name": "missing output",
-                "python_package": {"folder": "", "editable_files": ["main.py"]},
-                "python_package_files": {
-                    "template_key": selected["key"],
-                    "revision": selected["revision"],
-                    "files": [{"path": "main.py", "content": "value = object()\n"}],
-                },
-            },
-        ).status_code
-        == 422
-    )
+    middleware_catalog = client.get(
+        "/api/python-package-templates/middleware"
+    ).json()
+    assert [item["key"] for item in middleware_catalog["catalog"]] == [
+        "syntax-check"
+    ]
+    assert set(middleware_catalog["errors"]) == {
+        "invalid-syntax",
+        "missing-output",
+    }
     old_text_shape = {"enabled": True, "draft": "old shape"}
     for block_type, field in (
         ("filesystem", "system_prompt_override"),
@@ -177,7 +160,7 @@ def test_prompt_templates_accept_escaped_literal_braces(
                 "Explicit inherit",
                 name="explicit_inherit",
                 capability_overrides=[
-                    {"type": "model", "mode": "inherit", "block_id": ""}
+                    {"type": "model-requirement", "mode": "inherit", "block_id": ""}
                 ],
             ),
         ).status_code
@@ -185,7 +168,7 @@ def test_prompt_templates_accept_escaped_literal_braces(
     )
     missing_credential = model_payload("Missing credential")
     del missing_credential["credential"]
-    assert client.post("/api/blocks/model", json=missing_credential).status_code == 422
+    assert client.post("/api/model-connections", json=missing_credential).status_code == 422
     assert (
         client.post(
             "/api/blocks/filesystem",

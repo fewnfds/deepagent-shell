@@ -5,9 +5,10 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
+import yaml
 
 from agent_shell.app import create_app
-from agent_shell.storage.file_config import FileConfigRepository
+from agent_shell.storage.environment import parse_environment_text
 from support import ScopedAuthTestClient, configure_scope_tokens
 
 LOCAL_SECRET = "local-provider-secret-sentinel"
@@ -25,8 +26,8 @@ def make_client(
 ) -> tuple[TestClient, Path]:
     monkeypatch.chdir(tmp_path)
     configure_scope_tokens(monkeypatch, tmp_path)
-    database_path = tmp_path / "data" / "state" / "agent-shell.sqlite3"
-    return ScopedAuthTestClient(create_app()), database_path
+    data_root = tmp_path / "data"
+    return ScopedAuthTestClient(create_app()), data_root
 
 
 def model_payload(
@@ -49,24 +50,33 @@ def model_payload(
     }
 
 
-def database_payload(database_path: Path, block_id: str) -> tuple[dict, list[dict[str, str]]]:
-    repository = FileConfigRepository(database_path.parent.parent)
-    payload = next(
-        item
-        for item in repository.config()["components"]["model"]
-        if item["id"] == block_id
+def connection_storage_payload(
+    data_root: Path,
+    connection_id: str,
+) -> tuple[dict, list[dict[str, str]]]:
+    document = yaml.safe_load(
+        (
+            data_root
+            / "config"
+            / "model-connections"
+            / f"{connection_id}.yaml"
+        ).read_text(encoding="utf-8")
     )
+    payload = {
+        "id": document["id"],
+        "name": document["name"],
+        **document["payload"],
+    }
     environment: dict[str, str] = {}
-    env_path = repository.environment_path
+    env_path = data_root / "config" / "agent-shell.env"
     if env_path.exists():
-        for line in env_path.read_text(encoding="utf-8").splitlines():
-            key, separator, value = line.partition("=")
-            if (
-                separator
-                and key.endswith("_API_KEY")
-                and key != "AGENT_SHELL_API_KEY"
-            ):
-                environment[key] = value
+        environment = {
+            key: value
+            for key, value in parse_environment_text(
+                env_path.read_text(encoding="utf-8")
+            ).items()
+            if key.startswith("AGENT_SHELL_MODEL_")
+        }
     secrets = [
         {"id": key, "secret_value": value}
         for key, value in sorted(environment.items())
@@ -78,7 +88,7 @@ __all__ = [
     "LOCAL_SECRET",
     "REPLACEMENT_SECRET",
     "clean_agent_shell_environment",
-    "database_payload",
+    "connection_storage_payload",
     "make_client",
     "model_payload",
 ]

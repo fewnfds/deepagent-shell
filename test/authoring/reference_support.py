@@ -104,19 +104,9 @@ def make_client(tmp_path: Path, monkeypatch) -> TestClient:
 
 def block_payload(capability_type: str, name: str) -> dict:
     payloads = {
-        "model": {
+        "model-requirement": {
             "name": name,
-            "provider": "openai",
-            "base_url": "https://example.invalid/v1",
-            "credential": "reference-test-secret",
-            "model": "fixture-model",
-            "provider_settings": {
-                "temperature": 0.7,
-                "max_completion_tokens": 4096,
-            },
-            "tool_choice": None,
-            "response_format": None,
-            "model_settings": {},
+            "description": "Use a model suitable for the reference test.",
         },
         "custom-tool": {"name": name},
         "custom-middleware": {"name": name},
@@ -168,15 +158,10 @@ def create_blocks(client: TestClient, suffix: str, types=PUBLIC_TYPES) -> dict[s
             ).json()["catalog"][0]
             payload = {
                 **payload,
-                "python_package": {"folder": "", "editable_files": ["main.py"]},
-                "python_package_files": {
-                    "template_key": selected["key"],
+                "python_package": {"folder": ""},
+                "python_package_template": {
+                    "key": selected["key"],
                     "revision": selected["revision"],
-                    "files": [
-                        {"path": "main.py", "content": next(
-                            file["content"] for file in selected["files"] if file["path"] == "main.py"
-                        )}
-                    ],
                 },
             }
         response = client.post(
