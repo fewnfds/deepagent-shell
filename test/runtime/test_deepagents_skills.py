@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ from pydantic import ValidationError
 from agent_shell.contracts import FilesystemBlock, SkillBlock
 from agent_shell.runtime.capabilities import build_deepagents_capabilities
 from agent_shell.runtime.capabilities import deepagents as deepagents_capability
+from agent_shell.runtime.capabilities.deepagents import DeepAgentsCapabilityError
 
 def test_skill_requires_an_owned_private_package_reference() -> None:
     owner = "11111111-1111-4111-8111-111111111111"
@@ -41,6 +43,35 @@ def test_selected_skill_with_invalid_current_metadata_is_not_materialized(
         skills_dir=skills_dir, skill_owner_id=owner,
     )
     assert capabilities.skill_sources == ("/skills/",)
+
+
+def test_skill_runtime_rejects_links_inside_private_package(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    owner = "11111111-1111-4111-8111-111111111111"
+    skill_dir = skills_dir / owner / "linked"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: linked\ndescription: Linked instructions.\n---\n",
+        encoding="utf-8",
+    )
+    outside = tmp_path / "outside.txt"
+    outside.write_text("outside sentinel", encoding="utf-8")
+    try:
+        os.symlink(outside, skill_dir / "outside.txt")
+    except OSError as exc:
+        pytest.skip(f"symbolic links are unavailable in this environment: {exc}")
+    skill = SkillBlock.model_validate(
+        {"name": "Linked Skill", "skill_package": {"folder": owner}}
+    )
+
+    with pytest.raises(DeepAgentsCapabilityError, match="link, reparse point"):
+        build_deepagents_capabilities(
+            None,
+            skill,
+            filesystem_mode="default-shared",
+            skills_dir=skills_dir,
+            skill_owner_id=owner,
+        )
 
 def test_skill_prompt_supports_default_override_and_disabled_modes(tmp_path: Path) -> None:
     skills_dir = tmp_path / "skills"

@@ -1,360 +1,204 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { createI18n } from 'vue-i18n'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { FileManagerScope, ManagedDirectory } from '@/api'
+import {
+  ManagementApiError,
+  managementApi,
+  type ManagedDirectory,
+  type ManagedFileCapabilities,
+} from '@/api'
+import FileWorkspaceBrowser from '@/components/FileWorkspaceBrowser.vue'
+import FileWorkspaceDialog from '@/components/FileWorkspaceDialog.vue'
+import TextFileEditorSurface from '@/components/TextFileEditorSurface.vue'
 import { useConfirmation } from '@/composables/useConfirmation'
+import { en } from '@/locales/en'
 
-import FileManagerPage from './FileManagerPage.vue'
-
-vi.mock('vue-i18n', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('vue-i18n')>()
-  return {
-    ...actual,
-    useI18n: () => ({
-      locale: { value: 'en' },
-      t: (key: string) => key,
-      te: () => true,
-    }),
-  }
+const i18n = () => createI18n({
+  legacy: false,
+  locale: 'en',
+  messages: { en },
 })
 
-const fileScopeCatalog = {
-  scopes: ['files', 'skill_templates', 'python_templates'] as FileManagerScope[],
+const navigationCapabilities: ManagedFileCapabilities = {
+  list: true,
+  read: false,
+  create: false,
+  upload: false,
+  write: false,
+  download: false,
+  archive: false,
+  rename: false,
+  delete: false,
+}
+const editableCapabilities: ManagedFileCapabilities = {
+  list: true,
+  read: true,
+  create: true,
+  upload: true,
+  write: true,
+  download: true,
+  archive: true,
+  rename: true,
+  delete: true,
 }
 
-async function openFilesRoot(wrapper: ReturnType<typeof mount>): Promise<void> {
-  await wrapper.get('[data-scope="files"] a').trigger('click')
-  await flushPromises()
+afterEach(() => {
+  useConfirmation().cancel()
+  vi.restoreAllMocks()
+})
+
+function browserApi(listManagedFiles: (path?: string) => Promise<ManagedDirectory>) {
+  return {
+    listManagedFiles: vi.fn(listManagedFiles),
+    createManagedDirectory: vi.fn(),
+    createManagedTextFile: vi.fn(),
+    uploadManagedFile: vi.fn(),
+    downloadManagedEntry: vi.fn(),
+    previewManagedArchive: vi.fn(),
+    downloadManagedArchive: vi.fn(),
+    renameManagedEntry: vi.fn(),
+    deleteManagedFile: vi.fn(),
+  }
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((accept) => {
-    resolve = accept
-  })
-  return { promise, resolve }
-}
-
-describe('FileManagerPage', () => {
-  it('lists only backend-authorized file roots and creates a folder after entering one', async () => {
-    const empty: ManagedDirectory = { scope: 'files', path: '', items: [] }
-    const api = {
-      listManagedFileScopes: vi.fn().mockResolvedValue(fileScopeCatalog),
-      listManagedFiles: vi.fn().mockResolvedValue(empty),
-      createManagedDirectory: vi.fn().mockResolvedValue({ path: 'drafts' }),
-      createManagedTextFile: vi.fn(),
-      uploadManagedFile: vi.fn(),
-      downloadManagedEntry: vi.fn(),
-      previewManagedArchive: vi.fn(),
-      downloadManagedArchive: vi.fn(),
-      readManagedTextFile: vi.fn(),
-      saveManagedTextFile: vi.fn(),
-      renameManagedEntry: vi.fn(),
-      deleteManagedFile: vi.fn(),
-    }
-    const wrapper = mount(FileManagerPage, { props: { api } })
-    await flushPromises()
-
-    expect(wrapper.find('#file-manager-scope').exists()).toBe(false)
-    expect(wrapper.findAll('[data-testid="file-manager-roots"] tbody tr')).toHaveLength(3)
-    expect(wrapper.find('[data-scope="config"]').exists()).toBe(false)
-    expect(api.listManagedFiles).not.toHaveBeenCalled()
-
-    await openFilesRoot(wrapper)
-    expect(api.listManagedFiles).toHaveBeenCalledWith('files', '')
-
-    const createFolder = wrapper.findAll('button').find((button) => (
-      button.text() === 'fileManager.createFolder'
-    ))
-    await createFolder!.trigger('click')
-    await flushPromises()
-    const dialogInput = wrapper.find('[role="dialog"] input')
-    await dialogInput.setValue('drafts')
-    const create = wrapper.findAll('[role="dialog"] button').find((button) => (
-      button.text() === 'common.new'
-    ))
-    await create!.trigger('click')
-    await flushPromises()
-
-    expect(api.createManagedDirectory).toHaveBeenCalledWith('files', 'drafts')
-    expect(api.listManagedFiles).toHaveBeenCalledTimes(2)
-  })
-
-  it('keeps file actions distinct and renames within the current folder', async () => {
-    const directory: ManagedDirectory = {
-      scope: 'files',
-      path: 'notes',
+describe('File Workspace', () => {
+  it('browses real data paths and enables commands only from backend capabilities', async () => {
+    const root: ManagedDirectory = {
+      path: 'data',
+      capabilities: navigationCapabilities,
       items: [{
-        name: 'draft.txt',
-        path: 'notes/draft.txt',
-        kind: 'file',
-        size: 5,
-        modified_at: '2026-07-21T00:00:00Z',
-        revision: 'revision',
+        name: 'files',
+        path: 'data/files',
+        kind: 'directory',
+        size: null,
+        modified_at: '2026-08-21T00:00:00Z',
+        revision: 'root-revision',
+        capabilities: { ...editableCapabilities, read: false, write: false },
       }],
     }
-    const api = {
-      listManagedFileScopes: vi.fn().mockResolvedValue(fileScopeCatalog),
-      listManagedFiles: vi.fn().mockResolvedValue(directory),
-      createManagedDirectory: vi.fn(),
-      createManagedTextFile: vi.fn(),
-      uploadManagedFile: vi.fn(),
-      downloadManagedEntry: vi.fn(),
-      previewManagedArchive: vi.fn(),
-      downloadManagedArchive: vi.fn(),
-      readManagedTextFile: vi.fn(),
-      saveManagedTextFile: vi.fn(),
-      renameManagedEntry: vi.fn().mockResolvedValue({ path: 'notes/final.txt' }),
-      deleteManagedFile: vi.fn(),
+    const files: ManagedDirectory = {
+      path: 'data/files',
+      capabilities: editableCapabilities,
+      items: [],
     }
-    const wrapper = mount(FileManagerPage, { props: { api } })
+    const api = browserApi(async (path = 'data') => path === 'data' ? root : files)
+    const wrapper = mount(FileWorkspaceBrowser, {
+      props: { api },
+      global: { plugins: [i18n()] },
+    })
     await flushPromises()
-    await openFilesRoot(wrapper)
 
-    const breadcrumb = wrapper.get('[data-testid="file-manager-breadcrumb"]')
-    expect(breadcrumb.text()).toContain('fileManager.title')
-    expect(breadcrumb.text()).toContain('files')
-    expect(breadcrumb.text()).toContain('notes')
-    expect(breadcrumb.findAll('button')).toHaveLength(0)
-    expect(breadcrumb.findAll('a')).toHaveLength(2)
+    expect(api.listManagedFiles).toHaveBeenCalledWith('data')
+    expect(wrapper.text()).toContain('data')
+    expect(wrapper.text()).toContain('files')
+    expect(wrapper.text()).not.toContain('New folder')
 
-    const fileName = wrapper.get('[data-testid="managed-entry-name"]')
-    expect(fileName.element.tagName).toBe('SPAN')
-    expect(fileName.text()).toBe('draft.txt')
+    const filesButton = wrapper.findAll('button').find((button) => button.text().includes('files'))
+    await filesButton!.trigger('click')
+    await flushPromises()
 
-    const actions = wrapper.findAll('[data-testid="row-actions"] button')
-    expect(actions.map((button) => button.text())).toEqual([
-      'common.edit',
-      'fileManager.download',
-      'fileManager.rename',
-      'common.delete',
-    ])
-    expect(actions[0]?.classes()).toContain('btn-warning')
-    expect(actions[1]?.classes()).toContain('btn-info')
-    expect(actions[2]?.classes()).toContain('btn-warning')
-    expect(actions[3]?.classes()).toContain('btn-danger')
+    expect(api.listManagedFiles).toHaveBeenLastCalledWith('data/files')
+    expect(wrapper.text()).toContain('New folder')
+    expect(wrapper.text()).toContain('Upload files')
+  })
 
-    await actions[2]!.trigger('click')
-    await wrapper.get('[role="dialog"] input').setValue('final.txt')
-    const save = wrapper.findAll('[role="dialog"] button').find((button) => (
-      button.text() === 'common.save'
-    ))
+  it('opens a caller path at its real parent and waits for a file click before editing', async () => {
+    const path = 'data/configuration-repositories/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/python_package_instances/command/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/main.py'
+    const parent = path.slice(0, path.lastIndexOf('/'))
+    const list = vi.spyOn(managementApi, 'listManagedFiles').mockResolvedValue({
+      path: parent,
+      capabilities: editableCapabilities,
+      items: [{
+        name: 'main.py',
+        path,
+        kind: 'file',
+        size: 10,
+        modified_at: '2026-08-21T00:00:00Z',
+        revision: 'metadata-revision',
+        capabilities: editableCapabilities,
+      }],
+    })
+    const read = vi.spyOn(managementApi, 'readManagedTextFile').mockResolvedValue({
+      path,
+      content: 'SOURCE\n',
+      revision: 'content-revision',
+      capabilities: editableCapabilities,
+    })
+    const wrapper = mount(FileWorkspaceDialog, {
+      props: { open: true, path },
+      global: { plugins: [i18n()] },
+      attachTo: document.body,
+    })
+    await flushPromises()
+
+    expect(list).toHaveBeenCalledWith(parent)
+    expect(read).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('main.py')
+    expect(wrapper.get('tr[aria-current="true"] strong').text()).toBe('main.py')
+
+    const fileButton = wrapper.findAll('button').find((button) => button.text().includes('main.py'))
+    await fileButton!.trigger('click')
+    await flushPromises()
+
+    expect(read).toHaveBeenCalledWith(path)
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('SOURCE\n')
+    wrapper.unmount()
+  })
+
+  it('keeps a stale draft and overwrites only after fetching the latest revision', async () => {
+    const path = 'data/files/shared.txt'
+    const readManagedTextFile = vi.fn()
+      .mockResolvedValueOnce({
+        path,
+        content: 'disk v1',
+        revision: 'revision-1',
+        capabilities: editableCapabilities,
+      })
+      .mockResolvedValueOnce({
+        path,
+        content: 'disk v2',
+        revision: 'revision-2',
+        capabilities: editableCapabilities,
+      })
+    const saveManagedTextFile = vi.fn()
+      .mockRejectedValueOnce(new ManagementApiError({
+        status: 409,
+        code: 'text_file_revision_conflict',
+        message: 'conflict',
+      }))
+      .mockResolvedValueOnce({ path, revision: 'revision-3' })
+    const wrapper = mount(TextFileEditorSurface, {
+      props: {
+        path,
+        api: { readManagedTextFile, saveManagedTextFile },
+      },
+      global: { plugins: [i18n()] },
+    })
+    await flushPromises()
+
+    await wrapper.get('textarea').setValue('my draft')
+    const save = wrapper.findAll('button').find((button) => button.text().includes('Save'))
     await save!.trigger('click')
     await flushPromises()
 
-    expect(api.renameManagedEntry).toHaveBeenCalledWith(
-      'files',
-      'notes/draft.txt',
-      'final.txt',
-    )
-  })
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('my draft')
+    expect(wrapper.text()).toContain('The disk file changed')
 
-  it('keeps the latest directory when an earlier breadcrumb request finishes late', async () => {
-    const staleDirectory = deferred<ManagedDirectory>()
-    const latestDirectory = deferred<ManagedDirectory>()
-    const initialDirectory: ManagedDirectory = {
-      scope: 'files',
-      path: 'one/two',
-      items: [],
-    }
-    const listManagedFiles = vi.fn()
-      .mockResolvedValueOnce(initialDirectory)
-      .mockImplementation((_: FileManagerScope, path: string) => (
-        path === 'one' ? staleDirectory.promise : latestDirectory.promise
-      ))
-    const api = {
-      listManagedFileScopes: vi.fn().mockResolvedValue(fileScopeCatalog),
-      listManagedFiles,
-      createManagedDirectory: vi.fn(),
-      createManagedTextFile: vi.fn(),
-      uploadManagedFile: vi.fn(),
-      downloadManagedEntry: vi.fn(),
-      previewManagedArchive: vi.fn(),
-      downloadManagedArchive: vi.fn(),
-      readManagedTextFile: vi.fn(),
-      saveManagedTextFile: vi.fn(),
-      renameManagedEntry: vi.fn(),
-      deleteManagedFile: vi.fn(),
-    }
-    const wrapper = mount(FileManagerPage, { props: { api } })
-    await flushPromises()
-    await openFilesRoot(wrapper)
-
-    const breadcrumbLinks = wrapper.get('[data-testid="file-manager-breadcrumb"]').findAll('a')
-    await breadcrumbLinks[2]!.trigger('click')
-    await breadcrumbLinks[1]!.trigger('click')
-    latestDirectory.resolve({
-      scope: 'files',
-      path: '',
-      items: [{
-        name: 'latest.txt',
-        path: 'latest.txt',
-        kind: 'file',
-        size: 6,
-        modified_at: '2026-08-03T00:00:00Z',
-        revision: 'latest-revision',
-      }],
-    })
-    await flushPromises()
-    staleDirectory.resolve({
-      scope: 'files',
-      path: 'one',
-      items: [{
-        name: 'stale.txt',
-        path: 'one/stale.txt',
-        kind: 'file',
-        size: 5,
-        modified_at: '2026-08-02T00:00:00Z',
-        revision: 'stale-revision',
-      }],
-    })
-    await flushPromises()
-
-    expect(wrapper.get('[data-testid="file-manager-breadcrumb"]').text()).not.toContain('one')
-    expect(wrapper.get('[data-testid="managed-entry-name"]').text()).toBe('latest.txt')
-  })
-
-  it('keeps the latest editor content when an earlier text request finishes late', async () => {
-    const firstText = deferred<{ content: string, revision: string }>()
-    const secondText = deferred<{ content: string, revision: string }>()
-    const directory: ManagedDirectory = {
-      scope: 'files',
-      path: '',
-      items: [
-        {
-          name: 'first.txt',
-          path: 'first.txt',
-          kind: 'file',
-          size: 5,
-          modified_at: '2026-08-02T00:00:00Z',
-          revision: 'first-list-revision',
-        },
-        {
-          name: 'second.txt',
-          path: 'second.txt',
-          kind: 'file',
-          size: 6,
-          modified_at: '2026-08-03T00:00:00Z',
-          revision: 'second-list-revision',
-        },
-      ],
-    }
-    const api = {
-      listManagedFileScopes: vi.fn().mockResolvedValue(fileScopeCatalog),
-      listManagedFiles: vi.fn().mockResolvedValue(directory),
-      createManagedDirectory: vi.fn(),
-      createManagedTextFile: vi.fn(),
-      uploadManagedFile: vi.fn(),
-      downloadManagedEntry: vi.fn(),
-      previewManagedArchive: vi.fn(),
-      downloadManagedArchive: vi.fn(),
-      readManagedTextFile: vi.fn((_: FileManagerScope, path: string) => (
-        path === 'first.txt' ? firstText.promise : secondText.promise
-      )),
-      saveManagedTextFile: vi.fn(),
-      renameManagedEntry: vi.fn(),
-      deleteManagedFile: vi.fn(),
-    }
-    const wrapper = mount(FileManagerPage, { props: { api } })
-    await flushPromises()
-    await openFilesRoot(wrapper)
-
-    const rowActions = wrapper.findAll('[data-testid="row-actions"]')
-    await rowActions[0]!.findAll('button')[0]!.trigger('click')
-    await rowActions[1]!.findAll('button')[0]!.trigger('click')
-    secondText.resolve({ content: 'latest content', revision: 'latest-revision' })
-    await flushPromises()
-    firstText.resolve({ content: 'stale content', revision: 'stale-revision' })
-    await flushPromises()
-
-    expect(wrapper.get('[role="dialog"]').text()).toContain('second.txt')
-    expect((wrapper.get('[role="dialog"] textarea').element as HTMLTextAreaElement).value)
-      .toBe('latest content')
-  })
-
-  it('previews mixed selections and creates the archive only after confirmation', async () => {
-    const directory: ManagedDirectory = {
-      scope: 'files',
-      path: '',
-      items: [
-        {
-          name: 'documents',
-          path: 'documents',
-          kind: 'directory',
-          size: null,
-          modified_at: '2026-07-21T00:00:00Z',
-          revision: 'directory-revision',
-        },
-        {
-          name: 'readme.txt',
-          path: 'readme.txt',
-          kind: 'file',
-          size: 4,
-          modified_at: '2026-07-21T00:00:00Z',
-          revision: 'file-revision',
-        },
-      ],
-    }
-    const api = {
-      listManagedFileScopes: vi.fn().mockResolvedValue(fileScopeCatalog),
-      listManagedFiles: vi.fn().mockResolvedValue(directory),
-      createManagedDirectory: vi.fn(),
-      createManagedTextFile: vi.fn(),
-      uploadManagedFile: vi.fn(),
-      downloadManagedEntry: vi.fn(),
-      previewManagedArchive: vi.fn().mockResolvedValue({
-        total_size: 1028,
-        file_count: 2,
-        directory_count: 1,
-      }),
-      downloadManagedArchive: vi.fn().mockResolvedValue(new Blob(['archive'])),
-      readManagedTextFile: vi.fn(),
-      saveManagedTextFile: vi.fn(),
-      renameManagedEntry: vi.fn(),
-      deleteManagedFile: vi.fn(),
-    }
-    Object.defineProperty(URL, 'createObjectURL', {
-      configurable: true,
-      value: vi.fn(() => 'blob:archive'),
-    })
-    Object.defineProperty(URL, 'revokeObjectURL', {
-      configurable: true,
-      value: vi.fn(),
-    })
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
-    const wrapper = mount(FileManagerPage, { props: { api } })
-    await flushPromises()
-    await openFilesRoot(wrapper)
-
-    await wrapper.get('[data-testid="select-all-files"]').setValue(true)
-    await flushPromises()
-    const archive = wrapper.findAll('button').find((button) => (
-      button.text() === 'fileManager.archive.selected'
+    const overwrite = wrapper.findAll('button').find((button) => (
+      button.text().includes('Overwrite latest')
     ))
-    expect(archive).toBeDefined()
-    expect(archive!.attributes('disabled')).toBeUndefined()
-
-    await archive!.trigger('click')
-    await flushPromises()
-    expect(api.previewManagedArchive).toHaveBeenCalledWith(
-      'files',
-      ['documents', 'readme.txt'],
-    )
-    expect(api.downloadManagedArchive).not.toHaveBeenCalled()
-
-    useConfirmation().cancel()
-    await flushPromises()
-    expect(api.downloadManagedArchive).not.toHaveBeenCalled()
-
-    await archive!.trigger('click')
-    await flushPromises()
+    const overwriteClick = overwrite!.trigger('click')
+    await vi.waitFor(() => {
+      expect(useConfirmation().current.value?.dangerous).toBe(true)
+    })
+    expect(readManagedTextFile).toHaveBeenCalledTimes(1)
     useConfirmation().accept()
+    await overwriteClick
     await flushPromises()
-    expect(api.downloadManagedArchive).toHaveBeenCalledWith(
-      'files',
-      ['documents', 'readme.txt'],
-    )
-    expect(URL.createObjectURL).toHaveBeenCalled()
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:archive')
+
+    expect(readManagedTextFile).toHaveBeenCalledTimes(2)
+    expect(saveManagedTextFile).toHaveBeenLastCalledWith(path, 'my draft', 'revision-2')
+    expect((wrapper.get('textarea').element as HTMLTextAreaElement).value).toBe('my draft')
   })
 })

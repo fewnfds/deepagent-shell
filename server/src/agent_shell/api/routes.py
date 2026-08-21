@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from functools import wraps
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 import httpx
 from fastapi import APIRouter, HTTPException, Request
@@ -19,6 +22,11 @@ from agent_shell.api.agent_configs import (
     main_agent_block_reference_owner,
 )
 from agent_shell.capability_manifest import CAPABILITY_BY_TYPE
+from agent_shell.configuration.component_mutations import (
+    ComponentMutationError,
+    ComponentMutationService,
+    ComponentMutationValidationError,
+)
 from agent_shell.registries.skills import scan_skills
 from agent_shell.provider_http import ProviderHttpClients
 from agent_shell.provider_integrations import bundled_provider_ids
@@ -29,16 +37,13 @@ from agent_shell.storage.file_config import FileConfigRepository
 from agent_shell.storage.workflows import WorkflowStore
 from agent_shell.storage.runtime_policy import RuntimePolicyStore
 from agent_shell.validation.models import validation_failure_detail
-from agent_shell.validation.service import ConfigurationValidationService
 from agent_shell.python_packages.authoring import (
-    PackageChange,
     PythonPackageAuthoringError,
     PythonPackageAuthoringService,
 )
 from agent_shell.skills.authoring import (
     SkillPackageAuthoringError,
     SkillPackageAuthoringService,
-    SkillPackageChange,
 )
 
 
@@ -76,14 +81,25 @@ def build_router(
     config_store: AgentConfigStore,
     skills_dir: Path,
     secret_resolver: ProviderSecretResolver,
-    validation: ConfigurationValidationService,
     provider_http_clients: ProviderHttpClients,
     workflow_store: WorkflowStore,
     python_package_authoring: PythonPackageAuthoringService,
     skill_package_authoring: SkillPackageAuthoringService,
+    component_mutations: ComponentMutationService,
     runtime_policy: RuntimePolicyStore,
 ) -> APIRouter:
     router = APIRouter()
+
+    def configuration_mutation(endpoint):
+        @wraps(endpoint)
+        async def guarded(*args, **kwargs):
+            expected_repository_id = configuration.repository_id
+            with configuration.exclusive_config_mutation(
+                expected_repository_id=expected_repository_id
+            ):
+                return await endpoint(*args, **kwargs)
+
+        return guarded
 
     def check_type(block_type: str) -> None:
         if block_type not in MANAGED_COMPONENT_MODELS:
@@ -94,82 +110,6 @@ def build_router(
                 message="The configuration type is unknown.",
                 message_args={"type": block_type},
             )
-
-    def parse_payload(
-        block_type: str, payload: dict, *, block_id: str = ""
-    ) -> dict:
-        if block_type == "skill" and payload.get("skill_package") != {
-            "folder": block_id
-        }:
-            raise management_error(
-                422,
-                code="skill_package_owner_invalid",
-                message_key="errors.skillPackageOwnerInvalid",
-                message="The Skill private package folder must match its Component UUID.",
-            )
-        report, validated = validation.validate_block(
-            block_type,
-            payload,
-            stage="block_save",
-            owner_id=block_id,
-        )
-        if not report.valid:
-            raise HTTPException(
-                status_code=422,
-                detail=validation_failure_detail(report),
-            )
-        assert validated is not None
-        return validated
-
-    def package_files(payload: dict, *, creating: bool) -> tuple[dict, dict]:
-        candidate = dict(payload)
-        files = candidate.pop("python_package_files", None)
-        if not isinstance(files, dict):
-            raise management_error(
-                422,
-                code="python_package_files_required",
-                message_key="errors.pythonPackageFilesRequired",
-                message="Python package component saves require package file content.",
-            )
-        allowed = {"files", "revision", "template_key"}
-        if set(files) - allowed or not isinstance(files.get("files"), list) or not isinstance(files.get("revision"), str):
-            raise management_error(
-                422,
-                code="python_package_files_invalid",
-                message_key="errors.pythonPackageFilesInvalid",
-                message="The Python package file payload is invalid.",
-            )
-        if creating and (
-            not isinstance(files.get("template_key"), str)
-            or not files["template_key"].strip()
-        ):
-            raise management_error(
-                422,
-                code="python_package_template_required",
-                message_key="errors.pythonPackageTemplateRequired",
-                message="Select a Python package template or apply the empty template before saving.",
-            )
-        package = candidate.get("python_package")
-        if not isinstance(package, dict) or set(package) != {"folder", "editable_files"}:
-            raise management_error(
-                422,
-                code="python_package_files_invalid",
-                message_key="errors.pythonPackageFilesInvalid",
-                message="The Python package reference is invalid.",
-            )
-        entry_paths = [
-            item.get("path")
-            for item in files["files"]
-            if isinstance(item, dict)
-        ]
-        if package.get("editable_files") != entry_paths:
-            raise management_error(
-                422,
-                code="python_package_files_invalid",
-                message_key="errors.pythonPackageFilesInvalid",
-                message="The editable file list must match the ordered file contents.",
-            )
-        return candidate, files
 
     def package_reference(payload: dict) -> dict:
         value = payload.get("python_package")
@@ -195,29 +135,39 @@ def build_router(
             message=str(exc),
         )
 
+    def component_mutation_error(exc: ComponentMutationError) -> HTTPException:
+        return management_error(
+            exc.status_code,
+            code=exc.code,
+            message_key=exc.message_key,
+            message=str(exc),
+            message_args=exc.message_args,
+        )
+
+    def perform_component_mutation(operation: Callable[[], Any]) -> Any:
+        try:
+            return operation()
+        except ComponentMutationValidationError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=validation_failure_detail(exc.report),
+            ) from exc
+        except ComponentMutationError as exc:
+            raise component_mutation_error(exc) from exc
+        except PythonPackageAuthoringError as exc:
+            raise authoring_error(exc) from exc
+        except SkillPackageAuthoringError as exc:
+            raise skill_authoring_error(exc) from exc
+
     def project_block(
         block_type: str,
         block: dict | None,
         *,
-        include_package_files: bool = False,
+        include_package_details: bool = False,
     ) -> dict | None:
         if block is None:
             return None
-        if python_package_authoring.supports(block_type):
-            if not include_package_files:
-                return block
-            try:
-                return {
-                    **block,
-                    **python_package_authoring.project(
-                        block_type,
-                        str(block.get("id", "")),
-                        package_reference(block),
-                    ),
-                }
-            except PythonPackageAuthoringError as exc:
-                raise authoring_error(exc) from exc
-        if block_type == "skill" and include_package_files:
+        if block_type == "skill" and include_package_details:
             return {
                 **block,
                 "skill_package_contents": skill_package_authoring.inspect(
@@ -435,37 +385,15 @@ def build_router(
                 message_key="errors.skillTemplatePathInvalid",
                 message="A Skill Template path is required.",
             )
-        with configuration.exclusive_config_mutation():
-            if block_store.get_block_internal("skill", block_id) is None:
-                raise management_error(
-                    404,
-                    code="block_not_found",
-                    message_key="errors.blockNotFound",
-                    message="The Skill component configuration does not exist.",
-                )
-            try:
-                change = skill_package_authoring.add(block_id, payload["template_path"])
-            except SkillPackageAuthoringError as exc:
-                raise skill_authoring_error(exc) from exc
-            change.finalize()
-            return skill_package_authoring.inspect(block_id)
+        return perform_component_mutation(
+            lambda: component_mutations.add_skill(block_id, payload["template_path"])
+        )
 
     @router.delete("/api/blocks/skill/{block_id}/skills/{folder_name}")
     async def delete_private_skill(block_id: str, folder_name: str) -> dict:
-        with configuration.exclusive_config_mutation():
-            if block_store.get_block_internal("skill", block_id) is None:
-                raise management_error(
-                    404,
-                    code="block_not_found",
-                    message_key="errors.blockNotFound",
-                    message="The Skill component configuration does not exist.",
-                )
-            try:
-                change = skill_package_authoring.remove(block_id, folder_name)
-            except SkillPackageAuthoringError as exc:
-                raise skill_authoring_error(exc) from exc
-            change.finalize()
-            return skill_package_authoring.inspect(block_id)
+        return perform_component_mutation(
+            lambda: component_mutations.remove_skill(block_id, folder_name)
+        )
 
     @router.get("/api/blocks/{block_type}")
     async def list_blocks(block_type: str) -> list[dict]:
@@ -473,7 +401,9 @@ def build_router(
         return [project_block(block_type, item) for item in block_store.list_blocks(block_type)]
 
     @router.delete("/api/unsupported-blocks/{block_id}")
+    @configuration_mutation
     async def delete_unsupported_block(block_id: str) -> dict[str, bool]:
+        mutation_repository_id = block_store.repository_id()
         block = block_store.get_block_header(block_id)
         if block is None or block["block_type"] in MANAGED_COMPONENT_MODELS:
             raise management_error(
@@ -487,6 +417,7 @@ def build_router(
             block_type,
             block_id,
             detach_references=True,
+            expected_repository_id=mutation_repository_id,
         ):
             raise management_error(
                 404,
@@ -503,7 +434,6 @@ def build_router(
     ) -> dict[str, int]:
         check_type(block_type)
         ids = list(dict.fromkeys(payload.ids))
-        mutation_repository_id = block_store.repository_id()
         for block_id in ids:
             if block_store.get_block(block_type, block_id) is None:
                 raise management_error(
@@ -532,45 +462,9 @@ def build_router(
                     message="The configuration is still referenced.",
                     message_args={"owner": owner_name},
                 )
-        changes: list[PackageChange | SkillPackageChange] = []
-        if python_package_authoring.supports(block_type):
-            try:
-                for block_id in ids:
-                    source = block_store.get_block_internal(block_type, block_id)
-                    if source is None:
-                        continue
-                    changes.append(
-                        python_package_authoring.stage_delete(
-                            block_type,
-                            block_id,
-                            package_reference(source),
-                        )
-                    )
-            except PythonPackageAuthoringError as exc:
-                for change in reversed(changes):
-                    change.rollback()
-                raise authoring_error(exc) from exc
-        elif block_type == "skill":
-            try:
-                for block_id in ids:
-                    changes.append(skill_package_authoring.stage_delete(block_id))
-            except SkillPackageAuthoringError as exc:
-                for change in reversed(changes):
-                    change.rollback()
-                raise skill_authoring_error(exc) from exc
-        try:
-            deleted = block_store.delete_blocks(
-                block_type,
-                ids,
-                detach_references=True,
-                expected_repository_id=mutation_repository_id,
-            )
-        except BaseException:
-            for change in reversed(changes):
-                change.rollback()
-            raise
-        for change in changes:
-            change.finalize()
+        deleted = perform_component_mutation(
+            lambda: component_mutations.delete_many(block_type, ids)
+        )
         return {"deleted": deleted}
 
     @router.get("/api/blocks/{block_type}/{block_id}")
@@ -584,15 +478,16 @@ def build_router(
                 message_key="errors.blockNotFound",
                 message="The component configuration does not exist.",
             )
-        return project_block(block_type, block, include_package_files=True)
+        return project_block(block_type, block, include_package_details=True)
 
-    @router.post("/api/blocks/{block_type}/{block_id}/python-package-files")
-    async def read_python_package_files(
+    @router.get("/api/blocks/{block_type}/{block_id}/python-package")
+    @configuration_mutation
+    async def inspect_python_package(
         block_type: str,
         block_id: str,
-        payload: dict,
     ) -> dict:
         check_type(block_type)
+        repository_id = block_store.repository_id()
         block = block_store.get_block_internal(block_type, block_id)
         if block is None:
             raise management_error(
@@ -601,19 +496,19 @@ def build_router(
                 message_key="errors.blockNotFound",
                 message="The component configuration does not exist.",
             )
-        if not python_package_authoring.supports(block_type) or set(payload) != {"paths"}:
+        if not python_package_authoring.supports(block_type):
             raise management_error(
                 422,
-                code="python_package_files_invalid",
-                message_key="errors.pythonPackageFilesInvalid",
-                message="The Python package file request is invalid.",
+                code="python_package_component_unsupported",
+                message_key="errors.pythonPackageComponentUnsupported",
+                message="The component type does not own a Python package.",
             )
         try:
-            return python_package_authoring.read_files(
+            return python_package_authoring.project(
                 block_type,
                 block_id,
                 package_reference(block),
-                payload["paths"],
+                repository_id=repository_id,
             )
         except PythonPackageAuthoringError as exc:
             raise authoring_error(exc) from exc
@@ -621,72 +516,13 @@ def build_router(
     @router.post("/api/blocks/{block_type}")
     async def create_block(block_type: str, payload: dict) -> dict:
         check_type(block_type)
-        block_id = block_store.new_id()
-        mutation_repository_id = block_store.repository_id()
-        change: PackageChange | SkillPackageChange | None = None
-        candidate = payload
-        if python_package_authoring.supports(block_type):
-            candidate, files = package_files(payload, creating=True)
-            package = candidate.get("python_package")
-            try:
-                reference, change = python_package_authoring.create(
-                    block_type,
-                    block_id,
-                    template_key=str(files["template_key"]),
-                    template_revision=str(files["revision"]),
-                    files=list(files["files"]),
-                )
-            except PythonPackageAuthoringError as exc:
-                raise authoring_error(exc) from exc
-            candidate["python_package"] = reference
-        elif block_type == "skill":
-            candidate = dict(payload)
-            template_paths = candidate.pop("skill_template_paths", None)
-            if not isinstance(template_paths, list) or not all(
-                isinstance(item, str) for item in template_paths
-            ):
-                raise management_error(
-                    422,
-                    code="skill_templates_required",
-                    message_key="errors.skillTemplatesRequired",
-                    message="Select at least one Skill Template.",
-                )
-            try:
-                reference, change = skill_package_authoring.create(
-                    block_id, template_paths
-                )
-            except SkillPackageAuthoringError as exc:
-                raise skill_authoring_error(exc) from exc
-            candidate["skill_package"] = reference
-        try:
-            validated = parse_payload(block_type, candidate, block_id=block_id)
-            block_store.save_block(
-                block_type,
-                block_id,
-                validated,
-                expected_repository_id=mutation_repository_id,
-            )
-        except HTTPException:
-            if change is not None:
-                change.rollback()
-            raise
-        except ValueError as exc:
-            if change is not None:
-                change.rollback()
-            raise management_error(
-                409,
-                code="configuration_name_conflict",
-                message_key="errors.configurationNameConflict",
-                message="A configuration with this name already exists.",
-            ) from exc
-        except BaseException:
-            if change is not None:
-                change.rollback()
-            raise
+        created = perform_component_mutation(
+            lambda: component_mutations.create(block_type, payload)
+        )
         return project_block(
             block_type,
-            block_store.get_block(block_type, block_id),
-            include_package_files=True,
+            created,
+            include_package_details=True,
         )
 
     @router.post("/api/blocks/{block_type}/{block_id}/copy")
@@ -708,156 +544,30 @@ def build_router(
                 message="The configuration name must contain 1 to 120 characters.",
                 message_args={"minimum": 1, "maximum": 120},
             )
-        source = block_store.get_block_internal(block_type, block_id)
-        if source is None:
-            raise management_error(
-                404,
-                code="block_not_found",
-                message_key="errors.blockNotFound",
-                message="The component configuration does not exist.",
-            )
-        report = validation.validate_block_copy(block_type, source, name=name)
-        if not report.valid:
-            raise HTTPException(
-                status_code=422,
-                detail=validation_failure_detail(report),
-            )
-        new_id = block_store.new_id()
-        mutation_repository_id = block_store.repository_id()
-        change: PackageChange | SkillPackageChange | None = None
-        if python_package_authoring.supports(block_type):
-            try:
-                reference, change = python_package_authoring.copy(
-                    block_type,
-                    block_id,
-                    new_id,
-                    package_reference(source),
-                )
-            except PythonPackageAuthoringError as exc:
-                raise authoring_error(exc) from exc
-            source = {**source, "python_package": reference}
-        elif block_type == "skill":
-            try:
-                change = skill_package_authoring.copy(block_id, new_id)
-            except SkillPackageAuthoringError as exc:
-                raise skill_authoring_error(exc) from exc
-            source = {**source, "skill_package": {"folder": new_id}}
-        try:
-            copied = block_store.copy_block(
+        copied = perform_component_mutation(
+            lambda: component_mutations.copy(
                 block_type,
                 block_id,
-                new_id,
-                name,
-                source=source,
-                expected_repository_id=mutation_repository_id,
+                name=name,
             )
-        except ValueError as exc:
-            if change is not None:
-                change.rollback()
-            raise management_error(
-                409,
-                code="configuration_name_conflict",
-                message_key="errors.configurationNameConflict",
-                message="A configuration with this name already exists.",
-            ) from exc
-        except BaseException:
-            if change is not None:
-                change.rollback()
-            raise
-        if copied is None:
-            if change is not None:
-                change.rollback()
-            raise management_error(
-                404,
-                code="block_not_found",
-                message_key="errors.blockNotFound",
-                message="The component configuration does not exist.",
-            )
-        return project_block(block_type, copied, include_package_files=True)
+        )
+        return project_block(block_type, copied, include_package_details=True)
 
     @router.put("/api/blocks/{block_type}/{block_id}")
     async def update_block(block_type: str, block_id: str, payload: dict) -> dict:
         check_type(block_type)
-        existing_block = block_store.get_block_internal(block_type, block_id)
-        if existing_block is None:
-            raise management_error(
-                404,
-                code="block_not_found",
-                message_key="errors.blockNotFound",
-                message="The component configuration does not exist.",
-            )
-        mutation_repository_id = block_store.repository_id()
-        change: PackageChange | SkillPackageChange | None = None
-        candidate = payload
-        if python_package_authoring.supports(block_type):
-            candidate, files = package_files(payload, creating=False)
-            reference = candidate.get("python_package")
-            if (
-                not isinstance(reference, dict)
-                or reference.get("folder")
-                != package_reference(existing_block).get("folder")
-            ):
-                raise management_error(
-                    409,
-                    code="python_package_folder_immutable",
-                    message_key="errors.pythonPackageFolderImmutable",
-                    message="An existing component cannot change its extension code directory reference.",
-                )
-            try:
-                change = python_package_authoring.update(
-                    block_type,
-                    block_id,
-                    reference,
-                    revision=str(files["revision"]),
-                    files=list(files["files"]),
-                )
-            except PythonPackageAuthoringError as exc:
-                raise authoring_error(exc) from exc
-        elif block_type == "skill":
-            candidate = dict(payload)
-            reference = candidate.get("skill_package")
-            if reference != existing_block.get("skill_package"):
-                raise management_error(
-                    409,
-                    code="skill_package_folder_immutable",
-                    message_key="errors.skillPackageFolderImmutable",
-                    message="An existing Skill component cannot change its private package reference.",
-                )
-        try:
-            validated = parse_payload(block_type, candidate, block_id=block_id)
-            block_store.save_block(
-                block_type,
-                block_id,
-                validated,
-                expected_repository_id=mutation_repository_id,
-            )
-        except HTTPException:
-            if change is not None:
-                change.rollback()
-            raise
-        except ValueError as exc:
-            if change is not None:
-                change.rollback()
-            raise management_error(
-                409,
-                code="configuration_name_conflict",
-                message_key="errors.configurationNameConflict",
-                message="A configuration with this name already exists.",
-            ) from exc
-        except BaseException:
-            if change is not None:
-                change.rollback()
-            raise
+        updated = perform_component_mutation(
+            lambda: component_mutations.update(block_type, block_id, payload)
+        )
         return project_block(
             block_type,
-            block_store.get_block(block_type, block_id),
-            include_package_files=True,
+            updated,
+            include_package_details=True,
         )
 
     @router.delete("/api/blocks/{block_type}/{block_id}")
     async def delete_block(block_type: str, block_id: str) -> dict[str, bool]:
         check_type(block_type)
-        mutation_repository_id = block_store.repository_id()
         reject_workflow_event_output_reference(block_type, block_id)
         reject_command_reference(block_type, block_id)
         reject_task_dispatcher_reference(block_type, block_id)
@@ -873,45 +583,9 @@ def build_router(
                     message="The configuration is still referenced.",
                     message_args={"owner": owner_name},
                 )
-        change: PackageChange | SkillPackageChange | None = None
-        if python_package_authoring.supports(block_type):
-            source = block_store.get_block_internal(block_type, block_id)
-            if source is not None:
-                try:
-                    change = python_package_authoring.stage_delete(
-                        block_type,
-                        block_id,
-                        package_reference(source),
-                    )
-                except PythonPackageAuthoringError as exc:
-                    raise authoring_error(exc) from exc
-        elif block_type == "skill":
-            try:
-                change = skill_package_authoring.stage_delete(block_id)
-            except SkillPackageAuthoringError as exc:
-                raise skill_authoring_error(exc) from exc
-        try:
-            deleted = block_store.delete_block(
-                block_type,
-                block_id,
-                detach_references=True,
-                expected_repository_id=mutation_repository_id,
-            )
-        except BaseException:
-            if change is not None:
-                change.rollback()
-            raise
-        if not deleted:
-            if change is not None:
-                change.rollback()
-            raise management_error(
-                404,
-                code="block_not_found",
-                message_key="errors.blockNotFound",
-                message="The component configuration does not exist.",
-            )
-        if change is not None:
-            change.finalize()
+        perform_component_mutation(
+            lambda: component_mutations.delete(block_type, block_id)
+        )
         return {"ok": True}
 
     return router

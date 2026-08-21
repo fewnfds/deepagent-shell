@@ -53,26 +53,21 @@ Model 的事实来源。
 
 ## Agent Event Output
 
-Main Agent 的 required reference 包含一个 `agent-event-output` package。先从 template catalog 选择源码，或使用 `__empty__`
-提交完整 `main.py` 和空的 `requirements.txt`：
+Main Agent 的 required reference 包含一个 `agent-event-output` package。先从 template catalog 选择一个合法模板：
 
 ```json
 {
   "name": "Primary agent output",
-  "python_package": {"folder": "", "editable_files": ["main.py", "requirements.txt"]},
-  "python_package_files": {
-    "template_key": "__empty__",
-    "revision": "",
-    "files": [
-      {"path": "main.py", "content": "<complete source>"},
-      {"path": "requirements.txt", "content": ""}
-    ]
+  "python_package": {"folder": ""},
+  "python_package_template": {
+    "key": "<catalog key>",
+    "revision": "<catalog revision>"
   }
 }
 ```
 
 提交到 `POST /api/blocks/agent-event-output`。推荐先读取
-`GET /api/python-package-templates/agent-event-output`，使用返回的 `revision` 和 `files`，保存后配置拥有独占 package
+`GET /api/python-package-templates/agent-event-output`，使用返回的 `key` 和 `revision`，保存后配置拥有独占 package
 目录。
 
 
@@ -96,23 +91,16 @@ Middleware template catalog 来自：
 GET /api/python-package-templates/middleware
 ```
 
-在 `catalog` 中按精确 `key == "内置示例-workflow-input-context"` 选择 template。使用该项返回的 `revision` 和 `files`
-创建 Custom Middleware。catalog 返回的是当前 source 和 revision，文档不复制整份 WIC source：
+在 `catalog` 中按精确 `key == "内置示例-workflow-input-context"` 选择 template。使用该项返回的 `key` 和 `revision`
+创建 Custom Middleware。catalog 返回当前模板身份、文件投影和 revision，文档不复制整份 WIC source：
 
 ```json
 {
   "name": "Default workflow input context",
-  "python_package": {
-    "folder": "",
-    "editable_files": ["main.py", "requirements.txt"]
-  },
-  "python_package_files": {
-    "template_key": "内置示例-workflow-input-context",
-    "revision": "<catalog revision>",
-    "files": [
-      {"path": "main.py", "content": "<main.py content returned by catalog>"},
-      {"path": "requirements.txt", "content": "<requirements content returned by catalog>"}
-    ]
+  "python_package": {"folder": ""},
+  "python_package_template": {
+    "key": "内置示例-workflow-input-context",
+    "revision": "<catalog revision>"
   }
 }
 ```

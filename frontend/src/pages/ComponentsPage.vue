@@ -13,6 +13,7 @@ import {
   type CapabilityManifest,
   type SkillPackageInspection,
   type LocalizedMessagePayload,
+  type PythonPackageInspection,
   type SavedBlock,
   type ValidationReport,
 } from '@/api'
@@ -41,7 +42,10 @@ import {
   type SkillCatalogItem,
   type WorkflowEventOutputCatalogItem,
 } from '@/domain/blocks'
-import type { PythonPackageDraftState } from '@/domain/blocks/pythonPackage'
+import {
+  applyPythonPackageInspection,
+  type PythonPackageDraftState,
+} from '@/domain/blocks/pythonPackage'
 import {
   CustomMiddlewareEditor,
   CustomToolEditor,
@@ -264,9 +268,7 @@ function validationPayloadFromDraft(
   if (type === 'skill' && !value.id) return null
   if (!usesPythonExtension(type)) return payload
   if (!value.id) return null
-  const persisted = { ...payload } as BlockPayload & { python_package_files?: unknown }
-  delete persisted.python_package_files
-  return persisted
+  return payload
 }
 
 function routeId(): string {
@@ -356,12 +358,21 @@ async function loadRoute(): Promise<void> {
     const id = routeId()
     let loadedDraft: BlockDraftBase
     if (id) {
-      const [loaded, invalid] = await Promise.all([
+      const [loaded, invalid, packageInspection] = await Promise.all([
         managementApi.getBlock(manifest.type, id),
         isStoredRecordInvalid(id),
+        usesPythonExtension(manifest.type)
+          ? managementApi.inspectPythonPackage(manifest.type, id)
+          : Promise.resolve(null),
       ])
       if (sequence !== routeSequence) return
       loadedDraft = draftFromApi(manifest.type, loaded)
+      if (packageInspection) {
+        applyPythonPackageInspection(
+          loadedDraft as BlockDraftBase & PythonPackageDraftState,
+          packageInspection,
+        )
+      }
       privateSkillPackage.value = manifest.type === 'skill'
         ? ((loaded as SavedBlock & { skill_package_contents?: SkillPackageInspection }).skill_package_contents ?? null)
         : null
@@ -377,13 +388,9 @@ async function loadRoute(): Promise<void> {
     draft.value = loadedDraft
     selectedId.value = loadedDraft.id
     markClean()
-    if (manifest.type === 'skill' || (!id && (
-      manifest.type === 'custom-middleware'
-      || manifest.type === 'agent-event-output'
-      || manifest.type === 'workflow-event-output'
-      || manifest.type === 'command'
-      || manifest.type === 'task-dispatcher'
-    ))) await refreshResource()
+    if (manifest.type === 'skill' || (!id && usesPythonExtension(manifest.type))) {
+      await refreshResource()
+    }
   } catch (error) {
     if (sequence !== routeSequence) return
     pageError.value = managementError.describe(error).display
@@ -440,14 +447,9 @@ async function startNew(): Promise<void> {
       draft.value = blankDraft(activeType.value!)
       storedRecordInvalid.value = false
       markClean()
-      if (
-        activeType.value === 'skill'
-        || activeType.value === 'custom-middleware'
-        || activeType.value === 'agent-event-output'
-        || activeType.value === 'workflow-event-output'
-        || activeType.value === 'command'
-        || activeType.value === 'task-dispatcher'
-      ) await refreshResource()
+      if (activeType.value === 'skill' || usesPythonExtension(activeType.value!)) {
+        await refreshResource()
+      }
     }
   })
 }
@@ -459,11 +461,21 @@ async function reset(): Promise<void> {
     try {
       if (draft.value?.id) {
         const id = draft.value.id
-        const [loaded, invalid] = await Promise.all([
+        const [loaded, invalid, packageInspection] = await Promise.all([
           managementApi.getBlock(activeType.value!, id),
           isStoredRecordInvalid(id),
+          usesPythonExtension(activeType.value!)
+            ? managementApi.inspectPythonPackage(activeType.value!, id)
+            : Promise.resolve(null),
         ])
-        draft.value = draftFromApi(activeType.value!, loaded)
+        const loadedDraft = draftFromApi(activeType.value!, loaded)
+        if (packageInspection) {
+          applyPythonPackageInspection(
+            loadedDraft as BlockDraftBase & PythonPackageDraftState,
+            packageInspection,
+          )
+        }
+        draft.value = loadedDraft
         storedRecordInvalid.value = invalid
       } else {
         draft.value = blankDraft(activeType.value!)
@@ -494,16 +506,9 @@ async function save(): Promise<void> {
   if (
     packageDraft
     && !packageDraft.id
-    && !packageDraft.python_package_files.template_key.trim()
+    && !packageDraft.python_package_template.key.trim()
   ) {
     pageError.value = t('errors.pythonPackageTemplateRequired')
-    return
-  }
-  if (
-    packageDraft
-    && packageDraft.python_package_files.files.some((file) => file.exists === undefined)
-  ) {
-    pageError.value = t('errors.pythonPackageFilesLoadRequired')
     return
   }
   const payload = payloadFromDraft(activeType.value, draft.value)
@@ -532,7 +537,14 @@ async function save(): Promise<void> {
   try {
     const request = targetId ? { id: targetId, ...payload } : payload
     const saved = await managementApi.saveBlock(activeType.value, request)
-    draft.value = draftFromApi(activeType.value, saved)
+    const savedDraft = draftFromApi(activeType.value, saved)
+    if (packageType) {
+      applyPythonPackageInspection(
+        savedDraft as BlockDraftBase & PythonPackageDraftState,
+        await managementApi.inspectPythonPackage(activeType.value, saved.id),
+      )
+    }
+    draft.value = savedDraft
     privateSkillPackage.value = activeType.value === 'skill'
       ? ((saved as SavedBlock & { skill_package_contents?: SkillPackageInspection }).skill_package_contents ?? null)
       : null
@@ -560,31 +572,17 @@ function updateDraft(value: BlockDraftBase): void {
   draft.value = value
 }
 
-async function loadPackageFiles(paths: string[]): Promise<void> {
-  const type = activeType.value
-  const current = draft.value as (BlockDraftBase & PythonPackageDraftState) | null
-  if (!type || !usesPythonExtension(type) || !current?.id || paths.length === 0) return
-  const blockId = current.id
-  try {
-    const result = await managementApi.readPythonPackageFiles(type, blockId, paths)
-    const latest = draft.value as (BlockDraftBase & PythonPackageDraftState) | null
-    if (!latest || latest.id !== blockId || activeType.value !== type) return
-    const loaded = new Map(result.files.map((file) => [file.path, file]))
-    const requested = new Set(paths)
-    latest.python_package_files.files = latest.python_package_files.files.map((file) => {
-      if (!requested.has(file.path) || file.exists !== undefined || file.content !== '') return file
-      return loaded.get(file.path) ?? file
-    })
-    latest.python_package_files.revision = result.revision
-  } catch (error) {
-    notifyFailure('components.feedback.resourceFailed', error)
-  }
-}
-
 async function refreshResource(): Promise<void> {
   loadingResource.value = true
   try {
-    if (activeType.value === 'custom-tool') {
+    const current = draft.value as (BlockDraftBase & PythonPackageDraftState) | null
+    if (activeType.value && usesPythonExtension(activeType.value) && current?.id) {
+      const inspection: PythonPackageInspection = await managementApi.inspectPythonPackage(
+        activeType.value,
+        current.id,
+      )
+      if (draft.value?.id === current.id) applyPythonPackageInspection(current, inspection)
+    } else if (activeType.value === 'custom-tool') {
       const result = await managementApi.listCustomToolTemplates()
       customTools.value = result.catalog
       customToolErrors.value = result.errors
@@ -761,7 +759,6 @@ onMounted(() => {
           :is="currentEditor"
           v-bind="editorProps"
           :model-value="draft"
-          @load-files="loadPackageFiles"
           @refresh="refreshResource"
           @add-skill="addPrivateSkill"
           @remove-skill="removePrivateSkill"

@@ -31,6 +31,10 @@ from agent_shell.storage.environment import (
 CONFIG_VERSION = 2
 
 
+class ActiveRepositoryChangedError(RuntimeError):
+    """Raised when a request tries to commit against a different Repository."""
+
+
 def _default_config() -> dict[str, Any]:
     return {
         "config_version": CONFIG_VERSION,
@@ -443,10 +447,21 @@ class FileConfigRepository:
             return deepcopy(self._system)
 
     @contextmanager
-    def exclusive_config_mutation(self) -> Iterator[None]:
+    def exclusive_config_mutation(
+        self,
+        *,
+        expected_repository_id: str | None = None,
+    ) -> Iterator[None]:
         """Serialize one configuration mutation that also owns external assets."""
 
         with self._mutations.mutation(), self._lock:
+            if (
+                expected_repository_id is not None
+                and self.repository_id != expected_repository_id
+            ):
+                raise ActiveRepositoryChangedError(
+                    "active configuration repository changed during mutation"
+                )
             yield
 
     @contextmanager
@@ -474,7 +489,9 @@ class FileConfigRepository:
                 expected_repository_id is not None
                 and self.repository_id != expected_repository_id
             ):
-                raise RuntimeError("active configuration repository changed during mutation")
+                raise ActiveRepositoryChangedError(
+                    "active configuration repository changed during mutation"
+                )
             candidate = deepcopy(self._config)
             result = mutator(candidate)
             self._normalize_config(candidate)

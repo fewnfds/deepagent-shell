@@ -12,7 +12,6 @@ const messages = {
     sectionAriaLabel: 'Current section pages',
     sections: {
       systemSettings: 'System settings',
-      fileManager: 'File manager',
       messageInterception: 'Message interception',
       eventFeed: 'Log center',
       workflowLifecycles: 'Run history',
@@ -50,17 +49,16 @@ describe('PageShell', () => {
     const buttons = wrapper.get('[data-testid="section-nav"]').findAll('button')
     expect(buttons.map((button) => button.text())).toEqual([
       'System settings',
-      'File manager',
       'Message interception',
       'Log center',
       'Run history',
     ])
-    expect(buttons[3]?.attributes('aria-current')).toBe('page')
-    expect(buttons[3]?.classes()).toContain('btn-primary')
+    expect(buttons[2]?.attributes('aria-current')).toBe('page')
+    expect(buttons[2]?.classes()).toContain('btn-primary')
 
     await buttons[1]?.trigger('click')
     await flushPromises()
-    expect(router.currentRoute.value.path).toBe('/system/files')
+    expect(router.currentRoute.value.path).toBe('/system/message-interception')
   })
 
   it('starts with content and omits child navigation outside a route group', () => {

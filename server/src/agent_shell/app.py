@@ -58,7 +58,10 @@ from agent_shell.storage.api_server import ApiServerStore
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.configuration_mutations import ConfigurationMutationCoordinator
 from agent_shell.storage.database import SQLiteDatabase
-from agent_shell.storage.file_config import FileConfigRepository
+from agent_shell.storage.file_config import (
+    ActiveRepositoryChangedError,
+    FileConfigRepository,
+)
 from agent_shell.storage.history_retention import HistoryRetentionStore
 from agent_shell.storage.media_outputs import MediaOutputStore
 from agent_shell.storage.runtime_diagnostic_details import RuntimeDiagnosticDetailStore
@@ -77,6 +80,7 @@ from agent_shell.skills.authoring import SkillPackageAuthoringService
 from agent_shell.file_manager import FileManagerService
 from agent_shell.system_settings import SystemSettingsService
 from agent_shell.storage.permissions import secure_directory, secure_file
+from agent_shell.configuration.component_mutations import ComponentMutationService
 from agent_shell.configuration.bundles.journal import recover_configuration_imports
 from agent_shell.configuration.bundles.service import ConfigurationBundleService
 
@@ -183,6 +187,13 @@ def create_app(
         config_store,
         python_package_validation,
     )
+    component_mutations = ComponentMutationService(
+        configuration,
+        block_store,
+        configuration_validation,
+        python_package_authoring,
+        skill_package_authoring,
+    )
     repository_validation = RepositoryValidationService(
         configuration,
         block_store,
@@ -240,11 +251,7 @@ def create_app(
     secret_resolver = ProviderSecretResolver(configuration, model_resources)
     provider_http_clients = ProviderHttpClients(runtime_policy)
     file_manager = FileManagerService(
-        {
-            "files": settings.resolved_files_dir(),
-            "skill_templates": skill_templates_dir,
-            "python_templates": python_templates_dir,
-        },
+        settings.data_root,
         settings.resolved_runtime_dir() / "tmp",
         runtime_policy,
     )
@@ -413,6 +420,25 @@ def create_app(
             content={"detail": detail},
         )
 
+    @app.exception_handler(ActiveRepositoryChangedError)
+    async def repository_changed_error(
+        request: Request, exc: ActiveRepositoryChangedError
+    ) -> JSONResponse:
+        return await safe_http_error(
+            request,
+            HTTPException(
+                status_code=409,
+                detail=localized_error_detail(
+                    code="configuration_repository_changed",
+                    message_key="errors.configurationRepositoryChanged",
+                    message=(
+                        "The active Configuration Repository changed while the "
+                        "request was being prepared. Reload and try again."
+                    ),
+                ),
+            ),
+        )
+
     @app.exception_handler(RequestValidationError)
     async def safe_request_validation_error(
         request: Request, exc: RequestValidationError
@@ -548,11 +574,11 @@ def create_app(
             config_store,
             skill_templates_dir,
             secret_resolver,
-            configuration_validation,
             provider_http_clients,
             workflow_store,
             python_package_authoring,
             skill_package_authoring,
+            component_mutations,
             runtime_policy,
         )
     )

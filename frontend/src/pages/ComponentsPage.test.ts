@@ -44,13 +44,17 @@ vi.mock('@/composables/useToasts', () => ({
   useToasts: () => ({ notify: toastNotify }),
 }))
 
-vi.mock('vue-i18n', () => ({
-  useI18n: () => ({
-    locale: { value: 'en' },
-    t: (key: string) => key,
-    te: () => true,
-  }),
-}))
+vi.mock('vue-i18n', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('vue-i18n')>()
+  return {
+    ...actual,
+    useI18n: () => ({
+      locale: { value: 'en' },
+      t: (key: string) => key,
+      te: () => true,
+    }),
+  }
+})
 
 const modelManifest: CapabilityManifest = {
   type: 'model-requirement',
@@ -388,7 +392,7 @@ describe('ComponentsPage', () => {
     wrapper.unmount()
   })
 
-  it('offers the empty template and rejects duplicate names for Python extensions', async () => {
+  it('requires a template and rejects duplicate names for Python extensions', async () => {
     api.getCatalog.mockResolvedValueOnce({
       block_types: [skillManifest, modelManifest],
       workflow_component_types: [commandManifest],
@@ -397,10 +401,7 @@ describe('ComponentsPage', () => {
     api.listBlocks.mockResolvedValueOnce([{
       id: '00000000-0000-4000-8000-000000000010',
       name: 'Existing router',
-      python_package: {
-        folder: '00000000-0000-4000-8000-000000000010',
-        editable_files: ['main.py'],
-      },
+      python_package: { folder: '00000000-0000-4000-8000-000000000010' },
     }])
     api.listCommandTemplates.mockResolvedValueOnce({
       catalog: [commandTemplate],
@@ -422,9 +423,7 @@ describe('ComponentsPage', () => {
     })
     await flushPromises()
 
-    expect(wrapper.findAll('button').some((button) => (
-      button.text() === 'editors.pythonPackage.applyEmptyTemplate'
-    ))).toBe(true)
+    expect(wrapper.find('option[value="__empty__"]').exists()).toBe(false)
     await buttonByText(wrapper, 'common.save').trigger('click')
     expect(wrapper.get('[data-testid="page-error"]').text())
       .toContain('errors.pythonPackageTemplateRequired')

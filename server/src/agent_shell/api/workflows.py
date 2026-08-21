@@ -43,6 +43,8 @@ def _save(
     blocks: BlockStore,
     item_id: str,
     payload: dict,
+    *,
+    expected_repository_id: str,
 ) -> dict:
     validated = _validated(payload)
     existing = store.get_item(item_id)
@@ -59,7 +61,11 @@ def _save(
             message="The selected event output component does not exist.",
         )
     try:
-        store.save_item(item_id, validated)
+        store.save_item(
+            item_id,
+            validated,
+            expected_repository_id=expected_repository_id,
+        )
     except ValueError as exc:
         raise management_error(
             409,
@@ -107,10 +113,18 @@ def build_workflow_router(
 
     @router.post("/api/workflows")
     async def create_workflow(payload: dict) -> dict:
-        return _save(store, blocks, store.new_id(), payload)
+        mutation_repository_id = store.repository_id()
+        return _save(
+            store,
+            blocks,
+            store.new_id(),
+            payload,
+            expected_repository_id=mutation_repository_id,
+        )
 
     @router.post("/api/workflows/delete")
     async def delete_workflows(payload: WorkflowBulkDelete) -> dict[str, int]:
+        mutation_repository_id = store.repository_id()
         ids = list(dict.fromkeys(payload.ids))
         if any(store.get_item(item_id) is None for item_id in ids):
             raise management_error(
@@ -119,7 +133,11 @@ def build_workflow_router(
                 message_key="errors.workflowNotFound",
                 message="A Workflow does not exist.",
             )
-        return {"deleted": store.delete_items(ids)}
+        return {
+            "deleted": store.delete_items(
+                ids, expected_repository_id=mutation_repository_id
+            )
+        }
 
     @router.get("/api/workflows/{item_id}")
     async def get_workflow(item_id: str) -> dict:
@@ -135,6 +153,7 @@ def build_workflow_router(
 
     @router.put("/api/workflows/{item_id}")
     async def update_workflow(item_id: str, payload: dict) -> dict:
+        mutation_repository_id = store.repository_id()
         if store.get_item(item_id) is None:
             raise management_error(
                 404,
@@ -142,7 +161,13 @@ def build_workflow_router(
                 message_key="errors.workflowNotFound",
                 message="The Workflow does not exist.",
             )
-        return _save(store, blocks, item_id, payload)
+        return _save(
+            store,
+            blocks,
+            item_id,
+            payload,
+            expected_repository_id=mutation_repository_id,
+        )
 
     @router.get("/api/workflows/{item_id}/graph")
     async def get_workflow_graph(item_id: str) -> dict:
@@ -158,6 +183,7 @@ def build_workflow_router(
 
     @router.put("/api/workflows/{item_id}/graph")
     async def update_workflow_graph(item_id: str, payload: dict) -> dict:
+        mutation_repository_id = store.repository_id()
         workflow = store.get_item(item_id)
         if workflow is None:
             raise management_error(
@@ -186,7 +212,12 @@ def build_workflow_router(
                 status_code=422,
                 detail=validation_failure_detail(report),
             )
-        if not store.save_graph_and_enabled(item_id, document, enabled=True):
+        if not store.save_graph_and_enabled(
+            item_id,
+            document,
+            enabled=True,
+            expected_repository_id=mutation_repository_id,
+        ):
             raise management_error(
                 404,
                 code="workflow_not_found",
@@ -197,6 +228,7 @@ def build_workflow_router(
 
     @router.put("/api/workflows/{item_id}/draft")
     async def update_workflow_draft(item_id: str, payload: dict) -> dict:
+        mutation_repository_id = store.repository_id()
         if store.get_item(item_id) is None:
             raise management_error(
                 404,
@@ -210,7 +242,12 @@ def build_workflow_router(
                 status_code=422,
                 detail=validation_failure_detail(report),
             )
-        if not store.save_graph_and_enabled(item_id, document, enabled=False):
+        if not store.save_graph_and_enabled(
+            item_id,
+            document,
+            enabled=False,
+            expected_repository_id=mutation_repository_id,
+        ):
             raise management_error(
                 404,
                 code="workflow_not_found",
@@ -244,7 +281,10 @@ def build_workflow_router(
 
     @router.delete("/api/workflows/{item_id}")
     async def delete_workflow(item_id: str) -> dict[str, bool]:
-        if not store.delete_item(item_id):
+        mutation_repository_id = store.repository_id()
+        if not store.delete_item(
+            item_id, expected_repository_id=mutation_repository_id
+        ):
             raise management_error(
                 404,
                 code="workflow_not_found",

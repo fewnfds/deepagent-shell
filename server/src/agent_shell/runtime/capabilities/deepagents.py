@@ -17,6 +17,7 @@ from agent_shell.contracts import (
     FilesystemPermissionsBlock,
     SkillBlock,
 )
+from agent_shell.storage.owned_paths import is_plain_tree
 from agent_shell.validation.capability_assembly import FilesystemMode
 
 
@@ -455,21 +456,26 @@ def build_deepagents_capabilities(
             raise DeepAgentsCapabilityError(
                 "Skill package folder does not match its owner configuration."
             )
-        candidate_root = (skills_dir / skill.skill_package.folder).resolve()
+        canonical_skills_root = skills_dir.resolve()
+        candidate_root = canonical_skills_root / skill.skill_package.folder
+        if os.path.lexists(candidate_root) and not is_plain_tree(candidate_root):
+            raise DeepAgentsCapabilityError(
+                "Skill package contains a link, reparse point, or special file."
+            )
         try:
-            candidate_root.relative_to(skills_dir.resolve())
+            candidate_root.resolve(strict=False).relative_to(canonical_skills_root)
         except ValueError as exc:
             raise DeepAgentsCapabilityError(
                 "Skill package path escapes the active repository."
             ) from exc
-        if candidate_root.is_dir() and not candidate_root.is_symlink():
+        if candidate_root.is_dir():
             skill_package_root = candidate_root
             selected_skills = tuple(
                 child.name
                 for child in sorted(
                     candidate_root.iterdir(), key=lambda path: path.name.casefold()
                 )
-                if child.is_dir() and not child.is_symlink()
+                if child.is_dir()
             )
             if selected_skills:
                 skill_sources.append("/skills/")

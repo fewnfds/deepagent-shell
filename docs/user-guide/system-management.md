@@ -34,16 +34,24 @@ data/
 
 ## 文件管理
 
-【系统 / 文件管理】只开放三个 scope：普通文件、Skill Template 和 Python templates。支持浏览、新建、
-上传、下载、ZIP、重命名、文本编辑和递归删除。
+顶层【文件管理】使用相对软件根目录的真实路径，从 `data/` 开始显示允许访问的目录。页面支持浏览、新建、
+上传、下载、ZIP、重命名、UTF-8 文本编辑和递归删除。
 
-Python templates scope 用于在 `workflow/command/`、`workflow/task_dispatcher/`、`agent/custom_tool/` 或 `agent/custom_middleware/` 类别中建档静态代码模板。
-项目源码不携带实例 data，也不会自动生成默认模板；空模板目录不会影响运行中的配置扩展。
+可见目录包括普通文件 `data/files/`、Skill 模板 `data/skills-template/`、Python 模板 `data/templates/`，以及每个
+Configuration Repository 中的 Component、Agent、Workflow 和配置私有包。`components/`、`agents/`、`workflows/`
+可以查看和下载，内容修改仍通过对应配置页面完成。Python 与 Skill 私有包支持文件操作；手工修改后，组件刷新、装配或运行校验会报告无效内容。
 
-- 文本编辑默认上限为 2 MiB，可在【系统 / 系统配置】调整，并使用 revision 防止静默覆盖；
+- 路径和面包屑直接显示 `data/...` 的真实目录名；
+- 文本编辑默认上限为 2 MiB，可在【系统 / 系统配置】调整；
+- 文件打开时记录内容 revision。磁盘内容发生变化后，保存会保留页面草稿并提供重新载入、确认覆盖或继续编辑；
+- 编辑期间不锁定磁盘文件，外部编辑器和文件管理页面都可以修改同一文件；
 - 文件操作不跟随符号链接或 Windows reparse point；
-- 页面不能访问 `config/`、`configuration-repositories/`（包括配置扩展目录）、`state/`、`logs/`、外部映射或其他宿主路径；
+- `data/config/`、Repository metadata/import journal、`data/state/`、`data/logs/`、`data/media/`、外部映射和其他宿主路径不开放；
+- 系统设置、env secret、模型连接和模型映射只通过对应页面管理；
 - 递归删除没有回收站。
+
+`data/templates/` 用于按 `workflow/command/`、`workflow/task_dispatcher/`、`agent/custom_tool/` 等类别维护静态 Python 模板。
+创建 Python-backed Component 时选择一份合法模板；保存后形成配置独占的完整文件目录。
 
 ## 系统设置
 

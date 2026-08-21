@@ -280,8 +280,8 @@ describe('dedicated block editors', () => {
     })
     await agentOutput.get('select').setValue('agent-default')
     expect(agentOutput.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({
-      python_package_files: {
-        template_key: 'agent-default',
+      python_package_template: {
+        key: 'agent-default',
         revision: 'agent-revision',
       },
     })
@@ -303,8 +303,8 @@ describe('dedicated block editors', () => {
     })
     await workflowOutput.get('select').setValue('workflow-default')
     expect(workflowOutput.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({
-      python_package_files: {
-        template_key: 'workflow-default',
+      python_package_template: {
+        key: 'workflow-default',
         revision: 'workflow-revision',
       },
     })
@@ -531,13 +531,9 @@ describe('dedicated block editors', () => {
     await editor.get('select').setValue('word-count')
 
     expect(editor.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({
-      python_package_files: {
-        template_key: 'word-count',
+      python_package_template: {
+        key: 'word-count',
         revision: 'tool-revision',
-      },
-      python_package_manifest: {
-        family: 'tool',
-        adapter: 'agent-tool',
       },
     })
   })

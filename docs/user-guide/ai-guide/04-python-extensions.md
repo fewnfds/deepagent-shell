@@ -22,31 +22,24 @@ Runtime 会把所属范围内的每种 `event_type` 交给同一个 `output(even
 
 ## 创建 file-based Python package
 
-Custom Tool、Command Node、Task Dispatcher、Custom Middleware 和两类 Event Output 都使用 configuration-owned Python package。创建 Event Output 的最小 body
-如下；只需替换 endpoint 和 `main.py` contract：
+Custom Tool、Command Node、Task Dispatcher、Custom Middleware 和两类 Event Output 都使用 configuration-owned Python package。
+先读取对应 template catalog，再以模板身份创建 Event Output：
 
 ```http
 POST /api/blocks/agent-event-output
 
 {
   "name": "Review command",
-  "python_package": {
-    "folder": "",
-    "editable_files": ["main.py", "requirements.txt"]
-  },
-  "python_package_files": {
-    "template_key": "__empty__",
-    "revision": "",
-    "files": [
-      {"path": "main.py", "content": "<complete source>"},
-      {"path": "requirements.txt", "content": ""}
-    ]
+  "python_package": {"folder": ""},
+  "python_package_template": {
+    "key": "<catalog key>",
+    "revision": "<catalog revision>"
   }
 }
 ```
 
-Workflow Event Output 使用 `POST /api/blocks/workflow-event-output`。建议从对应 template catalog 创建；AI 已经拥有完整且符合
-contract 的 source 时也可以使用 `__empty__`。
+Workflow Event Output 使用 `POST /api/blocks/workflow-event-output`。需要从空白源码开始时，先通过 File Manager API 在
+`data/templates/` 的对应类别创建合法最小模板，再读取 catalog identity。
 
 首次保存后，系统会把 template 复制到该 configuration 独占的 extension directory：
 
@@ -60,18 +53,18 @@ data/configuration-repositories/<repository-uuid>/python_package_instances/
   workflow-event-output/<configuration-uuid>/
 ```
 
-frontend 和 Management API 只是创建、查看及保存这些 file 的入口，不是唯一修改入口。创建完成后，可以直接在对应 instance directory 中维护
-`main.py`、`requirements.txt`、local module 和 test file；不必为了修改 extension source 而改动 `frontend/`。直接新增的 local file 可以使用
-relative import；把 package-relative path 加入 editor file list 后，该 file 也会显示在 component editor 中。
+组件页通过 `GET /api/blocks/{type}/{id}/python-package` 递归列出完整私有包，并为每个文件返回真实
+`data/...` File Manager path。创建完成后，可以通过通用 File Manager API 或本地编辑器维护 `main.py`、`requirements.txt`、
+local module 和 test file；直接新增的文件会在下一次刷新时显示。local module 使用 normal relative import。
 
-`requirements.txt` 是扩展生成时应一并提供的可见文件；内容为空表示该 extension 没有额外 third-party dependency。内置示例和 `__empty__`
-模板都提供这个空文件。只有当 source import 了平台核心之外的 package 时，AI 才应在同一 package 中填写或修改
-`requirements.txt`，逐行写入普通 PyPI requirement，并在 `editable_files` 与 `python_package_files.files` 中一起提交该文件。
+`requirements.txt` 可以不存在或为空，表示该 extension 没有额外 third-party dependency。只有当 source import 了平台核心之外的
+package 时，AI 才应在同一私有包中创建或修改 `requirements.txt`，逐行写入普通 PyPI requirement。
 
-不要修改 Agent Shell 管理的 `package.json`，也不要移动、重命名 extension directory，或让一个 configuration 引用另一个 configuration 的 directory。
+`package.json.id`、folder 和 adapter 必须与所属 configuration 一致。File Manager 允许编辑该文件，但无效内容会在刷新、装配或运行校验时被拒绝。
+不要移动、重命名 extension directory，或让一个 configuration 引用另一个 configuration 的 directory。
 
 这些 code 在 service process 的 trusted boundary 执行，没有 sandbox。Python source change 会在下一次请求时重新加载；`requirements.txt` change 在
-service restart 后生效。component editor page 若早于 external change 打开，其 revision 会过期；reload 后才能从页面保存，否则服务端拒绝覆盖。
+service restart 后生效。文件打开后若磁盘内容发生变化，旧 revision 的保存会被拒绝；页面保留草稿并提供 reload 或确认覆盖最新内容。
 
 Custom Tool 固定使用同步无参 `create_tool()`，并返回一个 LangChain `BaseTool`；推荐返回 `@tool` 装饰后的函数。Command 和 Task Dispatcher 的 factory、return structure 及 Edge key 见[创建 Workflow Graph](03-workflow-graph.md)。Custom Middleware
 factory 的 return type 是官方 LangChain `AgentMiddleware`；完整 contract 见[File-based Python extension](../middleware-packages.md)。
@@ -171,7 +164,7 @@ FastAPI、Provider 或其他 core package 带来的 transitive dependency 不是
 提供 Windows x64 wheel、与平台核心约束兼容，并在 `requirements.txt` 中逐行声明普通 PyPI requirement。
 URL、local path、`.pth` 和只有 source distribution 的 dependency 会被拒绝。
 
-保存或 GET Python package component 时，响应包含以下 projection：
+调用 `GET /api/blocks/{type}/{id}/python-package` 时，响应包含以下 projection：
 
 - `dependency_status: "ready"`：当前 requirements 已准备完成，或没有额外 dependency；
 - `dependency_status: "restart_required"`：requirements 已变化，需要重启；
@@ -179,10 +172,10 @@ URL、local path、`.pth` 和只有 source distribution 的 dependency 会被拒
 - `requirements_fingerprint`：当前 dependency declaration fingerprint，不是 available library list。
 
 dependency 只从 enabled Workflow 可达的 Command、Task Dispatcher、Main Agent 和 Subagent configuration 收集。最可靠的闭环是：声明 direct dependency ->
-restart -> GET component 确认 `dependency_status` -> invoke 一次真实 Workflow。library 的 official docs 说明用法，这套实例 evidence 说明它在当前 environment 可用。
+restart -> GET package inspection 确认 `dependency_status` -> invoke 一次真实 Workflow。library 的 official docs 说明用法，这套实例 evidence 说明它在当前 environment 可用。
 
 因此 AI 编写 Workflow 时可以理解并处理依赖：先根据实际 import 判断是否需要 third-party package；不需要时保持 `requirements.txt` 为空，
-需要时将 direct dependency 和源码作为同一份 package payload 保存。不能因为某个 package 被核心 runtime 间接安装，就省略自己的依赖声明。
+需要时在同一私有包中修改源码与 direct dependency。不能因为某个 package 被核心 runtime 间接安装，就省略自己的依赖声明。
 
 下一步：[使用 background Run](05-background-runs.md)覆盖 asynchronous subtask；[Validation、enabled 与真实 invocation](06-validation-and-references.md)
 覆盖普通 Workflow 的完成阶段。

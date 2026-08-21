@@ -7,6 +7,7 @@ interface NavigationItem {
 export const navigationItems: NavigationItem[] = [
   { path: '/', labelKey: 'navigation.home', icon: 'bi-house' },
   { path: '/system', labelKey: 'navigation.system', icon: 'bi-gear' },
+  { path: '/files', labelKey: 'navigation.files', icon: 'bi-folder' },
   { path: '/models', labelKey: 'navigation.models', icon: 'bi-robot' },
   { path: '/agents', labelKey: 'navigation.agents', icon: 'bi-robot' },
   { path: '/agent-components', labelKey: 'navigation.components', icon: 'bi-boxes' },
@@ -50,7 +51,6 @@ const sectionNavigationGroups: SectionNavigationGroup[] = [
     prefix: '/system',
     items: [
       { path: '/system/config', labelKey: 'navigation.sections.systemSettings' },
-      { path: '/system/files', labelKey: 'navigation.sections.fileManager' },
       {
         path: '/system/message-interception',
         labelKey: 'navigation.sections.messageInterception',

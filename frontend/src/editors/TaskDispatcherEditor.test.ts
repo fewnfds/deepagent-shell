@@ -40,17 +40,10 @@ describe('TaskDispatcherEditor', () => {
 
     const emitted = wrapper.emitted('update:modelValue')?.at(-1)?.[0]
     expect(emitted).toMatchObject({
-      python_package: {
-        folder: '',
-        editable_files: ['main.py', 'requirements.txt'],
-      },
-      python_package_files: {
-        template_key: templateKey,
+      python_package: { folder: '' },
+      python_package_template: {
+        key: templateKey,
         revision: 'revision',
-        files: [
-          { path: 'main.py', content: source, exists: true },
-          { path: 'requirements.txt', content: '', exists: true },
-        ],
       },
     })
   })

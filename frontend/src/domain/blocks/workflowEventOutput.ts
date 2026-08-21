@@ -13,7 +13,7 @@ export type WorkflowEventOutputCatalogItem = PythonPackageTemplate
 
 interface WorkflowEventOutputPayload extends BlockPayloadBase {
   python_package: PythonPackageDraftState['python_package']
-  python_package_files: PythonPackageDraftState['python_package_files']
+  python_package_template?: PythonPackageDraftState['python_package_template']
 }
 
 export const workflowEventOutputAdapter = {

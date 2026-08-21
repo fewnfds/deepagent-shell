@@ -94,26 +94,14 @@ Agent 事件输出没有独立事件过滤配置。需要过滤时直接在 `out
 ```json
 {
   "name": "普通文本",
-  "python_package": {
-    "folder": "",
-    "editable_files": ["main.py", "requirements.txt"]
-  },
-  "python_package_files": {
-    "template_key": "__empty__",
-    "revision": "",
-    "files": [
-      {
-        "path": "main.py",
-        "content": "def output(event):\n    if event[\"event_type\"] == \"assistant_text\":\n        return event[\"message\"]\n    return \"\"\n"
-      },
-      {
-        "path": "requirements.txt",
-        "content": ""
-      }
-    ]
+  "python_package": {"folder": ""},
+  "python_package_template": {
+    "key": "内置示例-default",
+    "revision": "<catalog revision>"
   }
 }
 ```
 
-提交到 `POST /api/blocks/agent-event-output`。首次保存后服务端生成配置 UUID，并令 package folder、manifest ID 与配置 UUID
-一致。流式与非流式响应消费同一扩展结果，不会从最终 State 绕过 Agent 事件输出读取原始 Agent 内容。
+先从 `GET /api/python-package-templates/agent-event-output` 取得精确 `key` 与 `revision`，再提交到
+`POST /api/blocks/agent-event-output`。首次保存后服务端生成配置 UUID，并令 package folder、manifest ID 与配置 UUID一致。
+组件页通过共享文件管理工作区编辑复制后的私有包。流式与非流式响应消费同一扩展结果，不会从最终 State 绕过 Agent 事件输出读取原始 Agent 内容。

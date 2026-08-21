@@ -156,6 +156,7 @@ describe('ApiServerSettingsPage', () => {
     expect(navigationItems.map((item) => item.path)).toEqual([
       '/',
       '/system',
+      '/files',
       '/models',
       '/agents',
       '/agent-components',

@@ -40,15 +40,13 @@ import type {
   WorkflowRole,
   ManagedArchivePreview,
   ManagedDirectory,
-  ManagedFileScopeCatalog,
   ManagedFileUploadResult,
   ManagedTextFile,
   MessageInterception,
-  FileManagerScope,
   ModelProviderCatalog,
   ModelConnection,
   ModelRequirementBinding,
-  PythonPackageFiles,
+  PythonPackageInspection,
   MainAgent,
   MainAgentPayload,
   ReadinessResponse,
@@ -386,85 +384,77 @@ export const managementApi = {
     })
   },
 
-  listManagedFileScopes(): Promise<ManagedFileScopeCatalog> {
-    return managementRequest('/api/file-manager')
+  listManagedFiles(path = 'data'): Promise<ManagedDirectory> {
+    return managementRequest(`/api/file-manager${buildQuery({ path })}`)
   },
 
-  listManagedFiles(scope: FileManagerScope, path = ''): Promise<ManagedDirectory> {
-    return managementRequest(`/api/file-manager/${scope}${buildQuery({ path })}`)
+  createManagedDirectory(path: string): Promise<{ path: string }> {
+    return managementRequest('/api/file-manager/directories', jsonBody({ path }))
   },
 
-  createManagedDirectory(scope: FileManagerScope, path: string): Promise<{ path: string }> {
-    return managementRequest(`/api/file-manager/${scope}/directories`, jsonBody({ path }))
-  },
-
-  createManagedTextFile(scope: FileManagerScope, path: string): Promise<{ path: string }> {
-    return managementRequest(`/api/file-manager/${scope}/text-files`, jsonBody({ path }))
+  createManagedTextFile(path: string): Promise<{ path: string }> {
+    return managementRequest('/api/file-manager/text-files', jsonBody({ path }))
   },
 
   uploadManagedFile(
-    scope: FileManagerScope,
     path: string,
     file: Blob,
     overwrite: boolean,
     onProgress?: (loaded: number, total: number) => void,
   ): Promise<ManagedFileUploadResult> {
     return managementUpload(
-      `/api/file-manager/${scope}/upload${buildQuery({ path, overwrite })}`,
+      `/api/file-manager/upload${buildQuery({ path, overwrite })}`,
       file,
       { onProgress },
     )
   },
 
-  downloadManagedEntry(scope: FileManagerScope, path: string): Promise<Blob> {
+  downloadManagedEntry(path: string): Promise<Blob> {
     return managementDownload(
-      `/api/file-manager/${scope}/download${buildQuery({ path })}`,
+      `/api/file-manager/download${buildQuery({ path })}`,
     )
   },
 
   previewManagedArchive(
-    scope: FileManagerScope,
     paths: string[],
   ): Promise<ManagedArchivePreview> {
-    return managementRequest(`/api/file-manager/${scope}/archive/preview`, jsonBody({ paths }))
+    return managementRequest('/api/file-manager/archive/preview', jsonBody({ paths }))
   },
 
-  downloadManagedArchive(scope: FileManagerScope, paths: string[]): Promise<Blob> {
-    return managementDownload(`/api/file-manager/${scope}/archive`, jsonBody({ paths }))
+  downloadManagedArchive(paths: string[]): Promise<Blob> {
+    return managementDownload('/api/file-manager/archive', jsonBody({ paths }))
   },
 
-  readManagedTextFile(scope: FileManagerScope, path: string): Promise<ManagedTextFile> {
+  readManagedTextFile(path: string): Promise<ManagedTextFile> {
     return managementRequest(
-      `/api/file-manager/${scope}/text${buildQuery({ path })}`,
+      `/api/file-manager/text${buildQuery({ path })}`,
     )
   },
 
   saveManagedTextFile(
-    scope: FileManagerScope,
     path: string,
     content: string,
     revision: string,
   ): Promise<{ path: string; revision: string }> {
-    return managementRequest(`/api/file-manager/${scope}/text`, {
+    return managementRequest('/api/file-manager/text', {
       method: 'PUT',
       body: JSON.stringify({ path, content, revision }),
     })
   },
 
   renameManagedEntry(
-    scope: FileManagerScope,
     path: string,
     name: string,
   ): Promise<{ path: string }> {
-    return managementRequest(`/api/file-manager/${scope}`, {
+    return managementRequest('/api/file-manager', {
       method: 'PATCH',
       body: JSON.stringify({ path, name }),
     })
   },
 
-  deleteManagedFile(scope: FileManagerScope, path: string): Promise<{ deleted: boolean }> {
+  deleteManagedFile(path: string): Promise<{ deleted: boolean }> {
     return managementRequest(
-      `/api/file-manager/${scope}${buildQuery({ path })}`,
+      `/api/file-manager${buildQuery({ path })}`,
       { method: 'DELETE' },
     )
   },
@@ -482,14 +472,12 @@ export const managementApi = {
     return managementRequest(recordPath(`/api/blocks/${type}`, id))
   },
 
-  readPythonPackageFiles(
+  inspectPythonPackage(
     type: ManagedComponentType,
     id: string,
-    paths: string[],
-  ): Promise<PythonPackageFiles> {
+  ): Promise<PythonPackageInspection> {
     return managementRequest(
-      `${recordPath(`/api/blocks/${type}`, id)}/python-package-files`,
-      jsonBody({ paths }),
+      `${recordPath(`/api/blocks/${type}`, id)}/python-package`,
     )
   },
 

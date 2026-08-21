@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 import json
 import logging
 import os
 from pathlib import Path
 import shutil
+import stat
 import tempfile
 from typing import Any, Callable
 from uuid import uuid4
 
-from agent_shell.python_packages.contracts import (
-    EMPTY_TEMPLATE_KEY,
-    validate_package_relative_path,
-)
+from agent_shell.configuration.identity import is_configuration_id
 from agent_shell.python_packages.packages import (
     PythonPackageManifest,
     inspect_python_package_draft,
@@ -24,6 +23,9 @@ from agent_shell.python_packages.packages import (
     scan_python_package_templates,
 )
 from agent_shell.registries.errors import ResourceScanError
+from agent_shell.storage.atomic_files import write_bytes_atomic
+from agent_shell.storage.owned_paths import is_reparse_point
+from agent_shell.storage.staged_changes import StagedPathChange
 
 
 logger = logging.getLogger(__name__)
@@ -99,164 +101,6 @@ class PythonPackageAuthoringError(RuntimeError):
         super().__init__(message)
         self.code = code
         self.status_code = status_code
-
-
-@dataclass(slots=True)
-class PackageChange:
-    rollback_callback: Any
-    finalize_callback: Any = None
-
-    def rollback(self) -> None:
-        self.rollback_callback()
-
-    def finalize(self) -> None:
-        if self.finalize_callback is not None:
-            self.finalize_callback()
-
-
-def _write_bytes_atomic(path: Path, content: bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
-    )
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(content)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
-    except BaseException:
-        temporary.unlink(missing_ok=True)
-        raise
-
-
-def _restore_file(path: Path, existed: bool, content: bytes) -> None:
-    if existed:
-        _write_bytes_atomic(path, content)
-    else:
-        path.unlink(missing_ok=True)
-
-
-def _file_entries(value: object) -> list[dict[str, str]]:
-    if not isinstance(value, list) or not value or len(value) > 50:
-        raise PythonPackageAuthoringError(
-            "python_package_files_invalid",
-            "At least one editable Python package file is required.",
-        )
-    result: list[dict[str, str]] = []
-    seen: set[str] = set()
-    for item in value:
-        if (
-            not isinstance(item, dict)
-            or not {"path", "content"}.issubset(item)
-            or set(item) - {"path", "content", "exists", "readable"}
-        ):
-            raise PythonPackageAuthoringError(
-                "python_package_files_invalid",
-                "Each editable Python package file must contain path and content.",
-            )
-        path = item.get("path")
-        content = item.get("content")
-        if not isinstance(path, str) or not isinstance(content, str):
-            raise PythonPackageAuthoringError(
-                "python_package_files_invalid",
-                "Editable Python package paths and contents must be strings.",
-            )
-        try:
-            validate_package_relative_path(path)
-        except ValueError as exc:
-            raise PythonPackageAuthoringError(
-                "python_package_file_path_invalid",
-                str(exc),
-            ) from exc
-        if path in seen:
-            raise PythonPackageAuthoringError(
-                "python_package_files_invalid",
-                "Editable Python package file paths must be unique.",
-            )
-        seen.add(path)
-        result.append({"path": path, "content": content})
-    return result
-
-
-def _editable_paths(value: object) -> list[str]:
-    if (
-        not isinstance(value, list)
-        or not value
-        or len(value) > 50
-        or not all(isinstance(path, str) for path in value)
-    ):
-        raise PythonPackageAuthoringError(
-            "python_package_files_invalid",
-            "Provide between 1 and 50 editable Python package file paths.",
-        )
-    paths = list(value)
-    if len(paths) != len(set(paths)):
-        raise PythonPackageAuthoringError(
-            "python_package_files_invalid",
-            "Editable Python package file paths must be unique.",
-        )
-    for path in paths:
-        try:
-            validate_package_relative_path(path)
-        except ValueError as exc:
-            raise PythonPackageAuthoringError(
-                "python_package_file_path_invalid",
-                str(exc),
-            ) from exc
-    return paths
-
-
-def _read_editable_files(folder: Path, paths: list[str]) -> list[dict[str, object]]:
-    files: list[dict[str, object]] = []
-    for path_value in paths:
-        try:
-            path = validate_package_relative_path(path_value)
-        except ValueError:
-            files.append({"path": path_value, "content": "", "exists": False, "readable": True})
-            continue
-        target = folder / Path(*path.split("/"))
-        if not target.is_file():
-            files.append({"path": path, "content": "", "exists": False, "readable": True})
-            continue
-        try:
-            content = target.read_text(encoding="utf-8")
-        except (OSError, UnicodeError):
-            files.append({"path": path, "content": "", "exists": True, "readable": False})
-            continue
-        files.append(
-            {
-                "path": path,
-                "content": content.replace("\r\n", "\n").replace("\r", "\n"),
-                "exists": True,
-                "readable": True,
-            }
-        )
-    return files
-
-
-def _write_editable_files(folder: Path, entries: list[dict[str, str]]) -> None:
-    for item in entries:
-        target = folder / Path(*item["path"].split("/"))
-        if target.is_dir():
-            raise ResourceScanError(
-                "resource.error.pythonPackage.readFailed",
-                f"{item['path']} is a directory, not a text file.",
-            )
-        if not target.exists() and item["content"] == "":
-            if item["path"] == "requirements.txt":
-                _write_bytes_atomic(target, b"")
-            continue
-        if target.is_file() and item["content"] == "":
-            try:
-                target.read_text(encoding="utf-8")
-            except UnicodeError:
-                continue
-        _write_bytes_atomic(
-            target,
-            item["content"].replace("\r\n", "\n").encode("utf-8"),
-        )
 
 
 class PythonPackageAuthoringService:
@@ -414,10 +258,18 @@ class PythonPackageAuthoringService:
         block_type: str,
         owner_id: str,
         reference: dict[str, Any],
+        *,
+        repository_id: str,
     ) -> dict[str, object]:
+        if not is_configuration_id(repository_id):
+            raise PythonPackageAuthoringError(
+                "python_package_repository_invalid",
+                "The active configuration repository id is invalid.",
+            )
         inspection, folder = self._inspect_instance(
             block_type, owner_id, str(reference.get("folder", ""))
         )
+        spec = self._spec(block_type)
         metadata = inspection["metadata"]
         assert metadata is None or isinstance(metadata, dict)
         package_error = inspection["error"]
@@ -426,17 +278,54 @@ class PythonPackageAuthoringService:
             if isinstance(package_error, dict)
             else ""
         )
-        paths = reference.get("editable_files", ["main.py"])
-        if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
-            paths = ["main.py"]
-        editable_files = _read_editable_files(folder, paths)
+        files: list[dict[str, object]] = []
+        pending = [folder]
+        try:
+            while pending:
+                directory = pending.pop()
+                with os.scandir(directory) as scanner:
+                    entries = sorted(scanner, key=lambda item: item.name.casefold())
+                child_directories: list[Path] = []
+                for entry in entries:
+                    path = Path(entry.path)
+                    file_metadata = path.lstat()
+                    if is_reparse_point(path):
+                        raise OSError("Python package entries may not be reparse points")
+                    if stat.S_ISDIR(file_metadata.st_mode):
+                        child_directories.append(path)
+                        continue
+                    if not stat.S_ISREG(file_metadata.st_mode):
+                        raise OSError("Python package entries must be regular files")
+                    relative = path.relative_to(folder).as_posix()
+                    files.append(
+                        {
+                            "path": relative,
+                            "file_manager_path": (
+                                "data/configuration-repositories/"
+                                f"{repository_id}/python_package_instances/"
+                                f"{spec.adapter}/{owner_id}/{relative}"
+                            ),
+                            "size": file_metadata.st_size,
+                            "modified_at": datetime.fromtimestamp(
+                                file_metadata.st_mtime, timezone.utc
+                            )
+                            .isoformat()
+                            .replace("+00:00", "Z"),
+                        }
+                    )
+                pending.extend(reversed(child_directories))
+        except OSError as exc:
+            raise PythonPackageAuthoringError(
+                "python_package_read_failed",
+                "The configuration-owned Python extension could not be enumerated.",
+            ) from exc
+        files.sort(key=lambda item: str(item["path"]).casefold())
         return {
+            "repository_id": repository_id,
+            "owner_id": owner_id,
+            "revision": inspection["revision"],
+            "files": files,
             "python_package_manifest": inspection["manifest"],
-            "python_package_files": {
-                "template_key": "",
-                "files": editable_files,
-                "revision": inspection["revision"],
-            },
             "python_package_error": package_error,
             "requirements_fingerprint": (
                 metadata["requirements_fingerprint"] if metadata is not None else ""
@@ -449,23 +338,6 @@ class PythonPackageAuthoringService:
             ),
         }
 
-    def read_files(
-        self,
-        block_type: str,
-        owner_id: str,
-        reference: dict[str, Any],
-        paths: object,
-    ) -> dict[str, object]:
-        requested_paths = _editable_paths(paths)
-        inspection, folder = self._inspect_instance(
-            block_type, owner_id, str(reference.get("folder", ""))
-        )
-        return {
-            "template_key": "",
-            "files": _read_editable_files(folder, requested_paths),
-            "revision": inspection["revision"],
-        }
-
     def create(
         self,
         block_type: str,
@@ -473,57 +345,39 @@ class PythonPackageAuthoringService:
         *,
         template_key: str,
         template_revision: str,
-        files: list[dict[str, str]],
-    ) -> tuple[dict[str, Any], PackageChange]:
+    ) -> tuple[dict[str, str], StagedPathChange]:
         spec = self._spec(block_type)
-        entries = _file_entries(files)
-        template: Path | None = None
-        if template_key != EMPTY_TEMPLATE_KEY:
-            if template_key.startswith(BUILTIN_EXAMPLE_TEMPLATE_PREFIX):
-                template_root = self._example_root(spec)
-                folder_key = template_key.removeprefix(
-                    BUILTIN_EXAMPLE_TEMPLATE_PREFIX
-                )
-            else:
-                template_root = self._template_root(spec)
-                folder_key = template_key
-            template = template_root / folder_key
-            if template.parent != template_root:
-                raise PythonPackageAuthoringError(
-                    "python_package_template_invalid",
-                    "The selected Python package template key must name one template folder.",
-                )
-            try:
-                metadata = scan_python_package_template(
-                    template,
-                    family=spec.family,  # type: ignore[arg-type]
-                    adapter=spec.adapter,  # type: ignore[arg-type]
-                    factory_name=spec.factory_name,
-                    factory_parameters=spec.factory_parameters,
-                )
-            except ResourceScanError as exc:
-                raise PythonPackageAuthoringError(
-                    "python_package_template_invalid",
-                    "The selected Python package template is invalid.",
-                ) from exc
-            if metadata["revision"] != template_revision:
-                raise PythonPackageAuthoringError(
-                    "python_package_template_revision_conflict",
-                    "The Python package template changed after it was loaded.",
-                    status_code=409,
-                )
-        elif template_revision:
+        if template_key.startswith(BUILTIN_EXAMPLE_TEMPLATE_PREFIX):
+            template_root = self._example_root(spec)
+            folder_key = template_key.removeprefix(BUILTIN_EXAMPLE_TEMPLATE_PREFIX)
+        else:
+            template_root = self._template_root(spec)
+            folder_key = template_key
+        template = template_root / folder_key
+        if not folder_key or template.parent != template_root:
             raise PythonPackageAuthoringError(
                 "python_package_template_invalid",
-                "The empty Python package template does not have a revision.",
+                "The selected Python package template key must name one template folder.",
             )
-
-        # Keep the dependency file visible in a newly generated empty package.
-        # It is intentionally empty until the author adds third-party packages.
-        if template is None and not any(
-            item["path"] == "requirements.txt" for item in entries
-        ):
-            entries.append({"path": "requirements.txt", "content": ""})
+        try:
+            template_metadata = scan_python_package_template(
+                template,
+                family=spec.family,  # type: ignore[arg-type]
+                adapter=spec.adapter,  # type: ignore[arg-type]
+                factory_name=spec.factory_name,
+                factory_parameters=spec.factory_parameters,
+            )
+        except ResourceScanError as exc:
+            raise PythonPackageAuthoringError(
+                "python_package_template_invalid",
+                "The selected Python package template is invalid.",
+            ) from exc
+        if template_metadata["revision"] != template_revision:
+            raise PythonPackageAuthoringError(
+                "python_package_template_revision_conflict",
+                "The Python package template changed after it was loaded.",
+                status_code=409,
+            )
 
         folder_name = owner_id
         adapter_root = self._adapter_root(spec)
@@ -532,10 +386,7 @@ class PythonPackageAuthoringService:
         staged = staging_root / folder_name
         final = adapter_root / folder_name
         try:
-            if template is not None:
-                shutil.copytree(template, staged)
-            else:
-                staged.mkdir(parents=True)
+            shutil.copytree(template, staged, symlinks=True)
             manifest = PythonPackageManifest.model_validate(
                 {
                     "format_version": 1,
@@ -544,11 +395,17 @@ class PythonPackageAuthoringService:
                     "adapter": spec.adapter,
                 }
             )
-            _write_bytes_atomic(
+            write_bytes_atomic(
                 staged / "package.json",
-                (json.dumps(manifest.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
+                (
+                    json.dumps(
+                        manifest.model_dump(mode="json"),
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+                    + "\n"
+                ).encode("utf-8"),
             )
-            _write_editable_files(staged, entries)
             scan_python_package(
                 staged,
                 owner_id=owner_id,
@@ -570,81 +427,9 @@ class PythonPackageAuthoringService:
             raise
         shutil.rmtree(staging_root, ignore_errors=True)
         return (
-            {"folder": folder_name, "editable_files": [item["path"] for item in entries]},
-            PackageChange(lambda: shutil.rmtree(final, ignore_errors=True)),
+            {"folder": folder_name},
+            StagedPathChange(lambda: shutil.rmtree(final, ignore_errors=True)),
         )
-
-    def update(
-        self,
-        block_type: str,
-        owner_id: str,
-        reference: dict[str, Any],
-        *,
-        revision: str,
-        files: list[dict[str, str]],
-    ) -> PackageChange:
-        entries = _file_entries(files)
-        inspection, folder = self._inspect_instance(
-            block_type, owner_id, str(reference.get("folder", ""))
-        )
-        if inspection["revision"] != revision:
-            raise PythonPackageAuthoringError(
-                "python_package_revision_conflict",
-                "The Python extension changed after it was loaded.",
-                status_code=409,
-            )
-        spec = self._spec(block_type)
-        staging_root = Path(tempfile.mkdtemp(prefix=".authoring-", dir=self._adapter_root(spec)))
-        staged = staging_root / folder.name
-        try:
-            shutil.copytree(folder, staged)
-            _write_editable_files(staged, entries)
-            scan_python_package(
-                staged,
-                owner_id=owner_id,
-                family=spec.family,  # type: ignore[arg-type]
-                adapter=spec.adapter,  # type: ignore[arg-type]
-                factory_name=spec.factory_name,
-                factory_parameters=spec.factory_parameters,
-                runtime_root=self._runtime_root,
-            )
-        except ResourceScanError as exc:
-            shutil.rmtree(staging_root, ignore_errors=True)
-            raise PythonPackageAuthoringError(
-                "python_package_invalid",
-                "The Python extension does not satisfy its adapter contract.",
-            ) from exc
-        except BaseException:
-            shutil.rmtree(staging_root, ignore_errors=True)
-            raise
-
-        snapshots: list[tuple[Path, bool, bytes]] = []
-        for item in entries:
-            target = folder / Path(*item["path"].split("/"))
-            existed = target.is_file()
-            snapshots.append((target, existed, target.read_bytes() if existed else b""))
-        current, _ = self._inspect_instance(block_type, owner_id, folder.name)
-        if current["revision"] != revision:
-            shutil.rmtree(staging_root, ignore_errors=True)
-            raise PythonPackageAuthoringError(
-                "python_package_revision_conflict",
-                "The Python extension changed after it was loaded.",
-                status_code=409,
-            )
-        try:
-            _write_editable_files(folder, entries)
-        except BaseException:
-            for target, existed, content in snapshots:
-                _restore_file(target, existed, content)
-            shutil.rmtree(staging_root, ignore_errors=True)
-            raise
-        shutil.rmtree(staging_root, ignore_errors=True)
-
-        def rollback() -> None:
-            for target, existed, content in snapshots:
-                _restore_file(target, existed, content)
-
-        return PackageChange(rollback)
 
     def copy(
         self,
@@ -652,23 +437,27 @@ class PythonPackageAuthoringService:
         source_owner_id: str,
         target_owner_id: str,
         reference: dict[str, Any],
-    ) -> tuple[dict[str, Any], PackageChange]:
+    ) -> tuple[dict[str, str], StagedPathChange]:
         _metadata, source = self._scan_instance(
             block_type, source_owner_id, str(reference.get("folder", ""))
         )
         spec = self._spec(block_type)
         folder_name = target_owner_id
         final = self._adapter_root(spec) / folder_name
-        staging_root = Path(tempfile.mkdtemp(prefix=".authoring-", dir=self._adapter_root(spec)))
+        staging_root = Path(
+            tempfile.mkdtemp(prefix=".authoring-", dir=self._adapter_root(spec))
+        )
         staged = staging_root / folder_name
         try:
-            shutil.copytree(source, staged)
+            shutil.copytree(source, staged, symlinks=True)
             manifest_path = staged / "package.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["id"] = target_owner_id
-            _write_bytes_atomic(
+            write_bytes_atomic(
                 manifest_path,
-                (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8"),
+                (
+                    json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+                ).encode("utf-8"),
             )
             scan_python_package(
                 staged,
@@ -690,12 +479,9 @@ class PythonPackageAuthoringService:
             shutil.rmtree(staging_root, ignore_errors=True)
             raise
         shutil.rmtree(staging_root, ignore_errors=True)
-        paths = reference.get("editable_files", ["main.py"])
-        if not isinstance(paths, list) or not all(isinstance(path, str) for path in paths):
-            paths = ["main.py"]
         return (
-            {"folder": folder_name, "editable_files": list(paths)},
-            PackageChange(lambda: shutil.rmtree(final, ignore_errors=True)),
+            {"folder": folder_name},
+            StagedPathChange(lambda: shutil.rmtree(final, ignore_errors=True)),
         )
 
     def stage_delete(
@@ -703,7 +489,7 @@ class PythonPackageAuthoringService:
         block_type: str,
         owner_id: str,
         reference: dict[str, Any],
-    ) -> PackageChange:
+    ) -> StagedPathChange:
         spec = self._spec(block_type)
         folder_name = str(reference.get("folder", ""))
         folder = resolve_owned_python_package_folder(
@@ -718,7 +504,7 @@ class PythonPackageAuthoringService:
                 owner_id,
                 folder_name,
             )
-            return PackageChange(lambda: None)
+            return StagedPathChange(lambda: None)
         try:
             inspect_python_package_draft(
                 folder,
@@ -736,7 +522,7 @@ class PythonPackageAuthoringService:
                 owner_id,
                 folder_name,
             )
-            return PackageChange(lambda: None)
+            return StagedPathChange(lambda: None)
         tombstone_root = folder.parent / f".deleted-{uuid4()}"
         tombstone_root.mkdir(parents=True)
         tombstone = tombstone_root / folder.name
@@ -751,13 +537,12 @@ class PythonPackageAuthoringService:
         def finalize() -> None:
             shutil.rmtree(tombstone_root, ignore_errors=True)
 
-        return PackageChange(rollback, finalize)
+        return StagedPathChange(rollback, finalize)
 
 
 __all__ = [
     "BUILTIN_EXAMPLE_TEMPLATE_PREFIX",
     "PACKAGE_COMPONENT_SPECS",
-    "PackageChange",
     "PythonPackageAuthoringError",
     "PythonPackageAuthoringService",
 ]

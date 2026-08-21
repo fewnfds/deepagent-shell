@@ -207,7 +207,7 @@
           "card-header", "card-outline", "card-text", "card-title", "dropdown", "dropdown-item", "dropdown-menu", "dropdown-menu-end", "info-box-number", "page-item", "page-link", "pagination", "progress", "rounded", "spinner-border", "spinner-border-sm",
           "list-group", "list-group-flush", "list-group-item", "row", "table", "table-hover", "table-responsive", "table-striped", "text-bg-danger", "text-bg-info",
           "text-bg-primary",
-          "text-bg-secondary", "text-bg-success", "text-bg-warning", "time", "timeline", "timeline-body", "timeline-footer", "timeline-header", "timeline-item"
+          "table-active", "text-bg-secondary", "text-bg-success", "text-bg-warning", "time", "timeline", "timeline-body", "timeline-footer", "timeline-header", "timeline-item"
         ]
       },
       {
@@ -238,6 +238,8 @@
         "name": "management-tables",
         "paths": [
           "src/components/data-table/*.vue",
+          "src/components/FileWorkspaceBrowser.vue",
+          "src/components/PythonPackageEditor.vue",
           "src/pages/WorkflowsPage.vue",
           "src/pages/FileManagerPage.vue",
           "src/pages/StyleLabPage.vue"
@@ -334,7 +336,7 @@
     "allowed": [
       "archive", "arrow-clockwise", "arrow-down", "arrow-right", "arrow-up", "book", "boxes", "check-circle", "check-lg", "chevron-left", "circle",
       "chevron-right", "circle-half", "copy", "download", "exclamation-triangle", "eye", "eye-slash",
-      "diagram-3", "file-earmark", "floppy", "folder", "gear", "hdd-network", "house", "info-circle", "key", "list", "moon-fill", "node-plus", "pencil",
+      "diagram-3", "file-earmark", "file-earmark-plus", "floppy", "folder", "folder-plus", "gear", "hdd-network", "house", "info-circle", "key", "list", "moon-fill", "node-plus", "pencil",
       "play-fill", "plus-lg", "robot", "search", "sliders", "stop-fill", "sun-fill", "three-dots",
       "shield-lock", "translate", "trash", "upload", "x-circle", "x-lg"
     ],
@@ -379,9 +381,36 @@
         "callers": [
           "src/components/ConfirmDialog.vue",
           "src/components/AuthGate.vue",
-          "src/pages/ConfigLibraryPage.vue",
+          "src/components/FileWorkspaceDialog.vue",
+          "src/pages/ConfigLibraryPage.vue"
+        ]
+      },
+      {
+        "name": "FileWorkspaceBrowser",
+        "path": "src/components/FileWorkspaceBrowser.vue",
+        "kind": "product-behavior",
+        "reason": "Owns real data path navigation and capability-aware file commands for every file-management caller",
+        "callers": [
+          "src/components/FileWorkspaceDialog.vue",
           "src/pages/FileManagerPage.vue"
         ]
+      },
+      {
+        "name": "FileWorkspaceDialog",
+        "path": "src/components/FileWorkspaceDialog.vue",
+        "kind": "product-behavior",
+        "reason": "Hosts one shared file browser and text editor modal at a caller-provided data path",
+        "callers": [
+          "src/components/PythonPackageEditor.vue",
+          "src/pages/FileManagerPage.vue"
+        ]
+      },
+      {
+        "name": "TextFileEditorSurface",
+        "path": "src/components/TextFileEditorSurface.vue",
+        "kind": "product-behavior",
+        "reason": "Owns capability-aware UTF-8 text editing and optimistic revision conflict actions",
+        "callers": ["src/components/FileWorkspaceDialog.vue"]
       },
       {
         "name": "PageShell",
@@ -471,7 +500,7 @@
         "name": "PythonPackageEditor",
         "path": "src/components/PythonPackageEditor.vue",
         "kind": "domain-composition",
-        "reason": "Owns template selection and ordered private package text-file editing without changing package identity",
+        "reason": "Owns template identity selection and private package file-path projection while delegating content editing to File Workspace",
         "callers": [
           "src/editors/CommandEditor.vue",
           "src/editors/CustomToolEditor.vue",

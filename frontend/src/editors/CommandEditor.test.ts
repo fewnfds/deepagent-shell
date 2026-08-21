@@ -3,6 +3,7 @@ import { createI18n } from 'vue-i18n'
 import { describe, expect, it } from 'vitest'
 
 import { commandAdapter } from '@/domain/blocks'
+import { applyPythonPackageInspection } from '@/domain/blocks/pythonPackage'
 import { en } from '@/locales/en'
 
 import CommandEditor from './CommandEditor.vue'
@@ -13,141 +14,92 @@ const i18n = () => createI18n({
   messages: { en },
 })
 
+const template = {
+  key: 'threshold-router',
+  format_version: 1 as const,
+  family: 'workflow-node' as const,
+  adapter: 'command' as const,
+  name: 'threshold-router',
+  revision: 'template-revision',
+  files: [
+    { path: 'main.py', content: 'def create_command():\n    return route\n', exists: true },
+    { path: 'helpers/rules.py', content: 'THRESHOLD = 80\n', exists: true },
+  ],
+}
+
 describe('CommandEditor', () => {
-  it('orders editable package files from the relative path list', async () => {
-    const templateKey = 'threshold-router'
+  it('selects a template by identity without rendering or emitting source content', async () => {
     const wrapper = mount(CommandEditor, {
-      props: {
-        modelValue: commandAdapter.blank(),
-        catalog: [{
-          key: templateKey,
-          format_version: 1,
-          family: 'workflow-node',
-          adapter: 'command',
-          name: 'threshold-router',
-          revision: 'revision',
-          files: [
-            { path: 'main.py', content: 'def create_command():\n    return route\n', exists: true },
-            { path: 'helpers/rules.py', content: 'THRESHOLD = 80\n', exists: true },
-          ],
-        }],
-      },
+      props: { modelValue: commandAdapter.blank(), catalog: [template] },
       global: { plugins: [i18n()] },
     })
 
-    await wrapper.get('select').setValue(templateKey)
-    const pathList = wrapper.get('textarea[rows="2"]')
-    await pathList.setValue('main.py\nhelpers/rules.py\nmissing.py')
-    await pathList.trigger('change')
+    await wrapper.get('select').setValue(template.key)
 
     const emitted = wrapper.emitted('update:modelValue')?.at(-1)?.[0]
     expect(emitted).toMatchObject({
-      python_package: {
-        folder: '',
-        editable_files: ['main.py', 'helpers/rules.py', 'missing.py'],
-      },
-      python_package_files: {
-        template_key: templateKey,
-        revision: 'revision',
-        files: [
-          { path: 'main.py', exists: true },
-          { path: 'helpers/rules.py', content: 'THRESHOLD = 80\n', exists: true },
-          { path: 'missing.py', content: '', exists: false },
-        ],
+      python_package: { folder: '' },
+      python_package_template: {
+        key: template.key,
+        revision: template.revision,
       },
     })
-    expect(wrapper.text()).toContain('missing.py')
-    expect(wrapper.text()).toContain('This file does not exist yet.')
+    expect(JSON.stringify(emitted)).not.toContain('create_command')
+    expect(wrapper.find('textarea').exists()).toBe(false)
   })
 
-  it('keeps selected files visible when the saved package is invalid', () => {
-    const folder = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+  it('lists every projected private package path without loading file content', () => {
+    const id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
     const draft = commandAdapter.fromApi({
-      id: 'router-id',
-      name: 'Broken router',
-      python_package: {
-        folder,
-        editable_files: ['main.py'],
-      },
+      id,
+      name: 'Router',
+      python_package: { folder: id },
+    })
+    applyPythonPackageInspection(draft, {
+      repository_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      owner_id: id,
+      revision: 'package-revision',
+      files: [
+        {
+          path: 'helpers/rules.py',
+          file_manager_path: `data/configuration-repositories/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/python_package_instances/command/${id}/helpers/rules.py`,
+          size: 16,
+          modified_at: '2026-08-21T00:00:00Z',
+        },
+        {
+          path: 'package.json',
+          file_manager_path: `data/configuration-repositories/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/python_package_instances/command/${id}/package.json`,
+          size: 100,
+          modified_at: '2026-08-21T00:00:00Z',
+        },
+      ],
       python_package_manifest: null,
-      python_package_files: {
-        files: [{
-          path: 'main.py',
-          content: 'def create_command():\n    return (\n',
-          exists: true,
-        }],
-        revision: 'broken-revision',
-      },
       python_package_error: {
-        message_key: 'resource.error.pythonPackage.syntax',
-        message_args: { line: 2 },
+        message_key: 'resource.error.pythonPackage.idMismatch',
+        message_args: {},
       },
+      requirements_fingerprint: '',
       dependency_status: 'failed',
+      dependency_error_code: 'resource.error.pythonPackage.idMismatch',
     })
     const wrapper = mount(CommandEditor, {
       props: { modelValue: draft },
       global: { plugins: [i18n()] },
     })
 
-    expect(wrapper.findAll('textarea').some((item) => item.element.value.includes('return ('))).toBe(true)
-    expect(wrapper.text()).toContain('main.py contains a Python syntax error on line 2.')
-    expect(wrapper.text()).not.toContain(folder)
+    expect(wrapper.text()).toContain('helpers/rules.py')
+    expect(wrapper.text()).toContain('package.json')
+    expect(wrapper.text()).toContain('The package.json id must match the folder name.')
+    expect(wrapper.find('textarea').exists()).toBe(false)
   })
 
-  it('applies an empty template without a catalog entry', async () => {
+  it('does not offer a blank package template', () => {
     const wrapper = mount(CommandEditor, {
       props: { modelValue: commandAdapter.blank(), catalog: [] },
       global: { plugins: [i18n()] },
     })
 
-    const applyEmpty = wrapper.findAll('button').find((button) => (
-      button.text() === 'Apply empty template'
-    ))
-    expect(applyEmpty).toBeDefined()
-    await applyEmpty!.trigger('click')
-
-    const emitted = wrapper.emitted('update:modelValue')?.at(-1)?.[0]
-    expect(emitted).toMatchObject({
-      python_package: { folder: '', editable_files: ['main.py', 'requirements.txt'] },
-      python_package_files: {
-        template_key: '__empty__',
-        revision: '',
-        files: [
-          { path: 'main.py', content: '', exists: false },
-          { path: 'requirements.txt', content: '', exists: false },
-        ],
-      },
-    })
-  })
-
-  it('requests newly selected files from a saved package', async () => {
-    const draft = commandAdapter.fromApi({
-      id: 'router-id',
-      name: 'Router',
-      python_package: {
-        folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-        editable_files: ['main.py'],
-      },
-      python_package_files: {
-        files: [{ path: 'main.py', content: 'SOURCE\n', exists: true }],
-        revision: 'revision',
-      },
-    })
-    const wrapper = mount(CommandEditor, {
-      props: { modelValue: draft },
-      global: { plugins: [i18n()] },
-    })
-
-    const pathList = wrapper.get('textarea[rows="2"]')
-    await pathList.setValue('main.py\nhelpers/rules.py')
-    await pathList.trigger('change')
-
-    expect(wrapper.emitted('load-files')?.at(-1)?.[0]).toEqual(['helpers/rules.py'])
-    const emitted = wrapper.emitted('update:modelValue')?.at(-1)?.[0] as ReturnType<typeof commandAdapter.blank>
-    expect(emitted.python_package_files.files[1]).toEqual({
-      path: 'helpers/rules.py',
-      content: '',
-      readable: true,
-    })
+    expect(wrapper.text()).not.toContain('Empty template')
+    expect(wrapper.find('option[value="__empty__"]').exists()).toBe(false)
   })
 })

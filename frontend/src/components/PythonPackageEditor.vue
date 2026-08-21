@@ -1,17 +1,12 @@
 <script setup lang="ts">
-import { LteAlert, LteButton, LteTextarea } from '@adminlte/vue'
-import { computed } from 'vue'
+import { LteAlert, LteButton } from '@adminlte/vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type {
-  LocalizedMessagePayload,
-  PythonPackageFile,
-  PythonPackageTemplate,
-} from '@/api'
+import type { LocalizedMessagePayload, PythonPackageTemplate } from '@/api'
+import FileWorkspaceDialog from '@/components/FileWorkspaceDialog.vue'
 import {
-  applyEmptyPythonPackageTemplate,
   applyPythonPackageTemplate,
-  EMPTY_PYTHON_PACKAGE_TEMPLATE_KEY,
   type PythonPackageDraftState,
 } from '@/domain/blocks/pythonPackage'
 import { useEditorModel } from '@/editors/shared/useEditorModel'
@@ -28,10 +23,8 @@ const props = withDefaults(defineProps<{
   errors: () => ({}),
   loading: false,
 })
-
 const emit = defineEmits<{
   'update:modelValue': [value: PythonPackageDraftState]
-  'load-files': [paths: string[]]
   refresh: []
 }>()
 
@@ -40,21 +33,16 @@ const draft = useEditorModel(
   () => props.modelValue,
   (value) => emit('update:modelValue', value),
 )
+const workspaceOpen = ref(false)
+const workspacePath = ref('')
 
 const selectedTemplate = computed(() => props.catalog.find(
-  (item) => item.key === draft.python_package_files.template_key,
+  (item) => item.key === draft.python_package_template.key,
 ))
+const inspection = computed(() => draft.python_package_inspection)
 
 function selectTemplate(key: string): void {
-  if (key === EMPTY_PYTHON_PACKAGE_TEMPLATE_KEY) {
-    applyEmptyTemplate()
-    return
-  }
   applyPythonPackageTemplate(draft, props.catalog.find((item) => item.key === key))
-}
-
-function applyEmptyTemplate(): void {
-  applyEmptyPythonPackageTemplate(draft)
 }
 
 function templateLabel(template: PythonPackageTemplate): string {
@@ -63,58 +51,17 @@ function templateLabel(template: PythonPackageTemplate): string {
     : `${template.name} (${template.key})`
 }
 
-function templateFile(path: string): PythonPackageFile | undefined {
-  return selectedTemplate.value?.files.find((file) => file.path === path)
-}
-
-function isRelativePath(path: string): boolean {
-  return Boolean(path)
-    && !path.startsWith('/')
-    && !path.startsWith('\\')
-    && !path.includes('\\')
-    && !path.includes(':')
-    && !path.split('/').some((part) => !part || part === '.' || part === '..')
-    && path.split('/')[0]?.toLowerCase() !== 'package.json'
-}
-
-function updateEditablePaths(): void {
-  const paths = draft.editable_paths_source
-    .split(/\r?\n/)
-    .map((value) => value.trim())
-    .filter((value, index, values) => value !== '' && values.indexOf(value) === index)
-  const current = new Map(draft.python_package_files.files.map((file) => [file.path, file]))
-  const newPaths = paths.filter((path) => isRelativePath(path) && !current.has(path))
-  draft.python_package.editable_files = paths
-  draft.python_package_files.files = paths.map((path) => {
-    const existing = current.get(path)
-    if (existing) return existing
-    const fromTemplate = templateFile(path)
-    return fromTemplate
-      ? {
-        path,
-        content: fromTemplate.content,
-        exists: fromTemplate.exists !== false,
-        readable: fromTemplate.readable !== false,
-      }
-      : {
-        path,
-        content: '',
-        ...(props.saved ? {} : { exists: false }),
-        readable: true,
-      }
-  })
-  if (props.saved && newPaths.length) emit('load-files', newPaths)
-}
-
-function pathWarning(file: PythonPackageFile): string {
-  if (!isRelativePath(file.path)) return t('editors.pythonPackage.pathInvalid')
-  if (file.exists === false) return t('editors.pythonPackage.fileMissing')
-  if (file.readable === false) return t('editors.pythonPackage.fileUnreadable')
-  return ''
-}
-
 function resourceError(error: LocalizedMessagePayload): string {
   return t(error.message_key, error.message_args)
+}
+
+function openFile(path: string): void {
+  workspacePath.value = path
+  workspaceOpen.value = true
+}
+
+function refresh(): void {
+  emit('refresh')
 }
 </script>
 
@@ -123,14 +70,13 @@ function resourceError(error: LocalizedMessagePayload): string {
     <header class="card-header d-flex align-items-center gap-2">
       <h3 class="card-title h5 mb-0">{{ t('editors.pythonPackage.title') }}</h3>
       <LteButton
-        v-if="!saved"
         class="ms-auto"
-        :aria-label="t('editors.common.refresh')"
+        :aria-label="t('common.refresh')"
         :disabled="loading"
         size="sm"
         theme="info"
         type="button"
-        @click="emit('refresh')"
+        @click="refresh"
       >
         <i class="bi bi-arrow-clockwise" aria-hidden="true" />
       </LteButton>
@@ -140,83 +86,89 @@ function resourceError(error: LocalizedMessagePayload): string {
         <label class="form-label" :for="`${idPrefix}-template`">
           {{ t('editors.pythonPackage.template') }}
         </label>
-        <div class="input-group">
-          <select
-            :id="`${idPrefix}-template`"
-            class="form-select"
-            :value="draft.python_package_files.template_key"
-            @change="selectTemplate(($event.target as HTMLSelectElement).value)"
-          >
-            <option value="">{{ t('editors.pythonPackage.selectTemplate') }}</option>
-            <option :value="EMPTY_PYTHON_PACKAGE_TEMPLATE_KEY">{{ t('editors.pythonPackage.emptyTemplate') }}</option>
-            <option v-for="item in catalog" :key="item.key" :value="item.key">
-              {{ templateLabel(item) }}
-            </option>
-          </select>
-          <LteButton theme="secondary" type="button" @click="applyEmptyTemplate">
-            {{ t('editors.pythonPackage.applyEmptyTemplate') }}
-          </LteButton>
+        <select
+          :id="`${idPrefix}-template`"
+          class="form-select"
+          :value="draft.python_package_template.key"
+          @change="selectTemplate(($event.target as HTMLSelectElement).value)"
+        >
+          <option value="">{{ t('editors.pythonPackage.selectTemplate') }}</option>
+          <option v-for="item in catalog" :key="item.key" :value="item.key">
+            {{ templateLabel(item) }}
+          </option>
+        </select>
+        <div v-if="selectedTemplate" class="form-text">
+          {{ selectedTemplate.files.map((file) => file.path).join(', ') }}
         </div>
       </template>
 
-      <LteAlert
-        v-if="draft.python_package_error"
-        class="mt-3 mb-0"
-        theme="danger"
-        :title="resourceError(draft.python_package_error)"
-      />
-
-      <template v-if="draft.python_package_files.files.length || draft.python_package_files.template_key">
-        <div class="mt-3">
-          <label class="form-label" :for="`${idPrefix}-paths`">
-            {{ t('editors.pythonPackage.files') }}
-          </label>
-          <textarea
-            :id="`${idPrefix}-paths`"
-            v-model="draft.editable_paths_source"
-            class="form-control font-monospace"
-            rows="2"
-            spellcheck="false"
-            @change="updateEditablePaths"
-          />
-          <div class="form-text">{{ t('editors.pythonPackage.filesHint') }}</div>
+      <template v-else>
+        <LteAlert
+          v-if="inspection?.python_package_error"
+          class="mb-3"
+          theme="warning"
+          :title="resourceError(inspection.python_package_error)"
+        />
+        <div v-if="!inspection" class="d-flex align-items-center gap-2 p-3" role="status">
+          <span class="spinner-border" aria-hidden="true" />
+          <span>{{ t('common.loading') }}</span>
         </div>
-
-        <div
-          v-for="(file, index) in draft.python_package_files.files"
-          :key="`${file.path}-${index}`"
-          class="mt-3"
-        >
-          <label class="form-label" :for="`${idPrefix}-file-${index}`">{{ file.path }}</label>
-          <LteTextarea
-            :id="`${idPrefix}-file-${index}`"
-            v-model="file.content"
-            class="font-monospace"
-            :rows="18"
-            spellcheck="false"
-          />
-          <LteAlert
-            v-if="pathWarning(file)"
-            class="mt-2 mb-0"
-            theme="warning"
-            :title="pathWarning(file)"
-          />
+        <div v-else class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="management-table-head">
+              <tr>
+                <th>{{ t('editors.pythonPackage.files') }}</th>
+                <th>{{ t('fileManager.columns.size') }}</th>
+                <th class="text-end">{{ t('fileManager.columns.actions') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="inspection.files.length === 0">
+                <td class="text-center text-body-secondary p-3" colspan="3">
+                  {{ t('fileManager.empty') }}
+                </td>
+              </tr>
+              <tr v-for="file in inspection.files" :key="file.path">
+                <td class="font-monospace text-break">{{ file.path }}</td>
+                <td>{{ file.size }}</td>
+                <td class="text-end">
+                  <LteButton
+                    :aria-label="t('common.edit')"
+                    size="sm"
+                    theme="info"
+                    type="button"
+                    @click="openFile(file.file_manager_path)"
+                  >
+                    <i class="bi bi-pencil" aria-hidden="true" />
+                    {{ t('common.edit') }}
+                  </LteButton>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
 
         <LteAlert
-          v-if="saved && draft.dependency_status && draft.dependency_status !== 'ready'"
+          v-if="inspection?.dependency_status && inspection.dependency_status !== 'ready'"
           class="mt-3 mb-0"
           theme="info"
-          :title="t(`editors.pythonPackage.status.${draft.dependency_status}`)"
+          :title="t(`editors.pythonPackage.status.${inspection.dependency_status}`)"
         />
       </template>
     </div>
-    <div v-if="Object.keys(errors).length" class="card-body">
+    <div v-if="!saved && Object.keys(errors).length" class="card-body">
       <div class="alert alert-danger mb-0" role="alert">
         <p v-for="(error, folder) in errors" :key="folder" class="mb-1">
           <strong>{{ folder }}</strong> {{ resourceError(error) }}
         </p>
       </div>
     </div>
+
+    <FileWorkspaceDialog
+      :open="workspaceOpen"
+      :path="workspacePath"
+      @changed="refresh"
+      @close="workspaceOpen = false"
+    />
   </section>
 </template>

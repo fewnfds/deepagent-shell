@@ -80,58 +80,27 @@ describe('block adapters', () => {
     })
   })
 
-  it('keeps the configuration extension reference and file payload mechanical', () => {
+  it('keeps the configuration extension reference and template selection mechanical', () => {
     const toolDraft = customToolAdapter.blank()
     toolDraft.name = ' Tools '
-    toolDraft.python_package.editable_files = ['main.py', 'requirements.txt']
-    toolDraft.python_package_files.files = [
-      { path: 'main.py', content: 'def create_tool():\n    return tool\n' },
-      { path: 'requirements.txt', content: '' },
-    ]
+    toolDraft.python_package_template = { key: 'word-count', revision: 'revision' }
     expect(customToolAdapter.toPayload(toolDraft)).toEqual({
       name: 'Tools',
-      python_package: { folder: '', editable_files: ['main.py', 'requirements.txt'] },
-      python_package_files: {
-        template_key: '',
-        revision: '',
-        files: [
-          { path: 'main.py', content: 'def create_tool():\n    return tool\n' },
-          { path: 'requirements.txt', content: '' },
-        ],
-      },
+      python_package: { folder: '' },
+      python_package_template: { key: 'word-count', revision: 'revision' },
     })
 
     const middlewareDraft = customMiddlewareAdapter.fromApi({
       id: 'middleware-id',
       name: 'Middleware',
-      python_package: { folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', editable_files: ['main.py', 'requirements.txt'] },
-      python_package_files: {
-        files: [
-          { path: 'main.py', content: 'def create_middleware(agent):\n    return middleware\n', exists: true },
-          { path: 'requirements.txt', content: 'httpx==1\n', exists: true },
-        ],
-        revision: 'revision',
-      },
-      python_package_error: {
-        message_key: 'resource.error.pythonPackage.syntax',
-        message_args: { line: 2 },
-      },
+      python_package: { folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
     })
     const payload = customMiddlewareAdapter.toPayload(middlewareDraft)
-    expect(payload.python_package).toEqual({
-      folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', editable_files: ['main.py', 'requirements.txt'],
+    expect(payload).toEqual({
+      name: 'Middleware',
+      python_package: { folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
     })
-    expect(payload.python_package_files).toMatchObject({
-      files: [
-        { path: 'main.py', content: expect.any(String) },
-        { path: 'requirements.txt', content: 'httpx==1\n' },
-      ],
-      revision: 'revision',
-    })
-    expect(middlewareDraft.python_package_error).toEqual({
-      message_key: 'resource.error.pythonPackage.syntax',
-      message_args: { line: 2 },
-    })
+    expect(middlewareDraft.python_package_inspection).toBeNull()
   })
 
   it('uses the shared Python package draft contract for both event output owners', () => {
@@ -139,25 +108,11 @@ describe('block adapters', () => {
       const draft = adapter.fromApi({
         id: 'output-id',
         name: 'Output',
-        python_package: {
-          folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          editable_files: ['main.py'],
-        },
-        python_package_files: {
-          files: [{ path: 'main.py', content: 'def output(event):\n    return ""\n', exists: true }],
-          revision: 'revision',
-        },
+        python_package: { folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
       })
-      expect(adapter.toPayload(draft)).toMatchObject({
+      expect(adapter.toPayload(draft)).toEqual({
         name: 'Output',
-        python_package: {
-          folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-          editable_files: ['main.py'],
-        },
-        python_package_files: {
-          revision: 'revision',
-          files: [{ path: 'main.py', content: 'def output(event):\n    return ""\n' }],
-        },
+        python_package: { folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' },
       })
     }
   })
@@ -177,39 +132,17 @@ describe('block adapters', () => {
 
     const malformedTool = customToolAdapter.fromApi({
       id: 'tools', name: 'Tools',
-      python_package: {
-        folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-        editable_files: ['main.py', 42],
-      },
-      python_package_files: {
-        files: ['invalid'],
-        revision: 7,
-      },
+      python_package: { folder: 42 },
     } as never)
-    expect(malformedTool.python_package).toEqual({
-      folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', editable_files: ['main.py'],
-    })
-    expect(malformedTool.python_package_files).toMatchObject({
-      files: [{ path: 'main.py', content: '', exists: false }], revision: '',
-    })
+    expect(malformedTool.python_package).toEqual({ folder: '' })
+    expect(malformedTool.python_package_inspection).toBeNull()
 
     const middleware = customMiddlewareAdapter.fromApi({
       id: 'middleware', name: 'Middleware',
-      python_package: {
-        folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-        editable_files: ['main.py', 42],
-      },
-      python_package_files: {
-        files: ['invalid'],
-        revision: 7,
-      },
+      python_package: ['invalid'],
     } as never)
-    expect(middleware.python_package).toEqual({
-      folder: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', editable_files: ['main.py'],
-    })
-    expect(middleware.python_package_files).toMatchObject({
-      files: [{ path: 'main.py', content: '', exists: false }], revision: '',
-    })
+    expect(middleware.python_package).toEqual({ folder: '' })
+    expect(middleware.python_package_inspection).toBeNull()
 
     const filesystem = filesystemAdapter.fromApi({
       id: 'files', name: 'Files',

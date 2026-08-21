@@ -6,11 +6,11 @@ Agent Shell 的文件化 Python 扩展分为扩展模板、配置扩展和组件
 - 源码附带的只读示例位于 `examples/`，在模板选择器中使用 `内置示例-<key>` 名称；
 - 保存新配置时，系统把所选模板复制成由该配置独占的 Python 扩展；
 - 配置扩展位于当前 `data/configuration-repositories/<repository-uuid>/python_package_instances/`，复制完成后与原模板彻底解耦；
-- 组件 YAML 只保存扩展代码目录引用和管理台显示的有序相对文件路径。
+- 组件 YAML 只保存扩展代码目录引用。
 
 模板和内置示例都不会被直接导入、执行或收集依赖。修改或删除来源不会影响已经保存的配置；模板和配置扩展各自独立维护。
-内置示例不会写入 `data/`；管理员仍可通过【系统 / 文件管理】的 Python templates scope，或直接在
-`data/templates/` 对应类别下维护用户模板，目录为空也是合法状态。用户模板可以与内置示例同名，catalog key 分别为
+内置示例不会写入 `data/`；管理员可以通过顶层【文件管理】进入 `data/templates/`，或直接在
+对应类别下维护用户模板，目录为空也是合法状态。用户模板可以与内置示例同名，catalog key 分别为
 `<key>` 和 `内置示例-<key>`。
 
 ## 目录类别
@@ -56,7 +56,8 @@ examples/
 }
 ```
 
-`package.json` 由 Agent Shell 管理，不属于前端可编辑文件。它只承担配置 UUID 与 adapter 身份校验。
+`package.json` 承担配置 UUID 与 adapter 身份校验。文件管理会把它与私有包中的其他文件一同显示；修改后如果身份或格式不合法，
+组件刷新、装配和运行校验会报告问题。
 
 ## 配置引用
 
@@ -65,21 +66,17 @@ Command Node、Task Dispatcher 和 Custom Middleware 使用同一 YAML 外壳：
 ```yaml
 python_package:
   folder: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
-  editable_files:
-    - main.py
-    - helpers/rules.py
 ```
 
 YAML 不保存源码、requirements、manifest 投影、模板引用、revision 或绝对路径。复制组件配置时会复制一份新的配置扩展；删除组件
 配置时会删除其扩展代码目录。
 
-新配置编辑器同时读取对应类别的用户模板和内置示例。用户可以选择任一来源，或【套用空模板】得到空的 `main.py` 和
-`requirements.txt` 草稿；最终保存只接受包含
-对应 adapter 要求的有效工厂。用户可以在两行高的文件清单中逐行增加
-包内相对路径，编辑器按该顺序显示文本文件内容；
-首次保存才创建配置扩展。已有配置每次打开都从自己的扩展代码目录读取文件，保存操作更新原目录，不提供改指向另一模板或配置扩展的字段。
-不存在的相对路径显示非阻塞警告；填写内容后保存会创建文件，保持空内容则继续缺失。未列出的文件保持原样。
-绝对路径、`..`、反斜杠路径、重复路径和 `package.json` 会被拒绝。文件保存使用 revision；目录被外部修改后，旧 revision 的保存会被拒绝，重新载入可取得当前 revision。
+新配置编辑器同时读取对应类别的用户模板和内置示例。选择其中一项后，首次保存复制完整模板并生成配置 UUID 与
+`package.json`。需要空白起点时，先在 `data/templates/` 中创建符合对应 adapter 要求的最小模板。
+
+已有配置显示私有包中的全部相对文件路径。点击编辑会打开共享文件管理工作区并进入文件所在目录；文件正文、新文件、目录、
+上传、下载、重命名和删除都在该工作区中立即落盘，不依赖组件表单保存。UTF-8 文本使用内容 revision；磁盘文件发生变化后，
+旧 revision 的保存会被拒绝，页面保留草稿并允许重新载入或确认覆盖最新内容。文件编辑期间不持有磁盘锁。
 
 ## Command Node
 
@@ -162,7 +159,7 @@ Python 名称仍需显式 `import`。本地模块使用正常相对导入，例�
 的可选 `requirements.txt`。
 
 `requirements.txt` 可以不存在，也可以是空文件；两者都表示没有额外依赖。只有 source 实际 import 平台核心之外的 third-party
-package 时才需要新增或填写它，并将文件列入 package 的可编辑文件。模板和配置 extension 不会因为缺少这个占位文件而失效。
+package 时才需要新增或填写它。模板和配置 extension 不会因为缺少这个占位文件而失效。
 
 启动器只从启用 Workflow 可达的 Command Node、Task Dispatcher、Main Agent 和其 Subagent 引用中收集配置扩展 requirements。静态模板和
 未被运行配置触达的扩展不进入依赖指纹，也不影响全局依赖。依赖层生成在

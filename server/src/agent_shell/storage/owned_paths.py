@@ -19,6 +19,32 @@ def is_reparse_point(path: Path) -> bool:
     return stat.S_ISLNK(metadata.st_mode) or bool(attributes & reparse_flag)
 
 
+def is_plain_tree(root: Path) -> bool:
+    """Return whether a directory tree contains only plain directories and files."""
+
+    pending = [Path(root)]
+    try:
+        while pending:
+            directory = pending.pop()
+            metadata = directory.lstat()
+            if is_reparse_point(directory) or not stat.S_ISDIR(metadata.st_mode):
+                return False
+            with os.scandir(directory) as scanner:
+                entries = list(scanner)
+            for entry in entries:
+                path = Path(entry.path)
+                metadata = path.lstat()
+                if is_reparse_point(path):
+                    return False
+                if stat.S_ISDIR(metadata.st_mode):
+                    pending.append(path)
+                elif not stat.S_ISREG(metadata.st_mode):
+                    return False
+    except OSError:
+        return False
+    return True
+
+
 def require_single_path_segment(value: object, *, label: str) -> str:
     if not isinstance(value, str) or not value or value in {".", ".."}:
         raise OwnedPathError(f"{label} must be one non-empty path segment")
@@ -82,6 +108,7 @@ def resolve_owned_relative_path(
 
 __all__ = [
     "OwnedPathError",
+    "is_plain_tree",
     "is_reparse_point",
     "require_single_path_segment",
     "resolve_owned_relative_path",

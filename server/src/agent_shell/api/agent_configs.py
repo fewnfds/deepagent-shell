@@ -132,6 +132,7 @@ def build_agent_config_router(
     async def delete_main_agents(
         payload: ConfigurationBulkDelete,
     ) -> dict[str, int]:
+        mutation_repository_id = config_store.repository_id()
         ids = list(dict.fromkeys(payload.ids))
         if any(config_store.get_item(MAIN_AGENT_TABLE, item_id) is None for item_id in ids):
             raise management_error(
@@ -150,7 +151,13 @@ def build_agent_config_router(
                     message="The Main Agent is still referenced by a Workflow.",
                     message_args={"owner": workflow["name"]},
                 )
-        return {"deleted": config_store.delete_items(MAIN_AGENT_TABLE, ids)}
+        return {
+            "deleted": config_store.delete_items(
+                MAIN_AGENT_TABLE,
+                ids,
+                expected_repository_id=mutation_repository_id,
+            )
+        }
 
     @router.get("/api/main-agents/{item_id}")
     async def get_main_agent(item_id: str) -> dict:
@@ -166,6 +173,7 @@ def build_agent_config_router(
 
     @router.post("/api/main-agents")
     async def create_main_agent(payload: dict) -> dict:
+        mutation_repository_id = config_store.repository_id()
         report, validated, _ = validation.validate_main_agent(
             payload,
             stage="main_agent_save",
@@ -174,7 +182,12 @@ def build_agent_config_router(
         assert validated is not None
         item_id = config_store.new_id()
         try:
-            config_store.save_item(MAIN_AGENT_TABLE, item_id, validated)
+            config_store.save_item(
+                MAIN_AGENT_TABLE,
+                item_id,
+                validated,
+                expected_repository_id=mutation_repository_id,
+            )
         except ValueError as exc:
             raise management_error(
                 409,
@@ -186,6 +199,7 @@ def build_agent_config_router(
 
     @router.post("/api/main-agents/{item_id}/copy")
     async def copy_main_agent(item_id: str, payload: dict) -> dict:
+        mutation_repository_id = config_store.repository_id()
         name = _copy_name(payload)
         source = config_store.get_item(MAIN_AGENT_TABLE, item_id)
         if source is None:
@@ -207,7 +221,12 @@ def build_agent_config_router(
         assert validated is not None
         copy_id = config_store.new_id()
         try:
-            config_store.save_item(MAIN_AGENT_TABLE, copy_id, validated)
+            config_store.save_item(
+                MAIN_AGENT_TABLE,
+                copy_id,
+                validated,
+                expected_repository_id=mutation_repository_id,
+            )
         except ValueError as exc:
             raise management_error(
                 409,
@@ -219,6 +238,7 @@ def build_agent_config_router(
 
     @router.put("/api/main-agents/{item_id}")
     async def update_main_agent(item_id: str, payload: dict) -> dict:
+        mutation_repository_id = config_store.repository_id()
         if config_store.get_item(MAIN_AGENT_TABLE, item_id) is None:
             raise management_error(
                 404,
@@ -234,7 +254,12 @@ def build_agent_config_router(
         _raise_if_invalid(report)
         assert validated is not None
         try:
-            config_store.save_item(MAIN_AGENT_TABLE, item_id, validated)
+            config_store.save_item(
+                MAIN_AGENT_TABLE,
+                item_id,
+                validated,
+                expected_repository_id=mutation_repository_id,
+            )
         except ValueError as exc:
             raise management_error(
                 409,
@@ -246,6 +271,7 @@ def build_agent_config_router(
 
     @router.delete("/api/main-agents/{item_id}")
     async def delete_main_agent(item_id: str) -> dict[str, bool]:
+        mutation_repository_id = config_store.repository_id()
         if config_store.get_item(MAIN_AGENT_TABLE, item_id) is None:
             raise management_error(
                 404,
@@ -262,7 +288,11 @@ def build_agent_config_router(
                 message="The Main Agent is still referenced by a Workflow.",
                 message_args={"owner": workflow["name"]},
             )
-        config_store.delete_item(MAIN_AGENT_TABLE, item_id)
+        config_store.delete_item(
+            MAIN_AGENT_TABLE,
+            item_id,
+            expected_repository_id=mutation_repository_id,
+        )
         return {"ok": True}
 
     @router.get("/api/subagents")
@@ -273,6 +303,7 @@ def build_agent_config_router(
     async def delete_subagents(
         payload: ConfigurationBulkDelete,
     ) -> dict[str, int]:
+        mutation_repository_id = config_store.repository_id()
         ids = list(dict.fromkeys(payload.ids))
         for item_id in ids:
             if config_store.get_item(SUBAGENT_TABLE, item_id) is None:
@@ -287,6 +318,7 @@ def build_agent_config_router(
                 SUBAGENT_TABLE,
                 ids,
                 detach_references=True,
+                expected_repository_id=mutation_repository_id,
             )
         }
 
@@ -304,6 +336,7 @@ def build_agent_config_router(
 
     @router.post("/api/subagents")
     async def create_subagent(payload: dict) -> dict:
+        mutation_repository_id = config_store.repository_id()
         report, validated = validation.validate_subagent(
             payload,
             stage="subagent_save",
@@ -312,7 +345,12 @@ def build_agent_config_router(
         assert validated is not None
         item_id = config_store.new_id()
         try:
-            config_store.save_item(SUBAGENT_TABLE, item_id, validated)
+            config_store.save_item(
+                SUBAGENT_TABLE,
+                item_id,
+                validated,
+                expected_repository_id=mutation_repository_id,
+            )
         except ValueError as exc:
             raise management_error(
                 409,
@@ -324,6 +362,7 @@ def build_agent_config_router(
 
     @router.post("/api/subagents/{item_id}/copy")
     async def copy_subagent(item_id: str, payload: dict) -> dict:
+        mutation_repository_id = config_store.repository_id()
         component_name = _copy_component_name(payload)
         source = config_store.get_item(SUBAGENT_TABLE, item_id)
         if source is None:
@@ -344,7 +383,12 @@ def build_agent_config_router(
         assert validated is not None
         copy_id = config_store.new_id()
         try:
-            config_store.save_item(SUBAGENT_TABLE, copy_id, validated)
+            config_store.save_item(
+                SUBAGENT_TABLE,
+                copy_id,
+                validated,
+                expected_repository_id=mutation_repository_id,
+            )
         except ValueError as exc:
             raise management_error(
                 409,
@@ -356,6 +400,7 @@ def build_agent_config_router(
 
     @router.put("/api/subagents/{item_id}")
     async def update_subagent(item_id: str, payload: dict) -> dict:
+        mutation_repository_id = config_store.repository_id()
         if config_store.get_item(SUBAGENT_TABLE, item_id) is None:
             raise management_error(
                 404,
@@ -371,7 +416,12 @@ def build_agent_config_router(
         _raise_if_invalid(report)
         assert validated is not None
         try:
-            config_store.save_item(SUBAGENT_TABLE, item_id, validated)
+            config_store.save_item(
+                SUBAGENT_TABLE,
+                item_id,
+                validated,
+                expected_repository_id=mutation_repository_id,
+            )
         except ValueError as exc:
             raise management_error(
                 409,
@@ -383,6 +433,7 @@ def build_agent_config_router(
 
     @router.delete("/api/subagents/{item_id}")
     async def delete_subagent(item_id: str) -> dict[str, bool]:
+        mutation_repository_id = config_store.repository_id()
         if config_store.get_item(SUBAGENT_TABLE, item_id) is None:
             raise management_error(
                 404,
@@ -394,6 +445,7 @@ def build_agent_config_router(
             SUBAGENT_TABLE,
             item_id,
             detach_references=True,
+            expected_repository_id=mutation_repository_id,
         )
         return {"ok": True}
 

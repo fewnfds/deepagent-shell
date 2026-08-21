@@ -107,7 +107,13 @@ class WorkflowStore:
                     return self._public(item)
         return None
 
-    def save_item(self, item_id: str, data: dict) -> None:
+    def save_item(
+        self,
+        item_id: str,
+        data: dict,
+        *,
+        expected_repository_id: str | None = None,
+    ) -> None:
         existing = self.get_item(item_id)
         empty_definition = WorkflowGraphDefinitionV1().model_dump(mode="json")
         empty_layout = WorkflowLayoutV1().model_dump(mode="json")
@@ -132,7 +138,9 @@ class WorkflowStore:
             else:
                 records.append(stored)
 
-        self._repository.update_config(mutate)
+        self._repository.update_config(
+            mutate, expected_repository_id=expected_repository_id
+        )
         emit_configuration_events(self._events, action="updated" if existing else "created", entity="workflow", entity_id=item_id)
 
     def get_graph(self, item_id: str) -> WorkflowGraphDocumentV1 | None:
@@ -147,6 +155,7 @@ class WorkflowStore:
         document: WorkflowGraphDocumentV1,
         *,
         enabled: bool,
+        expected_repository_id: str | None = None,
     ) -> bool:
         changed = False
 
@@ -160,12 +169,19 @@ class WorkflowStore:
                     changed = True
                     break
 
-        self._repository.update_config(mutate)
+        self._repository.update_config(
+            mutate, expected_repository_id=expected_repository_id
+        )
         if changed:
             emit_configuration_events(self._events, action="updated", entity="workflow", entity_id=item_id)
         return changed
 
-    def delete_items(self, item_ids: list[str]) -> int:
+    def delete_items(
+        self,
+        item_ids: list[str],
+        *,
+        expected_repository_id: str | None = None,
+    ) -> int:
         unique_ids = set(item_ids)
         removed: list[str] = []
 
@@ -179,12 +195,25 @@ class WorkflowStore:
                     retained.append(item)
             config["workflows"] = retained
 
-        self._repository.update_config(mutate)
+        self._repository.update_config(
+            mutate, expected_repository_id=expected_repository_id
+        )
         for item_id in removed:
             emit_configuration_events(self._events, action="deleted", entity="workflow", entity_id=item_id)
         return len(removed)
 
-    def delete_item(self, item_id: str) -> bool:
-        return self.delete_items([item_id]) == 1
+    def delete_item(
+        self,
+        item_id: str,
+        *,
+        expected_repository_id: str | None = None,
+    ) -> bool:
+        return self.delete_items(
+            [item_id], expected_repository_id=expected_repository_id
+        ) == 1
+
     def new_id(self) -> str:
         return self._repository.new_configuration_id()
+
+    def repository_id(self) -> str:
+        return self._repository.repository_id

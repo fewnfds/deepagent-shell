@@ -2,6 +2,12 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+from agent_shell.skills.authoring import (
+    SkillPackageAuthoringError,
+    SkillPackageAuthoringService,
+)
 from agent_shell.storage.file_config import FileConfigRepository
 
 from .app_support import *
@@ -208,6 +214,67 @@ def test_failed_skill_create_rolls_back_private_package(tmp_path: Path, monkeypa
     assert response.status_code == 422, response.text
     assert set(repository.skill_package_instances_root.iterdir()) == before
 
+
+@pytest.mark.parametrize("owner_id", ["", ".", "..", "nested/owner"])
+def test_skill_package_rejects_non_configuration_owner_without_side_effects(
+    tmp_path: Path,
+    owner_id: str,
+) -> None:
+    instances = tmp_path / "instances"
+    instances.mkdir()
+    service = SkillPackageAuthoringService(
+        templates_root=tmp_path / "templates",
+        instances_root=instances,
+    )
+
+    with pytest.raises(SkillPackageAuthoringError) as raised:
+        service.inspect(owner_id)
+
+    assert raised.value.code == "skill_package_owner_invalid"
+    assert list(instances.iterdir()) == []
+
+
+@pytest.mark.parametrize("folder_name", [".", "..", "nested/name", "nested\\name"])
+def test_skill_remove_rejects_non_segment_before_creating_staging(
+    tmp_path: Path,
+    folder_name: str,
+) -> None:
+    owner_id = "11111111-1111-4111-8111-111111111111"
+    instances = tmp_path / "instances"
+    skill = instances / owner_id / "outline"
+    skill.mkdir(parents=True)
+    skill.joinpath("SKILL.md").write_text(
+        "---\nname: outline\ndescription: Outline.\n---\n",
+        encoding="utf-8",
+    )
+    service = SkillPackageAuthoringService(
+        templates_root=tmp_path / "templates",
+        instances_root=instances,
+    )
+    before = sorted(path.relative_to(instances) for path in instances.rglob("*"))
+
+    with pytest.raises(SkillPackageAuthoringError) as raised:
+        service.remove(owner_id, folder_name)
+
+    assert raised.value.code == "skill_folder_invalid"
+    assert sorted(path.relative_to(instances) for path in instances.rglob("*")) == before
+
+
+def test_skill_scan_warnings_use_localized_message_payload_shape(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    skills_dir = tmp_path / "data" / "skills-template"
+    broken = skills_dir / "broken"
+    broken.mkdir(parents=True)
+    broken.joinpath("SKILL.md").write_text("invalid\n", encoding="utf-8")
+    client = make_client(tmp_path, monkeypatch)
+
+    warnings = client.get("/api/skills").json()["errors"]
+
+    assert warnings
+    assert all(set(payload) == {"message_key", "message_args"} for payload in warnings.values())
+
 def test_custom_middleware_catalog_scans_recipes_without_executing_them(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -309,14 +376,10 @@ def test_saving_custom_middleware_source_does_not_execute_it(
         "/api/blocks/custom-middleware",
         json={
             "name": "Static only",
-            "python_package": {"folder": "", "editable_files": ["main.py"]},
-            "python_package_files": {
-                "template_key": selected["key"],
+            "python_package": {"folder": ""},
+            "python_package_template": {
+                "key": selected["key"],
                 "revision": selected["revision"],
-                "files": [
-                    {"path": file["path"], "content": file["content"]}
-                    for file in selected["files"] if file["path"] == "main.py"
-                ],
             },
         },
     )

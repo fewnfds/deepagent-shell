@@ -55,7 +55,8 @@ Invoke-RestMethod "$baseUrl/api/readiness" -Headers $managementHeaders
 | `GET /api/python-package-templates/{kind}` | 当前 script template 和 read-only built-in example |
 | `GET /api/validation/repository` | 当前完整 configuration repository 的 validation |
 
-`{kind}` 当前为 `middleware`、`command` 或 `task-dispatcher`。catalog 是 Node 和 component type 的当前来源；模型连接以
+`{kind}` 当前为 `custom-tool`、`middleware`、`agent-event-output`、`workflow-event-output`、`command` 或
+`task-dispatcher`。catalog 是 Node 和 component type 的当前来源；模型连接以
 `/api/model-connections` 为事实，模型要求与绑定以 `/api/model-requirements` 为事实。
 
 写操作通常沿以下数据流进行：
@@ -65,7 +66,7 @@ Invoke-RestMethod "$baseUrl/api/readiness" -Headers $managementHeaders
 3. 保存每次 POST 返回的 UUID；引用永远使用 UUID，不使用显示名称。
 4. PUT 是完整可写对象更新，不是 PATCH。普通对象可从 GET 结果移除 `id` 后修改；
     Model Connection PUT 中的 `credential` 接受 `null`（同 Provider/Base URL 时保留旧 Key）或新的 write-only Key，不接受 GET 返回的 masked metadata；
-   Python package component 还要移除 manifest、dependency status、error 等 read-only projection，只提交 `name`、`python_package` 和当前 `python_package_files`。
+   Python-backed component 的 PUT 只提交 `name` 和原有 `python_package` 引用；源码文件通过 File Manager API 独立修改。
    GET projection 含有 read-only field，因此不能直接原样作为 PUT payload。
 5. 422 响应中的 structured issue/path 会指出不符合的 field；删除 field 或降低 constraint 不会替代对应修正。
 6. 只要响应含 `X-Request-ID` 或 `request_id`，保留它用于诊断，但不要记录请求中的 secret 或用户隐私。

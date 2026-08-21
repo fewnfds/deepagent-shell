@@ -67,9 +67,11 @@ Middleware 包没有 sandbox，以 Agent Shell 服务进程权限运行。它可
 多个包的文件或变量冲突。
 
 项目 filesystem 的 mapped directories 可读写宿主真实目录。只映射 Agent 确实需要的路径；写入、编辑
-和递归删除工具按最小权限启用。Agent 看到的 Skill namespace 始终只读。文件管理页面只访问 `files`、`skill_templates`、
-`python_templates` 三个 data scope，不代表
-自定义代码或 mapped directory 具有相同限制。
+和递归删除工具按最小权限启用。Agent 看到的 Skill namespace 始终只读。
+
+文件管理页面只接受允许列表内的软件根相对 `data/...` 路径。普通文件、Skill/Python 模板和配置私有包可编辑；
+Component、Agent 与 Workflow 配置树只读。`data/config/`、Repository metadata/import journal、state、logs、media、runtime、
+mapped host directory 和软件根目录外路径均不可达。此边界不限制受信任自定义代码或 Agent Filesystem mapping 自身的权限。
 
 ## 容量与保留
 

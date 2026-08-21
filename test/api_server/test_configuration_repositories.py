@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+from agent_shell.storage.agent_configs import AgentConfigStore
+from agent_shell.storage.blocks import BlockStore
+from agent_shell.storage.file_config import (
+    ActiveRepositoryChangedError,
+    FileConfigRepository,
+)
+from agent_shell.storage.workflows import WorkflowStore
+
 from .support import *
 
 
@@ -80,3 +88,41 @@ def test_invalid_repository_name_does_not_leave_an_orphan_directory(
         assert response.status_code == 409, response.text
         repository_root = tmp_path / "data" / "configuration-repositories"
         assert len(list(repository_root.iterdir())) == 1
+
+
+def test_configuration_stores_reject_writes_after_repository_switch(
+    tmp_path: Path,
+) -> None:
+    repository = FileConfigRepository(tmp_path / "data")
+    expected_repository_id = repository.repository_id
+    alternate_id = str(repository.create_repository("Alternate")["id"])
+    repository.switch_repository(alternate_id)
+    before = repository.config()
+
+    mutations = (
+        lambda: AgentConfigStore(repository).delete_item(
+            "main_agents",
+            "11111111-1111-4111-8111-111111111111",
+            expected_repository_id=expected_repository_id,
+        ),
+        lambda: WorkflowStore(repository).delete_item(
+            "11111111-1111-4111-8111-111111111111",
+            expected_repository_id=expected_repository_id,
+        ),
+        lambda: BlockStore(repository).delete_block(
+            "unsupported-test-type",
+            "11111111-1111-4111-8111-111111111111",
+            expected_repository_id=expected_repository_id,
+        ),
+    )
+
+    for mutate in mutations:
+        with pytest.raises(ActiveRepositoryChangedError):
+            mutate()
+        assert repository.config() == before
+
+    with pytest.raises(ActiveRepositoryChangedError):
+        with repository.exclusive_config_mutation(
+            expected_repository_id=expected_repository_id
+        ):
+            raise AssertionError("the stale mutation body must not run")

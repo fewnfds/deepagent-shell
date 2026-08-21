@@ -97,11 +97,18 @@ export interface ModelRequirementBinding {
   connection: ModelConnection | null
 }
 
-export type FileManagerScope = 'files' | 'skill_templates' | 'python_templates'
 type ManagedFileKind = 'directory' | 'file' | 'unsupported'
 
-export interface ManagedFileScopeCatalog {
-  scopes: FileManagerScope[]
+export interface ManagedFileCapabilities {
+  list: boolean
+  read: boolean
+  create: boolean
+  upload: boolean
+  write: boolean
+  download: boolean
+  archive: boolean
+  rename: boolean
+  delete: boolean
 }
 
 export interface ManagedFileItem {
@@ -111,23 +118,23 @@ export interface ManagedFileItem {
   size: number | null
   modified_at: string
   revision: string
+  capabilities: ManagedFileCapabilities
 }
 
 export interface ManagedDirectory {
-  scope: FileManagerScope
   path: string
+  capabilities: ManagedFileCapabilities
   items: ManagedFileItem[]
 }
 
 export interface ManagedTextFile {
-  scope: FileManagerScope
   path: string
   content: string
   revision: string
+  capabilities: ManagedFileCapabilities
 }
 
 export interface ManagedFileUploadResult {
-  scope: FileManagerScope
   path: string
   kind: 'file'
   size: number
@@ -333,7 +340,6 @@ export interface CapabilityReference {
 
 export interface PythonPackageReference {
   folder: string
-  editable_files: string[]
 }
 
 export interface PythonPackageManifest {
@@ -351,12 +357,6 @@ export interface PythonPackageFile {
   readable?: boolean
 }
 
-export interface PythonPackageFiles {
-  template_key: string
-  files: PythonPackageFile[]
-  revision: string
-}
-
 export interface PythonPackageTemplate {
   format_version: 1
   key: string
@@ -367,10 +367,19 @@ export interface PythonPackageTemplate {
   revision: string
 }
 
-export interface PythonPackageProjection {
-  python_package: PythonPackageReference
+export interface PythonPackageFileProjection {
+  path: string
+  file_manager_path: string
+  size: number
+  modified_at: string
+}
+
+export interface PythonPackageInspection {
+  repository_id: string
+  owner_id: string
+  revision: string
+  files: PythonPackageFileProjection[]
   python_package_manifest: PythonPackageManifest | null
-  python_package_files: Omit<PythonPackageFiles, 'template_key'>
   python_package_error: LocalizedMessagePayload | null
   requirements_fingerprint: string
   dependency_status: 'ready' | 'restart_required' | 'failed'

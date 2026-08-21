@@ -52,43 +52,36 @@ def build_file_manager_router(files: FileManagerService) -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/file-manager")
-    async def list_scopes() -> dict:
-        return files.list_scopes()
-
-    @router.get("/api/file-manager/{scope}")
     async def list_directory(
-        scope: str,
-        path: str = Query(default="", max_length=4096),
+        path: str = Query(default="data", max_length=4096),
     ) -> dict:
         try:
-            return files.list_directory(scope, path)
+            return files.list_directory(path)
         except FileManagerError as exc:
             _raise_file_error(exc)
 
-    @router.post("/api/file-manager/{scope}/directories")
-    async def create_directory(scope: str, payload: FilePathInput) -> dict:
+    @router.post("/api/file-manager/directories")
+    async def create_directory(payload: FilePathInput) -> dict:
         try:
-            return files.create_directory(scope, payload.path)
+            return files.create_directory(payload.path)
         except FileManagerError as exc:
             _raise_file_error(exc)
 
-    @router.post("/api/file-manager/{scope}/text-files")
-    async def create_text_file(scope: str, payload: FilePathInput) -> dict:
+    @router.post("/api/file-manager/text-files")
+    async def create_text_file(payload: FilePathInput) -> dict:
         try:
-            return files.create_text_file(scope, payload.path)
+            return files.create_text_file(payload.path)
         except FileManagerError as exc:
             _raise_file_error(exc)
 
-    @router.put("/api/file-manager/{scope}/upload")
+    @router.put("/api/file-manager/upload")
     async def upload_file(
-        scope: str,
         request: Request,
         path: str = Query(max_length=4096),
         overwrite: bool = Query(default=False),
     ) -> dict:
         try:
             return await files.upload(
-                scope,
                 path,
                 request.stream(),
                 overwrite=overwrite,
@@ -96,13 +89,12 @@ def build_file_manager_router(files: FileManagerService) -> APIRouter:
         except FileManagerError as exc:
             _raise_file_error(exc)
 
-    @router.get("/api/file-manager/{scope}/download")
+    @router.get("/api/file-manager/download")
     async def download_file(
-        scope: str,
         path: str = Query(max_length=4096),
     ) -> FileResponse:
         try:
-            download = files.prepare_download(scope, path)
+            download = files.prepare_download(path)
         except FileManagerError as exc:
             _raise_file_error(exc)
         return FileResponse(
@@ -116,20 +108,19 @@ def build_file_manager_router(files: FileManagerService) -> APIRouter:
             ),
         )
 
-    @router.post("/api/file-manager/{scope}/archive/preview")
-    async def preview_archive(scope: str, payload: FileSelectionInput) -> dict:
+    @router.post("/api/file-manager/archive/preview")
+    async def preview_archive(payload: FileSelectionInput) -> dict:
         try:
-            return files.preview_archive(scope, payload.paths)
+            return files.preview_archive(payload.paths)
         except FileManagerError as exc:
             _raise_file_error(exc)
 
-    @router.post("/api/file-manager/{scope}/archive")
+    @router.post("/api/file-manager/archive")
     async def download_archive(
-        scope: str,
         payload: FileSelectionInput,
     ) -> FileResponse:
         try:
-            download = files.prepare_archive(scope, payload.paths)
+            download = files.prepare_archive(payload.paths)
         except FileManagerError as exc:
             _raise_file_error(exc)
         return FileResponse(
@@ -139,21 +130,19 @@ def build_file_manager_router(files: FileManagerService) -> APIRouter:
             background=BackgroundTask(download.path.unlink, missing_ok=True),
         )
 
-    @router.get("/api/file-manager/{scope}/text")
+    @router.get("/api/file-manager/text")
     async def read_text_file(
-        scope: str,
         path: str = Query(max_length=4096),
     ) -> dict:
         try:
-            return files.read_text(scope, path)
+            return files.read_text(path)
         except FileManagerError as exc:
             _raise_file_error(exc)
 
-    @router.put("/api/file-manager/{scope}/text")
-    async def save_text_file(scope: str, payload: TextFileSaveInput) -> dict:
+    @router.put("/api/file-manager/text")
+    async def save_text_file(payload: TextFileSaveInput) -> dict:
         try:
             return files.save_text(
-                scope,
                 payload.path,
                 payload.content,
                 payload.revision,
@@ -161,20 +150,19 @@ def build_file_manager_router(files: FileManagerService) -> APIRouter:
         except FileManagerError as exc:
             _raise_file_error(exc)
 
-    @router.patch("/api/file-manager/{scope}")
-    async def rename_file(scope: str, payload: FileRenameInput) -> dict:
+    @router.patch("/api/file-manager")
+    async def rename_file(payload: FileRenameInput) -> dict:
         try:
-            return files.rename(scope, payload.path, payload.name)
+            return files.rename(payload.path, payload.name)
         except FileManagerError as exc:
             _raise_file_error(exc)
 
-    @router.delete("/api/file-manager/{scope}")
+    @router.delete("/api/file-manager")
     async def delete_file(
-        scope: str,
         path: str = Query(max_length=4096),
     ) -> dict:
         try:
-            return files.delete(scope, path)
+            return files.delete(path)
         except FileManagerError as exc:
             _raise_file_error(exc)
 

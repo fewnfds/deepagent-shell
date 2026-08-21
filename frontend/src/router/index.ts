@@ -73,9 +73,9 @@ export const router = createRouter({
       meta: { titleKey: 'navigation.system' },
     },
     {
-      path: '/system/files',
+      path: '/files',
       component: FileManagerPage,
-      meta: { titleKey: 'navigation.system' },
+      meta: { titleKey: 'navigation.files' },
     },
     {
       path: '/system/message-interception',

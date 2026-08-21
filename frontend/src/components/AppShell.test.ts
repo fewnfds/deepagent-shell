@@ -63,6 +63,7 @@ function mediaQuery(query: string) {
 }
 
 function titleKeyForPath(path: string): string {
+  if (path === '/files') return 'navigation.files'
   if (path.startsWith('/system/')) return 'navigation.system'
   if (path.startsWith('/agents/')) return 'navigation.agents'
   if (path.startsWith('/workflows')) return 'navigation.workflows'
@@ -81,9 +82,15 @@ async function mountShell(path = '/', api = createShellApi()) {
       '/workflows',
       '/workflows/parents',
       '/workflows/children',
+      '/system',
       '/system/config',
-      '/system/files',
+      '/files',
       '/system/events',
+      '/models',
+      '/agents',
+      '/agent-components',
+      '/workflow-components',
+      '/library',
       '/style-lab',
       '/agents/main',
       '/agents/subagents',
@@ -130,9 +137,9 @@ afterEach(() => {
 
 describe('AppShell', () => {
   it('renders real hash-router navigation without AdminLTE demo content', async () => {
-    const { wrapper: shell } = await mountShell('/system/files')
+    const { wrapper: shell } = await mountShell('/files')
 
-    expect(shell.get('a[href="/system"]').classes()).toContain('active')
+    expect(shell.get('a[href="/files"]').classes()).toContain('active')
     expect(shell.text()).not.toContain('Alexander Pierce')
     expect(shell.text()).not.toContain('Followers')
     expect(shell.find('[data-bs-toggle="dropdown"]').exists()).toBe(false)
@@ -143,15 +150,15 @@ describe('AppShell', () => {
     expect(shell.find('a[href="/agents/main"]').exists()).toBe(false)
     expect(shell.find('a[href^="/agent-components/"]').exists()).toBe(false)
     expect(shell.get('a[href="/style-lab"] .nav-icon').classes()).toContain('bi-sliders')
-    expect(shell.findAll('.app-sidebar .nav-link')).toHaveLength(10)
+    expect(shell.findAll('.app-sidebar .nav-link')).toHaveLength(11)
   })
 
   it('renders the localized route title beside the navigation toggle', async () => {
-    const { router, wrapper: shell } = await mountShell('/system/files')
+    const { router, wrapper: shell } = await mountShell('/files')
 
     const title = shell.get('.app-header .app-page-title')
     expect(title.element.previousElementSibling?.classList).toContain('navbar-nav')
-    expect(title.text()).toBe('系统')
+    expect(title.text()).toBe('文件管理')
 
     await router.push('/agent-components/model')
     await nextTick()

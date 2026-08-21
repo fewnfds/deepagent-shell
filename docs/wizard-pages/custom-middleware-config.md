@@ -6,18 +6,16 @@
 name: Request Middleware
 python_package:
   folder: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
-  editable_files:
-    - main.py
 ```
 
 新建配置时，可以从 `data/templates/agent/custom_middleware/<template-key>/` 加载用户模板，也可以选择
-`examples/agent-components/custom-middleware/<example-key>/` 提供的 `内置示例-<example-key>`，或【套用空模板】从空的
-`main.py` 和空的 `requirements.txt` 开始编辑。用户模板与内置示例可以同名。首次保存会把当前草稿写入
+`examples/agent-components/custom-middleware/<example-key>/` 提供的 `内置示例-<example-key>`。用户模板与内置示例可以同名。
+首次保存会复制所选模板的完整目录到
 `data/configuration-repositories/<repository-uuid>/python_package_instances/agent-middleware/`，生成属于该配置的 `package.json` 和文件夹引用。此后配置只读取、
 编辑自己的扩展代码目录，模板修改不会传播。
 
-编辑器默认显示 `main.py`。用户可以逐行增加包内相对文件路径；编辑器按清单顺序显示并保存这些文本文件。
-不存在的文件只显示警告，填写内容并保存后创建；未列出的额外文件保持原样。
+已保存配置会递归显示私有扩展目录中的全部文件。点击文件的编辑按钮会打开共享文件管理工作区，可继续创建、上传、下载、
+重命名、删除或编辑 UTF-8 文本；文件修改立即落盘。
 
 `main.py` 必须提供同步的 `create_middleware` 工厂，并且只返回一个官方 LangChain `AgentMiddleware`。工厂参数不由
 Agent Shell 固定；运行时会按参数名提供当前可用的 `agent`、`package`、`block`、`assembly`、`backend`、`config`、`references`、

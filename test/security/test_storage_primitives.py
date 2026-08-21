@@ -8,6 +8,8 @@ from agent_shell.storage import atomic_files
 from agent_shell.storage.atomic_files import write_bytes_atomic, write_text_atomic
 from agent_shell.storage.owned_paths import (
     OwnedPathError,
+    is_plain_tree,
+    is_reparse_point,
     require_single_path_segment,
     resolve_owned_relative_path,
 )
@@ -63,3 +65,31 @@ def test_owned_relative_path_rejects_non_normalized_or_escaping_path(
 ) -> None:
     with pytest.raises(OwnedPathError):
         resolve_owned_relative_path(tmp_path, value)
+
+
+def test_reparse_detection_uses_windows_file_attributes() -> None:
+    class ReparsePath:
+        @staticmethod
+        def lstat():
+            return type(
+                "Metadata",
+                (),
+                {"st_mode": 0, "st_file_attributes": 0x400},
+            )()
+
+    assert is_reparse_point(ReparsePath()) is True  # type: ignore[arg-type]
+
+
+def test_plain_tree_rejects_a_detected_link(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "tree"
+    root.mkdir()
+    root.joinpath("linked").write_text("content", encoding="utf-8")
+    monkeypatch.setattr(
+        "agent_shell.storage.owned_paths.is_reparse_point",
+        lambda path: Path(path).name == "linked",
+    )
+
+    assert is_plain_tree(root) is False
