@@ -24,6 +24,7 @@ from agent_shell.runtime.workflow_lifecycle import WorkflowLifecycleService
 from agent_shell.storage.blocks import BlockStore
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.file_config import FileConfigRepository
+from agent_shell.storage.model_connections import ModelResourceSnapshot, ModelResourceStore
 from agent_shell.storage.media_outputs import MediaOutputStore
 from agent_shell.storage.runtime_policy import RuntimePolicyStore
 from agent_shell.storage.workflows import WorkflowStore
@@ -248,9 +249,9 @@ class RequestSnapshotRuntime:
         self,
         configuration: FileConfigRepository,
         *,
-        python_packages_dir: Path,
+        python_packages_dir: Path | Callable[[], Path],
         runtime_dir: Path,
-        skills_dir: Path,
+        skills_dir: Path | Callable[[], Path],
         provider_http_clients: ProviderHttpClients,
         media_outputs: MediaOutputStore,
         workflow_checkpoints: WorkflowCheckpointService,
@@ -258,11 +259,12 @@ class RequestSnapshotRuntime:
         background_tasks: BackgroundTaskManager,
         runtime_diagnostics: RuntimeDiagnostics,
         runtime_policy: RuntimePolicyStore,
+        model_resources: ModelResourceStore | None = None,
     ) -> None:
         self._configuration = configuration
-        self._python_packages_dir = python_packages_dir
+        self._python_packages_dir_source = python_packages_dir
         self._runtime_dir = runtime_dir
-        self._skills_dir = skills_dir
+        self._skills_dir_source = skills_dir
         self._provider_http_clients = provider_http_clients
         self._media_outputs = media_outputs
         self._workflow_checkpoints = workflow_checkpoints
@@ -270,15 +272,18 @@ class RequestSnapshotRuntime:
         self._background_tasks = background_tasks
         self._runtime_diagnostics = runtime_diagnostics
         self._runtime_policy = runtime_policy
+        self._model_resources = model_resources or ModelResourceStore(configuration.data_root)
 
     def capture(self) -> RequestRuntimeSnapshot:
-        repository = self._configuration.clone()
+        with self._configuration.request_snapshot_context() as context:
+            repository, python_packages_dir, skills_dir, _repository_id = context
         blocks = BlockStore(repository)
         configs = AgentConfigStore(repository)
         workflows = WorkflowStore(repository)
-        secrets = ProviderSecretResolver(repository)
+        model_resources = self._model_resources.snapshot()
+        secrets = ProviderSecretResolver(repository, model_resources)
         python_package_validation = PythonPackageValidationService(
-            packages_dir=self._python_packages_dir,
+            packages_dir=python_packages_dir,
             runtime_root=self._runtime_dir,
         )
         validation = ConfigurationValidationService(
@@ -290,16 +295,18 @@ class RequestSnapshotRuntime:
             return AgentRuntime(
                 AgentBuilder(
                     secrets,
-                    python_packages_dir=self._python_packages_dir,
+                    python_packages_dir=python_packages_dir,
                     runtime_dir=self._runtime_dir,
-                    skills_dir=self._skills_dir,
+                    skills_dir=skills_dir,
                     validation=validation,
                     provider_http_clients=self._provider_http_clients,
                     store=self._workflow_lifecycle.store,
+                    model_resources=model_resources,
+                    repository_id=_repository_id,
                     runtime_policy=self._runtime_policy,
                 ),
                 self._media_outputs,
-                python_packages_dir=self._python_packages_dir,
+                python_packages_dir=python_packages_dir,
                 runtime_dir=self._runtime_dir,
                 blocks=blocks,
                 workflow_checkpoints=self._workflow_checkpoints,

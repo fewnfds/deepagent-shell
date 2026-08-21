@@ -11,8 +11,8 @@ import {
   type ManagedComponentType,
   type WorkflowComponentManifest,
   type CapabilityManifest,
+  type SkillPackageInspection,
   type LocalizedMessagePayload,
-  type ModelProviderCatalog,
   type SavedBlock,
   type ValidationReport,
 } from '@/api'
@@ -39,7 +39,6 @@ import {
   type CustomToolCatalogItem,
   type FilesystemImportSource,
   type SkillCatalogItem,
-  type ModelDraft,
   type WorkflowEventOutputCatalogItem,
 } from '@/domain/blocks'
 import type { PythonPackageDraftState } from '@/domain/blocks/pythonPackage'
@@ -49,7 +48,7 @@ import {
   ExceptionRetryEditor,
   FilesystemEditor,
   FilesystemPermissionsEditor,
-  ModelEditor,
+  ModelRequirementEditor,
   AgentEventOutputEditor,
   PromptCachingEditor,
   SkillEditor,
@@ -75,7 +74,7 @@ const props = withDefaults(defineProps<{
 })
 
 const editorComponents: Record<ManagedComponentType, Component> = {
-  model: ModelEditor,
+  'model-requirement': ModelRequirementEditor,
   'system-prompt': SystemPromptEditor,
   filesystem: FilesystemEditor,
   'filesystem-permissions': FilesystemPermissionsEditor,
@@ -128,10 +127,6 @@ const { markClean, runAfterDiscard } = useUnsavedChanges(
   }),
 )
 
-const models = ref<string[]>([])
-const loadingModels = ref(false)
-const providerCatalog = ref<ModelProviderCatalog | null>(null)
-const loadingProviders = ref(false)
 const customTools = ref<CustomToolCatalogItem[]>([])
 const customToolErrors = ref<Record<string, LocalizedMessagePayload>>({})
 const customMiddlewares = ref<CustomMiddlewareCatalogItem[]>([])
@@ -147,18 +142,13 @@ const taskDispatcherPackageErrors = ref<Record<string, LocalizedMessagePayload>>
 const skills = ref<SkillCatalogItem[]>([])
 const filesystems = ref<FilesystemImportSource[]>([])
 const skillErrors = ref<Record<string, LocalizedMessagePayload>>({})
+const privateSkillPackage = ref<SkillPackageInspection | null>(null)
+const privateSkillLoading = ref(false)
+const privateSkillMutating = ref(false)
 const loadingResource = ref(false)
 
 let routeSequence = 0
 let catalogSequence = 0
-let modelRequestSequence = 0
-
-function invalidateModelCatalog(): void {
-  modelRequestSequence += 1
-  models.value = []
-  loadingModels.value = false
-}
-
 function defaultsForType(type: ManagedComponentType | null): unknown {
   const editorKey = manifests.value.find((item) => item.type === type)?.editor_key
   return editorKey ? editorDefaults.value[editorKey] : undefined
@@ -173,13 +163,6 @@ const navigationItems = computed<SectionNavItem[]>(() => manifests.value.map((ma
 
 const editorProps = computed<Record<string, unknown>>(() => {
   switch (activeType.value) {
-    case 'model':
-      return {
-        models: models.value,
-        loadingModels: loadingModels.value,
-        providers: providerCatalog.value?.providers ?? [],
-        loadingProviders: loadingProviders.value,
-      }
     case 'custom-tool':
       return {
         catalog: customTools.value,
@@ -224,6 +207,9 @@ const editorProps = computed<Record<string, unknown>>(() => {
         catalog: skills.value,
         errors: skillErrors.value,
         loading: loadingResource.value,
+        privatePackage: privateSkillPackage.value,
+        privateLoading: privateSkillLoading.value,
+        mutating: privateSkillMutating.value,
       }
     case 'filesystem':
     case 'filesystem-permissions':
@@ -275,6 +261,7 @@ function validationPayloadFromDraft(
   value: BlockDraftBase,
 ): BlockPayload | null {
   const payload = payloadFromDraft(type, value)
+  if (type === 'skill' && !value.id) return null
   if (!usesPythonExtension(type)) return payload
   if (!value.id) return null
   const persisted = { ...payload } as BlockPayload & { python_package_files?: unknown }
@@ -335,30 +322,13 @@ const showDraftValidation = computed(() => (
   || !activeType.value
   || !draft.value
   || !usesPythonExtension(activeType.value)
+  && activeType.value !== 'skill'
   || Boolean(draft.value.id)
 ))
 
 watch(draft, () => {
   saveValidation.value = null
 }, { deep: true })
-
-watch(
-  () => {
-    if (activeType.value !== 'model' || !draft.value) return null
-    const model = draft.value as ModelDraft
-    return [model.id, model.provider, model.base_url, model.credential_secret] as const
-  },
-  (current, previous) => {
-    if (!previous) return
-    if (
-      !current
-      || current[0] !== previous[0]
-      || current[1] !== previous[1]
-      || current[2] !== previous[2]
-      || current[3] !== previous[3]
-    ) invalidateModelCatalog()
-  },
-)
 
 async function loadRoute(): Promise<void> {
   if (manifests.value.length === 0) return
@@ -370,7 +340,6 @@ async function loadRoute(): Promise<void> {
     return
   }
 
-  invalidateModelCatalog()
   routeSequence += 1
   const sequence = routeSequence
   loading.value = true
@@ -393,9 +362,13 @@ async function loadRoute(): Promise<void> {
       ])
       if (sequence !== routeSequence) return
       loadedDraft = draftFromApi(manifest.type, loaded)
+      privateSkillPackage.value = manifest.type === 'skill'
+        ? ((loaded as SavedBlock & { skill_package_contents?: SkillPackageInspection }).skill_package_contents ?? null)
+        : null
       storedRecordInvalid.value = invalid
     } else {
       loadedDraft = blankDraft(manifest.type)
+      privateSkillPackage.value = null
       storedRecordInvalid.value = false
     }
     activeType.value = manifest.type
@@ -404,34 +377,18 @@ async function loadRoute(): Promise<void> {
     draft.value = loadedDraft
     selectedId.value = loadedDraft.id
     markClean()
-    if (manifest.type === 'model') await loadProviderCatalog(sequence)
-    if (!id && (
+    if (manifest.type === 'skill' || (!id && (
       manifest.type === 'custom-middleware'
       || manifest.type === 'agent-event-output'
       || manifest.type === 'workflow-event-output'
       || manifest.type === 'command'
       || manifest.type === 'task-dispatcher'
-    )) await refreshResource()
+    ))) await refreshResource()
   } catch (error) {
     if (sequence !== routeSequence) return
     pageError.value = managementError.describe(error).display
   } finally {
     if (sequence === routeSequence) loading.value = false
-  }
-}
-
-async function loadProviderCatalog(sequence = routeSequence): Promise<void> {
-  loadingProviders.value = true
-  try {
-    const loaded = await managementApi.listModelProviders()
-    if (sequence !== routeSequence) return
-    providerCatalog.value = loaded
-  } catch (error) {
-    if (sequence !== routeSequence) return
-    providerCatalog.value = null
-    notifyFailure('components.feedback.providerCatalogFailed', error)
-  } finally {
-    if (sequence === routeSequence) loadingProviders.value = false
   }
 }
 
@@ -484,7 +441,8 @@ async function startNew(): Promise<void> {
       storedRecordInvalid.value = false
       markClean()
       if (
-        activeType.value === 'custom-middleware'
+        activeType.value === 'skill'
+        || activeType.value === 'custom-middleware'
         || activeType.value === 'agent-event-output'
         || activeType.value === 'workflow-event-output'
         || activeType.value === 'command'
@@ -529,6 +487,7 @@ async function save(): Promise<void> {
   if (!activeType.value || !draft.value) return
   pageError.value = ''
   const packageType = usesPythonExtension(activeType.value)
+  const privateAssetType = packageType || activeType.value === 'skill'
   const packageDraft = packageType
     ? draft.value as BlockDraftBase & PythonPackageDraftState
     : null
@@ -553,7 +512,7 @@ async function save(): Promise<void> {
   ))
   let targetId = draft.value.id
   if (existing) {
-    if (packageType) {
+    if (privateAssetType) {
       pageError.value = t('errors.configurationNameConflict')
       return
     }
@@ -574,6 +533,9 @@ async function save(): Promise<void> {
     const request = targetId ? { id: targetId, ...payload } : payload
     const saved = await managementApi.saveBlock(activeType.value, request)
     draft.value = draftFromApi(activeType.value, saved)
+    privateSkillPackage.value = activeType.value === 'skill'
+      ? ((saved as SavedBlock & { skill_package_contents?: SkillPackageInspection }).skill_package_contents ?? null)
+      : null
     storedRecordInvalid.value = false
     selectedId.value = saved.id
     upsertRecord(saved)
@@ -650,6 +612,14 @@ async function refreshResource(): Promise<void> {
       const result = await managementApi.listSkills()
       skills.value = result.catalog
       skillErrors.value = result.errors
+      if (draft.value?.id) {
+        privateSkillLoading.value = true
+        try {
+          privateSkillPackage.value = await managementApi.inspectPrivateSkills(draft.value.id)
+        } finally {
+          privateSkillLoading.value = false
+        }
+      }
     }
   } catch (error) {
     notifyFailure('components.feedback.resourceFailed', error)
@@ -658,39 +628,27 @@ async function refreshResource(): Promise<void> {
   }
 }
 
-async function fetchModels(request: {
-  provider: string
-  baseUrl: string
-  credential: string
-  blockId: string
-}): Promise<void> {
-  if (activeType.value !== 'model') return
-  const sequence = ++modelRequestSequence
-  models.value = []
-  loadingModels.value = true
+async function addPrivateSkill(templatePath: string): Promise<void> {
+  if (activeType.value !== 'skill' || !draft.value?.id) return
+  privateSkillMutating.value = true
   try {
-    const loaded = await managementApi.fetchModels(
-      request.provider,
-      request.baseUrl,
-      request.credential || null,
-      request.blockId,
-    )
-    if (sequence !== modelRequestSequence) return
-    const current = draft.value as ModelDraft | null
-    if (
-      !current
-      || current.id !== request.blockId
-      || current.provider !== request.provider
-      || current.base_url !== request.baseUrl
-      || current.credential_secret !== request.credential
-    ) return
-    models.value = loaded
+    privateSkillPackage.value = await managementApi.addPrivateSkill(draft.value.id, templatePath)
   } catch (error) {
-    if (sequence !== modelRequestSequence) return
-    models.value = []
-    notifyFailure('components.feedback.modelsFailed', error)
+    notifyFailure('components.feedback.resourceFailed', error)
   } finally {
-    if (sequence === modelRequestSequence) loadingModels.value = false
+    privateSkillMutating.value = false
+  }
+}
+
+async function removePrivateSkill(folder: string): Promise<void> {
+  if (activeType.value !== 'skill' || !draft.value?.id) return
+  privateSkillMutating.value = true
+  try {
+    privateSkillPackage.value = await managementApi.deletePrivateSkill(draft.value.id, folder)
+  } catch (error) {
+    notifyFailure('components.feedback.resourceFailed', error)
+  } finally {
+    privateSkillMutating.value = false
   }
 }
 
@@ -704,6 +662,7 @@ watch(
       records.value = []
       selectedId.value = ''
       draft.value = null
+      privateSkillPackage.value = null
       markClean()
       void loadCatalog()
       return
@@ -798,13 +757,14 @@ onMounted(() => {
           />
         </div>
 
-        <component
+      <component
           :is="currentEditor"
           v-bind="editorProps"
           :model-value="draft"
-          @fetch-models="fetchModels"
           @load-files="loadPackageFiles"
           @refresh="refreshResource"
+          @add-skill="addPrivateSkill"
+          @remove-skill="removePrivateSkill"
           @update:model-value="updateDraft"
         />
       </section>

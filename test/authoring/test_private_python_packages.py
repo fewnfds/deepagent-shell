@@ -9,6 +9,7 @@ import yaml
 
 from agent_shell.python_packages.authoring import PythonPackageAuthoringService
 from agent_shell.command_packages import CommandPackageRuntime, scan_command_package
+from agent_shell.storage.file_config import FileConfigRepository
 
 from .app_support import make_client
 
@@ -193,9 +194,7 @@ def test_manifest_free_template_creates_owned_package_and_keeps_missing_file_war
     }
 
     private_folder = (
-        data_root
-        / "config"
-        / "python_package_instances"
+        FileConfigRepository(data_root).python_package_instances_root
         / "command"
         / folder_name
     )
@@ -209,8 +208,7 @@ def test_manifest_free_template_creates_owned_package_and_keeps_missing_file_war
     assert not (private_folder / "missing.py").exists()
     stored = yaml.safe_load(
         (
-            data_root
-            / "config"
+            FileConfigRepository(data_root).config_root
             / "components"
             / "command"
             / f"{block_id}.yaml"
@@ -236,7 +234,7 @@ def test_loading_python_package_does_not_change_source_revision(
     ).json()["catalog"][0]
     created = _create_command(client, selected, name="Stable revision router")
     owner_id = created["id"]
-    packages_dir = data_root / "config" / "python_package_instances"
+    packages_dir = FileConfigRepository(data_root).python_package_instances_root
     package_dir = packages_dir / "command" / owner_id
     before = scan_command_package(package_dir, owner_id=owner_id)["revision"]
     runtime = CommandPackageRuntime(
@@ -291,9 +289,7 @@ def test_builtin_example_coexists_with_same_named_user_template_and_is_copied(
 
     created = _create_command(client, builtin, name="Built-in router")
     copied = (
-        data_root
-        / "config"
-        / "python_package_instances"
+        FileConfigRepository(data_root).python_package_instances_root
         / "command"
         / created["id"]
         / "main.py"
@@ -383,9 +379,7 @@ def test_existing_package_updates_ordered_text_files_and_creates_new_file(
         "nested/new.py",
     ]
     folder = (
-        data_root
-        / "config"
-        / "python_package_instances"
+        FileConfigRepository(data_root).python_package_instances_root
         / "command"
         / updated["python_package"]["folder"]
     )
@@ -438,7 +432,7 @@ def test_editable_file_paths_cannot_escape_owned_package(
 
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "python_package_file_path_invalid"
-    assert not (data_root / "config" / "python_package_instances" / "outside.py").exists()
+    assert not (FileConfigRepository(data_root).python_package_instances_root / "outside.py").exists()
 
     managed_manifest = client.post(
         "/api/blocks/command",
@@ -492,7 +486,7 @@ def test_legacy_python_package_config_is_rejected(
     )
 
     assert response.status_code == 422
-    instance_root = data_root / "config" / "python_package_instances" / "command"
+    instance_root = FileConfigRepository(data_root).python_package_instances_root / "command"
     assert not instance_root.exists() or not any(instance_root.iterdir())
 
 
@@ -515,9 +509,7 @@ def test_copy_and_delete_follow_private_package_ownership(
     copied = copied_response.json()
     assert copied["python_package"]["editable_files"] == ["main.py"]
     copied_folder = (
-        data_root
-        / "config"
-        / "python_package_instances"
+        FileConfigRepository(data_root).python_package_instances_root
         / "command"
         / copied["python_package"]["folder"]
     )

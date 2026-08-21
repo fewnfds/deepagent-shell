@@ -8,6 +8,12 @@ if TYPE_CHECKING:
     from agent_shell.storage.database import SQLiteDatabase
     from agent_shell.storage.file_config import FileConfigRepository
 
+from agent_shell.storage.configuration_mutations import ConfigurationMutationCoordinator
+from agent_shell.storage.environment import (
+    API_SERVER_ENVIRONMENT_OWNER,
+    InstanceEnvironmentStore,
+)
+
 
 ApiKeyOperation = Literal["keep", "replace", "clear"]
 class ApiServerStore:
@@ -15,10 +21,17 @@ class ApiServerStore:
         self,
         database: SQLiteDatabase,
         config_repository: FileConfigRepository,
+        environment: InstanceEnvironmentStore | None = None,
+        mutations: ConfigurationMutationCoordinator | None = None,
         event_logger: SecurityEventLogger | None = None,
     ) -> None:
         self._database = database
         self._config_repository = config_repository
+        self._mutations = mutations or ConfigurationMutationCoordinator()
+        self._environment = environment or InstanceEnvironmentStore(
+            config_repository.data_root / "config" / "agent-shell.env",
+            mutations=self._mutations,
+        )
         self._events = event_logger
     def settings(self) -> dict[str, object]:
         values = self._config_repository.system().get("api_server", {})
@@ -32,7 +45,7 @@ class ApiServerStore:
         }
 
     def api_key(self) -> str | None:
-        return self._config_repository.secret("AGENT_SHELL_API_KEY")
+        return self._environment.get("AGENT_SHELL_API_KEY")
 
     def is_enabled(self) -> bool:
         return bool(self._config_repository.system().get("api_server", {}).get("enabled", True))
@@ -58,17 +71,37 @@ class ApiServerStore:
         api_key: str | None,
         max_initial_messages: int | None = None,
     ) -> None:
-        def mutate(system: dict, environment: dict[str, str]) -> None:
-            if api_key_operation == "replace" and api_key is not None:
-                environment["AGENT_SHELL_API_KEY"] = api_key
-            elif api_key_operation == "clear":
-                environment.pop("AGENT_SHELL_API_KEY", None)
+        def mutate(system: dict) -> None:
             if max_initial_messages is not None:
                 system.setdefault("api_server", {})[
                     "max_initial_messages"
                 ] = max_initial_messages
 
-        self._config_repository.update_system_and_environment(mutate)
+        with self._mutations.mutation():
+            original_environment = self._environment.owned_values(
+                API_SERVER_ENVIRONMENT_OWNER
+            )
+            try:
+                if api_key_operation == "replace" and api_key is not None:
+                    self._environment.patch(
+                        API_SERVER_ENVIRONMENT_OWNER,
+                        set_values={"AGENT_SHELL_API_KEY": api_key},
+                    )
+                elif api_key_operation == "clear":
+                    self._environment.patch(
+                        API_SERVER_ENVIRONMENT_OWNER,
+                        remove_keys={"AGENT_SHELL_API_KEY"},
+                    )
+                self._config_repository.update_system(mutate)
+            except BaseException:
+                try:
+                    self._environment.replace_owned(
+                        API_SERVER_ENVIRONMENT_OWNER,
+                        original_environment,
+                    )
+                except BaseException:
+                    pass
+                raise
         self._emit_updated()
 
     def _emit_updated(self, *, state: str = "") -> None:

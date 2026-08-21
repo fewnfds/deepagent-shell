@@ -63,7 +63,7 @@ class CapabilityManifest:
 
 CAPABILITY_MANIFESTS = (
     CapabilityManifest(
-        "model", "model", "模型", 1, "bot", "model",
+        "model-requirement", "model-requirement", "模型要求", 1, "bot", "model_requirement",
         subagent_overrideable=True, required=True, subagent_policy="inherit",
     ),
     CapabilityManifest(

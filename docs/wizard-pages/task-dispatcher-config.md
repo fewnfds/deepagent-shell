@@ -26,7 +26,7 @@ state["shared_vars"] = {
 ## Package 与入口
 
 用户模板位于 `data/templates/workflow/task_dispatcher/<template-key>/`；首次保存后复制为
-`data/config/python_package_instances/task-dispatcher/<configuration-uuid>/`。manifest 固定使用 `family: workflow-node`、
+`data/configuration-repositories/<repository-uuid>/python_package_instances/task-dispatcher/<configuration-uuid>/`。manifest 固定使用 `family: workflow-node`、
 `adapter: task-dispatcher`。`main.py` 必须提供同步工厂：
 
 ```python

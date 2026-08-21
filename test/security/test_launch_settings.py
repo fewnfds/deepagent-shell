@@ -13,6 +13,7 @@ from agent_shell.settings import SettingsError, get_settings
 from agent_shell.storage.api_server import ApiServerStore
 from agent_shell.storage.database import SQLiteDatabase
 from agent_shell.storage.file_config import FileConfigRepository
+from agent_shell.storage.environment import serialize_environment
 from agent_shell.storage import permissions as storage_permissions
 from agent_shell.storage.permissions import PermissionStatus
 
@@ -20,7 +21,13 @@ from agent_shell.storage.permissions import PermissionStatus
 def _write_environment_file(root: Path, content: str) -> Path:
     path = root / "data" / "config" / "agent-shell.env"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    values = {
+        name: value
+        for line in content.splitlines()
+        if (separator := line.partition("="))[1]
+        for name, value in [(separator[0], separator[2])]
+    }
+    path.write_text(serialize_environment(values), encoding="utf-8")
     return path
 
 
@@ -49,7 +56,7 @@ def test_create_app_installs_minimal_cors_and_runtime_directories(
     runtime_dir = tmp_path / "runtime"
     data_root = tmp_path / "data"
     python_templates_dir = data_root / "templates"
-    python_package_instances_dir = data_root / "config" / "python_package_instances"
+    python_package_instances_dir = FileConfigRepository(data_root).python_package_instances_root
     _write_system_settings(tmp_path, cors_origins=["https://console.example"])
     _write_environment_file(
         tmp_path, "AGENT_SHELL_MANAGEMENT_TOKEN=management-secret\n"
@@ -382,7 +389,7 @@ def test_windows_launcher_initializes_missing_local_management_password(
     env_text = (
         tmp_path / "data" / "config" / "agent-shell.env"
     ).read_text(encoding="utf-8")
-    assert f"AGENT_SHELL_MANAGEMENT_TOKEN={sentinel}" in env_text
+    assert f'AGENT_SHELL_MANAGEMENT_TOKEN="{sentinel}"' in env_text
     assert "# AGENT_SHELL_MANAGEMENT_TOKEN=" not in env_text
     assert get_settings().management_token.get_secret_value() == sentinel
     captured = capsys.readouterr()
@@ -412,7 +419,9 @@ def test_windows_launcher_keeps_existing_management_password(
         )
         == 0
     )
-    assert env_path.read_text(encoding="utf-8") == original
+    assert env_path.read_text(encoding="utf-8") == serialize_environment(
+        {"AGENT_SHELL_MANAGEMENT_TOKEN": "existing-admin-password"}
+    )
 
 
 def test_windows_launcher_does_not_overwrite_invalid_existing_settings(
@@ -439,7 +448,9 @@ def test_windows_launcher_does_not_overwrite_invalid_existing_settings(
         )
         == 2
     )
-    assert env_path.read_text(encoding="utf-8") == original
+    assert env_path.read_text(encoding="utf-8") == serialize_environment(
+        {"AGENT_SHELL_MANAGEMENT_TOKEN": "existing-admin-password"}
+    )
     assert system_path.read_text(encoding="utf-8") == original_system
     captured = capsys.readouterr()
     assert "AGENT_SHELL_PORT" in captured.err

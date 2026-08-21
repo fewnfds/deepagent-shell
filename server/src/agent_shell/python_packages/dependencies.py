@@ -344,14 +344,16 @@ def prepare_windows_dependencies(
     from agent_shell.middleware_packages.packages import resolve_middleware_package
     from agent_shell.task_dispatcher_packages import resolve_task_dispatcher_package
     from agent_shell.tool_packages import resolve_tool_package
+    from agent_shell.configuration.bundles.journal import recover_configuration_imports
     from agent_shell.storage.file_config import FileConfigRepository
 
     manifest = _runtime_manifest(runtime_root)
     core_fingerprint = str(manifest.get("build_fingerprint", ""))
     if not core_fingerprint:
         raise ValueError("The Windows runtime manifest lacks its build fingerprint.")
-    packages_dir = data_root / "config" / "python_package_instances"
+    recover_configuration_imports(data_root)
     repository = FileConfigRepository(data_root)
+    packages_dir = repository.python_package_instances_root
     config = repository.config()
     components = config.get("components", {})
 

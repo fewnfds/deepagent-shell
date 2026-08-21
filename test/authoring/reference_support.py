@@ -93,6 +93,12 @@ def make_client(tmp_path: Path, monkeypatch) -> TestClient:
         "    return reference_tool\n",
         encoding="utf-8",
     )
+    skill = tmp_path / "data" / "skills-template" / "fixture-skill"
+    skill.mkdir(parents=True, exist_ok=True)
+    (skill / "SKILL.md").write_text(
+        "---\nname: fixture-skill\ndescription: Exercise Skill references.\n---\n",
+        encoding="utf-8",
+    )
     return ScopedAuthTestClient(create_app())
 
 
@@ -122,7 +128,10 @@ def block_payload(capability_type: str, name: str) -> dict:
                 {"path": "/workspace/**", "permission": "read-only"}
             ],
         },
-        "skill": {"name": name, "skills": ["fixture-skill"]},
+        "skill": {
+            "name": name,
+            "skill_template_paths": ["fixture-skill"],
+        },
         "system-prompt": {"name": name, "system_prompt": "Fixture prompt."},
         "subagent": {"name": name},
         "todo-list": {"name": name},

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from agent_shell.storage.file_config import FileConfigRepository
+from agent_shell.storage.model_connections import ModelResourceSnapshot, ModelResourceStore
 
 
 class ProviderCredentialError(RuntimeError):
@@ -13,29 +14,41 @@ class ProviderCredentialError(RuntimeError):
 class ProviderSecretResolver:
     """The only service allowed to return provider credential plaintext."""
 
-    def __init__(self, repository: FileConfigRepository) -> None:
+    def __init__(
+        self,
+        repository: FileConfigRepository,
+        model_connections: ModelResourceStore | ModelResourceSnapshot | None = None,
+    ) -> None:
         self._repository = repository
+        self._connections = model_connections or ModelResourceStore(repository.data_root)
+
+    @property
+    def model_connections(self) -> ModelResourceStore | ModelResourceSnapshot:
+        return self._connections
+
+    @property
+    def repository_id(self) -> str:
+        return self._repository.repository_id
 
     def _stored_model(self, block_id: str) -> dict:
-        for item in self._repository.config().get("components", {}).get("model", []):
-            if item.get("id") == block_id:
-                return item
-        raise ProviderCredentialError("model_not_found", "The model configuration does not exist.")
+        try:
+            return self._connections.resolve_connection(block_id)
+        except KeyError as exc:
+            raise ProviderCredentialError(
+                "model_connection_not_found",
+                "The model connection does not exist.",
+            ) from exc
 
     def resolve_model(self, block_id: str) -> str | None:
         payload = self._stored_model(block_id)
         credential = payload.get("credential")
         if credential is None:
             return None
-        if not isinstance(credential, dict) or set(credential) != {"reference"}:
+        if not isinstance(credential, str):
             raise ProviderCredentialError("provider_credential_invalid", "The model credential metadata is invalid.")
-        reference = credential.get("reference")
-        if not isinstance(reference, str) or not reference:
-            raise ProviderCredentialError("provider_credential_invalid", "The model credential reference is invalid.")
-        value = self._repository.secret(reference)
-        if not value:
+        if not credential:
             raise ProviderCredentialError("provider_secret_reference_missing", "The model credential reference is missing.")
-        return value
+        return credential
 
     def resolve_request(
         self,

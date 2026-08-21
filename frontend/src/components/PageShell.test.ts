@@ -15,6 +15,7 @@ const messages = {
       fileManager: 'File manager',
       messageInterception: 'Message interception',
       eventFeed: 'Log center',
+      workflowLifecycles: 'Run history',
       styleLab: 'Style lab',
       mainAgent: 'Main Agent',
       subagents: 'Subagent',
@@ -52,6 +53,7 @@ describe('PageShell', () => {
       'File manager',
       'Message interception',
       'Log center',
+      'Run history',
     ])
     expect(buttons[3]?.attributes('aria-current')).toBe('page')
     expect(buttons[3]?.classes()).toContain('btn-primary')

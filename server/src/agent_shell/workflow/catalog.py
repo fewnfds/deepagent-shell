@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
+from agent_shell.configuration.identity import ConfigurationId
 from agent_shell.workflow_contracts import WorkflowRole
 
 
@@ -16,7 +16,7 @@ class EmptyNodeConfig(BaseModel):
 class AgentNodeConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    main_agent_id: UUID
+    main_agent_id: ConfigurationId
     # Reserved execution policy for LangGraph's deferred node scheduling.
     defer: bool = False
 
@@ -24,13 +24,13 @@ class AgentNodeConfig(BaseModel):
 class CommandNodeConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    command_id: UUID
+    command_id: ConfigurationId
 
 
 class TaskDispatcherNodeConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    task_dispatcher_id: UUID
+    task_dispatcher_id: ConfigurationId
 
 
 @dataclass(frozen=True, slots=True)

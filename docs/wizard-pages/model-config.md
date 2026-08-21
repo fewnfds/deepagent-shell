@@ -1,56 +1,32 @@
-# 模型
+# 模型连接与模型要求
 
-模型组件保存一个 LangChain Provider integration、连接信息和请求设置。
+## 模型连接
 
-| Provider ID | LangChain 类 | 凭据 |
-| --- | --- | --- |
-| `openai` | `ChatOpenAI` | API Key |
-| `anthropic` | `ChatAnthropic` | API Key |
-| `google_genai` | `ChatGoogleGenerativeAI` | API Key |
-| `google_vertexai` | `ChatVertexAI` | Application Default Credentials |
-| `deepseek` | `ChatDeepSeek` | API Key |
-| `xai` | `ChatXAI` | API Key |
+模型连接是实例私有资源，在【模型 -> 模型连接】创建和维护。它保存 LangChain Provider、`base_url`、具体 `model`、Provider 请求参数以及 write-only `credential`。连接 YAML 位于 `data/config/model-connections/<uuid>.yaml`，凭据实际值只位于 `data/config/agent-shell.env`；普通 API 响应只返回 `masked` 或 `missing` 状态。
+
+模型连接不属于 Configuration Repository，不进入配置 Bundle。接口为：
+
+- `GET/POST /api/model-connections`
+- `GET/PUT/DELETE /api/model-connections/{id}`
+- `POST /api/model-connections/{id}/copy`
+
+模型连接表单沿用现有 Provider contract；`credential: null` 在 Provider 与 Base URL 未变时保留已有 secret。
+
+## 模型要求
+
+模型要求是代理组件中的可迁移 Component type `model-requirement`，payload 只包含名称和多行 `description`：
 
 ```json
 {
   "name": "Reasoning model",
-  "provider": "deepseek",
-  "base_url": "https://api.deepseek.com",
-  "credential": null,
-  "model": "deepseek-reasoner",
-  "provider_settings": {"max_tokens": 4096},
-  "tool_choice": null,
-  "response_format": null,
-  "model_settings": {}
+  "description": "Use a reasoning-capable model for planning and tool selection."
 }
 ```
 
-## 字段
+Main Agent 和 Subagent 通过模型要求 UUID 引用。模型要求进入 Bundle 闭包，但 Provider、具体 model、credential 和模型连接不会进入 Bundle。
 
-- `base_url` 必须是无 userinfo、query、fragment 的 HTTP(S) URL；
-- `credential` 是 write-only。编辑时留空会在 Provider 与 Base URL 未变时保留已有值；改变连接而未填
-  新 Key 会清除已有值；Vertex AI 固定使用 ADC；
-- `provider_settings` 只接受当前 Provider 白名单中的原生参数，切换 Provider 会清空该对象；OpenAI 的
-  `use_responses_api` 为 `false` 或缺省时使用 OpenAI-compatible Chat Completions，只有选择官方
-  OpenAI Responses API 时才设为 `true`；
-- `tool_choice` 可以是字符串、布尔值、JSON 对象或 `null`；
-- `response_format` 为 JSON Schema 对象或 `null`，非空时要求 `title` 和 `description`；
-- `model_settings` 为 bind 阶段 JSON 对象，不能包含 `tools`、`tool_choice` 或 `response_format`。
+## 模型映射
 
-当前 Provider 参数：
+【模型 -> 模型映射】递归显示当前 Configuration Repository 的全部模型要求。每张卡显示 description，并从本机模型连接列表中显式选择绑定；一个连接可供多个要求复用。同一仓库的映射保存在 `data/config/model-bindings.yaml`，不随 Bundle 导出。
 
-- OpenAI：`use_responses_api`, `temperature`, `max_completion_tokens`, `top_p`, `stop_sequences`, `presence_penalty`,
-  `frequency_penalty`, `seed`, `timeout`, `max_retries`, `stream_usage`, `streaming`, `reasoning_effort`,
-  `service_tier`, `logprobs`, `top_logprobs`；
-- DeepSeek/xAI：同上，token 字段为 `max_tokens`；
-- Anthropic：`temperature`, `max_tokens_to_sample`, `top_p`, `stop`, `timeout`, `max_retries`,
-  `stream_usage`, `streaming`, `effort`；
-- Google GenAI：`temperature`, `max_tokens`, `top_p`, `stop_sequences`, `presence_penalty`,
-  `frequency_penalty`, `seed`, `request_timeout`, `retries`, `streaming`, `thinking_level`,
-  `thinking_budget`, `include_thoughts`；
-- Google Vertex AI：`temperature`, `max_tokens`, `top_p`, `stop_sequences`, `presence_penalty`,
-  `frequency_penalty`, `seed`, `timeout`, `max_retries`, `streaming`, `logprobs`, `thinking_budget`,
-  `include_thoughts`。
-
-【获取模型】调用 `${base_url}/models` 读取 OpenAI-compatible 模型目录。真实 Agent 是否支持某个参数组合
-由目标 Provider 和模型决定，静态保存校验不会发起探测。
+导入后模型要求默认未绑定。页面和全局 repository validation 显示 warning；实际运行在 Agent 装配边界返回 `model_requirement_unbound`，不会启动模型调用。删除模型连接会清除相关 binding，不会自动替换。

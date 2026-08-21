@@ -13,6 +13,13 @@ import type {
   ManagedComponentType,
   CatalogResponse,
   ConfigurationValidationSettings,
+  ConfigurationBundleImportResult,
+  ConfigurationBundlePreview,
+  ConfigurationBundleResolutions,
+  ConfigurationBundleRoot,
+  ConfigurationRepository,
+  ConfigurationRepositoryActivation,
+  ConfigurationRepositoryList,
   RuntimePolicySettings,
   RuntimePolicyUpdate,
   PythonPackageTemplate,
@@ -39,6 +46,8 @@ import type {
   MessageInterception,
   FileManagerScope,
   ModelProviderCatalog,
+  ModelConnection,
+  ModelRequirementBinding,
   PythonPackageFiles,
   MainAgent,
   MainAgentPayload,
@@ -47,6 +56,7 @@ import type {
   RuntimeDiagnostics,
   SavedBlock,
   SkillResource,
+  SkillPackageInspection,
   Subagent,
   SubagentPayload,
   SystemLogSettings,
@@ -107,6 +117,41 @@ export const managementApi = {
     return managementRequest('/api/model-providers')
   },
 
+  listModelConnections(): Promise<ModelConnection[]> {
+    return managementRequest('/api/model-connections')
+  },
+
+  getModelConnection(id: string): Promise<ModelConnection> {
+    return managementRequest(recordPath('/api/model-connections', id))
+  },
+
+  saveModelConnection<T extends object>(data: T & { id?: string }): Promise<ModelConnection> {
+    const id = typeof data.id === 'string' ? data.id : ''
+    return managementRequest(id ? recordPath('/api/model-connections', id) : '/api/model-connections', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(withoutId(data)),
+    })
+  },
+
+  copyModelConnection(id: string, name: string): Promise<ModelConnection> {
+    return managementRequest(`${recordPath('/api/model-connections', id)}/copy`, jsonBody({ name }))
+  },
+
+  deleteModelConnection(id: string): Promise<{ ok: boolean }> {
+    return managementRequest(recordPath('/api/model-connections', id), { method: 'DELETE' })
+  },
+
+  listModelRequirements(): Promise<ModelRequirementBinding[]> {
+    return managementRequest('/api/model-requirements')
+  },
+
+  bindModelRequirement(id: string, connectionId: string | null): Promise<ModelRequirementBinding> {
+    return managementRequest(`${recordPath('/api/model-requirements', id)}/binding`, {
+      method: 'PUT',
+      body: JSON.stringify({ connection_id: connectionId }),
+    })
+  },
+
   listCustomToolTemplates(): Promise<ResourceCatalog<PythonPackageTemplate>> {
     return managementRequest('/api/python-package-templates/custom-tool')
   },
@@ -135,6 +180,72 @@ export const managementApi = {
     return managementRequest('/api/skills')
   },
 
+  inspectPrivateSkills(blockId: string): Promise<SkillPackageInspection> {
+    return managementRequest(`${recordPath('/api/blocks/skill', blockId)}/skills`)
+  },
+
+  addPrivateSkill(blockId: string, templatePath: string): Promise<SkillPackageInspection> {
+    return managementRequest(
+      `${recordPath('/api/blocks/skill', blockId)}/skills`,
+      jsonBody({ template_path: templatePath }),
+    )
+  },
+
+  deletePrivateSkill(blockId: string, folder: string): Promise<SkillPackageInspection> {
+    return managementRequest(
+      `${recordPath('/api/blocks/skill', blockId)}/skills/${encodeURIComponent(folder)}`,
+      { method: 'DELETE' },
+    )
+  },
+
+  listConfigurationRepositories(): Promise<ConfigurationRepositoryList> {
+    return managementRequest('/api/configuration-repositories')
+  },
+
+  createConfigurationRepository(name: string): Promise<ConfigurationRepository> {
+    return managementRequest('/api/configuration-repositories', jsonBody({ name }))
+  },
+
+  activateConfigurationRepository(id: string): Promise<ConfigurationRepositoryActivation> {
+    return managementRequest(
+      `${recordPath('/api/configuration-repositories', id)}/activate`,
+      { method: 'POST' },
+    )
+  },
+
+  exportConfigurationBundle(root: ConfigurationBundleRoot): Promise<Blob> {
+    return managementDownload(
+      '/api/configuration-bundles/export',
+      jsonBody(root),
+    )
+  },
+
+  previewConfigurationBundle(bundle: File): Promise<ConfigurationBundlePreview> {
+    const body = new FormData()
+    body.append('bundle', bundle, bundle.name)
+    return managementRequest('/api/configuration-bundles/preview', {
+      method: 'POST',
+      body,
+    })
+  },
+
+  importConfigurationBundle(
+    bundle: File,
+    bundleSha256: string,
+    resolutions: ConfigurationBundleResolutions,
+  ): Promise<ConfigurationBundleImportResult> {
+    const body = new FormData()
+    body.append('bundle', bundle, bundle.name)
+    body.append('request', JSON.stringify({
+      bundle_sha256: bundleSha256,
+      resolutions,
+    }))
+    return managementRequest('/api/configuration-bundles/import', {
+      method: 'POST',
+      body,
+    })
+  },
+
   listWorkflows(workflowRole?: WorkflowRole): Promise<Workflow[]> {
     const query = workflowRole ? `?workflow_role=${encodeURIComponent(workflowRole)}` : ''
     return managementRequest(`/api/workflows${query}`)
@@ -161,6 +272,10 @@ export const managementApi = {
 
   deleteWorkflow(id: string): Promise<{ ok: boolean }> {
     return managementRequest(`/api/workflows/${id}`, { method: 'DELETE' })
+  },
+
+  deleteWorkflows(ids: string[]): Promise<{ deleted: number }> {
+    return managementRequest('/api/workflows/delete', jsonBody({ ids }))
   },
 
   listWorkflowLifecycles(

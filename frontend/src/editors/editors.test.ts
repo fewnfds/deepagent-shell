@@ -374,6 +374,29 @@ describe('dedicated block editors', () => {
     })
   })
 
+  it('keeps Template paths distinct while preventing duplicate private Skill names', async () => {
+    const editor = mountEditor(SkillEditor, {
+      modelValue: skillAdapter.blank(skillDefaults), defaults: skillDefaults,
+      catalog: [
+        { name: 'research', folder: 'research', template_path: 'team-a/research', description: 'First' },
+        { name: 'research', folder: 'research', template_path: 'team-b/research', description: 'Second' },
+      ],
+    })
+    const templateRows = editor.findAll('[data-testid="skill-template-item"]')
+    expect(templateRows.map((row) => row.text())).toEqual([
+      expect.stringContaining('team-a/research'),
+      expect.stringContaining('team-b/research'),
+    ])
+    expect(templateRows[0]!.get('details').attributes('open')).toBeUndefined()
+    await templateRows[0]!.get('button').trigger('click')
+
+    expect(editor.findAll('[data-testid="private-skill-item"]')).toHaveLength(1)
+    expect(templateRows[1]!.get('button').attributes('disabled')).toBeDefined()
+    expect(editor.emitted('update:modelValue')?.at(-1)?.[0]).toMatchObject({
+      skill_template_paths: ['team-a/research'],
+    })
+  })
+
   it('renders queried models as selectable cards', async () => {
     const editor = mountEditor(ModelEditor, {
       modelValue: modelAdapter.blank(),

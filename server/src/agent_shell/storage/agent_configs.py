@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 
+from agent_shell.configuration.identity import name_collision_key
 from agent_shell.security_events import SecurityEventLogger, emit_configuration_events
 from agent_shell.storage.file_config import FileConfigRepository
 from agent_shell.storage.reference_mutations import detach_subagent_references
@@ -54,7 +55,12 @@ class AgentConfigStore:
 
         def mutate(config: dict) -> None:
             records = config.setdefault(table, [])
-            if any(item.get(identity) == name and item.get("id") != item_id for item in records):
+            if any(
+                name_collision_key(str(item.get(identity, "")))
+                == name_collision_key(name)
+                and item.get("id") != item_id
+                for item in records
+            ):
                 raise ValueError(f"名称「{name}」已存在")
             stored = deepcopy(data)
             stored["id"] = item_id
@@ -102,3 +108,5 @@ class AgentConfigStore:
 
     def delete_item(self, table: str, item_id: str, *, detach_references: bool = False) -> bool:
         return self.delete_items(table, [item_id], detach_references=detach_references) == 1
+    def new_id(self) -> str:
+        return self._repository.new_configuration_id()

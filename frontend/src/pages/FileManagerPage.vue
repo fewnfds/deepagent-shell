@@ -67,6 +67,10 @@ const confirmation = useConfirmation()
 const managementError = useManagementError()
 const { notify } = useToasts()
 
+function scopeLabel(value: FileManagerScope): string {
+  return t(`fileManager.roots.${value}`)
+}
+
 const scopes = ref<FileManagerScope[]>([])
 const scope = ref<FileManagerScope>('files')
 const atManagerRoot = ref(true)
@@ -542,7 +546,7 @@ onMounted(() => { void loadScopes() })
                 <td>
                   <a href="#" class="d-flex align-items-center gap-2" @click.prevent="openScope(item)">
                     <i class="bi bi-folder" aria-hidden="true" />
-                    {{ item }}
+                    {{ scopeLabel(item) }}
                   </a>
                 </td>
                 <td>{{ t('fileManager.kinds.directory') }}</td>

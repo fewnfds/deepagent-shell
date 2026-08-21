@@ -10,7 +10,7 @@ keyword 拆成中英混合词组。搜索源码时直接使用英文原名或 id
 
 固定使用以下 terminology：
 
-- Model、Agent Event Output、system prompt、Filesystem、Filesystem Permissions；
+- Model Connection、Model Requirement、Agent Event Output、system prompt、Filesystem、Filesystem Permissions；
 - Custom Tool、Custom Middleware、Workflow Input Context（WIC）、Workflow Event Output；
 - Main Agent、Subagent、Task Dispatcher；
 - Lifecycle、Run、thread、invocation、checkpoint；
@@ -80,12 +80,12 @@ End 不遵循隐式汇聚。
 Work Node 可以是当前 Node catalog 允许的任意 Work Node。可达 Work Node 没有 outgoing Edge 时，路径自然结束。
 一般 Workflow 可按业务放入实际需要的 Work Node，condition 和 successor selection 由 Command Node 表达。
 包含 loop 的 Graph，需要明确 exit condition 的 path 使用显式 End。
-Model、Agent Event Output、Main Agent 和 Workflow Input Context（WIC）Middleware 只在使用 Agent Node 时出现。
+Model Requirement、Agent Event Output、Main Agent 和 Workflow Input Context（WIC）Middleware 只在使用 Agent Node 时出现。
 客户端 `messages[]` 不会自动写入 Workflow root State；不同配置的 WIC 负责为不同 Agent 单独构造 Agent context。
 
 ## Component 建议
 
-向用户建议自行创建所需 Model、Filesystem，并指明它们的 reference relationship。
+向用户建议自行创建所需 Model Connection、Model Requirement、Filesystem，并指明它们的 reference relationship。
 
 ## 文档索引
 

@@ -20,8 +20,8 @@ CORS 只接受明确的 `http://` 或 `https://` origin，不支持 `*`、userin
 
 ## Secret 与用户内容
 
-Provider credential、API Key、管理密码和 LangSmith API Key 保存在实例 `data/config/` 中：YAML 只保存模型 key
-的变量引用，`agent-shell.env` 保存实际敏感值；当前文件不是加密 vault。保护整个 `data/` 的磁盘权限、备份和传输，
+Provider credential、API Key、管理密码和 LangSmith API Key 保存在实例 `data/config/` 中：模型连接 YAML 只保存
+credential 的变量引用，`agent-shell.env` 保存实际敏感值；这些文件不提供加密存储。保护整个 `data/` 的磁盘权限、备份和传输，
 不要提交 Git 或公开分享。
 
 普通 API、普通 DOM、系统日志和运行诊断摘要不回显 credential、Bearer token、宿主敏感路径、traceback 或
@@ -33,6 +33,25 @@ Provider 原始错误正文。以下 management-only 功能会按产品用途保
 
 运行诊断列表只保存固定结构化身份和安全摘要字段。异常详情附件不经过摘要白名单或脱敏，并只从管理台日志中心对应的
 运行诊断行下载；它保留 Provider 异常链，供实例维护者调查网关原始响应。正常完成不会产生诊断或附件。
+
+## 配置 Bundle
+
+配置 Bundle 是 management-only 的 ZIP 导入/导出入口，用于迁移单个配置根及其声明式依赖闭包。它不承担实例备份；
+不会包含 `system.yaml`、`agent-shell.env`、credential value/environment reference、SQLite、运行历史、日志、媒体、普通文件、
+Python template 或 runtime cache。模型要求会随配置导入，模型连接和 credential 需要在目标实例单独维护并完成模型映射。
+
+平台不能可靠识别用户自行写进 prompt、Skill 文件或 Python source 的任意 secret。导出者在分享前仍需审查这些内容；导入者
+需把 Bundle 中的 Python package 视为受信任代码，并在启用 Workflow 前审查源码、requirements、文件与网络权限。导入和
+导出阶段只执行静态语法/manifest/factory contract 扫描，不 import module、不安装 dependency、不调用 factory。
+
+ZIP 只接受当前 format version、canonical `manifest.json`、规范相对 POSIX path 和匹配的 SHA-256 asset tree hash；绝对路径、
+`..`、反斜杠、重复/大小写冲突 entry、file/directory 前缀冲突、symlink/reparse、未声明文件、未知 kind/type/field
+或缺失依赖闭包会被拒绝。
+Filesystem host content 不进入 Bundle；绝对 mapped path 和全部 virtual source path 必须在目标实例显式重绑。
+
+导入永不覆盖配置或资产。preview 生成的新 UUID map 与 bundle digest 必须原样提交；Workflow 固定 disabled。提交使用 staging 与
+prepared/committed journal，失败或下次启动恢复只清理该 journal 声明的新 UUID 路径，不把导入前对象作为回滚目标。部署侧的
+反向代理仍负责按实例资源条件设置上传 request body 边界；应用不隐藏另设 Bundle 大小、文件数或展开字节上限。
 
 ## 用户代码与文件系统
 
@@ -48,7 +67,7 @@ Middleware 包没有 sandbox，以 Agent Shell 服务进程权限运行。它可
 多个包的文件或变量冲突。
 
 项目 filesystem 的 mapped directories 可读写宿主真实目录。只映射 Agent 确实需要的路径；写入、编辑
-和递归删除工具按最小权限启用。Agent 看到的 Skill namespace 始终只读。文件管理页面只访问 `files`、`skills`、
+和递归删除工具按最小权限启用。Agent 看到的 Skill namespace 始终只读。文件管理页面只访问 `files`、`skill_templates`、
 `python_templates` 三个 data scope，不代表
 自定义代码或 mapped directory 具有相同限制。
 
@@ -82,17 +101,21 @@ api_server:
   message_interception_enabled: false
 ```
 
-`data/config/agent-shell.env` 保存敏感变量：
+`data/config/agent-shell.env` 使用 UTF-8 的 canonical `KEY=<JSON string literal>` 行格式保存敏感变量，例如：
 
-```dotenv
-AGENT_SHELL_MANAGEMENT_TOKEN=<management password>
-AGENT_SHELL_API_KEY=<FastAPI/OpenAI shell key>
-AGENT_SHELL_MODEL_<id>_API_KEY=<model API key>
-LANGSMITH_API_KEY=<LangSmith API key>
+```text
+AGENT_SHELL_API_KEY="<FastAPI/OpenAI shell key>"
+AGENT_SHELL_MANAGEMENT_TOKEN="<management password>"
+AGENT_SHELL_MODEL_<UUID_WITHOUT_HYPHENS>_API_KEY="<model credential>"
+LANGSMITH_API_KEY="<LangSmith API key>"
 ```
 
-模型 YAML 使用 `$AGENT_SHELL_MODEL_<id>_API_KEY` 形式引用对应变量；其他字段（包括 prompt、base URL、filesystem、
-middleware 和 tool 配置）直接写入 YAML。LangSmith 连接在系统配置中管理；启用或修改 Endpoint、API Key、
+值按 JSON 字符串解析，因此引号、反斜杠、换行和前后空白可以精确保留。管理页面负责生成该格式；未知的 `AGENT_SHELL_*` key、重复 key、BOM
+或无效 JSON 会使启动失败。
+
+模型连接 YAML 位于 `data/config/model-connections/<uuid>.yaml`，credential 实际值由连接的 env 变量保存；
+模型要求 YAML 只保存名称和说明，写入 Configuration Repository。其他字段（包括 prompt、filesystem、middleware 和 tool 配置）直接写入 YAML。
+LangSmith 连接在系统配置中管理；启用或修改 Endpoint、API Key、
 Workspace ID 时会在落盘前验证 Key 能否访问对应区域，保存后重启生效。进程使用官方显式 Client 配置，并同步
 设置 `LANGSMITH_TRACING`、`LANGSMITH_API_KEY`、`LANGSMITH_ENDPOINT`、`LANGSMITH_PROJECT` 和可选
 `LANGSMITH_WORKSPACE_ID` 供 LangChain 生态读取。关闭时只在本项目进程环境中强制 tracing 为 `false`。开启后，标准 LangSmith trace

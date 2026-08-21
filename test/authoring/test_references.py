@@ -99,7 +99,7 @@ def test_missing_custom_tool_reference_is_reported(
                 ("model", "agent-event-output"),
             ),
             "tool_refs": [
-                {"tool_id": "00000000-0000-0000-0000-000000000099"}
+                {"tool_id": "00000000-0000-4000-8000-000000000099"}
             ],
         },
     )
@@ -177,7 +177,7 @@ def test_generic_draft_validation_covers_each_target_without_writing(
                     {
                         "type": "model",
                         "mode": "replace",
-                        "block_id": "00000000-0000-0000-0000-000000000000",
+                        "block_id": "00000000-0000-4000-8000-000000000000",
                     }
                 ],
             ),

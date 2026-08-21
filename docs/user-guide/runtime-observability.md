@@ -30,7 +30,7 @@ Provider 异常仍作为 cause 进入上述完整异常链；实例维护者从�
 
 ## 运行历史
 
-【Workflow / 运行历史】以一次顶层请求的 Lifecycle 聚合 root Workflow、background Workflow 和 background Agent Run。
+【系统 / 运行历史】以一次顶层请求的 Lifecycle 聚合 root Workflow、background Workflow 和 background Agent Run。
 Run Registry 是 Run 身份与终态的权威记录；append-only Event Journal 保存 Run、Workflow Node、Agent、Model 和 Tool
 的结构边界。Node 每次执行使用独立 `node_invocation_id/span_id`，同一 Node 的循环、重试和 fan-out 不会合并。
 Run 完成、失败、超时或取消时，Journal 会以相同终态关闭仍开放的 Node、Agent、Model 和 Tool span，Timeline 不保留伪 `running` 子项。

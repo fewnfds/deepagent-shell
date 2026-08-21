@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import shutil
 import tempfile
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 from agent_shell.python_packages.contracts import (
@@ -265,13 +265,22 @@ class PythonPackageAuthoringService:
         *,
         templates_root: Path,
         examples_root: Path,
-        instances_root: Path,
+        instances_root: Path | Callable[[], Path],
         runtime_root: Path,
     ) -> None:
         self._templates_root = templates_root
         self._examples_root = examples_root
-        self._instances_root = instances_root
+        self._instances_root_source = instances_root
         self._runtime_root = runtime_root
+
+    @property
+    def _instances_root(self) -> Path:
+        value = (
+            self._instances_root_source()
+            if callable(self._instances_root_source)
+            else self._instances_root_source
+        )
+        return Path(value).resolve()
 
     @staticmethod
     def supports(block_type: str) -> bool:

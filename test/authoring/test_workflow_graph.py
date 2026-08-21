@@ -1354,6 +1354,7 @@ def test_runtime_builds_repeated_main_agent_references_per_workflow_node() -> No
             self._blocks = None
             self._workflow_checkpoints = None
             self._runtime_diagnostics = None
+            self._runtime_policy = None
             lifecycle_store = InMemoryStore()
 
             class Lifecycle:

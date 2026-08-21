@@ -15,6 +15,7 @@ from agent_shell.runtime.agent_builder import BuiltAgent
 from agent_shell.runtime.context import WorkflowRuntimeContext
 from agent_shell.runtime.state import AgentShellState
 from agent_shell.runtime.workflow_lifecycle import lifecycle_invocations_namespace
+from agent_shell.storage.file_config import FileConfigRepository
 from agent_shell.task_dispatcher import TaskDispatcherError, run_task_dispatcher
 from agent_shell.task_dispatcher_packages import TaskDispatcherPackageRuntime
 from agent_shell.workflow import admit_workflow_document, compile_workflow
@@ -448,10 +449,7 @@ def test_builtin_dispatcher_example_creates_owned_python_package(
     assert response.status_code == 200, response.text
     created = response.json()
     manifest_path = (
-        tmp_path
-        / "data"
-        / "config"
-        / "python_package_instances"
+        FileConfigRepository(tmp_path / "data").python_package_instances_root
         / "task-dispatcher"
         / created["id"]
         / "package.json"

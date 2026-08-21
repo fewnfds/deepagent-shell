@@ -114,7 +114,10 @@ class WorkflowStore:
 
         def mutate(config: dict) -> None:
             records = config.setdefault("workflows", [])
-            if any(item.get("name") == data["name"] and item.get("id") != item_id for item in records):
+            if any(
+                item.get("name") == data["name"] and item.get("id") != item_id
+                for item in records
+            ):
                 raise ValueError("workflow name already exists")
             stored = deepcopy(data)
             stored["id"] = item_id
@@ -183,3 +186,5 @@ class WorkflowStore:
 
     def delete_item(self, item_id: str) -> bool:
         return self.delete_items([item_id]) == 1
+    def new_id(self) -> str:
+        return self._repository.new_configuration_id()

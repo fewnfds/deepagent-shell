@@ -1,16 +1,16 @@
 # 创建组件
 
-【组件】提供当前 catalog 声明的可复用配置。保存组件后，还要由 Workflow、Main Agent 或 Subagent 按各自所有权引用才会参与运行。
+【代理组件】和【工作流组件】提供当前 catalog 声明的可复用配置。保存组件后，还要由 Workflow、Main Agent 或 Subagent 按各自所有权引用才会参与运行。
 
 | 组件 | 用途 | Main Agent 要求 | Subagent 策略 |
 | --- | --- | --- | --- |
-| 模型 | Provider、模型名、凭据和请求设置 | 必选 | 继承或替换 |
+| 模型要求 | 名称和能力说明 | 必选 | 继承或替换 |
 | 系统提示词 | 基础 system prompt | 可选 | 继承、替换或关闭 |
 | 文件系统 | Agent workspace、映射、初始文件和文件工具 | 自选；未选时使用最小 Filesystem | 继承、自选或最小 |
 | 文件系统权限 | 路径权限与文件工具、提示词覆写 | 可选 | 继承、替换或关闭 |
 | 待办计划 | `write_todos` 与规划提示 | 可选 | 继承、替换或关闭 |
 | 自定义工具 | 一个 Python extension 导出一个 LangChain Tool | 通过有序引用装配 | Subagent 独立有序引用 |
-| Skill | 选择 `data/resources/skills/` 中的 Skill | 可选 | 继承、替换或关闭 |
+| Skill | 从 `data/skills-template/` 选择合法 Template，并复制到 Component 私有包 | 可选 | 继承、替换或关闭 |
 | 自定义 Middleware | 定义一个 LangChain Middleware | 通过有序引用装配 | Subagent 独立有序引用 |
 | Agent 事件输出 | 用文件化 Python 扩展把 v3 Agent 事件投影为响应文本 | 必选 | 只用于顶层 Main Agent |
 | 异常重试 | Provider 或 ModelRetryMiddleware 重试 | 可选 | 继承、替换或关闭 |
@@ -24,6 +24,8 @@
 组件编辑页从服务端 catalog 取得字段、默认值和资源发现结果。草稿校验与保存校验都以后端 contract
 为准；记录使用 UUID 引用，重命名不会断开引用。
 
+Skill Template 允许多层目录；遇到某层的 `SKILL.md` 就停止向下递归。合法 Template 以规范相对路径显示，坏 Template 只在 catalog 报告且不能被选择。创建 Skill Component 时会复制所选目录到 owner UUID 的私有包，之后 Template 改动不会影响 Component。私有包可由用户或 AI 直接编辑；同名 Add 不覆盖，必须先删除并刷新。私有包问题只在组件页载入或刷新时显示 warning，不阻塞保存或运行。
+
 详细字段见[组件说明](../wizard-pages/README.md)。Agent 组合方式见
 [装配 Main Agent 与 Subagent](configuration-workflow.md)。
 
@@ -32,7 +34,7 @@ Subagent 分别通过有序 `middleware_refs` 装配多个配置。格式、安�
 [自定义 Middleware 扩展](middleware-packages.md)。
 
 Custom Tool 组件同样保存一个配置独占的 Python 扩展，但固定由同步 `create_tool()` 返回一个 LangChain `BaseTool`。Main Agent
-和 Subagent 分别通过有序 `tool_refs` 装配多个配置；一个配置不再保存 Tool name 列表。完整 contract 见
+和 Subagent 分别通过有序 `tool_refs` 装配多个配置；每个配置对应一个 Tool。完整 contract 见
 [自定义工具](../wizard-pages/custom-tool-config.md)。
 
 Workflow Input Context 是重要的 Agent 上下文约定，但不是 catalog 组件。当前通过普通 Custom Middleware 实现：从

@@ -1,18 +1,34 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from copy import deepcopy
-import os
 from pathlib import Path
-import tempfile
 import threading
 from typing import Any, Callable
 
 import yaml
 
+from agent_shell.configuration.identity import require_configuration_id
+from agent_shell.configuration.identity import new_configuration_id as generate_configuration_id
+from agent_shell.configuration.repositories import (
+    ConfigurationRepositoryDescriptor,
+    create_configuration_repository,
+    ensure_active_configuration_repository,
+    list_configuration_repositories,
+    load_configuration_repository,
+    write_active_configuration_repository,
+)
+from agent_shell.configuration.storage import validate_configuration_snapshot
+from agent_shell.storage.atomic_files import write_text_atomic
+from agent_shell.storage.configuration_mutations import ConfigurationMutationCoordinator
+from agent_shell.storage.environment import (
+    InstanceEnvironmentStore,
+    environment_owner_for_name,
+)
 
-CONFIG_VERSION = 1
-API_KEY_ENV = "AGENT_SHELL_API_KEY"
-LANGSMITH_API_KEY_ENV = "LANGSMITH_API_KEY"
+
+CONFIG_VERSION = 2
 
 
 def _default_config() -> dict[str, Any]:
@@ -62,41 +78,54 @@ def _read_yaml(path: Path, default: dict[str, Any]) -> dict[str, Any]:
     return value
 
 
-def _read_env(path: Path) -> dict[str, str]:
-    values: dict[str, str] = {}
-    if not path.exists():
-        return values
-    for raw_line in path.read_text(encoding="utf-8-sig").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if line.lower().startswith("export "):
-            line = line[7:].lstrip()
-        key, separator, value = line.partition("=")
-        if separator and key.strip():
-            values[key.strip()] = value.strip().strip('"')
-    return values
-
-
-def _write_atomic(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            "w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False
-        ) as stream:
-            temporary = Path(stream.name)
-            stream.write(text)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
-    finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
-
-
 def _dump_yaml(value: dict[str, Any]) -> str:
     return yaml.safe_dump(value, allow_unicode=True, sort_keys=False, default_flow_style=False)
+
+
+def _configuration_document(
+    path: Path,
+    document: dict[str, Any],
+    *,
+    kind: str,
+    component_type: str = "",
+    identity_field: str = "",
+) -> tuple[str, dict[str, Any]]:
+    expected_keys = {"kind", "schema_version", "id", "payload"}
+    if component_type:
+        expected_keys.update({"type", "name"})
+    elif identity_field:
+        expected_keys.add(identity_field)
+    if set(document) != expected_keys:
+        raise ValueError(f"configuration document envelope is invalid: {path}")
+    if document.get("kind") != kind:
+        raise ValueError(f"configuration document kind is invalid: {path}")
+    if type(document.get("schema_version")) is not int or document.get(
+        "schema_version"
+    ) != CONFIG_VERSION:
+        raise ValueError(f"configuration document schema_version is invalid: {path}")
+    if component_type and document.get("type") != component_type:
+        raise ValueError(f"configuration document type is invalid: {path}")
+    item_id = require_configuration_id(
+        document.get("id"),
+        label=f"configuration document id in {path}",
+    )
+    if path.stem != item_id:
+        raise ValueError(
+            f"configuration filename must match its document id: {path}"
+        )
+    payload = document.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError(f"configuration payload must be a mapping: {path}")
+    reserved_payload_fields = {"id"}
+    if component_type:
+        reserved_payload_fields.add("name")
+    elif identity_field:
+        reserved_payload_fields.add(identity_field)
+    if reserved_payload_fields.intersection(payload):
+        raise ValueError(
+            f"configuration payload duplicates envelope identity: {path}"
+        )
+    return item_id, payload
 
 
 class FileConfigRepository:
@@ -110,45 +139,116 @@ class FileConfigRepository:
         *,
         _config: dict[str, Any] | None = None,
         _system: dict[str, Any] | None = None,
-        _env: dict[str, str] | None = None,
         _persist: bool = True,
+        _repository: ConfigurationRepositoryDescriptor | None = None,
+        mutations: ConfigurationMutationCoordinator | None = None,
+        environment: InstanceEnvironmentStore | None = None,
     ) -> None:
         self.data_root = data_root.resolve()
-        self.config_root = self.data_root / "config"
-        self.components_root = self.config_root / self._COMPONENT_DIR
-        self.agents_root = self.config_root / "agents"
-        self.workflows_root = self.config_root / "workflows"
-        self.system_path = self.config_root / "system.yaml"
-        self.environment_path = self.config_root / "agent-shell.env"
+        self._instance_config_root = self.data_root / "config"
+        self.system_path = self._instance_config_root / "system.yaml"
         self._lock = threading.RLock()
+        self._mutations = mutations or ConfigurationMutationCoordinator()
+        self._environment = environment or InstanceEnvironmentStore(
+            self._instance_config_root / "agent-shell.env",
+            mutations=self._mutations,
+        )
         self._persist = _persist
+        self._active_repository = (
+            _repository
+            if _repository is not None
+            else (
+                ensure_active_configuration_repository(self.data_root)
+                if _persist
+                else ConfigurationRepositoryDescriptor(
+                    id="",
+                    name="",
+                    root=self._instance_config_root,
+                )
+            )
+        )
         self._config = deepcopy(_config) if _config is not None else self._load_config()
         self._system = deepcopy(_system) if _system is not None else _read_yaml(self.system_path, _default_system())
-        loaded_environment = dict(_env) if _env is not None else _read_env(self.environment_path)
-        allowed_environment = self._allowed_environment_names(self._config)
-        self._env = {
-            name: value
-            for name, value in loaded_environment.items()
-            if name in allowed_environment
-        }
         self._normalize()
+        validate_configuration_snapshot(
+            self._config,
+            config_version=CONFIG_VERSION,
+        )
         if self._persist and not self.system_path.exists():
-            _write_atomic(self.system_path, _dump_yaml(self._system))
+            write_text_atomic(self.system_path, _dump_yaml(self._system))
+
+    @property
+    def config_root(self) -> Path:
+        return self._active_repository.root
+
+    @property
+    def components_root(self) -> Path:
+        return self.config_root / self._COMPONENT_DIR
+
+    @property
+    def agents_root(self) -> Path:
+        return self.config_root / "agents"
+
+    @property
+    def workflows_root(self) -> Path:
+        return self.config_root / "workflows"
+
+    @property
+    def python_package_instances_root(self) -> Path:
+        return self._active_repository.python_packages_root
+
+    @property
+    def skill_package_instances_root(self) -> Path:
+        return self._active_repository.skill_packages_root
+
+    @property
+    def configuration_imports_root(self) -> Path:
+        return self._active_repository.imports_root
+
+    @property
+    def repository_id(self) -> str:
+        return self._active_repository.id
+
+    @property
+    def repository_name(self) -> str:
+        return self._active_repository.name
+
+    def _load_config_from(self, root: Path) -> dict[str, Any]:
+        previous = self._active_repository
+        self._active_repository = ConfigurationRepositoryDescriptor(
+            id=previous.id,
+            name=previous.name,
+            root=root.resolve(),
+        )
+        try:
+            return self._load_config()
+        finally:
+            self._active_repository = previous
 
     def _load_config(self) -> dict[str, Any]:
         config = _default_config()
         for directory in self.components_root.glob("*") if self.components_root.exists() else ():
             if not directory.is_dir():
                 continue
+            if directory.name == "model":
+                raise ValueError(
+                    "legacy model components are not accepted; use model-requirement "
+                    "and instance model connections"
+                )
             records: list[dict[str, Any]] = []
             for path in sorted(directory.glob("*.yaml")):
                 document = _read_yaml(path, {})
-                payload = document.get("payload")
-                if not isinstance(payload, dict):
-                    raise ValueError(f"component payload must be a mapping: {path}")
-                record = {**deepcopy(payload), "id": document.get("id"), "name": document.get("name")}
-                if directory.name == "model" and isinstance(record.get("credential"), str) and record["credential"].startswith("$"):
-                    record["credential"] = {"reference": record["credential"][1:]}
+                item_id, payload = _configuration_document(
+                    path,
+                    document,
+                    kind="component",
+                    component_type=directory.name,
+                )
+                record = {
+                    **deepcopy(payload),
+                    "id": item_id,
+                    "name": document.get("name"),
+                }
                 records.append(record)
             config["components"][directory.name] = records
 
@@ -158,19 +258,32 @@ class FileConfigRepository:
             if directory.exists():
                 for path in sorted(directory.glob("*.yaml")):
                     document = _read_yaml(path, {})
-                    payload = document.get("payload")
-                    if not isinstance(payload, dict):
-                        raise ValueError(f"agent payload must be a mapping: {path}")
-                    records.append({**deepcopy(payload), "id": document.get("id"), identity: document.get(identity)})
+                    item_id, payload = _configuration_document(
+                        path,
+                        document,
+                        kind="main_agent" if category == "main" else "subagent",
+                        identity_field=identity,
+                    )
+                    records.append(
+                        {
+                            **deepcopy(payload),
+                            "id": item_id,
+                            identity: document.get(identity),
+                        }
+                    )
             config[key] = records
 
         if self.workflows_root.exists():
             for path in sorted(self.workflows_root.glob("*.yaml")):
                 document = _read_yaml(path, {})
-                payload = document.get("payload")
-                if not isinstance(payload, dict):
-                    raise ValueError(f"workflow payload must be a mapping: {path}")
-                config["workflows"].append({**deepcopy(payload), "id": document.get("id")})
+                item_id, payload = _configuration_document(
+                    path,
+                    document,
+                    kind="workflow",
+                )
+                config["workflows"].append(
+                    {**deepcopy(payload), "id": item_id}
+                )
         return config
 
     @staticmethod
@@ -206,30 +319,120 @@ class FileConfigRepository:
         self._normalize_config(self._config)
         self._normalize_system(self._system)
 
-    @staticmethod
-    def _allowed_environment_names(config: dict[str, Any]) -> set[str]:
-        names = {
-            "AGENT_SHELL_MANAGEMENT_TOKEN",
-            API_KEY_ENV,
-            LANGSMITH_API_KEY_ENV,
-        }
-        models = config.get("components", {}).get("model", [])
-        if not isinstance(models, list):
-            return names
-        for model in models:
-            credential = model.get("credential") if isinstance(model, dict) else None
-            reference = credential.get("reference") if isinstance(credential, dict) else None
-            if isinstance(reference, str) and reference:
-                names.add(reference)
-        return names
-
     @classmethod
     def empty(cls, data_root: Path) -> "FileConfigRepository":
-        return cls(data_root, _config=_default_config(), _system=_default_system(), _env=_read_env(data_root / "config" / "agent-shell.env"), _persist=False)
+        return cls(
+            data_root,
+            _config=_default_config(),
+            _system=_default_system(),
+            _persist=False,
+        )
+
+    @classmethod
+    def from_snapshot(
+        cls,
+        data_root: Path,
+        config: dict[str, Any],
+    ) -> "FileConfigRepository":
+        """Build an isolated repository view for validation without persistence."""
+
+        return cls(
+            data_root,
+            _config=config,
+            _system=_default_system(),
+            _persist=False,
+        )
 
     def clone(self) -> "FileConfigRepository":
         with self._lock:
-            return FileConfigRepository(self.data_root, _config=self._config, _system=self._system, _env=self._env, _persist=False)
+            return FileConfigRepository(
+                self.data_root,
+                _config=self._config,
+                _system=self._system,
+                _persist=False,
+                _repository=self._active_repository,
+                mutations=self._mutations,
+                environment=self._environment,
+            )
+
+    def list_repositories(self) -> list[dict[str, object]]:
+        with self._lock:
+            active_id = self.repository_id
+            return [
+                item.as_dict(active=item.id == active_id)
+                for item in list_configuration_repositories(self.data_root)
+            ]
+
+    def create_repository(self, name: str) -> dict[str, object]:
+        with self._mutations.mutation(), self._lock:
+            if any(
+                item.name.casefold() == name.strip().casefold()
+                for item in list_configuration_repositories(self.data_root)
+            ):
+                raise ValueError("configuration repository name already exists")
+            descriptor = create_configuration_repository(self.data_root, name)
+            return descriptor.as_dict(active=False)
+
+    @staticmethod
+    def _configuration_ids(config: dict[str, Any]) -> set[str]:
+        ids = {
+            str(item.get("id"))
+            for records in config.get("components", {}).values()
+            if isinstance(records, list)
+            for item in records
+            if isinstance(item, dict) and item.get("id")
+        }
+        for key in ("main_agents", "subagents", "workflows"):
+            ids.update(
+                str(item.get("id"))
+                for item in config.get(key, [])
+                if isinstance(item, dict) and item.get("id")
+            )
+        return ids
+
+    def all_configuration_ids(self) -> set[str]:
+        with self._lock:
+            result: set[str] = set()
+            for descriptor in list_configuration_repositories(self.data_root):
+                snapshot = self._load_config_from(descriptor.root)
+                current = self._configuration_ids(snapshot)
+                if result.intersection(current):
+                    raise ValueError(
+                        "configuration ids must be globally unique across repositories"
+                    )
+                result.update(current)
+            return result
+
+    def new_configuration_id(self) -> str:
+        with self._lock:
+            existing = self.all_configuration_ids()
+            value = generate_configuration_id()
+            while value in existing:
+                value = generate_configuration_id()
+            return value
+
+    def switch_repository(self, repository_id: str) -> dict[str, object]:
+        with self._mutations.mutation(), self._lock:
+            descriptor = load_configuration_repository(
+                self.data_root / "configuration-repositories" / repository_id
+            )
+            candidate = self._load_config_from(descriptor.root)
+            self._normalize_config(candidate)
+            validate_configuration_snapshot(candidate, config_version=CONFIG_VERSION)
+            target_ids = self._configuration_ids(candidate)
+            for other in list_configuration_repositories(self.data_root):
+                if other.id == descriptor.id:
+                    continue
+                if target_ids.intersection(
+                    self._configuration_ids(self._load_config_from(other.root))
+                ):
+                    raise ValueError(
+                        "configuration ids must be globally unique across repositories"
+                    )
+            write_active_configuration_repository(self.data_root, descriptor.id)
+            self._active_repository = descriptor
+            self._config = candidate
+            return descriptor.as_dict(active=True)
 
     def config(self) -> dict[str, Any]:
         with self._lock:
@@ -239,11 +442,46 @@ class FileConfigRepository:
         with self._lock:
             return deepcopy(self._system)
 
-    def update_config(self, mutator: Callable[[dict[str, Any]], Any]) -> Any:
+    @contextmanager
+    def exclusive_config_mutation(self) -> Iterator[None]:
+        """Serialize one configuration mutation that also owns external assets."""
+
+        with self._mutations.mutation(), self._lock:
+            yield
+
+    @contextmanager
+    def request_snapshot_context(
+        self,
+    ) -> Iterator[tuple["FileConfigRepository", Path, Path, str]]:
+        """Capture config and both private asset roots from one active repository."""
+
         with self._lock:
+            yield (
+                self.clone(),
+                self.python_package_instances_root,
+                self.skill_package_instances_root,
+                self.repository_id,
+            )
+
+    def update_config(
+        self,
+        mutator: Callable[[dict[str, Any]], Any],
+        *,
+        expected_repository_id: str | None = None,
+    ) -> Any:
+        with self._mutations.mutation(), self._lock:
+            if (
+                expected_repository_id is not None
+                and self.repository_id != expected_repository_id
+            ):
+                raise RuntimeError("active configuration repository changed during mutation")
             candidate = deepcopy(self._config)
             result = mutator(candidate)
             self._normalize_config(candidate)
+            validate_configuration_snapshot(
+                candidate,
+                config_version=CONFIG_VERSION,
+            )
             try:
                 self._flush_config(candidate)
             except BaseException:
@@ -256,111 +494,26 @@ class FileConfigRepository:
             return result
 
     def update_system(self, mutator: Callable[[dict[str, Any]], Any]) -> Any:
-        with self._lock:
+        with self._mutations.mutation(), self._lock:
             candidate = deepcopy(self._system)
             result = mutator(candidate)
             self._normalize_system(candidate)
             if self._persist:
-                _write_atomic(self.system_path, _dump_yaml(candidate))
+                write_text_atomic(self.system_path, _dump_yaml(candidate))
             self._system = candidate
             return result
 
-    def update_config_and_environment(
-        self,
-        mutator: Callable[[dict[str, Any], dict[str, str]], Any],
-    ) -> Any:
-        with self._lock:
-            original_config = deepcopy(self._config)
-            original_environment = dict(self._env)
-            candidate_config = deepcopy(self._config)
-            candidate_environment = dict(self._env)
-            result = mutator(candidate_config, candidate_environment)
-            self._normalize_config(candidate_config)
-            self._commit_config_and_environment(
-                original_config,
-                original_environment,
-                candidate_config,
-                candidate_environment,
-            )
-            self._config = candidate_config
-            self._env = candidate_environment
-            return result
-
-    def update_system_and_environment(
-        self,
-        mutator: Callable[[dict[str, Any], dict[str, str]], Any],
-    ) -> Any:
-        with self._lock:
-            original_system = deepcopy(self._system)
-            original_environment = dict(self._env)
-            candidate_system = deepcopy(self._system)
-            candidate_environment = dict(self._env)
-            result = mutator(candidate_system, candidate_environment)
-            self._normalize_system(candidate_system)
-            staged_environment = {**original_environment, **candidate_environment}
-            try:
-                if staged_environment != original_environment:
-                    self._write_environment(staged_environment)
-                if self._persist:
-                    _write_atomic(self.system_path, _dump_yaml(candidate_system))
-                if candidate_environment != staged_environment:
-                    self._write_environment(candidate_environment)
-            except BaseException:
-                try:
-                    if self._persist:
-                        _write_atomic(self.system_path, _dump_yaml(original_system))
-                    self._write_environment(original_environment)
-                except BaseException:
-                    pass
-                raise
-            self._system = candidate_system
-            self._env = candidate_environment
-            return result
-
     def secret(self, name: str) -> str | None:
-        with self._lock:
-            return self._env.get(name)
+        return self._environment.get(name)
 
     def set_secret(self, name: str, value: str | None) -> None:
-        with self._lock:
-            candidate = dict(self._env)
-            if value is None:
-                candidate.pop(name, None)
-            else:
-                candidate[name] = value
-            self._write_environment(candidate)
-            self._env = candidate
-
-    def _write_environment(self, environment: dict[str, str]) -> None:
-        if not self._persist:
-            return
-        lines = [f"{key}={item}" for key, item in sorted(environment.items())]
-        _write_atomic(
-            self.environment_path,
-            "\n".join(lines) + ("\n" if lines else ""),
-        )
-
-    def _commit_config_and_environment(
-        self,
-        original_config: dict[str, Any],
-        original_environment: dict[str, str],
-        candidate_config: dict[str, Any],
-        candidate_environment: dict[str, str],
-    ) -> None:
-        staged_environment = {**original_environment, **candidate_environment}
-        try:
-            if staged_environment != original_environment:
-                self._write_environment(staged_environment)
-            self._flush_config(candidate_config)
-            if candidate_environment != staged_environment:
-                self._write_environment(candidate_environment)
-        except BaseException:
-            try:
-                self._flush_config(original_config)
-                self._write_environment(original_environment)
-            except BaseException:
-                pass
-            raise
+        owner = environment_owner_for_name(name)
+        if owner is None:
+            raise ValueError("environment key does not have a registered owner")
+        if value is None:
+            self._environment.patch(owner, remove_keys={name})
+        else:
+            self._environment.patch(owner, set_values={name: value})
 
     def _flush_config(self, config: dict[str, Any]) -> None:
         if not self._persist:
@@ -376,7 +529,7 @@ class FileConfigRepository:
                 document = {"kind": "component", "type": block_type, "schema_version": CONFIG_VERSION, "id": record["id"], "name": record.get("name", ""), "payload": self._serialize_record(record, block_type)}
                 path = directory / f"{record['id']}.yaml"
                 expected.add(path)
-                _write_atomic(path, _dump_yaml(document))
+                write_text_atomic(path, _dump_yaml(document))
         self._write_agents(config, expected)
         self._write_workflows(config, expected)
         for directory in (
@@ -400,7 +553,7 @@ class FileConfigRepository:
                 path = directory / f"{record['id']}.yaml"
                 expected.add(path)
                 payload = {k: deepcopy(v) for k, v in record.items() if k not in {"id", identity}}
-                _write_atomic(path, _dump_yaml({"kind": kind, "schema_version": CONFIG_VERSION, "id": record["id"], identity: record.get(identity, ""), "payload": payload}))
+                write_text_atomic(path, _dump_yaml({"kind": kind, "schema_version": CONFIG_VERSION, "id": record["id"], identity: record.get(identity, ""), "payload": payload}))
 
     def _write_workflows(
         self, config: dict[str, Any], expected: set[Path]
@@ -412,13 +565,9 @@ class FileConfigRepository:
             path = self.workflows_root / f"{record['id']}.yaml"
             expected.add(path)
             payload = {k: deepcopy(v) for k, v in record.items() if k != "id"}
-            _write_atomic(path, _dump_yaml({"kind": "workflow", "schema_version": CONFIG_VERSION, "id": record["id"], "payload": payload}))
+            write_text_atomic(path, _dump_yaml({"kind": "workflow", "schema_version": CONFIG_VERSION, "id": record["id"], "payload": payload}))
 
     @staticmethod
     def _serialize_record(record: dict, block_type: str) -> dict:
         payload = {k: deepcopy(v) for k, v in record.items() if k not in {"id", "name"}}
-        if block_type == "model":
-            credential = payload.get("credential")
-            if isinstance(credential, dict) and isinstance(credential.get("reference"), str):
-                payload["credential"] = f"${credential['reference']}"
         return payload

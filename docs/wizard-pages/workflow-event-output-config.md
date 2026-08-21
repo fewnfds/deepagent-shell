@@ -8,10 +8,8 @@ OpenAI 响应。画布 Agent Node 产生的事件仍使用各 Main Agent 的[Age
 可从 `GET /api/python-package-templates/workflow-event-output` 加载内置示例，保存后源码与示例解耦。
 
 内置示例使用与 Agent 事件输出相同的 HTML `details` 结构，并为 `custom`、`lifecycle`、`values`、`updates`、`tasks`、
-`checkpoints`、`input`、`input.requested`、`debug` 和 `other` 分别保留分支。之前页面上每类事件各有一段脚本；迁移到一个
-`output(event)` 后，示例曾暂时只展示 `custom` 和 `lifecycle`，这只是示例收缩，不是 Workflow runtime 删除了事件类别。
-旧版页面虽然列出全部类别，但默认只启用 `custom` 和 `lifecycle`；其余类别主要用于 State、checkpoint、task 和 debug 观察，
-默认不进入公开文本是为了避免把内部运行数据直接刷进响应。现在统一 package 仍可按需为这些类别返回字符串。
+`checkpoints`、`input`、`input.requested`、`debug` 和 `other` 分别保留分支。各分支都在同一个 `output(event)` 中按需处理；
+未返回字符串的事件不会写入公开响应，Workflow runtime 仍保留完整事件分类供运行历史和调试使用。
 
 ```python
 def output(event):

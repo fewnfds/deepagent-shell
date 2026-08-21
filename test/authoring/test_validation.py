@@ -6,10 +6,12 @@ from pydantic import ValidationError
 from agent_shell.contracts import (
     CustomMiddlewareBlock,
     FilesystemBlock,
-    ModelBlock,
+    MainAgentProfile,
     SubagentProfile,
     SystemPromptBlock,
 )
+from agent_shell.workflow.catalog import AgentNodeConfig
+from agent_shell.workflow_contracts import WorkflowDefinition
 from agent_shell.validation import ValidationIssue, report_from_validation_error
 
 
@@ -98,6 +100,57 @@ def test_validation_issue_rejects_non_primitive_message_arguments() -> None:
 
 
 @pytest.mark.parametrize(
+    ("model", "payload"),
+    [
+        (
+            MainAgentProfile,
+            {
+                "name": "Invalid reference",
+                "capability_refs": [
+                    {"type": "model", "block_id": "not-a-uuid"}
+                ],
+            },
+        ),
+        (
+            SubagentProfile,
+            {
+                "component_name": "Invalid reference",
+                "name": "worker",
+                "description": "Invalid reference.",
+                "settings": {
+                    "capability_overrides": [
+                        {
+                            "type": "model",
+                            "mode": "replace",
+                            "block_id": "not-a-uuid",
+                        }
+                    ]
+                },
+            },
+        ),
+        (
+            WorkflowDefinition,
+            {
+                "name": "Invalid reference",
+                "workflow_role": "parent",
+                "workflow_event_output_id": "not-a-uuid",
+            },
+        ),
+        (
+            AgentNodeConfig,
+            {"main_agent_id": "not-a-uuid"},
+        ),
+    ],
+)
+def test_declared_configuration_references_require_canonical_uuid4(
+    model: type,
+    payload: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError):
+        model.model_validate(payload)
+
+
+@pytest.mark.parametrize(
     ("model", "payload", "scope", "owner_type", "expected"),
     [
         (
@@ -114,72 +167,6 @@ def test_validation_issue_rejects_non_primitive_message_arguments() -> None:
                 "contract.subagent_name_format_invalid",
                 "validation.issue.contract.subagentNameFormatInvalid",
                 "name",
-                {},
-            ),
-        ),
-        (
-            ModelBlock,
-            {
-                "name": "Local model",
-                "provider": "OpenAI",
-                "base_url": "http://127.0.0.1:8000/v1",
-                "credential": "secret",
-                "model": "test-model",
-                "provider_settings": {},
-                "tool_choice": None,
-                "response_format": None,
-                "model_settings": {},
-            },
-            "block",
-            "model",
-            (
-                "contract.provider_format_invalid",
-                "validation.issue.contract.providerFormatInvalid",
-                "provider",
-                {},
-            ),
-        ),
-        (
-            ModelBlock,
-            {
-                "name": "Local model",
-                "provider": "unsupported_provider",
-                "base_url": "http://127.0.0.1:8000/v1",
-                "credential": "secret",
-                "model": "test-model",
-                "provider_settings": {},
-                "tool_choice": None,
-                "response_format": None,
-                "model_settings": {},
-            },
-            "block",
-            "model",
-            (
-                "contract.provider_unavailable",
-                "validation.issue.contract.providerUnavailable",
-                "provider",
-                {},
-            ),
-        ),
-        (
-            ModelBlock,
-            {
-                "name": "Local model",
-                "provider": "openai",
-                "base_url": "not-an-url",
-                "credential": "secret",
-                "model": "test-model",
-                "provider_settings": {},
-                "tool_choice": None,
-                "response_format": None,
-                "model_settings": {},
-            },
-            "block",
-            "model",
-            (
-                "contract.base_url_invalid",
-                "validation.issue.contract.baseUrlInvalid",
-                "base_url",
                 {},
             ),
         ),

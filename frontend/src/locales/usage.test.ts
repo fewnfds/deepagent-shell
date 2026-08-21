@@ -11,6 +11,7 @@ const srcRoot = join(process.cwd(), 'src')
 const backendRoot = join(process.cwd(), '..', 'server', 'src', 'agent_shell')
 const nonLocaleDottedLiterals = new Set([
   'fields.length',
+  'models.length',
 ])
 
 function sourceFiles(directory: string): string[] {

@@ -154,7 +154,10 @@ def _payload(capability_type: str, name: str, secret: str, *, update: bool) -> d
                 {"path": "/workspace/**", "permission": "read-only"}
             ],
         },
-        "skill": {"name": name, "skills": ["fixture-skill"]},
+        "skill": {
+            "name": name,
+            "skill_template_paths": ["fixture-skill"],
+        },
         "system-prompt": {"name": name, "system_prompt": "Smoke prompt."},
         "subagent": {"name": name},
         "summarization": {"name": name},
@@ -225,6 +228,12 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
         if not key.upper().startswith("AGENT_SHELL_")
     }
     configuration = FileConfigRepository(data_dir)
+    skill_template = data_dir / "skills-template" / "fixture-skill"
+    skill_template.mkdir(parents=True, exist_ok=True)
+    (skill_template / "SKILL.md").write_text(
+        "---\nname: fixture-skill\ndescription: Exercise the process smoke.\n---\n",
+        encoding="utf-8",
+    )
     configuration.set_secret("AGENT_SHELL_MANAGEMENT_TOKEN", management_token)
     configuration.update_system(
         lambda system: system["settings"].update(
@@ -370,6 +379,11 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
                 update_payload["python_package_files"] = created[
                     "python_package_files"
                 ]
+            if capability_type == "skill":
+                update_payload = {
+                    "name": f"{mode}-{capability_type}-updated",
+                    "skill_package": created["skill_package"],
+                }
             updated = _request(
                 client,
                 "PUT",
@@ -465,7 +479,7 @@ def _run_mode(repo_root: Path, scratch_root: Path) -> dict:
         )
 
         model_id = blocks["model"]["id"]
-        model_path = data_dir / "config" / "components" / "model" / f"{model_id}.yaml"
+        model_path = configuration.config_root / "components" / "model" / f"{model_id}.yaml"
         model_text = model_path.read_text(encoding="utf-8")
         assert provider_secret not in model_text
         model_secret_name = f"AGENT_SHELL_MODEL_{model_id.replace('-', '').upper()}_API_KEY"

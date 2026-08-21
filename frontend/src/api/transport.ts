@@ -299,7 +299,12 @@ async function authenticatedFetch(
     if (init.signal?.aborted) throw abortError()
     const headers = new Headers(init.headers)
     headers.set('Accept', accept)
-    if (init.body !== null && init.body !== undefined && !headers.has('Content-Type')) {
+    if (
+      init.body !== null
+      && init.body !== undefined
+      && !(init.body instanceof FormData)
+      && !headers.has('Content-Type')
+    ) {
       headers.set('Content-Type', 'application/json')
     }
     let requestGeneration = -1

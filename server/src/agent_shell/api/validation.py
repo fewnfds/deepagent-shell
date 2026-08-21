@@ -12,6 +12,7 @@ from agent_shell.storage.validation_settings import (
     ConfigurationValidationSettingsStore,
 )
 from agent_shell.validation.service import ConfigurationValidationService
+from agent_shell.validation.repository import RepositoryValidationService
 
 
 class DraftValidationTarget(BaseModel):
@@ -39,13 +40,14 @@ class ConfigurationValidationSettingsUpdate(BaseModel):
 
 def build_validation_router(
     validation: ConfigurationValidationService,
+    repository_validation: RepositoryValidationService,
     settings: ConfigurationValidationSettingsStore,
 ) -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/validation/repository")
     async def validate_repository() -> dict[str, object]:
-        return validation.validate_repository().as_dict()
+        return repository_validation.validate_repository().as_dict()
 
     @router.get("/api/validation/settings")
     async def get_validation_settings() -> dict[str, int]:

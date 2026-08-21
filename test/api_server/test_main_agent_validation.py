@@ -15,7 +15,7 @@ def test_subagent_references_report_duplicate_entity_name_and_missing_target(
         ).json()
         second = client.post(
             "/api/subagents",
-            json=subagent_payload("Second worker", name="worker"),
+            json=subagent_payload("Second worker", name="WORKER"),
         ).json()
         payload = {
             "name": main_agent["name"],
@@ -24,7 +24,7 @@ def test_subagent_references_report_duplicate_entity_name_and_missing_target(
                 {"subagent_id": first["id"]},
                 {"subagent_id": first["id"]},
                 {"subagent_id": second["id"]},
-                {"subagent_id": "00000000-0000-0000-0000-000000000000"},
+                {"subagent_id": "00000000-0000-4000-8000-000000000000"},
             ],
         }
 

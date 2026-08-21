@@ -70,7 +70,7 @@ task identity，供下游汇总 Agent 的 WIC 选择。WIC 中的共享列表扫
 
 ## 从内置示例创建
 
-1. 打开【Agent 组件 / 自定义 Middleware】，新建配置。
+1. 打开【代理组件 / 自定义 Middleware】，新建配置。
 2. 选择 `内置示例-workflow-input-context`。
 3. 保存后编辑当前配置独占的 `main.py`。
 4. 在 Main Agent 或 Subagent 的有序 `middleware_refs` 中选择该配置。

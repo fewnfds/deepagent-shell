@@ -68,7 +68,7 @@ def test_file_manager_completes_common_file_and_text_workflows(
     assert scopes.json() == {
         "scopes": [
             "files",
-            "skills",
+            "skill_templates",
             "python_templates",
         ]
     }
@@ -138,23 +138,23 @@ def test_file_upload_streams_nested_paths_and_requires_explicit_overwrite(
 ) -> None:
     with make_client(tmp_path, monkeypatch) as client:
         uploaded = client.put(
-            "/api/file-manager/skills/upload",
+            "/api/file-manager/skill_templates/upload",
             params={"path": "outline/references/example.md"},
             content=b"first",
             headers={"Content-Type": "application/octet-stream"},
         )
         conflict = client.put(
-            "/api/file-manager/skills/upload",
+            "/api/file-manager/skill_templates/upload",
             params={"path": "outline/references/example.md"},
             content=b"second",
         )
         replaced = client.put(
-            "/api/file-manager/skills/upload",
+            "/api/file-manager/skill_templates/upload",
             params={"path": "outline/references/example.md", "overwrite": "true"},
             content=b"second",
         )
         downloaded = client.get(
-            "/api/file-manager/skills/download",
+            "/api/file-manager/skill_templates/download",
             params={"path": "outline/references/example.md"},
         )
 

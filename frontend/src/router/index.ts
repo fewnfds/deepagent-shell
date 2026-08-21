@@ -14,12 +14,17 @@ const TerminologyPage = () => import('@/pages/TerminologyPage.vue')
 const WorkflowsPage = () => import('@/pages/WorkflowsPage.vue')
 const WorkflowEditorPage = () => import('@/pages/WorkflowEditorPage.vue')
 const WorkflowLifecyclesPage = () => import('@/pages/WorkflowLifecyclesPage.vue')
+const ModelConnectionsPage = () => import('@/pages/ModelConnectionsPage.vue')
+const ModelMappingPage = () => import('@/pages/ModelMappingPage.vue')
 
 export const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', component: ApiServerSettingsPage, meta: { titleKey: 'apiServer.homeTitle' } },
     { path: '/workflows', redirect: '/workflows/parents' },
+    { path: '/models', redirect: '/models/connections' },
+    { path: '/models/connections', component: ModelConnectionsPage, meta: { titleKey: 'navigation.models' } },
+    { path: '/models/mapping', component: ModelMappingPage, meta: { titleKey: 'navigation.models' } },
     {
       path: '/workflows/parents',
       component: WorkflowsPage,
@@ -33,7 +38,7 @@ export const router = createRouter({
       meta: { titleKey: 'workflows.title' },
     },
     {
-      path: '/workflows/lifecycles',
+      path: '/system/workflow-lifecycles',
       component: WorkflowLifecyclesPage,
       meta: { titleKey: 'workflowLifecycles.title' },
     },
@@ -59,7 +64,7 @@ export const router = createRouter({
       props: { scope: 'workflow' },
       meta: { titleKey: 'workflowComponents.title' },
     },
-    { path: '/library', redirect: '/library/model' },
+    { path: '/library', redirect: '/library/model-requirement' },
     { path: '/library/:type', component: ConfigLibraryPage, meta: { titleKey: 'library.title' } },
     { path: '/system', redirect: '/system/config' },
     {

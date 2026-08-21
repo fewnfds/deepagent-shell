@@ -112,15 +112,6 @@ def _specific_contract_identity(
         )
     if (
         error_type == "string_pattern_mismatch"
-        and owner_type == "model"
-        and path == "provider"
-    ):
-        return (
-            "contract.provider_format_invalid",
-            "validation.issue.contract.providerFormatInvalid",
-        )
-    if (
-        error_type == "string_pattern_mismatch"
         and owner_type
         in {
             "custom-middleware",
@@ -135,24 +126,6 @@ def _specific_contract_identity(
             "contract.python_package_folder_format_invalid",
             "validation.issue.contract.pythonPackageFolderFormatInvalid",
         )
-    if error_type == "value_error" and owner_type == "model" and path == "provider":
-        if detail == "provider must be bundled with this Agent Shell version":
-            return (
-                "contract.provider_unavailable",
-                "validation.issue.contract.providerUnavailable",
-            )
-    if error_type == "value_error" and owner_type == "model" and path == "base_url":
-        if detail == "base_url must be an HTTP(S) URL":
-            return (
-                "contract.base_url_invalid",
-                "validation.issue.contract.baseUrlInvalid",
-            )
-    if error_type == "value_error" and owner_type == "model" and path == "credential":
-        if detail == "masked secret text cannot replace a credential":
-            return (
-                "contract.credential_masked",
-                "validation.issue.contract.credentialMasked",
-            )
     return None
 
 

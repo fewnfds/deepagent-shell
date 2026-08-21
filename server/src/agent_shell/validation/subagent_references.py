@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from agent_shell.configuration.identity import name_collision_key
 from agent_shell.validation.models import ValidationIssue
 
 
@@ -44,7 +45,7 @@ def subagent_reference_issues(
         profile = profiles.get(subagent_id)
         if profile is None:
             continue
-        name = str(profile.get("name", ""))
+        name = name_collision_key(str(profile.get("name", "")))
         if name in seen_names:
             issues.append(
                 ValidationIssue(

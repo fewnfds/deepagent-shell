@@ -7,9 +7,10 @@ interface NavigationItem {
 export const navigationItems: NavigationItem[] = [
   { path: '/', labelKey: 'navigation.home', icon: 'bi-house' },
   { path: '/system', labelKey: 'navigation.system', icon: 'bi-gear' },
-  { path: '/workflows', labelKey: 'navigation.workflows', icon: 'bi-diagram-3' },
+  { path: '/models', labelKey: 'navigation.models', icon: 'bi-robot' },
   { path: '/agents', labelKey: 'navigation.agents', icon: 'bi-robot' },
   { path: '/agent-components', labelKey: 'navigation.components', icon: 'bi-boxes' },
+  { path: '/workflows', labelKey: 'navigation.workflows', icon: 'bi-diagram-3' },
   {
     path: '/workflow-components',
     labelKey: 'navigation.workflowComponents',
@@ -32,11 +33,17 @@ interface SectionNavigationGroup {
 
 const sectionNavigationGroups: SectionNavigationGroup[] = [
   {
+    prefix: '/models',
+    items: [
+      { path: '/models/connections', labelKey: 'navigation.sections.modelConnections' },
+      { path: '/models/mapping', labelKey: 'navigation.sections.modelMapping' },
+    ],
+  },
+  {
     prefix: '/workflows',
     items: [
       { path: '/workflows/parents', labelKey: 'navigation.sections.parentWorkflows' },
       { path: '/workflows/children', labelKey: 'navigation.sections.childWorkflows' },
-      { path: '/workflows/lifecycles', labelKey: 'navigation.sections.workflowLifecycles' },
     ],
   },
   {
@@ -49,6 +56,7 @@ const sectionNavigationGroups: SectionNavigationGroup[] = [
         labelKey: 'navigation.sections.messageInterception',
       },
       { path: '/system/events', labelKey: 'navigation.sections.eventFeed' },
+      { path: '/system/workflow-lifecycles', labelKey: 'navigation.sections.workflowLifecycles' },
     ],
   },
   {

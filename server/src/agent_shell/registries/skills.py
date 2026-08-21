@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import stat
 from pathlib import Path
 from typing import Any
 
@@ -10,6 +11,17 @@ from agent_shell.registries.errors import ResourceScanError
 
 SKILL_NAME_MAX_LENGTH = 64
 SKILL_DESCRIPTION_MAX_LENGTH = 1024
+
+
+def _is_reparse_point(path: Path) -> bool:
+    try:
+        metadata = path.lstat()
+    except OSError:
+        return False
+    attributes = getattr(metadata, "st_file_attributes", 0)
+    return path.is_symlink() or bool(
+        attributes & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    )
 
 
 def _skill_name_error(value: str) -> ResourceScanError | None:
@@ -142,17 +154,108 @@ def scan_skill_folder(folder: Path) -> dict[str, Any]:
     }
 
 
-def scan_skills(skills_dir: Path) -> dict[str, Any]:
+def scan_skill_templates(skills_dir: Path) -> dict[str, Any]:
     catalog: list[dict[str, Any]] = []
     errors: dict[str, dict[str, object]] = {}
     if not skills_dir.exists():
         return {"catalog": catalog, "errors": errors}
 
-    for folder in sorted(skills_dir.iterdir(), key=lambda path: path.name.lower()):
+    def visit(parent: Path) -> None:
+        try:
+            children = sorted(
+                parent.iterdir(), key=lambda path: path.name.casefold()
+            )
+        except OSError as exc:
+            relative = parent.relative_to(skills_dir).as_posix() or "."
+            errors[relative] = {
+                "message_key": "resource.error.skill.readFailed",
+                "message": "The Skill template directory could not be read.",
+                "details": str(exc),
+            }
+            return
+        for folder in children:
+            relative_path = folder.relative_to(skills_dir).as_posix()
+            if not folder.is_dir():
+                continue
+            if _is_reparse_point(folder):
+                errors[relative_path] = {
+                    "message_key": "resource.error.skill.pathUnsupported",
+                    "message": "Symbolic links and reparse points are not supported.",
+                }
+                continue
+            manifest = folder / "SKILL.md"
+            if manifest.exists():
+                try:
+                    item = scan_skill_folder(folder)
+                except ResourceScanError as exc:
+                    errors[relative_path] = exc.as_dict()
+                else:
+                    catalog.append(
+                        {
+                            **item,
+                            "template_path": relative_path,
+                        }
+                    )
+                # A first SKILL.md is the complete ownership boundary, even if
+                # its contents are invalid.
+                continue
+            visit(folder)
+
+    visit(skills_dir)
+    catalog.sort(key=lambda item: (str(item["template_path"]).casefold(), str(item["name"])))
+    return {"catalog": catalog, "errors": errors}
+
+
+def scan_private_skill_package(skills_dir: Path) -> dict[str, Any]:
+    catalog: list[dict[str, Any]] = []
+    errors: dict[str, dict[str, object]] = {}
+    if not skills_dir.exists():
+        return {"catalog": catalog, "errors": errors}
+    try:
+        children = sorted(skills_dir.iterdir(), key=lambda path: path.name.casefold())
+    except OSError as exc:
+        return {
+            "catalog": catalog,
+            "errors": {
+                ".": {
+                    "message_key": "resource.error.skill.readFailed",
+                    "message": "The private Skill package could not be read.",
+                    "details": str(exc),
+                }
+            },
+        }
+    names: dict[str, str] = {}
+    for folder in children:
         if not folder.is_dir():
+            continue
+        relative_path = folder.name
+        if _is_reparse_point(folder):
+            errors[relative_path] = {
+                "message_key": "resource.error.skill.pathUnsupported",
+                "message": "Symbolic links and reparse points are not supported.",
+            }
             continue
         try:
             catalog.append(scan_skill_folder(folder))
         except ResourceScanError as exc:
-            errors[folder.name] = exc.as_dict()
+            errors[relative_path] = exc.as_dict()
+            continue
+        name = str(catalog[-1]["name"])
+        previous = names.get(name)
+        if previous is not None:
+            errors[relative_path] = {
+                "message_key": "resource.error.skill.duplicateName",
+                "message": f"The private Skill package contains duplicate Skill name {name!r}.",
+                "details": {"name": name, "other_folder": previous},
+            }
+            catalog.pop()
+        else:
+            names[name] = relative_path
+    catalog.sort(key=lambda item: str(item["name"]).casefold())
     return {"catalog": catalog, "errors": errors}
+
+
+def scan_skills(skills_dir: Path) -> dict[str, Any]:
+    """Backward-neutral registry entry point for the template catalog."""
+
+    return scan_skill_templates(skills_dir)

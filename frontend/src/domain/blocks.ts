@@ -3,7 +3,7 @@ import { customToolAdapter } from './blocks/customTool'
 import { exceptionRetryAdapter } from './blocks/exceptionRetry'
 import { filesystemAdapter } from './blocks/filesystem'
 import { filesystemPermissionsAdapter } from './blocks/filesystemPermissions'
-import { modelAdapter } from './blocks/model'
+import { modelRequirementAdapter } from './blocks/modelRequirement'
 import { agentEventOutputAdapter } from './blocks/agentEventOutput'
 import { promptCachingAdapter } from './blocks/promptCaching'
 import { skillAdapter } from './blocks/skill'
@@ -42,11 +42,9 @@ export type {
   FilesystemPermissionsDraft,
   FilesystemPermissionValue,
 } from './blocks/filesystemPermissions'
-export type {
-  ModelApiRecord,
-  ModelDraft,
-  ModelProviderSettingInput,
-} from './blocks/model'
+export type { ModelRequirementDraft } from './blocks/modelRequirement'
+export type { ModelApiRecord, ModelDraft, ModelProviderSettingInput } from './blocks/model'
+export { modelAdapter } from './blocks/model'
 export type {
   AgentEventOutputCatalogItem,
   AgentEventOutputDraft,
@@ -87,7 +85,7 @@ export {
   exceptionRetryAdapter,
   filesystemAdapter,
   filesystemPermissionsAdapter,
-  modelAdapter,
+  modelRequirementAdapter,
   agentEventOutputAdapter,
   promptCachingAdapter,
   skillAdapter,
@@ -101,7 +99,7 @@ export {
 }
 
 export const blockTypes = [
-  'model',
+  'model-requirement',
   'custom-tool',
   'custom-middleware',
   'agent-event-output',
@@ -124,7 +122,7 @@ export const managedComponentTypes = [
 ] as const
 
 export const blockAdapters = {
-  model: modelAdapter,
+  'model-requirement': modelRequirementAdapter,
   'custom-tool': customToolAdapter,
   'custom-middleware': customMiddlewareAdapter,
   'agent-event-output': agentEventOutputAdapter,

@@ -2,7 +2,7 @@
 
 background Run 是 optional capability。普通 linear Workflow、synchronous Subagent 和 Task Dispatcher 不需要它。
 
-Agent Shell 提供 single-process background task system。它不是 LangGraph Graph Node，也不是 Deep Agents 的 `SubAgentMiddleware`。command 通过当前
+Agent Shell 提供 single-process background task system。该能力通过当前
 Run 的官方 `Runtime.context.background_runs` 暴露给 Command Node、Task Dispatcher、Custom Tool、Middleware 和普通 Node：
 
 ```python

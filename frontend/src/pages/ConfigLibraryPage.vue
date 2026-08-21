@@ -4,7 +4,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
-import { managementApi, type CapabilityManifest, type WorkflowComponentManifest, type ValidationIssue } from '@/api'
+import { managementApi, type CapabilityManifest, type ConfigurationBundlePreview, type ConfigurationRepository, type WorkflowComponentManifest, type ValidationIssue } from '@/api'
 import ConfigDetail from '@/components/ConfigDetail.vue'
 import ConfigurationLibraryNav from '@/components/ConfigurationLibraryNav.vue'
 import DataTableWorkbench from '@/components/data-table/DataTableWorkbench.vue'
@@ -18,8 +18,10 @@ import { useConfirmation } from '@/composables/useConfirmation'
 import { useConfigurationValidation } from '@/composables/useConfigurationValidation'
 import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
+import { triggerBrowserDownload } from '@/utils/download'
 import {
   agentLibraryCategories,
+  bundleRoot,
   editLocation,
   routeCategory,
   type ConfigLibraryApi,
@@ -51,6 +53,18 @@ const copyName = ref('')
 const copyError = ref('')
 const copying = ref(false)
 const deletingUnsupportedBlockId = ref('')
+const repositories = ref<ConfigurationRepository[]>([])
+const activeRepositoryId = ref('')
+const repositoryName = ref('')
+const repositoryBusy = ref(false)
+const repositoryError = ref('')
+const bundleInput = ref<HTMLInputElement | null>(null)
+const bundleFile = ref<File | null>(null)
+const bundlePreview = ref<ConfigurationBundlePreview | null>(null)
+const bundleNames = ref<Record<string, string>>({})
+const bundleBindings = ref<Record<string, { value: string; path_origin?: 'absolute' | 'data-root-relative' }>>({})
+const bundleBusy = ref(false)
+const bundleError = ref('')
 const {
   validation: repositoryValidation,
   validateNow: refreshRepositoryValidation,
@@ -83,6 +97,8 @@ const agentCategoryItems = computed<SectionNavItem[]>(() => (
 const categoryItems = computed<SectionNavItem[]>(() => [
   ...componentCategoryItems.value,
   ...agentCategoryItems.value,
+  { id: 'parent-workflow', label: t('capabilities.parent-workflow.label') },
+  { id: 'child-workflow', label: t('capabilities.child-workflow.label') },
 ])
 
 const currentCategory = computed<LibraryCategoryId | null>(() => (
@@ -114,10 +130,141 @@ async function loadCatalog(): Promise<void> {
   }
 }
 
+async function loadRepositories(): Promise<void> {
+  try {
+    const result = await api.value.listConfigurationRepositories()
+    repositories.value = result.repositories
+    activeRepositoryId.value = result.active_id
+  } catch (cause) {
+    repositoryError.value = managementError.describe(cause).display
+  }
+}
+
+function resetRepositoryScopedUi(): void {
+  detailItem.value = null
+  copyItem.value = null
+  copyName.value = ''
+  copyError.value = ''
+  bundleFile.value = null
+  bundlePreview.value = null
+  bundleNames.value = {}
+  bundleBindings.value = {}
+  bundleError.value = ''
+}
+
 async function listCategory(category: LibraryCategoryId): Promise<LibraryItem[]> {
   if (category === 'main-agent') return api.value.listMainAgents()
   if (category === 'subagent-profile') return api.value.listSubagents()
+  if (category === 'parent-workflow') return api.value.listWorkflows('parent')
+  if (category === 'child-workflow') return api.value.listWorkflows('child')
   return api.value.listBlocks(category)
+}
+
+async function activateRepository(): Promise<void> {
+  if (!activeRepositoryId.value || repositoryBusy.value || bundleBusy.value) return
+  repositoryBusy.value = true
+  repositoryError.value = ''
+  try {
+    const result = await api.value.activateConfigurationRepository(activeRepositoryId.value)
+    resetRepositoryScopedUi()
+    await Promise.all([loadCatalog(), libraryTable.value?.reload(), refreshRepositoryValidation()])
+    notify({ tone: result.restart_required ? 'warning' : 'success', title: result.restart_required ? t('library.repository.restartRequired') : t('library.repository.activated') })
+  } catch (cause) {
+    repositoryError.value = managementError.describe(cause).display
+    await loadRepositories()
+  } finally {
+    repositoryBusy.value = false
+  }
+}
+
+async function createRepository(): Promise<void> {
+  const name = repositoryName.value.trim()
+  if (!name || repositoryBusy.value || bundleBusy.value) return
+  repositoryBusy.value = true
+  repositoryError.value = ''
+  try {
+    const created = await api.value.createConfigurationRepository(name)
+    activeRepositoryId.value = created.id
+    repositoryName.value = ''
+    await api.value.activateConfigurationRepository(created.id)
+    resetRepositoryScopedUi()
+    await Promise.all([loadRepositories(), loadCatalog(), libraryTable.value?.reload(), refreshRepositoryValidation()])
+    notify({ tone: 'success', title: t('library.repository.created') })
+  } catch (cause) {
+    repositoryError.value = managementError.describe(cause).display
+  } finally {
+    repositoryBusy.value = false
+  }
+}
+
+async function downloadBundle(item: LibraryItem): Promise<void> {
+  const category = currentCategory.value
+  if (!category) return
+  const blob = await api.value.exportConfigurationBundle(bundleRoot(category, item.id))
+  const safeName = libraryItemName(item).replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'configuration'
+  triggerBrowserDownload(blob, `${safeName}.agent-shell.zip`)
+}
+
+function openBundlePicker(): void { bundleInput.value?.click() }
+async function selectBundle(event: Event): Promise<void> {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  ;(event.target as HTMLInputElement).value = ''
+  if (!file) return
+  bundleBusy.value = true
+  bundleError.value = ''
+  try {
+    const preview = await api.value.previewConfigurationBundle(file)
+    bundleFile.value = file
+    bundlePreview.value = preview
+    bundleNames.value = Object.fromEntries(preview.records.map((record) => [record.source_id, record.suggested_name]))
+    bundleBindings.value = Object.fromEntries(preview.filesystem_bindings.map((binding) => [binding.binding_id, {
+      value: binding.target_value ?? '',
+      ...(binding.source_path_origin === 'data-root-relative' ? { path_origin: 'data-root-relative' as const } : {}),
+    }]))
+  } catch (cause) {
+    bundleError.value = managementError.describe(cause).display
+    bundleFile.value = null
+    bundlePreview.value = null
+  } finally {
+    bundleBusy.value = false
+  }
+}
+function closeBundle(): void {
+  if (bundleBusy.value) return
+  bundleFile.value = null
+  bundlePreview.value = null
+  bundleError.value = ''
+}
+function bundleCategory(preview: ConfigurationBundlePreview): LibraryCategoryId | null {
+  if (preview.root.kind === 'component') return preview.root.type
+  if (preview.root.kind === 'main_agent') return 'main-agent'
+  if (preview.root.kind === 'subagent') return 'subagent-profile'
+  if (preview.root.kind === 'workflow') return preview.root.workflow_role === 'child' ? 'child-workflow' : 'parent-workflow'
+  return null
+}
+async function importBundle(): Promise<void> {
+  const file = bundleFile.value
+  const preview = bundlePreview.value
+  if (!file || !preview || bundleBusy.value) return
+  bundleBusy.value = true
+  bundleError.value = ''
+  try {
+    const imported = await api.value.importConfigurationBundle(file, preview.bundle_sha256, {
+      target_ids: preview.target_ids,
+      names: bundleNames.value,
+      filesystem_bindings: bundleBindings.value,
+    })
+    const category = bundleCategory(preview)
+    bundleFile.value = null
+    bundlePreview.value = null
+    notify({ tone: 'success', title: t('library.bundle.imported') })
+    if (category) await router.push(editLocation(category, imported.root.target_id))
+    else await refresh()
+  } catch (cause) {
+    bundleError.value = managementError.describe(cause).display
+  } finally {
+    bundleBusy.value = false
+  }
 }
 
 function libraryItemName(item: LibraryItem): string {
@@ -267,6 +414,15 @@ const libraryTableConfig: DataTableConfig<LibraryItem> = {
       label: () => t('common.copy'),
       tone: 'success',
       run: openCopy,
+      visible: () => currentCategory.value !== 'parent-workflow' && currentCategory.value !== 'child-workflow',
+    },
+    {
+      key: 'download-configuration',
+      label: () => t('library.bundle.download'),
+      icon: 'download',
+      tone: 'info',
+      run: downloadBundle,
+      failureTitle: () => t('library.bundle.exportFailed'),
     },
     {
       key: 'delete-configuration',
@@ -285,6 +441,7 @@ const libraryTableConfig: DataTableConfig<LibraryItem> = {
         if (!category) return
         if (category === 'main-agent') await api.value.deleteMainAgent(item.id)
         else if (category === 'subagent-profile') await api.value.deleteSubagent(item.id)
+        else if (category === 'parent-workflow' || category === 'child-workflow') await api.value.deleteWorkflow(item.id)
         else await api.value.deleteBlock(category, item.id)
         if (detailItem.value?.id === item.id) closeDetail()
         await refreshRepositoryValidation()
@@ -313,6 +470,8 @@ const libraryTableConfig: DataTableConfig<LibraryItem> = {
         ? await api.value.deleteMainAgents(ids)
         : category === 'subagent-profile'
           ? await api.value.deleteSubagents(ids)
+          : category === 'parent-workflow' || category === 'child-workflow'
+            ? await api.value.deleteWorkflows(ids)
           : await api.value.deleteBlocks(category, ids)
       closeDetail()
       await refreshRepositoryValidation()
@@ -327,7 +486,7 @@ const libraryTableConfig: DataTableConfig<LibraryItem> = {
 
 onMounted(async () => {
   const validationRequest = refreshRepositoryValidation()
-  await loadCatalog()
+  await Promise.all([loadCatalog(), loadRepositories()])
   await validationRequest
 })
 </script>
@@ -335,6 +494,11 @@ onMounted(async () => {
 <template>
   <PageShell>
     <template #actions>
+      <input ref="bundleInput" accept=".zip,application/zip" class="visually-hidden" type="file" @change="selectBundle">
+      <LteButton :disabled="bundleBusy || repositoryBusy" theme="success" type="button" @click="openBundlePicker">
+        <i class="bi bi-upload" aria-hidden="true" />
+        {{ t('library.bundle.upload') }}
+      </LteButton>
       <LteButton
         :disabled="refreshing"
         theme="info"
@@ -345,6 +509,28 @@ onMounted(async () => {
         {{ refreshing ? t('common.refreshing') : t('common.refresh') }}
       </LteButton>
     </template>
+
+    <section class="card mb-3" data-testid="repository-switcher">
+      <header class="card-header"><h2 class="card-title">{{ t('library.repository.title') }}</h2></header>
+      <div class="card-body">
+        <div class="row g-3 align-items-end">
+          <div class="col-lg-6">
+            <FormField field-path="repository_id" label-key="library.repository.active">
+              <select v-model="activeRepositoryId" class="form-select" :disabled="repositoryBusy || bundleBusy" @change="activateRepository">
+                <option v-for="repository in repositories" :key="repository.id" :value="repository.id">{{ repository.name }}</option>
+              </select>
+            </FormField>
+          </div>
+          <div class="col-lg-6">
+            <form class="d-flex gap-2" @submit.prevent="createRepository">
+              <div class="w-100"><label class="form-label" for="new-repository-name">{{ t('library.repository.newName') }}</label><input id="new-repository-name" v-model="repositoryName" class="form-control" maxlength="120" required></div>
+              <LteButton class="align-items-end" :disabled="repositoryBusy || bundleBusy || !repositoryName.trim()" theme="success" type="submit"><i class="bi bi-plus-lg" aria-hidden="true" /> {{ t('library.repository.create') }}</LteButton>
+            </form>
+          </div>
+        </div>
+        <LteAlert v-if="repositoryError" class="mt-3" theme="danger">{{ repositoryError }}</LteAlert>
+      </div>
+    </section>
 
     <ConfigurationLibraryNav :manifests="manifests" />
 
@@ -485,5 +671,22 @@ onMounted(async () => {
         {{ copying ? t('common.copying') : t('library.copy.submit') }}
       </LteButton>
     </template>
+  </ModalHost>
+
+  <ModalHost
+    :open="bundlePreview !== null || Boolean(bundleError)"
+    size="wide"
+    :title="t('library.bundle.previewTitle')"
+    @close="closeBundle"
+  >
+    <LteAlert v-if="bundleError" theme="danger">{{ bundleError }}</LteAlert>
+    <template v-if="bundlePreview">
+      <p class="small font-monospace text-break">{{ t('library.bundle.digest') }}: {{ bundlePreview.bundle_sha256 }}</p>
+      <div class="table-responsive mb-3"><table class="table table-striped align-middle"><thead><tr><th>{{ t('library.bundle.originalName') }}</th><th>{{ t('library.bundle.importName') }}</th><th>{{ t('library.bundle.targetId') }}</th></tr></thead><tbody><tr v-for="record in bundlePreview.records" :key="record.source_id"><td>{{ record.original_name }}</td><td><input v-model="bundleNames[record.source_id]" class="form-control" required></td><td class="small font-monospace text-break">{{ record.target_id }}</td></tr></tbody></table></div>
+      <section v-if="bundlePreview.filesystem_bindings.length" class="mb-3"><h3 class="h5">{{ t('library.bundle.bindings') }}</h3><div v-for="binding in bundlePreview.filesystem_bindings" :key="binding.binding_id" class="row g-3 align-items-end mb-2"><div v-if="binding.kind === 'mapped-directory'" class="col-lg-4"><label class="form-label">{{ t('library.bundle.pathOrigin') }}</label><select v-model="bundleBindings[binding.binding_id]!.path_origin" class="form-select"><option value="absolute">{{ t('library.bundle.absolute') }}</option><option value="data-root-relative">{{ t('library.bundle.dataRootRelative') }}</option></select></div><div class="col"><label class="form-label">{{ binding.configuration_name }} · {{ binding.path }}</label><input v-model="bundleBindings[binding.binding_id]!.value" class="form-control" required></div></div></section>
+      <LteAlert v-if="bundlePreview.errors.length" :title="t('library.bundle.blockers')" theme="danger"><p v-for="issue in bundlePreview.errors" :key="`${issue.code}:${issue.source_id}:${issue.path}`" class="mb-1">{{ issue.message }}</p></LteAlert>
+      <LteAlert v-if="bundlePreview.warnings.length" :title="t('library.bundle.warnings')" theme="warning"><p v-for="issue in bundlePreview.warnings" :key="`${issue.code}:${issue.source_id}:${issue.path}`" class="mb-1">{{ issue.message }}</p></LteAlert>
+    </template>
+    <template #footer><LteButton :disabled="bundleBusy" theme="warning" type="button" @click="closeBundle">{{ t('common.cancel') }}</LteButton><LteButton :disabled="bundleBusy || !bundlePreview || Object.values(bundleNames).some((name) => !name.trim()) || Object.values(bundleBindings).some((binding) => !binding.value.trim())" theme="primary" type="button" @click="importBundle"><span v-if="bundleBusy" class="spinner-border spinner-border-sm" aria-hidden="true" />{{ t('library.bundle.import') }}</LteButton></template>
   </ModalHost>
 </template>

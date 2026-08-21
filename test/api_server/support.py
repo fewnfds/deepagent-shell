@@ -104,10 +104,26 @@ def create_main_agent(
         "model_settings": {},
         **(model_request_settings or {}),
     }
-    model = client.post(
-        "/api/blocks/model",
+    connection_response = client.post(
+        "/api/model-connections",
         json=model_payload,
-    ).json()
+    )
+    assert connection_response.status_code == 200, connection_response.text
+    connection = connection_response.json()
+    requirement_response = client.post(
+        "/api/blocks/model-requirement",
+        json={
+            "name": "Published model requirement",
+            "description": "A model capable of the published workflow task.",
+        },
+    )
+    assert requirement_response.status_code == 200, requirement_response.text
+    requirement = requirement_response.json()
+    binding_response = client.put(
+        f"/api/model-requirements/{requirement['id']}/binding",
+        json={"connection_id": connection["id"]},
+    )
+    assert binding_response.status_code == 200, binding_response.text
     output_response = client.post(
         "/api/blocks/agent-event-output",
         json=agent_event_output_payload(
@@ -123,7 +139,7 @@ def create_main_agent(
         )
         assert filesystem.status_code == 200, filesystem.text
         filesystem_id = filesystem.json()["id"]
-    capability_refs = [{"type": "model", "block_id": model["id"]}]
+    capability_refs = [{"type": "model-requirement", "block_id": requirement["id"]}]
     capability_refs.append(
         {"type": "agent-event-output", "block_id": event_output["id"]}
     )

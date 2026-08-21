@@ -24,10 +24,10 @@ from agent_shell.capability_manifest import (
     PUBLIC_CAPABILITY_MANIFESTS,
     validate_capability_manifests,
 )
+from agent_shell.configuration.identity import ConfigurationId
 from agent_shell.command import CommandBlock
 from agent_shell.model_provider_contracts import validate_provider_settings
 from agent_shell.provider_integrations import bundled_provider_ids
-from agent_shell.registries.skills import SKILL_NAME_MAX_LENGTH, skill_name_issue
 from agent_shell.task_dispatcher import TaskDispatcherBlock
 from agent_shell.workflow_event_output import WorkflowEventOutputBlock
 
@@ -42,10 +42,6 @@ TASK_DESCRIPTION_FIELDS = ("available_agents",)
 
 
 BlockName = Annotated[str, Field(min_length=1, max_length=120)]
-SkillName = Annotated[
-    str,
-    Field(min_length=1, max_length=SKILL_NAME_MAX_LENGTH),
-]
 LocalPath = Annotated[str, Field(max_length=4096)]
 VirtualPath = Annotated[str, Field(min_length=1, max_length=4096)]
 DescriptionDraft = Annotated[str, Field(max_length=100_000)]
@@ -60,8 +56,8 @@ ModelText = Annotated[
     StringConstraints(strict=True, strip_whitespace=True, min_length=1),
     Field(max_length=120),
 ]
-BlockReference = Annotated[str, Field(max_length=120)]
-RequiredReference = Annotated[str, Field(min_length=1, max_length=120)]
+BlockReference = ConfigurationId | Literal[""]
+RequiredReference = ConfigurationId
 # Keep user-authored filesystem targets out of upstream framework namespaces.
 # Agent Shell enforces this input boundary but does not manage those directories.
 RESERVED_VIRTUAL_NAMESPACES = (
@@ -196,7 +192,7 @@ def _reject_masked_credential(value: str | None) -> str | None:
     return value
 
 
-class ModelBlock(StrictBlock):
+class ModelConnectionBlock(StrictBlock):
     provider: Annotated[
         str,
         Field(min_length=1, max_length=64, pattern=r"^[a-z0-9_-]+$"),
@@ -219,7 +215,7 @@ class ModelBlock(StrictBlock):
         return value
 
     @model_validator(mode="after")
-    def validate_settings_for_provider(self) -> ModelBlock:
+    def validate_settings_for_provider(self) -> ModelConnectionBlock:
         if self.provider == "google_vertexai" and self.credential is not None:
             raise ValueError(
                 "google_vertexai uses Application Default Credentials"
@@ -281,6 +277,21 @@ class ModelBlock(StrictBlock):
                 + ", ".join(missing)
             )
         return value
+
+
+class ModelRequirementBlock(StrictBlock):
+    """Portable model capability requirement.
+
+    Provider credentials and model connection settings are instance-owned and
+    deliberately do not belong in a Configuration Repository.
+    """
+
+    description: Annotated[
+        str,
+        StringConstraints(strip_whitespace=False, min_length=1),
+        Field(max_length=100_000),
+    ]
+
 
 class CustomToolBlock(StrictBlock):
     python_package: PythonPackageReference
@@ -634,23 +645,17 @@ class FilesystemBlock(StrictBlock):
 
 
 class SkillBlock(StrictBlock):
-    skills: list[SkillName] = Field(default_factory=list)
+    class SkillPackageReference(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        folder: ConfigurationId
+
+    skill_package: SkillPackageReference
     system_prompt_enabled: bool = True
     instruction_override: PromptOverrideText | None = None
 
-    @field_validator("skills")
-    @classmethod
-    def unique_skills(cls, values: list[str]) -> list[str]:
-        for value in values:
-            issue = skill_name_issue(value)
-            if issue:
-                raise ValueError(issue)
-        return list(dict.fromkeys(values))
-
     @model_validator(mode="after")
     def validate_system_prompt_override(self) -> "SkillBlock":
-        if not self.skills:
-            raise ValueError("At least one Skill must be selected")
         prompt = self.instruction_override
         if not self.system_prompt_enabled:
             if prompt is not None:
@@ -865,7 +870,7 @@ class SubagentProfile(BaseModel):
 
 
 BLOCK_MODELS: dict[str, type[StrictBlock]] = {
-    "model": ModelBlock,
+    "model-requirement": ModelRequirementBlock,
     "system-prompt": SystemPromptBlock,
     "filesystem": FilesystemBlock,
     "filesystem-permissions": FilesystemPermissionsBlock,

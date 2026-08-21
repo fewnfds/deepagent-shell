@@ -51,7 +51,7 @@ contract 的 source 时也可以使用 `__empty__`。
 首次保存后，系统会把 template 复制到该 configuration 独占的 extension directory：
 
 ```text
-data/config/python_package_instances/
+data/configuration-repositories/<repository-uuid>/python_package_instances/
   command/<configuration-uuid>/
   task-dispatcher/<configuration-uuid>/
   agent-tool/<configuration-uuid>/
@@ -108,8 +108,8 @@ event 是单向 output，Node 不会收到 projection result。field 说明见[W
 
 Workflow Event Output 的内置示例继续使用 HTML `details` 格式，并覆盖 `custom`、`lifecycle`、`values`、`updates`、`tasks`、
 `checkpoints`、`input`、`input.requested`、`debug` 和 `other`。这些类别仍由当前 v3 normalizer 产生；统一 package 只是把原来每类
-独立的脚本合并到同一个 `output(event)` 分支中。旧版默认只把 `custom` 和 `lifecycle` 投影到公开文本，其余类别默认关闭是为了
-避免 State、checkpoint、task 和 debug 数据直接进入响应；当前示例把分支全部列出，用户可按需返回字符串。
+独立的脚本合并到同一个 `output(event)` 分支中。示例默认只把适合阅读的事件投影到公开文本；其余事件仍可由 package 按需返回字符串，
+也可以保持空字符串以过滤它们。
 
 ## Runtime capability 与 discovery path
 

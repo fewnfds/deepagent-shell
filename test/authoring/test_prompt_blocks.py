@@ -6,12 +6,13 @@ from .app_support import *
 def test_prompt_templates_reject_unsupported_single_brace_fields(
     tmp_path: Path, monkeypatch
 ) -> None:
+    write_skill_template(tmp_path)
     client = make_client(tmp_path, monkeypatch)
     skill = client.post(
         "/api/blocks/skill",
         json={
             "name": "Invalid Skill prompt",
-            "skills": ["demo"],
+            "skill_template_paths": ["outline"],
             "instruction_override": (
                 'JSON {"answer": "value"}\n'
                 "{skills_locations}\n{skills_load_warnings}\n{skills_list}"
@@ -48,12 +49,13 @@ def test_prompt_templates_reject_unsupported_single_brace_fields(
 def test_prompt_templates_accept_escaped_literal_braces(
     tmp_path: Path, monkeypatch
 ) -> None:
+    write_skill_template(tmp_path)
     client = make_client(tmp_path, monkeypatch)
     skill = client.post(
         "/api/blocks/skill",
         json={
             "name": "Escaped Skill prompt",
-            "skills": ["demo"],
+            "skill_template_paths": ["outline"],
             "instruction_override": (
                 'JSON {{"answer": "value"}}\n'
                 "{skills_locations}\n{skills_load_warnings}\n{skills_list}"

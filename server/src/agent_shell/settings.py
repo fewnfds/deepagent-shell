@@ -3,7 +3,6 @@ from __future__ import annotations
 import ipaddress
 import json
 from pathlib import Path
-import re
 from typing import Annotated, Any
 from urllib.parse import urlsplit
 
@@ -11,9 +10,15 @@ import yaml
 from pydantic import Field, PrivateAttr, SecretStr, ValidationError, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from agent_shell.configuration.repositories import ensure_active_configuration_repository
+from agent_shell.storage.environment import (
+    EnvironmentFormatError,
+    read_environment_file,
+    unknown_environment_names,
+)
+
 
 ENV_PREFIX = "AGENT_SHELL_"
-_MODEL_SECRET_ENVIRONMENT = re.compile(r"^AGENT_SHELL_MODEL_[A-Z0-9_]+_API_KEY$", re.IGNORECASE)
 DEFAULT_LANGSMITH_ENDPOINT = "https://api.smith.langchain.com"
 
 
@@ -298,10 +303,17 @@ class Settings(BaseSettings):
         return self.data_root / "templates"
 
     def resolved_python_package_instances_dir(self) -> Path:
-        return self.data_root / "config" / "python_package_instances"
+        return ensure_active_configuration_repository(
+            self.data_root
+        ).python_packages_root
 
-    def resolved_skills_dir(self) -> Path:
-        return self.data_root / "resources" / "skills"
+    def resolved_skill_templates_dir(self) -> Path:
+        return self.data_root / "skills-template"
+
+    def resolved_skill_package_instances_dir(self) -> Path:
+        return ensure_active_configuration_repository(
+            self.data_root
+        ).skill_packages_root
 
     def ensure_directories(self) -> None:
         directories = (
@@ -321,7 +333,8 @@ class Settings(BaseSettings):
             self.resolved_python_package_instances_dir() / "agent-tool",
             self.resolved_python_package_instances_dir() / "agent-event-output",
             self.resolved_python_package_instances_dir() / "workflow-event-output",
-            self.resolved_skills_dir(),
+            self.resolved_skill_package_instances_dir(),
+            self.resolved_skill_templates_dir(),
             self.resolved_logs_dir(),
             self.resolved_runtime_dir() / "cache",
             self.resolved_runtime_dir() / "tmp",
@@ -331,68 +344,8 @@ class Settings(BaseSettings):
             directory.mkdir(parents=True, exist_ok=True)
 
 
-def _known_environment_keys() -> set[str]:
-    return {
-        "AGENT_SHELL_MANAGEMENT_TOKEN",
-        "AGENT_SHELL_API_KEY",
-    }
-
-
 def _unknown_environment_keys(environment: dict[str, str]) -> tuple[str, ...]:
-    known = _known_environment_keys()
-    return tuple(
-        sorted(
-            key
-            for key in environment
-            if (
-                key.upper().startswith(ENV_PREFIX)
-                and key.upper() not in known
-                and not _MODEL_SECRET_ENVIRONMENT.fullmatch(key.upper())
-            )
-        )
-    )
-
-
-def _environment_file_keys(path: Path) -> tuple[str, ...]:
-    if not path.exists():
-        return ()
-    keys: list[str] = []
-    try:
-        lines = path.read_text(encoding="utf-8-sig").splitlines()
-    except (OSError, UnicodeError):
-        return ()
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if stripped.lower().startswith("export "):
-            stripped = stripped[7:].lstrip()
-        name, separator, _ = stripped.partition("=")
-        name = name.strip()
-        if separator and name:
-            keys.append(name)
-    return tuple(keys)
-
-
-def _environment_file_values(path: Path) -> dict[str, str]:
-    if not path.exists():
-        return {}
-    values: dict[str, str] = {}
-    try:
-        lines = path.read_text(encoding="utf-8-sig").splitlines()
-    except (OSError, UnicodeError):
-        return {}
-    for line in lines:
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if stripped.lower().startswith("export "):
-            stripped = stripped[7:].lstrip()
-        name, separator, value = stripped.partition("=")
-        name = name.strip()
-        if separator and name:
-            values[name] = value.strip().strip('"')
-    return values
+    return unknown_environment_names(environment)
 
 
 def _error_keys(exc: ValidationError) -> tuple[str, ...]:
@@ -424,9 +377,14 @@ def load_settings(
     root = root.resolve() if root.is_absolute() else (home / root).resolve()
     env_path = root / "config" / "agent-shell.env"
     system_path = root / "config" / "system.yaml"
-    file_unknown = _unknown_environment_keys(
-        {key: "" for key in _environment_file_keys(env_path)}
-    )
+    try:
+        environment_values = read_environment_file(env_path)
+    except (OSError, UnicodeError, EnvironmentFormatError):
+        raise SettingsError(
+            ("data/config/agent-shell.env",),
+            "Rewrite the secret settings through the management pages.",
+        ) from None
+    file_unknown = _unknown_environment_keys(environment_values)
     if file_unknown:
         raise SettingsError(
             file_unknown, "Remove or correct unknown AGENT_SHELL_* settings."
@@ -444,7 +402,6 @@ def load_settings(
             system_values = dict(values)
         system_values.pop("management_token", None)
         system_values.pop("langsmith_api_key", None)
-        environment_values = _environment_file_values(env_path)
         management_token = environment_values.get("AGENT_SHELL_MANAGEMENT_TOKEN")
         if management_token is not None:
             system_values["management_token"] = management_token

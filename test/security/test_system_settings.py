@@ -118,7 +118,59 @@ def test_valid_system_settings_are_atomic_and_take_effect_after_restart(
     env_text = (tmp_path / "data" / "config" / "agent-shell.env").read_text(
         encoding="utf-8"
     )
-    assert "LANGSMITH_API_KEY=langsmith-test-key" in env_text
+    assert 'LANGSMITH_API_KEY="langsmith-test-key"' in env_text
+
+
+def test_system_and_model_secret_updates_preserve_each_other(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app, client = _client(tmp_path, monkeypatch)
+    connection_id = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+    model_payload = {
+        "name": "Local model",
+        "provider": "openai",
+        "base_url": "https://api.example.com/v1",
+        "credential": "model-secret",
+        "model": "local-model",
+        "provider_settings": {},
+        "tool_choice": None,
+        "response_format": None,
+        "model_settings": {},
+    }
+    app.state.model_resources.save_connection(connection_id, model_payload)
+
+    updated = client.put(
+        "/api/system/settings",
+        json=_payload(port=9125),
+    )
+
+    assert updated.status_code == 200, updated.text
+    assert (
+        app.state.model_resources.resolve_connection(connection_id)["credential"]
+        == "model-secret"
+    )
+
+    client.put(
+        "/api/system/settings",
+        json=_payload(
+            management_token={
+                "operation": "replace",
+                "value": "changed-management-token",
+            }
+        ),
+    )
+    app.state.model_resources.save_connection(
+        connection_id,
+        {**model_payload, "credential": "rotated-model-secret"},
+    )
+
+    restarted = get_settings(application_home=tmp_path)
+    assert restarted.management_token is not None
+    assert (
+        restarted.management_token.get_secret_value()
+        == "changed-management-token"
+    )
 
 
 def test_unreachable_langsmith_connection_does_not_save_settings_or_secret(
@@ -225,20 +277,29 @@ def test_permission_failure_leaves_existing_settings_unchanged(
     _, client = _client(tmp_path, monkeypatch)
     system_path = tmp_path / "data" / "config" / "system.yaml"
     original = system_path.read_text(encoding="utf-8")
+    environment_path = tmp_path / "data" / "config" / "agent-shell.env"
+    original_environment = environment_path.read_text(encoding="utf-8")
     monkeypatch.setattr(
         FileConfigRepository,
-        "update_system_and_environment",
+        "update_system",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("write failed")),
     )
 
     response = client.put(
         "/api/system/settings",
-        json=_payload(port=9124),
+        json=_payload(
+            port=9124,
+            management_token={
+                "operation": "replace",
+                "value": "must-be-rolled-back",
+            },
+        ),
     )
 
     assert response.status_code == 500
     assert response.json()["detail"]["code"] == "system_settings_write_failed"
     assert system_path.read_text(encoding="utf-8") == original
+    assert environment_path.read_text(encoding="utf-8") == original_environment
 
 
 def test_runtime_policy_is_discoverable_and_persists_without_product_maximums(

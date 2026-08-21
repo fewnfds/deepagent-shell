@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from uuid import uuid4
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -174,7 +172,7 @@ def build_agent_config_router(
         )
         _raise_if_invalid(report)
         assert validated is not None
-        item_id = str(uuid4())
+        item_id = config_store.new_id()
         try:
             config_store.save_item(MAIN_AGENT_TABLE, item_id, validated)
         except ValueError as exc:
@@ -207,7 +205,7 @@ def build_agent_config_router(
         )
         _raise_if_invalid(report)
         assert validated is not None
-        copy_id = str(uuid4())
+        copy_id = config_store.new_id()
         try:
             config_store.save_item(MAIN_AGENT_TABLE, copy_id, validated)
         except ValueError as exc:
@@ -312,7 +310,7 @@ def build_agent_config_router(
         )
         _raise_if_invalid(report)
         assert validated is not None
-        item_id = str(uuid4())
+        item_id = config_store.new_id()
         try:
             config_store.save_item(SUBAGENT_TABLE, item_id, validated)
         except ValueError as exc:
@@ -344,7 +342,7 @@ def build_agent_config_router(
         )
         _raise_if_invalid(report)
         assert validated is not None
-        copy_id = str(uuid4())
+        copy_id = config_store.new_id()
         try:
             config_store.save_item(SUBAGENT_TABLE, copy_id, validated)
         except ValueError as exc:

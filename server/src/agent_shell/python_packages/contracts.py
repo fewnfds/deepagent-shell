@@ -6,20 +6,19 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
-PACKAGE_ID_PATTERN = (
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+from agent_shell.configuration.identity import (
+    CONFIGURATION_ID_PATTERN,
+    ConfigurationId,
 )
+
+PACKAGE_ID_PATTERN = CONFIGURATION_ID_PATTERN
 _UUID_FRAGMENT = PACKAGE_ID_PATTERN.removeprefix("^").removesuffix("$")
 PACKAGE_FOLDER_PATTERN = rf"^{_UUID_FRAGMENT}$"
 _PACKAGE_FOLDER = re.compile(PACKAGE_FOLDER_PATTERN)
 EMPTY_TEMPLATE_KEY = "__empty__"
 
 
-PackageId = Annotated[
-    str,
-    Field(min_length=36, max_length=36, pattern=PACKAGE_ID_PATTERN),
-]
+PackageId = ConfigurationId
 
 
 PackageFolder = Annotated[

@@ -1,20 +1,22 @@
 # Skill
 
-页面扫描 `data/resources/skills/` 的一级目录。每个 Skill 必须包含 UTF-8 `SKILL.md`，frontmatter 至少有
-与目录名相同的 `name` 和非空 `description`。发现阶段只读取 frontmatter，不执行正文或脚本。
+公共 Skill Template 根为 `data/skills-template/`。扫描允许任意层级；某一层第一次发现 `SKILL.md` 后，该目录就是完整 Skill 边界，合法或不合法都不再递归。只有名称、目录、UTF-8 和 YAML frontmatter 通过当前 contract 的 Template 才能在前端选择，catalog 同时按规范相对路径报告坏项。
+
+创建请求使用 Template 路径，服务端复制完整目录到 Component owner UUID 的私有包：
 
 ```json
 {
   "name": "写作技能",
-  "skills": ["outline", "continuity-check"],
+  "skill_template_paths": ["writing/outline", "review/continuity-check"],
   "system_prompt_enabled": true,
   "instruction_override": null
 }
 ```
 
-组件至少选择一个 Skill，最多 200 个。启用系统提示时，`null` 使用 Deep Agents 默认 Skill 提示；
-非空覆写必须保留 `{skills_locations}`、`{skills_load_warnings}` 和 `{skills_list}`。关闭系统提示时
-`instruction_override` 必须为 `null`，但选中的 Skill 和读取能力仍然存在。
+保存后的记录只引用：
 
-每个 Agent 只看到自己最终选择的 `/skills/` 目录；该 namespace 只读，未选择的 Skill 返回 not found。
-Subagent 可以继承、替换或关闭 Skill。Skill 选择保存在组件 YAML；资源文件不进入文件配置快照，真实请求会重新校验当前磁盘内容。
+```json
+{"skill_package": {"folder": "<component-uuid>"}}
+```
+
+私有包根的直接子目录是 Skill；它与 Template 完全解耦，用户或 AI 可以直接编辑。已存在同名 Skill 时 Add 返回冲突且不覆盖，必须先从右侧删除或手动删除目录并点击 Refresh。组件页载入或刷新时才扫描私有包并显示 warning；warning 不阻塞保存、装配、仓库切换、Bundle 或进程退出。Runtime 将最终私有包映射到官方 `/skills/` namespace，并保持只读隔离。

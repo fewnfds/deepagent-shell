@@ -12,6 +12,11 @@ from agent_shell.langsmith_tracing import (
 from agent_shell.settings import Settings, SettingsError
 from agent_shell.security import ApiKeyPolicyError, validate_api_key_policy
 from agent_shell.storage.file_config import FileConfigRepository
+from agent_shell.storage.configuration_mutations import ConfigurationMutationCoordinator
+from agent_shell.storage.environment import (
+    InstanceEnvironmentStore,
+    SYSTEM_SETTINGS_ENVIRONMENT_OWNER,
+)
 
 
 class SystemSettingsError(RuntimeError):
@@ -49,11 +54,15 @@ class SystemSettingsService:
         active: Settings,
         api_key_provider: Callable[[], str | None],
         configuration: FileConfigRepository,
+        environment: InstanceEnvironmentStore,
+        mutations: ConfigurationMutationCoordinator,
     ) -> None:
         self._active = active
         self._saved = active
         self._api_key_provider = api_key_provider
         self._configuration = configuration
+        self._environment = environment
+        self._mutations = mutations
 
     @staticmethod
     def _public(settings: Settings) -> dict[str, Any]:
@@ -206,9 +215,7 @@ class SystemSettingsService:
                     "LangSmith connection validation failed. Check the API key, endpoint region, and workspace ID.",
                 ) from None
         try:
-            def mutate(
-                system: dict[str, Any], environment: dict[str, str]
-            ) -> None:
+            def mutate(system: dict[str, Any]) -> None:
                 system["settings"] = {
                     "host": candidate.host,
                     "port": candidate.port,
@@ -220,18 +227,41 @@ class SystemSettingsService:
                     "cors_origins": list(candidate.cors_origins),
                     "trusted_proxy_cidrs": list(candidate.trusted_proxy_cidrs),
                 }
+            set_values: dict[str, str] = {}
+            remove_keys: set[str] = set()
+            if payload["management_token"]["operation"] == "replace":
                 management_token = _secret_value(candidate.management_token)
-                if management_token is not None:
-                    environment["AGENT_SHELL_MANAGEMENT_TOKEN"] = management_token
-                operation = payload["langsmith_api_key"]["operation"]
-                if operation != "keep":
-                    langsmith_api_key = _secret_value(candidate.langsmith_api_key)
-                    if langsmith_api_key is None:
-                        environment.pop("LANGSMITH_API_KEY", None)
-                    else:
-                        environment["LANGSMITH_API_KEY"] = langsmith_api_key
+                assert management_token is not None
+                set_values["AGENT_SHELL_MANAGEMENT_TOKEN"] = management_token
+            operation = payload["langsmith_api_key"]["operation"]
+            if operation == "replace":
+                langsmith_api_key = _secret_value(candidate.langsmith_api_key)
+                assert langsmith_api_key is not None
+                set_values["LANGSMITH_API_KEY"] = langsmith_api_key
+            elif operation == "clear":
+                remove_keys.add("LANGSMITH_API_KEY")
 
-            self._configuration.update_system_and_environment(mutate)
+            with self._mutations.mutation():
+                original_environment = self._environment.owned_values(
+                    SYSTEM_SETTINGS_ENVIRONMENT_OWNER
+                )
+                try:
+                    if set_values or remove_keys:
+                        self._environment.patch(
+                            SYSTEM_SETTINGS_ENVIRONMENT_OWNER,
+                            set_values=set_values,
+                            remove_keys=remove_keys,
+                        )
+                    self._configuration.update_system(mutate)
+                except BaseException:
+                    try:
+                        self._environment.replace_owned(
+                            SYSTEM_SETTINGS_ENVIRONMENT_OWNER,
+                            original_environment,
+                        )
+                    except BaseException:
+                        pass
+                    raise
         except OSError as exc:
             raise SystemSettingsError(
                 500,

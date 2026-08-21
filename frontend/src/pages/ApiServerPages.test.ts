@@ -156,9 +156,10 @@ describe('ApiServerSettingsPage', () => {
     expect(navigationItems.map((item) => item.path)).toEqual([
       '/',
       '/system',
-      '/workflows',
+      '/models',
       '/agents',
       '/agent-components',
+      '/workflows',
       '/workflow-components',
       '/library',
       '/terminology',

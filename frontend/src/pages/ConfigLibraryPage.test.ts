@@ -26,7 +26,18 @@ const messages = {
       agentComponents: 'Agent components',
       workflowComponents: 'Workflow components',
       agents: 'Agents',
+      workflows: 'Workflows',
       plugins: 'Plugins',
+    },
+    repository: {
+      title: 'Configuration Repository', active: 'Active repository', newName: 'New repository name',
+      create: 'Create and switch', created: 'Created', activated: 'Activated', restartRequired: 'Restart required',
+    },
+    bundle: {
+      upload: 'Upload configuration Bundle', download: 'Download Bundle', exportFailed: 'Export failed',
+      previewTitle: 'Import Bundle', digest: 'Digest', originalName: 'Original', importName: 'Import name',
+      targetId: 'Target UUID', bindings: 'Bindings', pathOrigin: 'Path origin', absolute: 'Absolute',
+      dataRootRelative: 'Data root relative', blockers: 'Blockers', warnings: 'Warnings', import: 'Import', imported: 'Imported',
     },
     catalogUnavailable: 'Catalog unavailable',
     unknownCategory: 'Unknown category {type}',
@@ -117,6 +128,8 @@ const messages = {
     model: { label: 'Model' },
     'main-agent': { label: 'Main Agent' },
     'subagent-profile': { label: 'Subagent' },
+    'parent-workflow': { label: 'Parent Workflow' },
+    'child-workflow': { label: 'Child Workflow' },
   },
   validation: {
     status: {
@@ -192,6 +205,7 @@ function createApi() {
   const listBlocks = vi.fn(async () => [...stored])
   const listMainAgents = vi.fn(async () => [])
   const listSubagents = vi.fn(async () => [])
+  const listWorkflows = vi.fn(async () => [])
   const copyBlock = vi.fn(async () => {
     stored = [...stored, copied]
     return copied
@@ -211,6 +225,7 @@ function createApi() {
     listBlocks,
     listMainAgents,
     listSubagents,
+    listWorkflows,
     copyBlock,
     copyMainAgent: vi.fn(),
     copySubagent: vi.fn(),
@@ -219,8 +234,19 @@ function createApi() {
     deleteBlocks: vi.fn(async (_type, ids) => deleteBlocks(ids)),
     deleteMainAgent: vi.fn(),
     deleteSubagent: vi.fn(),
+    deleteWorkflow: vi.fn(),
     deleteMainAgents: vi.fn(),
     deleteSubagents: vi.fn(),
+    deleteWorkflows: vi.fn(),
+    listConfigurationRepositories: vi.fn(async () => ({
+      active_id: '11111111-1111-4111-8111-111111111111',
+      repositories: [{ id: '11111111-1111-4111-8111-111111111111', name: 'Default', schema_version: 1 as const, active: true }],
+    })),
+    createConfigurationRepository: vi.fn(),
+    activateConfigurationRepository: vi.fn(),
+    exportConfigurationBundle: vi.fn(async () => new Blob()),
+    previewConfigurationBundle: vi.fn(),
+    importConfigurationBundle: vi.fn(),
   }
   return {
     service,
@@ -237,12 +263,12 @@ function createApi() {
   }
 }
 
-async function mountPage(service: ConfigLibraryApi) {
+async function mountPage(service: ConfigLibraryApi, path = '/library/model') {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/library/:type', component: ConfigLibraryPage }],
   })
-  await router.push('/library/model')
+  await router.push(path)
   await router.isReady()
   const i18n = createI18n({
     legacy: false,
@@ -272,6 +298,76 @@ afterEach(() => {
 })
 
 describe('ConfigLibraryPage', () => {
+  it('lists Workflows in the library without copy and keeps deletion there', async () => {
+    const api = createApi()
+    const workflow = {
+      id: 'workflow-uuid', name: 'Parent flow', workflow_role: 'parent' as const,
+      description: '', workflow_event_output_id: null, recursion_limit: 100,
+      execution_timeout_seconds: 120, max_concurrency: 4, enabled: false,
+    }
+    vi.mocked(api.service.listWorkflows).mockResolvedValue([workflow])
+    const { wrapper } = await mountPage(api.service, '/library/parent-workflow')
+
+    expect(api.service.listWorkflows).toHaveBeenCalledWith('parent')
+    expect(wrapper.text()).toContain('Parent flow')
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Copy')).toBe(false)
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Delete')).toBe(true)
+    expect(wrapper.findAll('button').some((button) => button.text() === 'Download Bundle')).toBe(true)
+  })
+
+  it('activates a selected repository and reloads the active category', async () => {
+    const api = createApi()
+    vi.mocked(api.service.listConfigurationRepositories).mockResolvedValue({
+      active_id: '11111111-1111-4111-8111-111111111111',
+      repositories: [
+        { id: '11111111-1111-4111-8111-111111111111', name: 'Default', schema_version: 1, active: true },
+        { id: '22222222-2222-4222-8222-222222222222', name: 'Alternate', schema_version: 1, active: false },
+      ],
+    })
+    vi.mocked(api.service.activateConfigurationRepository).mockResolvedValue({
+      id: '22222222-2222-4222-8222-222222222222', name: 'Alternate', schema_version: 1,
+      active: true, restart_required: false,
+      validation: { valid: true, stage: 'repository_load', issues: [] },
+    })
+    const { wrapper } = await mountPage(api.service)
+    await buttonByText(wrapper, 'View').trigger('click')
+    expect(wrapper.text()).toContain('Details for Original model')
+    await wrapper.get('[data-testid="repository-switcher"] select').setValue('22222222-2222-4222-8222-222222222222')
+    await flushPromises()
+
+    expect(api.service.activateConfigurationRepository).toHaveBeenCalledWith('22222222-2222-4222-8222-222222222222')
+    expect(api.listBlocks).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).not.toContain('Details for Original model')
+  })
+
+  it('commits the same uploaded Bundle digest and target UUID plan', async () => {
+    const api = createApi()
+    const file = new File(['bundle'], 'model.zip', { type: 'application/zip' })
+    vi.mocked(api.service.previewConfigurationBundle).mockResolvedValue({
+      bundle_sha256: 'a'.repeat(64), manifest_sha256: 'b'.repeat(64),
+      root: { kind: 'component', type: 'model', source_id: 'source-id', target_id: 'target-id', workflow_role: null },
+      target_ids: { 'source-id': 'target-id' },
+      records: [{ source_id: 'source-id', target_id: 'target-id', kind: 'component', type: 'model', original_name: 'Model', suggested_name: 'Model', selected_name: 'Model', requires_confirmation: false }],
+      filesystem_bindings: [], skill_packages: [], errors: [], warnings: [], ready: true,
+    })
+    vi.mocked(api.service.importConfigurationBundle).mockResolvedValue({
+      bundle_sha256: 'a'.repeat(64),
+      root: { kind: 'component', type: 'model', source_id: 'source-id', target_id: 'target-id', workflow_role: null },
+      target_ids: { 'source-id': 'target-id' }, records: [], skill_packages: [], warnings: [],
+    })
+    const { wrapper } = await mountPage(api.service)
+    const input = wrapper.get('input[type="file"]')
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+    await buttonByText(wrapper, 'Import').trigger('click')
+    await flushPromises()
+
+    expect(api.service.importConfigurationBundle).toHaveBeenCalledWith(file, 'a'.repeat(64), {
+      target_ids: { 'source-id': 'target-id' }, names: { 'source-id': 'Model' }, filesystem_bindings: {},
+    })
+  })
+
   it('keeps list and copy failures in their local error regions without toasts', async () => {
     const listFailure = createApi()
     listFailure.listBlocks.mockRejectedValueOnce(new Error('offline'))

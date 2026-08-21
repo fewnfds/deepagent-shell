@@ -5,11 +5,11 @@ Agent Shell 的文件化 Python 扩展分为扩展模板、配置扩展和组件
 - 用户模板是 `data/templates/` 下的公共代码资源，只用于创建配置；
 - 源码附带的只读示例位于 `examples/`，在模板选择器中使用 `内置示例-<key>` 名称；
 - 保存新配置时，系统把所选模板复制成由该配置独占的 Python 扩展；
-- 配置扩展位于 `data/config/python_package_instances/`，复制完成后与原模板彻底解耦；
+- 配置扩展位于当前 `data/configuration-repositories/<repository-uuid>/python_package_instances/`，复制完成后与原模板彻底解耦；
 - 组件 YAML 只保存扩展代码目录引用和管理台显示的有序相对文件路径。
 
-模板和内置示例都不会被直接导入、执行或收集依赖。修改或删除来源不会影响已经保存的配置，也没有模板继承、
-同步或升级关系。内置示例不会写入 `data/`；管理员仍可通过【系统 / 文件管理】的 Python templates scope，或直接在
+模板和内置示例都不会被直接导入、执行或收集依赖。修改或删除来源不会影响已经保存的配置；模板和配置扩展各自独立维护。
+内置示例不会写入 `data/`；管理员仍可通过【系统 / 文件管理】的 Python templates scope，或直接在
 `data/templates/` 对应类别下维护用户模板，目录为空也是合法状态。用户模板可以与内置示例同名，catalog key 分别为
 `<key>` 和 `内置示例-<key>`。
 
@@ -21,7 +21,7 @@ data/
     workflow/command/<template-key>/
     workflow/task_dispatcher/<template-key>/
     agent/custom_middleware/<template-key>/
-  config/
+  configuration-repositories/<repository-uuid>/
     components/<type>/<configuration-uuid>.yaml
     python_package_instances/
       command/

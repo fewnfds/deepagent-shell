@@ -1,237 +1,103 @@
 <script setup lang="ts">
-import { LteAlert, LteButton, LteInput, LteTextarea } from '@adminlte/vue'
-import { computed, onMounted, ref } from 'vue'
+import { LteAlert, LteButton, LteTextarea } from '@adminlte/vue'
+import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
-import {
-  managementApi,
-  type SavedBlock,
-  type Workflow,
-  type WorkflowPayload,
-  type WorkflowRole,
-} from '@/api'
-import DataTableWorkbench from '@/components/data-table/DataTableWorkbench.vue'
-import type { DataTableConfig } from '@/components/data-table/types'
+import { managementApi, type SavedBlock, type Workflow, type WorkflowPayload, type WorkflowRole } from '@/api'
 import FormField from '@/components/FormField.vue'
-import ModalHost from '@/components/ModalHost.vue'
 import PageShell from '@/components/PageShell.vue'
+import RecordPicker from '@/components/RecordPicker.vue'
 import { useManagementError } from '@/composables/useManagementError'
 import { useToasts } from '@/composables/useToasts'
 
-const { t } = useI18n()
-const router = useRouter()
 const props = defineProps<{ workflowRole: WorkflowRole }>()
+const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 const managementError = useManagementError()
 const { notify } = useToasts()
-
-const table = ref<{ reload: () => Promise<void> } | null>(null)
-const editingId = ref('')
-const formOpen = ref(false)
-const saving = ref(false)
-const formError = ref('')
+const records = ref<Workflow[]>([])
 const workflowEventOutputs = ref<SavedBlock[]>([])
+const selectedId = ref('')
 const form = ref<WorkflowPayload>(blankWorkflow())
+const loading = ref(true)
+const saving = ref(false)
+const error = ref('')
 
 function blankWorkflow(): WorkflowPayload {
-  return {
-    name: '',
-    workflow_role: props.workflowRole,
-    description: '',
-    workflow_event_output_id: null,
-    recursion_limit: 1_000_000,
-    execution_timeout_seconds: 1_200,
-    max_concurrency: 100,
+  return { name: '', workflow_role: props.workflowRole, description: '', workflow_event_output_id: null, recursion_limit: 1_000_000, execution_timeout_seconds: 1_200, max_concurrency: 100 }
+}
+function toPayload(workflow: Workflow): WorkflowPayload {
+  return { name: workflow.name, workflow_role: workflow.workflow_role, description: workflow.description, workflow_event_output_id: workflow.workflow_event_output_id, recursion_limit: workflow.recursion_limit, execution_timeout_seconds: workflow.execution_timeout_seconds, max_concurrency: workflow.max_concurrency }
+}
+async function load(): Promise<void> {
+  loading.value = true
+  error.value = ''
+  try {
+    const [listed, outputs] = await Promise.all([managementApi.listWorkflows(props.workflowRole), managementApi.listBlocks('workflow-event-output')])
+    records.value = listed
+    workflowEventOutputs.value = outputs
+    const requested = typeof route.query.id === 'string' ? route.query.id : ''
+    const selected = listed.find((item) => item.id === requested) ?? listed[0]
+    selectedId.value = selected?.id ?? ''
+    form.value = selected ? toPayload(selected) : blankWorkflow()
+  } catch (cause) {
+    error.value = managementError.describe(cause).display
+  } finally {
+    loading.value = false
   }
 }
-
-function openNew(): void {
-  editingId.value = ''
+function selectRecord(id: string): void {
+  selectedId.value = id
+  const selected = records.value.find((item) => item.id === id)
+  form.value = selected ? toPayload(selected) : blankWorkflow()
+  void router.replace({ path: `/workflows/${props.workflowRole === 'parent' ? 'parents' : 'children'}`, ...(id ? { query: { id } } : {}) })
+}
+function updateName(value: string): void { form.value.name = value }
+function newWorkflow(): void {
+  selectedId.value = ''
   form.value = blankWorkflow()
-  formError.value = ''
-  formOpen.value = true
+  void router.replace({ path: `/workflows/${props.workflowRole === 'parent' ? 'parents' : 'children'}` })
 }
-
-function openEdit(workflow: Workflow): void {
-  editingId.value = workflow.id
-  form.value = {
-    name: workflow.name,
-    workflow_role: workflow.workflow_role,
-    description: workflow.description,
-    workflow_event_output_id: workflow.workflow_event_output_id,
-    recursion_limit: workflow.recursion_limit,
-    execution_timeout_seconds: workflow.execution_timeout_seconds,
-    max_concurrency: workflow.max_concurrency,
-  }
-  formError.value = ''
-  formOpen.value = true
-}
-
-function closeForm(): void {
-  if (saving.value) return
-  formOpen.value = false
-}
-
 async function save(): Promise<void> {
   if (saving.value) return
   saving.value = true
-  formError.value = ''
+  error.value = ''
   try {
-    const payload: WorkflowPayload = {
-      name: form.value.name.trim(),
-      workflow_role: props.workflowRole,
-      description: form.value.description.trim(),
-      workflow_event_output_id: form.value.workflow_event_output_id || null,
-      recursion_limit: Number(form.value.recursion_limit),
-      execution_timeout_seconds: Number(form.value.execution_timeout_seconds),
-      max_concurrency: Number(form.value.max_concurrency),
-    }
-    if (editingId.value) await managementApi.updateWorkflow(editingId.value, payload)
-    else await managementApi.createWorkflow(payload)
-    formOpen.value = false
+    const payload: WorkflowPayload = { ...form.value, name: form.value.name.trim(), workflow_role: props.workflowRole, description: form.value.description.trim(), workflow_event_output_id: form.value.workflow_event_output_id || null, recursion_limit: Number(form.value.recursion_limit), execution_timeout_seconds: Number(form.value.execution_timeout_seconds), max_concurrency: Number(form.value.max_concurrency) }
+    const saved = selectedId.value ? await managementApi.updateWorkflow(selectedId.value, payload) : await managementApi.createWorkflow(payload)
+    records.value = selectedId.value ? records.value.map((item) => item.id === saved.id ? saved : item) : [...records.value, saved]
+    selectedId.value = saved.id
+    form.value = toPayload(saved)
+    await router.replace({ path: `/workflows/${props.workflowRole === 'parent' ? 'parents' : 'children'}`, query: { id: saved.id } })
     notify({ tone: 'success', title: t('workflows.saved') })
-    await table.value?.reload()
-  } catch (error) {
-    formError.value = managementError.describe(error).display
+  } catch (cause) {
+    error.value = managementError.describe(cause).display
   } finally {
     saving.value = false
   }
 }
-
-onMounted(async () => {
-  const [blocksResult] = await Promise.allSettled([
-    Promise.all([
-      managementApi.listBlocks('workflow-event-output'),
-    ]),
-  ])
-  if (blocksResult.status === 'fulfilled') {
-    ;[workflowEventOutputs.value] = blocksResult.value
-  } else {
-    notify({
-      tone: 'danger',
-      title: t('workflows.componentLoadFailed'),
-      message: managementError.describe(blocksResult.reason).display,
-    })
-  }
-})
-
-const tableConfig = computed<DataTableConfig<Workflow>>(() => ({
-  id: `workflows-${props.workflowRole}`,
-  ariaLabel: () => t(`workflows.${props.workflowRole}TableAriaLabel`),
-  emptyMessage: () => t(`workflows.${props.workflowRole}Empty`),
-  filteredEmptyMessage: () => t('workflows.filteredEmpty'),
-  loadErrorTitle: () => t('workflows.loadFailed'),
-  rowKey: (row) => row.id,
-  provider: { mode: 'local', load: () => managementApi.listWorkflows(props.workflowRole) },
-  search: {
-    label: () => t('common.search'),
-    placeholder: () => t('workflows.searchPlaceholder'),
-    values: (row) => [row.name, row.description],
-  },
-  columns: [
-    { key: 'name', label: () => t('workflows.fields.name'), value: (row) => row.name },
-    {
-      key: 'status',
-      label: () => t('workflows.fields.status'),
-      value: (row) => row.enabled
-        ? t('workflows.status.published')
-        : t('workflows.status.draft'),
-    },
-  ],
-  rowActions: [
-    {
-      key: 'configure',
-      label: () => t('workflows.actions.configure'),
-      tone: 'primary',
-      run: (row) => openEdit(row),
-    },
-    {
-      key: 'edit-flow',
-      label: () => t('workflows.actions.editFlow'),
-      tone: 'info',
-      run: (row) => router.push(`/workflows/${encodeURIComponent(row.id)}/editor`),
-    },
-    {
-      key: 'delete',
-      label: () => t('common.delete'),
-      tone: 'danger',
-      confirm: (row) => ({
-        title: t('workflows.deleteTitle'),
-        description: t('workflows.deleteDescription', { name: row.name }),
-        confirmLabel: t('common.delete'),
-        cancelLabel: t('common.cancel'),
-        dangerous: true,
-      }),
-      run: (row) => managementApi.deleteWorkflow(row.id),
-      successTitle: () => t('workflows.deleted'),
-      failureTitle: () => t('workflows.deleteFailed'),
-      reloadAfter: 'current',
-    },
-  ],
-}))
+function editGraph(): void {
+  if (selectedId.value) void router.push(`/workflows/${encodeURIComponent(selectedId.value)}/editor`)
+}
+watch(() => props.workflowRole, () => { void load() })
+onMounted(() => { void load() })
 </script>
 
 <template>
   <PageShell>
-    <DataTableWorkbench :key="props.workflowRole" ref="table" :config="tableConfig" />
-    <template #actions>
-      <LteButton theme="success" type="button" @click="openNew">
-        <i class="bi bi-plus-lg" aria-hidden="true" />
-        {{ t('common.new') }}
-      </LteButton>
-    </template>
+    <LteAlert v-if="error" data-testid="workflow-error" :title="t('workflows.loadFailed')" theme="danger">{{ error }}</LteAlert>
+    <div v-if="!loading" class="row g-3 align-items-start">
+      <section class="col-lg-9">
+        <RecordPicker :disabled="saving" :model-value="selectedId" :name="form.name" :records="records" @select="selectRecord" @update:name="updateName" />
+        <div class="card mt-3"><header class="card-header"><h2 class="card-title">{{ t('workflows.metadataTitle') }}</h2></header><div class="card-body">
+          <FormField field-path="workflow_event_output_id" label-key="workflows.fields.eventOutput"><select v-model="form.workflow_event_output_id" class="form-select"><option :value="null">{{ t('common.none') }}</option><option v-for="output in workflowEventOutputs" :key="output.id" :value="output.id">{{ output.name }}</option></select></FormField>
+          <FormField field-path="description" label-key="workflows.fields.description"><LteTextarea v-model="form.description" :rows="4" maxlength="2000" /></FormField>
+          <div class="row g-3" data-ui-control-row><div class="col-lg-4"><FormField field-path="recursion_limit" label-key="workflows.fields.recursionLimit"><input v-model.number="form.recursion_limit" class="form-control" min="1" step="1" type="number" required></FormField></div><div class="col-lg-4"><FormField field-path="execution_timeout_seconds" label-key="workflows.fields.executionTimeoutSeconds"><div class="input-group"><input v-model.number="form.execution_timeout_seconds" class="form-control" min="1" max="86400" step="1" type="number" required><span class="input-group-text">{{ t('workflows.seconds') }}</span></div></FormField></div><div class="col-lg-4"><FormField field-path="max_concurrency" label-key="workflows.fields.maxConcurrency"><input v-model.number="form.max_concurrency" class="form-control" min="1" max="256" step="1" type="number" required></FormField></div></div>
+        </div></div></section>
+      <aside class="col-lg-3"><div class="card"><header class="card-header"><h2 class="card-title">{{ t('workflows.statusTitle') }}</h2></header><div class="card-body"><p class="mb-0">{{ selectedId ? (records.find((item) => item.id === selectedId)?.enabled ? t('workflows.status.published') : t('workflows.status.draft')) : t('workflows.newStatus') }}</p></div></div></aside>
+    </div>
+    <template #actions><LteButton theme="success" type="button" @click="newWorkflow"><i class="bi bi-plus-lg" aria-hidden="true" /> {{ t('common.new') }}</LteButton><LteButton :disabled="saving" theme="primary" type="button" @click="save"><span v-if="saving" class="spinner-border spinner-border-sm" aria-hidden="true" /><i v-else class="bi bi-floppy" aria-hidden="true" /> {{ t('common.save') }}</LteButton><LteButton :disabled="!selectedId || saving" theme="info" type="button" @click="editGraph"><i class="bi bi-pencil" aria-hidden="true" /> {{ t('workflows.actions.editFlow') }}</LteButton></template>
   </PageShell>
-
-  <ModalHost
-    :open="formOpen"
-    :title="editingId ? t('workflows.editTitle') : t(`workflows.${props.workflowRole}CreateTitle`)"
-    @close="closeForm"
-  >
-    <form id="workflow-form" @submit.prevent="save">
-      <FormField field-path="name" label-key="workflows.fields.name">
-        <LteInput v-model="form.name" maxlength="120" required />
-      </FormField>
-      <FormField field-path="workflow_event_output_id" label-key="workflows.fields.eventOutput">
-        <select v-model="form.workflow_event_output_id" class="form-select">
-          <option :value="null">{{ t('common.none') }}</option>
-          <option v-for="output in workflowEventOutputs" :key="output.id" :value="output.id">
-            {{ output.name }}
-          </option>
-        </select>
-      </FormField>
-      <FormField field-path="description" label-key="workflows.fields.description">
-        <LteTextarea v-model="form.description" :rows="4" maxlength="2000" />
-      </FormField>
-      <div class="row g-3" data-ui-control-row>
-        <div class="col-lg-4">
-          <FormField field-path="recursion_limit" label-key="workflows.fields.recursionLimit">
-            <input v-model.number="form.recursion_limit" class="form-control" min="1" step="1" type="number" required>
-          </FormField>
-        </div>
-        <div class="col-lg-4">
-          <FormField field-path="execution_timeout_seconds" label-key="workflows.fields.executionTimeoutSeconds">
-            <div class="input-group">
-              <input v-model.number="form.execution_timeout_seconds" class="form-control" min="1" max="86400" step="1" type="number" required>
-              <span class="input-group-text">{{ t('workflows.seconds') }}</span>
-            </div>
-          </FormField>
-        </div>
-        <div class="col-lg-4">
-          <FormField field-path="max_concurrency" label-key="workflows.fields.maxConcurrency">
-            <input v-model.number="form.max_concurrency" class="form-control" min="1" max="256" step="1" type="number" required>
-          </FormField>
-        </div>
-      </div>
-      <LteAlert v-if="formError" class="mt-3" theme="danger">{{ formError }}</LteAlert>
-    </form>
-    <template #footer>
-      <LteButton :disabled="saving" theme="warning" type="button" @click="closeForm">
-        {{ t('common.cancel') }}
-      </LteButton>
-      <LteButton :disabled="saving" form="workflow-form" theme="primary" type="submit">
-        <span v-if="saving" class="spinner-border spinner-border-sm" aria-hidden="true" />
-        {{ t('common.save') }}
-      </LteButton>
-    </template>
-  </ModalHost>
 </template>

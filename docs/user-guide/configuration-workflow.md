@@ -28,7 +28,7 @@ Custom Tool、Middleware 或普通 Node 可以在自己的 invocation 内调用 
 该保证不跨 caller Run 或尚未实现的 Resume 边界；业务上确实需要重派时使用新的 operation ID。Workflow target 仍只允许已启用子图，后台 Agent 使用自身有效 Filesystem；后台输出不会自动混入
 parent 响应。
 
-【运行历史】页面按一次顶层请求列出 Lifecycle，并展示 root/background Run 父子关系、结构 Timeline、Checkpoint/Store
+【系统 / 运行历史】页面按一次顶层请求列出 Lifecycle，并展示 root/background Run 父子关系、结构 Timeline、Checkpoint/Store
 摘要、关联诊断以及单 Run/Lifecycle 诊断包下载。Event Journal 只保存结构身份、状态、时间和 usage，不复制运行正文。
 Lifecycle 的
 messages、task records、resolved mapping records 和 parent/child checkpoint 默认持续保留，直到用户显式删除；删除时同时清理
@@ -80,7 +80,7 @@ task identity。完整配置与城市/乡镇示例见[任务分发](../wizard-pa
 
 ## Main Agent 与直接 Subagent
 
-在【Agent / Main Agent】选择模型和 Agent 事件输出等 capability。Main Agent 是完整 Agent 装配，由 Workflow 的
+在【代理 / Main Agent】选择模型要求和 Agent 事件输出等 capability。Main Agent 是完整 Agent 装配，由 Workflow 的
 Agent node 引用。需要同步委派时，先创建 Subagent 实体，再由 Main Agent 按顺序保存 `subagent_id` 引用并选择委派
 capability。
 

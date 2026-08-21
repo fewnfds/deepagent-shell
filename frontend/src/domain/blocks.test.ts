@@ -238,10 +238,11 @@ describe('block adapters', () => {
     })
 
     expect(skillAdapter.fromApi({
-      id: 'skill', name: 'Skill', skills: ['kept', 42],
+      id: 'skill', name: 'Skill', skill_package: { folder: 'skill' },
       system_prompt_enabled: false, instruction_override: 42,
     } as never, skillDefaults)).toMatchObject({
-      skills: ['kept'], system_prompt_enabled: false, instruction_override: 'skill default',
+      skill_package: { folder: 'skill' }, skill_template_paths: [],
+      system_prompt_enabled: false, instruction_override: 'skill default',
     })
     expect(systemPromptAdapter.fromApi({
       id: 'system', name: 'System', system_prompt: 42,
@@ -300,14 +301,14 @@ describe('block adapters', () => {
   it('round-trips the remaining simple editors and removes displayed defaults', () => {
     const skill = skillAdapter.blank(skillDefaults)
     skill.name = ' Skill '
-    skill.skills = ['alpha', 'alpha']
+    skill.skill_template_paths = ['group/alpha']
     expect(skillAdapter.toPayload(skill, skillDefaults)).toEqual({
-      name: 'Skill', skills: ['alpha'], system_prompt_enabled: true, instruction_override: null,
+      name: 'Skill', skill_template_paths: ['group/alpha'], system_prompt_enabled: true, instruction_override: null,
     })
     skill.system_prompt_enabled = false
     skill.instruction_override = 'Custom but disabled'
     expect(skillAdapter.toPayload(skill, skillDefaults)).toEqual({
-      name: 'Skill', skills: ['alpha'], system_prompt_enabled: false, instruction_override: null,
+      name: 'Skill', skill_template_paths: ['group/alpha'], system_prompt_enabled: false, instruction_override: null,
     })
 
     const systemPrompt = systemPromptAdapter.blank()

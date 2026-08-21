@@ -129,7 +129,7 @@ def test_dependency_preparation_replaces_only_successful_package_layer(
 ) -> None:
     data_root = tmp_path / "data"
     runtime_root = tmp_path / "runtime"
-    packages = data_root / "config" / "python_package_instances"
+    packages = FileConfigRepository(data_root).python_package_instances_root
     owner_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
     package_id = "11111111-1111-4111-8111-111111111111"
     folder_name, folder = write_package(packages, owner_id, package_id)

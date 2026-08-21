@@ -1,6 +1,6 @@
 # 配置 Agent
 
-只有包含 Agent Node 时，才需要 Model、Filesystem、Agent Event Output、Workflow Input Context（WIC）Middleware 和 Main Agent；没有 Agent Node 的 Graph 不需要额外创建这些对象。其他装配项均为选配。
+只有包含 Agent Node 时，才需要模型要求、Filesystem、Agent Event Output、Workflow Input Context（WIC）Middleware 和 Main Agent；没有 Agent Node 的 Graph 不需要额外创建这些对象。其他装配项均为选配。
 
 ## Filesystem
 
@@ -18,21 +18,23 @@ Content-Type: application/json
 
 保存响应中的 `id`，并把它作为 Main Agent 或 Subagent 的 `filesystem` capability ref。
 
-## Model
+## Model Connection 与 Model Requirement
 
-强烈建议用户自行创建，并做好基本参数适配（temperature、top_p 等），AI 需要特殊参数时可复制配置，例如需要特殊 response_format。
+在【模型 -> 模型连接】创建实例私有连接，按 LangChain Provider contract 填写 endpoint、具体 model、请求参数和凭据。模型连接不属于 Configuration Repository，也不会进入 Bundle；凭据实际值只写入实例 env，普通响应仅返回 masked/missing 状态。
 
-`credential` 是 management-only 的 write-only input。创建 Model 时在 HTTPS 或本机 loopback 连接中提交真实 Provider Key；
-服务端会把它写入 `agent-shell.env` 的独立 environment variable，并在 Model YAML 中只保存 variable reference。响应不会回显 plaintext。不要把 Key 写进
+在【代理组件 -> 模型要求】创建可迁移的模型能力要求，只填写名称和多行 description。导入配置后，在【模型 -> 模型映射】按 description 选择本机模型连接；未绑定只产生 warning，运行装配时返回结构化 `model_requirement_unbound`。
+
+`credential` 是 management-only 的 write-only input。创建 Model Connection 时在 HTTPS 或本机 loopback 连接中提交真实 Provider Key；
+服务端会把它写入 `agent-shell.env` 的独立 environment variable，并在 Model Connection YAML 中只保存 variable reference。响应不会回显 plaintext。不要把 Key 写进
 script、普通日志或后续 GET/PUT payload；编辑同一 Provider 与 Base URL 时传 `null` 会保留现有 Key。
 
 ```http
-POST /api/blocks/model
+POST /api/model-connections
 Authorization: Bearer <management token>
 Content-Type: application/json
 
 {
-  "name": "Primary model",
+  "name": "Primary local connection",
   "provider": "openai",
   "base_url": "https://api.openai.com/v1",
   "credential": "<write-only Provider API Key>",
@@ -125,7 +127,7 @@ Task Dispatcher task、Runtime Context、Store 或当前 Agent Filesystem 材料
 
 ## Main Agent
 
-最小 Main Agent 引用 Model、Agent Event Output 和 WIC：
+最小 Main Agent 引用 Model Requirement、Agent Event Output 和 WIC：
 
 ```http
 POST /api/main-agents
@@ -135,7 +137,7 @@ Content-Type: application/json
 {
   "name": "Primary worker",
   "capability_refs": [
-    {"type": "model", "block_id": "<model UUID>"},
+    {"type": "model-requirement", "block_id": "<model requirement UUID>"},
     {"type": "agent-event-output", "block_id": "<agent-event-output UUID>"}
   ],
   "tool_refs": [
@@ -175,10 +177,20 @@ POST /api/subagents
 ```
 
 然后把 `{"subagent_id":"<UUID>"}` 加入 Main Agent 的 `subagents`。Subagent 默认继承 Main Agent 的 inheritable capability；不同的
-Model、system prompt 或 Filesystem Permissions 通过 `replace`/`disabled` override 表达，Tool 通过自己的 `settings.tool_refs` 独立装配。Main Agent 引用 `subagent` delegation capability component 后，
+Model Requirement、system prompt 或 Filesystem Permissions 通过 `replace`/`disabled` override 表达，Tool 通过自己的 `settings.tool_refs` 独立装配。Main Agent 引用 `subagent` delegation capability component 后，
 `task` Tool description 与 routing prompt 来自当前业务配置。
 
 Subagent 的 `name` 是 Model-visible routing name；清楚描述 delegation timing、职责和 return content 有助于 Model routing。当前 contract 只支持
 Main Agent 的一层直接 Subagent，不接受嵌套 Subagent 树。
+
+## 可移植配置 Bundle
+
+需要跨实例分享时，以一个 Component、Subagent、Main Agent 或 Workflow UUID 作为 Bundle root。后端沿
+`configuration.dependencies` 的 typed references 计算 transitive closure；不要按名称猜依赖，也不要扫描或替换 Python source
+中的 UUID。preview 为每个 source Configuration UUID 给出固定 target UUID，并返回名称建议、Filesystem bindings、阻塞项、warnings 和 trusted-code warnings。
+
+导入时提交同一 `bundle_sha256` 和完整 target map。所有配置 UUID 都改变，Node/Edge ID 等 Workflow-local topology key 保持不变；
+Python package folder/manifest owner UUID 跟随 Component target UUID。Workflow 必须保持 disabled，待 credential、path、Skill、
+Python code 和 dependency 复核完成后再走正常 Graph validation/publish。
 
 下一步：[创建 Workflow Graph](03-workflow-graph.md)。

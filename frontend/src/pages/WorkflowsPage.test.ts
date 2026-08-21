@@ -63,11 +63,10 @@ afterEach(() => {
 })
 
 describe('WorkflowsPage', () => {
-  it('loads Workflows and performs create and delete operations', async () => {
+  it('loads a Workflow and creates a new configuration from the action dock', async () => {
     vi.spyOn(managementApi, 'listWorkflows').mockResolvedValue([workflow])
     mockComponentLists()
     const create = vi.spyOn(managementApi, 'createWorkflow').mockResolvedValue(workflow)
-    const remove = vi.spyOn(managementApi, 'deleteWorkflow').mockResolvedValue({ ok: true })
     const router = testRouter()
     await router.push('/workflows/parents')
     await router.isReady()
@@ -79,20 +78,20 @@ describe('WorkflowsPage', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain(workflow.name)
-    expect(wrapper.text()).toContain('Configure')
     expect(wrapper.text()).toContain('Edit Flow')
+    expect(wrapper.text()).not.toContain('Delete')
     await wrapper.findAll('button').find((button) => button.text() === 'New')!.trigger('click')
     await flushPromises()
 
-    await wrapper.get('#workflow-form input[type="text"]').setValue('New Workflow')
-    await wrapper.get('#workflow-form textarea').setValue('New description')
-    const componentSelects = wrapper.findAll('#workflow-form select:not([required])')
+    await wrapper.get('[data-field="record-name"]').setValue('New Workflow')
+    await wrapper.get('textarea').setValue('New description')
+    const componentSelects = wrapper.findAll('select').filter((select) => !select.attributes('data-testid'))
     await componentSelects[0]!.setValue(eventOutput.id)
-    const runtimeLimits = wrapper.findAll('#workflow-form input[type="number"]')
+    const runtimeLimits = wrapper.findAll('input[type="number"]')
     await runtimeLimits[0]!.setValue(250)
     await runtimeLimits[1]!.setValue(900)
     await runtimeLimits[2]!.setValue(32)
-    await wrapper.get('#workflow-form').trigger('submit')
+    await wrapper.findAll('button').find((button) => button.text() === 'Save')!.trigger('click')
     await flushPromises()
 
     expect(create).toHaveBeenCalledWith({
@@ -105,11 +104,6 @@ describe('WorkflowsPage', () => {
       max_concurrency: 32,
     })
 
-    await wrapper.findAll('button').find((button) => button.text() === 'Delete')!.trigger('click')
-    useConfirmation().accept()
-    await flushPromises()
-
-    expect(remove).toHaveBeenCalledWith(workflow.id)
     wrapper.unmount()
   })
 
@@ -130,8 +124,8 @@ describe('WorkflowsPage', () => {
 
     expect(list).toHaveBeenCalledWith('child')
     await wrapper.findAll('button').find((button) => button.text() === 'New')!.trigger('click')
-    await wrapper.get('#workflow-form input[type="text"]').setValue('Child Workflow')
-    await wrapper.get('#workflow-form').trigger('submit')
+    await wrapper.get('[data-field="record-name"]').setValue('Child Workflow')
+    await wrapper.findAll('button').find((button) => button.text() === 'Save')!.trigger('click')
     await flushPromises()
 
     expect(create).toHaveBeenCalledWith({
@@ -164,12 +158,9 @@ describe('WorkflowsPage', () => {
     })
     await flushPromises()
 
-    await wrapper.findAll('button').find((button) => button.text() === 'Configure')!.trigger('click')
-    await flushPromises()
-
-    const componentSelects = wrapper.findAll('#workflow-form select:not([required])')
+    const componentSelects = wrapper.findAll('select').filter((select) => !select.attributes('data-testid'))
     expect((componentSelects[0]!.element as HTMLSelectElement).value).toBe(eventOutput.id)
-    await wrapper.get('#workflow-form').trigger('submit')
+    await wrapper.findAll('button').find((button) => button.text() === 'Save')!.trigger('click')
     await flushPromises()
 
     expect(update).toHaveBeenCalledWith(workflow.id, {

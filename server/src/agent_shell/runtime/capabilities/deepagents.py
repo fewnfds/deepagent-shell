@@ -17,7 +17,6 @@ from agent_shell.contracts import (
     FilesystemPermissionsBlock,
     SkillBlock,
 )
-from agent_shell.registries.skills import scan_skill_folder
 from agent_shell.validation.capability_assembly import FilesystemMode
 
 
@@ -407,6 +406,7 @@ def build_deepagents_capabilities(
     filesystem_permissions: FilesystemPermissionsBlock | None = None,
     filesystem_mode: FilesystemMode,
     skills_dir: Path,
+    skill_owner_id: str = "",
     workspace: DeepAgentsWorkspace | None = None,
     mapped_directory_paths: Mapping[str, Path] | None = None,
 ) -> DeepAgentsCapabilities:
@@ -449,10 +449,30 @@ def build_deepagents_capabilities(
 
     selected_skills: tuple[str, ...] = ()
     skill_sources: list[str] = []
-    if skill is not None and skill.skills:
-        selected_skills = tuple(skill.skills)
-        for name in selected_skills:
-            skill_sources.append(f"/skills/{name}/")
+    skill_package_root: Path | None = None
+    if skill is not None:
+        if skill.skill_package.folder != skill_owner_id:
+            raise DeepAgentsCapabilityError(
+                "Skill package folder does not match its owner configuration."
+            )
+        candidate_root = (skills_dir / skill.skill_package.folder).resolve()
+        try:
+            candidate_root.relative_to(skills_dir.resolve())
+        except ValueError as exc:
+            raise DeepAgentsCapabilityError(
+                "Skill package path escapes the active repository."
+            ) from exc
+        if candidate_root.is_dir() and not candidate_root.is_symlink():
+            skill_package_root = candidate_root
+            selected_skills = tuple(
+                child.name
+                for child in sorted(
+                    candidate_root.iterdir(), key=lambda path: path.name.casefold()
+                )
+                if child.is_dir() and not child.is_symlink()
+            )
+            if selected_skills:
+                skill_sources.append("/skills/")
 
     agent_routes: dict[str, Any] = {}
     for route in filesystem.mapped_directories if filesystem is not None else ():
@@ -510,22 +530,9 @@ def build_deepagents_capabilities(
         )
 
     skill_routes: dict[str, Any] = {}
-    for name in selected_skills:
-        skill_folder = (skills_dir / name).resolve()
-        try:
-            skill_folder.relative_to(skills_dir.resolve())
-        except ValueError as exc:
-            raise DeepAgentsCapabilityError(
-                f"skill path escapes skills_dir: {name}"
-            ) from exc
-        try:
-            scan_skill_folder(skill_folder)
-        except ValueError as exc:
-            raise DeepAgentsCapabilityError(
-                f"selected skill is invalid: {name}: {exc}"
-            ) from exc
-        skill_routes[f"/{name}/"] = FilesystemBackend(
-            root_dir=skill_folder,
+    if skill_package_root is not None:
+        skill_routes["/"] = FilesystemBackend(
+            root_dir=skill_package_root,
             virtual_mode=True,
         )
 

@@ -5,6 +5,7 @@ import json
 import shutil
 
 from agent_shell.storage.blocks import BlockStore
+from agent_shell.storage.file_config import FileConfigRepository
 from agent_shell.storage.workflows import WorkflowStore
 from .support import *
 
@@ -249,6 +250,99 @@ def test_workflow_rejects_removed_filesystem_field(
     assert legacy.json()["detail"]["code"] == "workflow_invalid"
 
 
+def test_repository_validation_includes_disabled_workflow_references(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    missing_main_agent_id = "00000000-0000-4000-8000-000000000077"
+    with make_client(tmp_path, monkeypatch) as client:
+        main_agent = create_main_agent(client)
+        wrong_type_id = capability_reference_id(main_agent, "model-requirement")
+        workflow = create_workflow(client, name="Reference integrity draft")
+        document = {
+            "definition": {
+                "schema_version": 1,
+                "state_contract": "agent-shell.workflow.agent-invocations.v1",
+                "nodes": [
+                    {
+                        "id": "missing",
+                        "type": "agent",
+                        "type_version": 1,
+                        "config": {"main_agent_id": missing_main_agent_id},
+                    },
+                    {
+                        "id": "wrong-type",
+                        "type": "agent",
+                        "type_version": 1,
+                        "config": {"main_agent_id": wrong_type_id},
+                    },
+                ],
+                "edges": [],
+            },
+            "layout": {"nodes": {}, "viewport": {"x": 0, "y": 0, "zoom": 1}},
+        }
+        saved = client.put(
+            f"/api/workflows/{workflow['id']}/draft",
+            json=document,
+        )
+        report = client.get("/api/validation/repository")
+
+    assert saved.status_code == 200, saved.text
+    assert report.status_code == 200, report.text
+    issues = {
+        (issue["code"], issue["path"])
+        for issue in report.json()["issues"]
+        if issue["owner_id"] == workflow["id"]
+    }
+    assert issues == {
+        (
+            "storage.reference_not_found",
+            "definition.nodes[0].config.main_agent_id",
+        ),
+        (
+            "storage.reference_type_mismatch",
+            "definition.nodes[1].config.main_agent_id",
+        ),
+    }
+
+
+def test_repository_validation_includes_workflow_graph_admission(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        workflow = create_workflow(client, name="Invalid graph admission")
+
+    repository = FileConfigRepository(tmp_path / "data")
+
+    def add_unsupported_node(config: dict) -> None:
+        stored = next(
+            item
+            for item in config["workflows"]
+            if item["id"] == workflow["id"]
+        )
+        stored["definition"]["nodes"] = [
+            {
+                "id": "unsupported",
+                "type": "removed-node",
+                "type_version": 1,
+                "config": {},
+            }
+        ]
+
+    repository.update_config(add_unsupported_node)
+
+    with make_client(tmp_path, monkeypatch) as client:
+        report = client.get("/api/validation/repository")
+
+    assert report.status_code == 200, report.text
+    assert any(
+        issue["code"] == "workflow.node_type_unsupported"
+        and issue["owner_id"] == "unsupported"
+        for issue in report.json()["issues"]
+    )
+
+
 def test_workflow_draft_publish_and_validation_share_one_graph(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -408,10 +502,7 @@ def test_workflow_publish_reports_broken_router_package_without_missing_referenc
         assert router.status_code == 200, router.text
         folder = router.json()["python_package"]["folder"]
         shutil.rmtree(
-            tmp_path
-            / "data"
-            / "config"
-            / "python_package_instances"
+            FileConfigRepository(tmp_path / "data").python_package_instances_root
             / "command"
             / folder
         )

@@ -2,7 +2,7 @@ export type JsonPrimitive = boolean | number | string | null
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue }
 
 export type BlockType =
-  | 'model'
+  | 'model-requirement'
   | 'system-prompt'
   | 'filesystem'
   | 'filesystem-permissions'
@@ -76,7 +76,28 @@ export interface ModelProviderCatalog {
   providers: ModelProviderCatalogItem[]
 }
 
-export type FileManagerScope = 'files' | 'skills' | 'python_templates'
+export interface ModelConnection {
+  id: string
+  name: string
+  provider: string
+  base_url: string
+  credential: { status: 'masked' | 'missing' }
+  model: string
+  provider_settings: Record<string, unknown>
+  tool_choice: unknown
+  response_format: Record<string, unknown> | null
+  model_settings: Record<string, unknown>
+}
+
+export interface ModelRequirementBinding {
+  id: string
+  name: string
+  description: string
+  binding: string | null
+  connection: ModelConnection | null
+}
+
+export type FileManagerScope = 'files' | 'skill_templates' | 'python_templates'
 type ManagedFileKind = 'directory' | 'file' | 'unsupported'
 
 export interface ManagedFileScopeCatalog {
@@ -186,6 +207,113 @@ export interface SkillResource {
   name: string
   folder: string
   description: string
+  template_path: string
+}
+
+export interface PrivateSkillResource {
+  name: string
+  folder: string
+  description: string
+}
+
+export interface SkillPackageInspection {
+  folder: string
+  path: string
+  catalog: PrivateSkillResource[]
+  warnings: Record<string, LocalizedMessagePayload>
+}
+
+export interface ConfigurationRepository {
+  id: string
+  name: string
+  schema_version: 1
+  active: boolean
+}
+
+export interface ConfigurationRepositoryList {
+  active_id: string
+  repositories: ConfigurationRepository[]
+}
+
+export interface ConfigurationRepositoryActivation extends ConfigurationRepository {
+  restart_required: boolean
+  validation: ValidationReport
+}
+
+export type ConfigurationEntityKind = 'component' | 'main_agent' | 'subagent' | 'workflow'
+
+export interface ConfigurationBundleRoot {
+  kind: ConfigurationEntityKind
+  source_id: string
+  type?: ManagedComponentType
+}
+
+export interface ConfigurationBundleRecordPlan {
+  source_id: string
+  target_id: string
+  kind: ConfigurationEntityKind
+  type: ManagedComponentType | null
+  original_name: string
+  suggested_name: string
+  selected_name: string
+  requires_confirmation: boolean
+}
+
+export interface ConfigurationBundleFilesystemBinding {
+  binding_id: string
+  source_id: string
+  configuration_name: string
+  path: string
+  kind: 'mapped-directory' | 'virtual-directory' | 'virtual-file'
+  source_value: string
+  source_path_origin: 'absolute' | 'data-root-relative' | null
+  required: boolean
+  status: 'ready' | 'target-missing' | 'binding-required'
+  target_value: string | null
+}
+
+export interface ConfigurationBundleIssue {
+  code: string
+  message: string
+  source_id?: string
+  path?: string
+}
+
+export interface ConfigurationBundlePreview {
+  bundle_sha256: string
+  manifest_sha256: string
+  root: {
+    kind: ConfigurationEntityKind
+    type: ManagedComponentType | null
+    source_id: string
+    target_id: string
+    workflow_role: WorkflowRole | null
+  }
+  target_ids: Record<string, string>
+  records: ConfigurationBundleRecordPlan[]
+  filesystem_bindings: ConfigurationBundleFilesystemBinding[]
+  skill_packages: Array<{ source_id: string; target_id: string; sha256: string }>
+  errors: ConfigurationBundleIssue[]
+  warnings: ConfigurationBundleIssue[]
+  ready: boolean
+}
+
+export interface ConfigurationBundleResolutions {
+  target_ids: Record<string, string>
+  names: Record<string, string>
+  filesystem_bindings: Record<string, {
+    value: string
+    path_origin?: 'absolute' | 'data-root-relative'
+  }>
+}
+
+export interface ConfigurationBundleImportResult {
+  bundle_sha256: string
+  root: ConfigurationBundlePreview['root']
+  target_ids: Record<string, string>
+  records: ConfigurationBundleRecordPlan[]
+  skill_packages: Array<{ source_id: string; target_id: string; sha256: string }>
+  warnings: ConfigurationBundleIssue[]
 }
 
 export interface LocalizedMessagePayload {

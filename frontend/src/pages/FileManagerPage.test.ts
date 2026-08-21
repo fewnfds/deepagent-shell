@@ -19,7 +19,7 @@ vi.mock('vue-i18n', async (importOriginal) => {
 })
 
 const fileScopeCatalog = {
-  scopes: ['files', 'skills', 'python_templates'] as FileManagerScope[],
+  scopes: ['files', 'skill_templates', 'python_templates'] as FileManagerScope[],
 }
 
 async function openFilesRoot(wrapper: ReturnType<typeof mount>): Promise<void> {

@@ -199,11 +199,17 @@ def test_agent_config_copy_revalidates_invalid_stored_sources_before_writing(
     def corrupt_stored_sources(config: dict) -> None:
         for record in config["main_agents"]:
             if record.get("id") == main_agent["id"]:
-                record["capability_refs"][0]["block_id"] = "missing-block"
+                record["capability_refs"][0]["block_id"] = (
+                    "00000000-0000-4000-8000-000000000098"
+                )
         for record in config["subagents"]:
             if record.get("id") == subagent["id"]:
                 record["settings"]["capability_overrides"] = [
-                    {"type": "model", "mode": "replace", "block_id": "missing-block"}
+                    {
+                        "type": "model",
+                        "mode": "replace",
+                        "block_id": "00000000-0000-4000-8000-000000000098",
+                    }
                 ]
 
     configuration.update_config(corrupt_stored_sources)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .support import *
+from agent_shell.storage.file_config import FileConfigRepository
 
 def test_api_key_is_write_only_and_takes_effect_immediately(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -36,6 +37,37 @@ def test_api_key_is_write_only_and_takes_effect_immediately(
     assert persisted.status_code == 200
     assert status.json()["message_interception_enabled"] is False
     assert secret not in status.text
+
+
+def test_api_key_update_restores_environment_when_system_write_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        environment_path = tmp_path / "data" / "config" / "agent-shell.env"
+        original_environment = environment_path.read_text(encoding="utf-8")
+        monkeypatch.setattr(
+            FileConfigRepository,
+            "update_system",
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                OSError("injected system write failure")
+            ),
+        )
+
+        with pytest.raises(OSError, match="injected system write failure"):
+            client.put(
+                "/api/api-server",
+                json={
+                    "api_key": {
+                        "operation": "replace",
+                        "value": "must-be-rolled-back",
+                    }
+                },
+            )
+
+        assert environment_path.read_text(encoding="utf-8") == original_environment
+        assert client.app.state.api_server_store.api_key() == API_KEY
+
 
 def test_start_stop_and_known_workflow_runs_after_restart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

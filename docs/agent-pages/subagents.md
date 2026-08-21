@@ -9,7 +9,7 @@ Subagent 是 Main Agent 可直接委派的一层独立配置实体：
   "description": "Research delegated topics.",
   "settings": {
     "capability_overrides": [
-      {"type": "model", "mode": "replace", "block_id": "model-uuid"}
+      {"type": "model-requirement", "mode": "replace", "block_id": "model-requirement-uuid"}
     ],
     "middleware_refs": [
       {"middleware_id": "middleware-uuid"}

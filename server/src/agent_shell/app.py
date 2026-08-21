@@ -10,6 +10,8 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from agent_shell.api.routes import build_router
+from agent_shell.api.configuration_bundles import build_configuration_bundle_router
+from agent_shell.api.configuration_repositories import build_configuration_repository_router
 from agent_shell.api.agent_configs import build_agent_config_router
 from agent_shell.api.python_packages import build_python_package_router
 from agent_shell.api.errors import localized_error_detail
@@ -24,6 +26,7 @@ from agent_shell.api.runtime_diagnostics import build_runtime_diagnostics_router
 from agent_shell.api.file_manager import build_file_manager_router
 from agent_shell.api.provider_integrations import build_provider_integrations_router
 from agent_shell.api.system_settings import build_system_settings_router
+from agent_shell.api.model_connections import build_model_connection_router
 from agent_shell.api.validation import build_validation_router
 from agent_shell.api.workflows import build_workflow_router
 from agent_shell.api.workflow_lifecycles import build_workflow_lifecycle_router
@@ -53,6 +56,7 @@ from agent_shell.security import (
 from agent_shell.storage.agent_configs import AgentConfigStore
 from agent_shell.storage.api_server import ApiServerStore
 from agent_shell.storage.blocks import BlockStore
+from agent_shell.storage.configuration_mutations import ConfigurationMutationCoordinator
 from agent_shell.storage.database import SQLiteDatabase
 from agent_shell.storage.file_config import FileConfigRepository
 from agent_shell.storage.history_retention import HistoryRetentionStore
@@ -63,12 +67,18 @@ from agent_shell.storage.runtime_policy import RuntimePolicyStore
 from agent_shell.storage.system_log_settings import MIB_BYTES, SystemLogSettingsStore
 from agent_shell.storage.validation_settings import ConfigurationValidationSettingsStore
 from agent_shell.storage.workflows import WorkflowStore
+from agent_shell.storage.environment import InstanceEnvironmentStore
+from agent_shell.storage.model_connections import ModelResourceStore
 from agent_shell.validation.service import ConfigurationValidationService
+from agent_shell.validation.repository import RepositoryValidationService
 from agent_shell.python_packages.validation import PythonPackageValidationService
 from agent_shell.python_packages.authoring import PythonPackageAuthoringService
+from agent_shell.skills.authoring import SkillPackageAuthoringService
 from agent_shell.file_manager import FileManagerService
 from agent_shell.system_settings import SystemSettingsService
 from agent_shell.storage.permissions import secure_directory, secure_file
+from agent_shell.configuration.bundles.journal import recover_configuration_imports
+from agent_shell.configuration.bundles.service import ConfigurationBundleService
 
 
 def create_app(
@@ -83,6 +93,7 @@ def create_app(
         settings = get_settings(application_home=application_home)
     langsmith_client = configure_project_langsmith_tracing(settings)
     settings.ensure_directories()
+    recover_configuration_imports(settings.data_root)
 
     environment_permissions = ()
     environment_path = settings.environment_file
@@ -95,8 +106,7 @@ def create_app(
             )
         environment_permissions = (environment_permission,)
     python_templates_dir = settings.resolved_python_templates_dir()
-    python_package_instances_dir = settings.resolved_python_package_instances_dir()
-    skills_dir = settings.resolved_skills_dir()
+    skill_templates_dir = settings.resolved_skill_templates_dir()
 
     runtime_dir = settings.resolved_runtime_dir()
     logs_dir = settings.resolved_logs_dir()
@@ -110,7 +120,23 @@ def create_app(
         )
     )
     database = SQLiteDatabase(settings.resolved_database_path())
-    configuration = FileConfigRepository(settings.data_root)
+    configuration_mutations = ConfigurationMutationCoordinator()
+    environment = InstanceEnvironmentStore(
+        settings.environment_file,
+        mutations=configuration_mutations,
+    )
+    configuration = FileConfigRepository(
+        settings.data_root,
+        mutations=configuration_mutations,
+        environment=environment,
+    )
+    model_resources = ModelResourceStore(
+        settings.data_root,
+        environment=environment,
+        mutations=configuration_mutations,
+    )
+    python_package_instances_dir = configuration.python_package_instances_root
+    skill_package_instances_dir = configuration.skill_package_instances_root
     runtime_policy = RuntimePolicyStore(configuration)
     media_outputs = MediaOutputStore(
         database,
@@ -135,7 +161,7 @@ def create_app(
     config_store = AgentConfigStore(configuration, event_logger)
     workflow_store = WorkflowStore(configuration, event_logger)
     python_package_validation = PythonPackageValidationService(
-        packages_dir=python_package_instances_dir,
+        packages_dir=lambda: configuration.python_package_instances_root,
         runtime_root=runtime_dir,
     )
     workflow_lifecycle = WorkflowLifecycleService(
@@ -145,15 +171,37 @@ def create_app(
     python_package_authoring = PythonPackageAuthoringService(
         templates_root=python_templates_dir,
         examples_root=application_home / "examples",
-        instances_root=python_package_instances_dir,
+        instances_root=lambda: configuration.python_package_instances_root,
         runtime_root=runtime_dir,
+    )
+    skill_package_authoring = SkillPackageAuthoringService(
+        templates_root=skill_templates_dir,
+        instances_root=lambda: configuration.skill_package_instances_root,
     )
     configuration_validation = ConfigurationValidationService(
         block_store,
         config_store,
         python_package_validation,
     )
-    api_server_store = ApiServerStore(database, configuration, event_logger)
+    repository_validation = RepositoryValidationService(
+        configuration,
+        block_store,
+        configuration_validation,
+        model_resources=model_resources,
+    )
+    configuration_bundles = ConfigurationBundleService(
+        configuration,
+        packages_dir=lambda: configuration.python_package_instances_root,
+        skills_dir=lambda: configuration.skill_package_instances_root,
+        runtime_root=runtime_dir,
+    )
+    api_server_store = ApiServerStore(
+        database,
+        configuration,
+        environment,
+        configuration_mutations,
+        event_logger,
+    )
     try:
         validate_api_key_policy(settings, api_server_store.api_key())
     except ApiKeyPolicyError as exc:
@@ -189,23 +237,29 @@ def create_app(
         runtime_diagnostics,
         system_log_settings,
     )
-    secret_resolver = ProviderSecretResolver(configuration)
+    secret_resolver = ProviderSecretResolver(configuration, model_resources)
     provider_http_clients = ProviderHttpClients(runtime_policy)
     file_manager = FileManagerService(
         {
             "files": settings.resolved_files_dir(),
-            "skills": skills_dir,
+            "skill_templates": skill_templates_dir,
             "python_templates": python_templates_dir,
         },
         settings.resolved_runtime_dir() / "tmp",
         runtime_policy,
     )
-    system_settings = SystemSettingsService(settings, api_server_store.api_key, configuration)
+    system_settings = SystemSettingsService(
+        settings,
+        api_server_store.api_key,
+        configuration,
+        environment,
+        configuration_mutations,
+    )
     agent_runtime = RequestSnapshotRuntime(
         configuration,
-        python_packages_dir=python_package_instances_dir,
+        python_packages_dir=lambda: configuration.python_package_instances_root,
         runtime_dir=runtime_dir,
-        skills_dir=skills_dir,
+        skills_dir=lambda: configuration.skill_package_instances_root,
         provider_http_clients=provider_http_clients,
         media_outputs=media_outputs,
         workflow_checkpoints=workflow_checkpoints,
@@ -213,6 +267,7 @@ def create_app(
         background_tasks=background_tasks,
         runtime_diagnostics=runtime_diagnostics,
         runtime_policy=runtime_policy,
+        model_resources=model_resources,
     )
 
     frontend_dir = Path(__file__).resolve().parents[3] / "runtime" / "frontend_dist"
@@ -453,6 +508,7 @@ def create_app(
     app.state.workflow_lifecycle = workflow_lifecycle
     app.state.background_tasks = background_tasks
     app.state.system_log_settings = system_log_settings
+    app.state.model_resources = model_resources
     app.add_middleware(
         ScopeAuthenticationMiddleware,
         settings=settings,
@@ -477,17 +533,34 @@ def create_app(
             max_age=600,
         )
     app.include_router(build_system_router(readiness))
+    app.include_router(build_configuration_bundle_router(configuration_bundles))
+    app.include_router(
+        build_configuration_repository_router(
+            configuration,
+            repository_validation,
+            runtime_root=runtime_dir,
+        )
+    )
     app.include_router(
         build_router(
+            configuration,
             block_store,
             config_store,
-            skills_dir,
+            skill_templates_dir,
             secret_resolver,
             configuration_validation,
             provider_http_clients,
             workflow_store,
             python_package_authoring,
+            skill_package_authoring,
             runtime_policy,
+        )
+    )
+    app.include_router(
+        build_model_connection_router(
+            configuration,
+            block_store,
+            model_resources,
         )
     )
     app.include_router(
@@ -516,6 +589,7 @@ def create_app(
     app.include_router(
         build_validation_router(
             configuration_validation,
+            repository_validation,
             configuration_validation_settings,
         )
     )

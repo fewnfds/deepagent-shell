@@ -3,10 +3,8 @@ from __future__ import annotations
 import argparse
 import getpass
 import os
-import re
 import socket
 import sys
-import tempfile
 from collections.abc import Callable
 from pathlib import Path
 from typing import TextIO
@@ -19,6 +17,10 @@ from agent_shell.settings import (
     load_settings,
 )
 from agent_shell.storage.permissions import secure_file
+from agent_shell.storage.environment import (
+    InstanceEnvironmentStore,
+    SYSTEM_SETTINGS_ENVIRONMENT_OWNER,
+)
 
 
 _MISSING_LOCAL_MANAGEMENT_TOKEN_ACTION = "Configure the management Bearer token."
@@ -110,46 +112,13 @@ def _write_management_password(
     *,
     env_path: Path,
 ) -> None:
-    existing = env_path.read_text(encoding="utf-8-sig") if env_path.exists() else ""
-    newline = "\r\n" if "\r\n" in existing else "\n"
-    lines: list[str] = []
-    for line in existing.splitlines():
-        key, separator, _ = line.partition("=")
-        normalized = key.strip().upper()
-        if separator and (
-            normalized == "AGENT_SHELL_API_KEY"
-            or normalized.endswith("_API_KEY")
-        ):
-            lines.append(line)
-    replacement = f"AGENT_SHELL_MANAGEMENT_TOKEN={password}"
-    placeholder = re.compile(
-        r"^\s*AGENT_SHELL_MANAGEMENT_TOKEN\s*=.*$",
-        flags=re.IGNORECASE,
+    InstanceEnvironmentStore(env_path).patch(
+        SYSTEM_SETTINGS_ENVIRONMENT_OWNER,
+        set_values={"AGENT_SHELL_MANAGEMENT_TOKEN": password},
     )
-    for index, line in enumerate(lines):
-        if placeholder.fullmatch(line):
-            lines[index] = replacement
-            break
-    else:
-        if lines and lines[-1]:
-            lines.append("")
-        lines.append(replacement)
-
-    env_path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix="agent-shell.env.", suffix=".tmp", dir=env_path.parent
-    )
-    temporary_path = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as target:
-            target.write(newline.join(lines) + newline)
-        os.replace(temporary_path, env_path)
-        permission = secure_file(env_path)
-        if not permission.enforced:
-            raise OSError("The management settings file permissions are not private.")
-    except BaseException:
-        temporary_path.unlink(missing_ok=True)
-        raise
+    permission = secure_file(env_path)
+    if not permission.enforced:
+        raise OSError("The management settings file permissions are not private.")
 
 
 def initialize_local_settings(

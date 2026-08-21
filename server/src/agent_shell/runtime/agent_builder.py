@@ -67,6 +67,7 @@ from agent_shell.validation.service import ConfigurationValidationService
 from agent_shell.validation.assembly import StaticAssembly
 from agent_shell.python_requirements import parse_python_requirements
 from agent_shell.storage.runtime_policy import RUNTIME_POLICY_DEFAULTS, RuntimePolicyStore
+from agent_shell.storage.model_connections import ModelResourceSnapshot, ModelResourceStore
 from agent_shell.tool_packages import ToolPackageRuntime
 
 
@@ -157,6 +158,8 @@ class AgentBuilder:
         validation: ConfigurationValidationService,
         provider_http_clients: ProviderHttpClients,
         store: BaseStore,
+        model_resources: ModelResourceStore | ModelResourceSnapshot | None = None,
+        repository_id: str | None = None,
         runtime_policy: RuntimePolicyStore | None = None,
     ) -> None:
         self._secrets = secrets
@@ -167,6 +170,8 @@ class AgentBuilder:
         self._provider_http_clients = provider_http_clients
         self._runtime_policy = runtime_policy
         self._store = store
+        self._model_resources = model_resources or getattr(secrets, "model_connections", None)
+        self._repository_id = repository_id or getattr(secrets, "repository_id", "")
         self._tool_runtime: ToolPackageRuntime | None = None
         self._middleware_runtime: MiddlewarePackageRuntime | None = None
 
@@ -228,26 +233,53 @@ class AgentBuilder:
         ] | None = None,
         disabled_capabilities: frozenset[str] = frozenset(),
     ) -> MaterializedAgentProfile:
-        model_id = references["model"]
-        model_block = selected_blocks["model"]
+        requirement_id = references["model-requirement"]
+        if "model-requirement" not in selected_blocks:
+            raise configuration_error(
+                "model_requirement_unbound",
+                "The Agent does not select a model requirement.",
+                status_code=409,
+                scope=scope,
+                owner_id=owner_id,
+                owner_name=owner_name,
+                path="capability_refs.model-requirement",
+            )
+        connection_id = (
+            self._model_resources.get_binding(self._repository_id, requirement_id)
+            if self._model_resources is not None
+            else None
+        )
+        if not connection_id:
+            raise configuration_error(
+                "model_requirement_unbound",
+                "The model requirement is not bound to a local model connection.",
+                status_code=409,
+                scope=scope,
+                owner_id=owner_id,
+                owner_name=owner_name,
+                path="capability_refs.model-requirement",
+            )
+        try:
+            if self._model_resources is None:
+                raise KeyError(connection_id)
+            model_block = self._model_resources.resolve_connection(connection_id)
+        except KeyError as exc:
+            raise configuration_error(
+                "model_requirement_unbound",
+                "The model requirement is bound to a missing local model connection.",
+                status_code=409,
+                scope=scope,
+                owner_id=owner_id,
+                owner_name=owner_name,
+                path="capability_refs.model-requirement",
+            ) from exc
         exception_retry = selected_blocks.get("exception-retry")
         effective_model_block = (
             model_block_with_retry_overrides(model_block, exception_retry)
             if exception_retry is not None
             else model_block
         )
-        try:
-            credential = self._secrets.resolve_model(model_id)
-        except ProviderCredentialError as exc:
-            raise configuration_error(
-                exc.code,
-                exc.safe_message,
-                status_code=409,
-                scope=scope,
-                owner_id=owner_id,
-                owner_name=owner_name,
-                path="capability_refs.model",
-            ) from exc
+        credential = model_block.pop("credential", None)
         try:
             model = _build_chat_model(
                 effective_model_block,
@@ -262,7 +294,7 @@ class AgentBuilder:
                 scope=scope,
                 owner_id=owner_id,
                 owner_name=owner_name,
-                path="capability_refs.model",
+                path="capability_refs.model-requirement",
             ) from exc
         except Exception as exc:
             raise configuration_error(
@@ -272,7 +304,7 @@ class AgentBuilder:
                 scope=scope,
                 owner_id=owner_id,
                 owner_name=owner_name,
-                path="capability_refs.model",
+                path="capability_refs.model-requirement",
             ) from exc
 
         tools: list[Any] = []
@@ -348,6 +380,7 @@ class AgentBuilder:
                 filesystem_permissions=filesystem_permissions_block,
                 filesystem_mode=filesystem_mode,
                 skills_dir=self._skills_dir,
+                skill_owner_id=str(skill.get("id", "")) if skill is not None else "",
                 workspace=workspace,
                 mapped_directory_paths=(
                     mapped_directory_paths_by_filesystem.get(

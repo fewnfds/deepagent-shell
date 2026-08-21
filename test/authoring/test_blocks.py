@@ -4,6 +4,8 @@ import shutil
 
 import pytest
 
+from agent_shell.storage.file_config import FileConfigRepository
+
 from .app_support import *
 
 
@@ -192,9 +194,7 @@ def test_command_uses_component_crud_storage_and_repository_validation(
         f"/api/blocks/command/{created['id']}"
     ).json() == created
     assert (
-        tmp_path
-        / "data"
-        / "config"
+        FileConfigRepository(tmp_path / "data").config_root
         / "components"
         / "command"
         / f"{created['id']}.yaml"
@@ -296,6 +296,11 @@ def test_block_crud_round_trips_every_form_payload(tmp_path: Path, monkeypatch) 
                 "name": f"{payload['name']} updated",
                 "python_package": created["python_package"],
                 "python_package_files": created["python_package_files"],
+            }
+        if block_type == "skill":
+            update_payload = {
+                "name": f"{payload['name']} updated",
+                "skill_package": created["skill_package"],
             }
         updated = client.put(
             f"/api/blocks/{block_type}/{created['id']}", json=update_payload
@@ -424,7 +429,7 @@ def test_basic_payload_shape_errors_are_rejected(tmp_path: Path, monkeypatch) ->
 
     empty_skill = client.post(
         "/api/blocks/skill",
-        json={"name": "Empty Skill selection", "skills": []},
+        json={"name": "Empty Skill selection", "skill_template_paths": []},
     )
     removed_skill_switch = client.post(
         "/api/blocks/skill",

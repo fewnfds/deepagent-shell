@@ -20,9 +20,14 @@ PackageResolver = Callable[..., tuple[dict[str, object], Path] | None]
 
 
 class PythonPackageValidationService:
-    def __init__(self, *, packages_dir: Path, runtime_root: Path) -> None:
-        self._packages_dir = packages_dir
+    def __init__(self, *, packages_dir: Path | Callable[[], Path], runtime_root: Path) -> None:
+        self._packages_dir_source = packages_dir
         self._runtime_root = runtime_root
+
+    @property
+    def _packages_dir(self) -> Path:
+        value = self._packages_dir_source() if callable(self._packages_dir_source) else self._packages_dir_source
+        return Path(value).resolve()
 
     def middleware_issues(
         self,

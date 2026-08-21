@@ -13,7 +13,7 @@ python_package:
 新建配置时，可以从 `data/templates/agent/custom_middleware/<template-key>/` 加载用户模板，也可以选择
 `examples/agent-components/custom-middleware/<example-key>/` 提供的 `内置示例-<example-key>`，或【套用空模板】从空的
 `main.py` 和空的 `requirements.txt` 开始编辑。用户模板与内置示例可以同名。首次保存会把当前草稿写入
-`data/config/python_package_instances/agent-middleware/`，生成属于该配置的 `package.json` 和文件夹引用。此后配置只读取、
+`data/configuration-repositories/<repository-uuid>/python_package_instances/agent-middleware/`，生成属于该配置的 `package.json` 和文件夹引用。此后配置只读取、
 编辑自己的扩展代码目录，模板修改不会传播。
 
 编辑器默认显示 `main.py`。用户可以逐行增加包内相对文件路径；编辑器按清单顺序显示并保存这些文本文件。

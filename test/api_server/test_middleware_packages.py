@@ -10,6 +10,7 @@ from langchain.agents.middleware import ModelCallLimitMiddleware
 
 from agent_shell.middleware_packages.runtime import MiddlewareOwner, MiddlewarePackageRuntime
 from agent_shell.runtime.errors import AgentRuntimeError
+from agent_shell.storage.file_config import FileConfigRepository
 
 from .support import make_client
 
@@ -38,10 +39,7 @@ def write_private_middleware(
 ) -> tuple[str, Path]:
     folder_name = owner_id
     folder = (
-        tmp_path
-        / "data"
-        / "config"
-        / "python_package_instances"
+        FileConfigRepository(tmp_path / "data").python_package_instances_root
         / "agent-middleware"
         / folder_name
     )
@@ -154,10 +152,7 @@ def test_missing_private_middleware_is_rejected_when_projected(
         assert created.status_code == 200, created.text
         folder = created.json()["python_package"]["folder"]
         shutil.rmtree(
-            tmp_path
-            / "data"
-            / "config"
-            / "python_package_instances"
+            FileConfigRepository(tmp_path / "data").python_package_instances_root
             / "agent-middleware"
             / folder
         )
@@ -188,7 +183,7 @@ def test_package_materializes_official_langchain_middleware(tmp_path: Path) -> N
                 ),),
             )
         ],
-        packages_dir=tmp_path / "data" / "config" / "python_package_instances",
+        packages_dir=FileConfigRepository(tmp_path / "data").python_package_instances_root,
         runtime_root=tmp_path / "runtime",
     )
 
@@ -227,7 +222,7 @@ def test_package_factory_can_request_runtime_context_by_name(tmp_path: Path) -> 
                 ),),
             )
         ],
-        packages_dir=tmp_path / "data" / "config" / "python_package_instances",
+        packages_dir=FileConfigRepository(tmp_path / "data").python_package_instances_root,
         runtime_root=tmp_path / "runtime",
     )
 
@@ -278,7 +273,7 @@ def test_package_runtime_preserves_ordered_middleware_references(tmp_path: Path)
                 ),
             )
         ],
-        packages_dir=tmp_path / "data" / "config" / "python_package_instances",
+        packages_dir=FileConfigRepository(tmp_path / "data").python_package_instances_root,
         runtime_root=tmp_path / "runtime",
     )
 
@@ -310,7 +305,7 @@ def test_package_runtime_rejects_multiple_middleware_result(tmp_path: Path) -> N
                 ),),
             )
         ],
-        packages_dir=tmp_path / "data" / "config" / "python_package_instances",
+        packages_dir=FileConfigRepository(tmp_path / "data").python_package_instances_root,
         runtime_root=tmp_path / "runtime",
     )
 
@@ -345,7 +340,7 @@ def test_async_agent_runtime_rejects_sync_only_middleware_hooks(tmp_path: Path) 
                 ),),
             )
         ],
-        packages_dir=tmp_path / "data" / "config" / "python_package_instances",
+        packages_dir=FileConfigRepository(tmp_path / "data").python_package_instances_root,
         runtime_root=tmp_path / "runtime",
     )
 

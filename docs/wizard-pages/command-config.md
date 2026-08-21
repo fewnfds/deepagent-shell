@@ -6,7 +6,7 @@ Command 节点是 Workflow 画布上可同时更新 State 和动态选择后继�
 ## Package 与入口
 
 静态模板位于 `data/templates/workflow/command/<template-key>/`。新配置首次保存时复制为
-`data/config/python_package_instances/command/<configuration-uuid>/` 下的配置扩展。
+`data/configuration-repositories/<repository-uuid>/python_package_instances/command/<configuration-uuid>/` 下的配置扩展。
 配置扩展至少包含 `package.json` 和 `main.py`，并可包含 `requirements.txt`、本地模块和测试。manifest 固定使用 `family: workflow-node` 与
 `adapter: command`。完整目录、manifest、imports 和依赖规则见[文件化 Python 扩展包](../user-guide/middleware-packages.md)。
 

@@ -7,33 +7,34 @@
 ```text
 data/
   config/
-    components/<type>/<uuid>.yaml
-    python_package_instances/{command,task-dispatcher,agent-tool,agent-middleware,agent-event-output,workflow-event-output}/
-    agents/main/<uuid>.yaml
-    agents/subagent/<uuid>.yaml
-    workflows/<uuid>.yaml
+    active-configuration-repository.json
     system.yaml
     agent-shell.env
+  configuration-repositories/<repository-uuid>/
+    repository.json
+    components/ agents/ workflows/
+    python_package_instances/ skill_package_instances/
+    configuration-imports/
   state/agent-shell.sqlite3*
   files/
-  resources/skills/
+  skills-template/
   templates/{workflow/command,workflow/task_dispatcher,agent/custom_tool,agent/custom_middleware}/
   logs/security-events.jsonl
   logs/diagnostics/*.log
 ```
 
 它包含管理密码、API Key、Provider credential、Workflow、Agent/组件配置、用户文件和历史，应作为敏感数据
-整体备份。配置文件位于 `data/config/`；SQLite 保存官方 LangGraph checkpoint、Lifecycle Run Registry/Event Journal、
+整体备份。可装配配置文件位于 `data/configuration-repositories/`；`data/config/` 只保存系统配置、secret env 与 active pointer。SQLite 保存官方 LangGraph checkpoint、Lifecycle Run Registry/Event Journal、
 结构化 runtime 失败诊断和媒体元数据。迁移时先完全停止服务，
 再复制完整 `data/`，包括 SQLite WAL/SHM。外部 filesystem 映射需要单独迁移并更新路径。
 
 静态 Python 模板保存在 `data/templates/`，配置独占的 Python 扩展及其可选 `requirements.txt` 保存在
-`data/config/python_package_instances/`。两者都属于需备份的 data；Windows 生成的共享依赖位于
+`data/configuration-repositories/<repository-uuid>/python_package_instances/`。两者都属于需备份的 data；Windows 生成的共享依赖位于
 `runtime/python_packages/`，属于可重建运行态，不进入备份。模板不运行且不参与依赖。
 
 ## 文件管理
 
-【系统 / 文件管理】只开放三个 scope：普通文件、Skill 和 Python templates。支持浏览、新建、
+【系统 / 文件管理】只开放三个 scope：普通文件、Skill Template 和 Python templates。支持浏览、新建、
 上传、下载、ZIP、重命名、文本编辑和递归删除。
 
 Python templates scope 用于在 `workflow/command/`、`workflow/task_dispatcher/`、`agent/custom_tool/` 或 `agent/custom_middleware/` 类别中建档静态代码模板。
@@ -41,7 +42,7 @@ Python templates scope 用于在 `workflow/command/`、`workflow/task_dispatcher
 
 - 文本编辑默认上限为 2 MiB，可在【系统 / 系统配置】调整，并使用 revision 防止静默覆盖；
 - 文件操作不跟随符号链接或 Windows reparse point；
-- 页面不能访问 `config/`（包括配置扩展目录）、`state/`、`logs/`、外部映射或其他宿主路径；
+- 页面不能访问 `config/`、`configuration-repositories/`（包括配置扩展目录）、`state/`、`logs/`、外部映射或其他宿主路径；
 - 递归删除没有回收站。
 
 ## 系统设置
@@ -66,8 +67,8 @@ LangSmith 配置项含义如下：
 
 API Key、消息上限和输入与资源策略立即生效；host、端口、远程访问、管理密码、LangSmith、CORS 和可信代理重启后生效。
 
-【系统 / 拦截消息】管理 Chat Completions 入站拦截。开关立即生效并持久化；开启后，请求在进入 Workflow
-之前直接收到 OpenAI-compatible 的“消息已拦截”回复。页面只展示进程内最新一条原始 JSON，正文不写入 SQLite、
+【系统 / 拦截消息】管理 Chat Completions 入站拦截。开关立即生效并持久化；开启后，请求会在进入 Workflow 前
+直接收到 OpenAI-compatible 的“消息已拦截”回复。页面只展示进程内最新一条原始 JSON，正文不写入 SQLite、
 系统日志或运行诊断，服务重启后清空。
 远程部署要求见[安全与部署](../security-and-deployment.md)。
 

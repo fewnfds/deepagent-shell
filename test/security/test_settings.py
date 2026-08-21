@@ -11,12 +11,19 @@ from agent_shell.app import create_app
 from agent_shell.settings import SettingsError, get_settings
 from agent_shell.storage import permissions as storage_permissions
 from agent_shell.storage.permissions import PermissionStatus
+from agent_shell.storage.environment import serialize_environment
 
 
 def _write_environment_file(root: Path, content: str) -> Path:
     path = root / "data" / "config" / "agent-shell.env"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    values = {
+        name: value
+        for line in content.splitlines()
+        if (separator := line.partition("="))[1]
+        for name, value in [(separator[0], separator[2])]
+    }
+    path.write_text(serialize_environment(values), encoding="utf-8")
     return path
 
 
@@ -99,7 +106,7 @@ def test_local_settings_writer_secures_environment_file(
 
     assert secured == [environment_path]
     assert environment_path.read_text(encoding="utf-8") == (
-        "AGENT_SHELL_MANAGEMENT_TOKEN=management-secret\n"
+        'AGENT_SHELL_MANAGEMENT_TOKEN="management-secret"\n'
     )
 
 
@@ -218,8 +225,8 @@ def test_relative_paths_are_bound_to_explicit_application_home(tmp_path: Path) -
     assert first.resolved_runtime_dir() == (first_home / "runtime").resolve()
     assert first.resolved_logs_dir() == (first_home / "data" / "logs").resolve()
     assert first.resolved_files_dir() == (first_home / "data" / "files").resolve()
-    assert first.resolved_skills_dir() == (
-        first_home / "data" / "resources" / "skills"
+    assert first.resolved_skill_templates_dir() == (
+        first_home / "data" / "skills-template"
     ).resolve()
     assert second.resolved_database_path() == (
         second_home / "data" / "state" / "agent-shell.sqlite3"

@@ -367,60 +367,6 @@ class ConfigurationValidationService:
             )
         return report, assembly
 
-    def validate_repository(self) -> ValidationReport:
-        stage = "repository_load"
-        issues: list[ValidationIssue] = []
-        for block in self._blocks.list_block_headers():
-            block_type = block["block_type"]
-            if block_type not in MANAGED_COMPONENT_MODELS:
-                issues.append(
-                    ValidationIssue(
-                        code="storage.unknown_block_type",
-                        scope="block",
-                        owner_id=block["id"],
-                        owner_name=block["name"],
-                        owner_type=block_type,
-                        path="block_type",
-                        message=(
-                            f"Stored configuration type {block_type!r} is not "
-                            "supported."
-                        ),
-                        message_key="errors.unknownConfigurationType",
-                        message_args={"type": block_type},
-                    )
-                )
-        for block_type in MANAGED_COMPONENT_MODELS:
-            for block in self._blocks.list_blocks_internal(block_type):
-                issues.extend(
-                    self.validate_stored_block(
-                        block_type,
-                        block,
-                        stage=stage,
-                    ).issues
-                )
-        for profile in self._agent_configs.list_items("subagents"):
-            report, _ = self.validate_subagent(
-                profile,
-                stage=stage,
-                owner_id=str(profile.get("id", "")),
-                stored=True,
-            )
-            issues.extend(report.issues)
-        issues.extend(self._saved_main_agent_issues(stage))
-        return ValidationReport(stage=stage, issues=tuple(issues))
-
-    def _saved_main_agent_issues(self, stage: str) -> list[ValidationIssue]:
-        issues: list[ValidationIssue] = []
-        for main_agent in self._agent_configs.list_items("main_agents"):
-            report, _, _ = self.validate_main_agent(
-                main_agent,
-                stage=stage,
-                owner_id=str(main_agent.get("id", "")),
-                stored=True,
-            )
-            issues.extend(report.issues)
-        return issues
-
     @staticmethod
     def _reference_map(profile: dict[str, Any]) -> dict[str, str]:
         return {
@@ -460,33 +406,7 @@ class ConfigurationValidationService:
         capability_type: str, block: dict[str, Any]
     ) -> tuple[dict[str, Any], ValidationIssue | None]:
         payload = {key: value for key, value in block.items() if key != "id"}
-        if capability_type != "model":
-            return payload, None
-        credential = payload.get("credential")
-        if credential is None:
-            return payload, None
-        if (
-            isinstance(credential, dict)
-            and set(credential) == {"reference"}
-            and isinstance(credential["reference"], str)
-            and credential["reference"]
-        ):
-            payload["credential"] = None
-            return payload, None
-        return payload, ValidationIssue(
-            code="storage.credential_metadata_invalid",
-            scope="block",
-            owner_id=str(block.get("id", "")),
-            owner_name=str(block.get("name", "")),
-            owner_type=capability_type,
-            path="credential",
-            message=(
-                "The stored model credential metadata is invalid. "
-                "Save the model configuration again."
-            ),
-            message_key="validation.issue.storage.credentialMetadataInvalid",
-            message_args={},
-        )
+        return payload, None
 
     def _block_contract_issue(
         self,

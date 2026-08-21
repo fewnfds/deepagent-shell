@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_shell.storage.environment import serialize_environment
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 WINDOWS_POWERSHELL = (
@@ -115,7 +117,9 @@ def test_listen_probe_reports_an_occupied_port_without_starting_the_app(
     environment_path = tmp_path / "data" / "config" / "agent-shell.env"
     environment_path.parent.mkdir(parents=True, exist_ok=True)
     environment_path.write_text(
-        "AGENT_SHELL_MANAGEMENT_TOKEN=management-secret\n",
+        serialize_environment(
+            {"AGENT_SHELL_MANAGEMENT_TOKEN": "management-secret"}
+        ),
         encoding="utf-8",
     )
     monkeypatch.setattr(

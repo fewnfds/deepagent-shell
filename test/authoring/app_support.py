@@ -52,6 +52,20 @@ def make_client(tmp_path: Path, monkeypatch) -> TestClient:
     return ScopedAuthTestClient(create_app())
 
 
+def write_skill_template(
+    tmp_path: Path,
+    name: str = "outline",
+    description: str = "Build a clear document outline.",
+) -> Path:
+    skill = tmp_path / "data" / "skills-template" / name
+    skill.mkdir(parents=True, exist_ok=True)
+    (skill / "SKILL.md").write_text(
+        f"---\nname: {name}\ndescription: {description}\n---\n",
+        encoding="utf-8",
+    )
+    return skill
+
+
 def model_payload(name: str = "Local model") -> dict:
     return {
         "name": name,
@@ -127,6 +141,7 @@ def custom_tool_payload(name: str = "Word count") -> dict:
 def block_cases(tmp_path: Path) -> list[tuple[str, dict]]:
     mapped = tmp_path / "mapped"
     mapped.mkdir()
+    write_skill_template(tmp_path)
     return [
         ("model", model_payload()),
         ("custom-tool", custom_tool_payload()),
@@ -183,7 +198,10 @@ def block_cases(tmp_path: Path) -> list[tuple[str, dict]]:
                 },
             },
         ),
-        ("skill", {"name": "Writing skills", "skills": ["outline"]}),
+        (
+            "skill",
+            {"name": "Writing skills", "skill_template_paths": ["outline"]},
+        ),
         (
             "system-prompt",
             {"name": "Concise", "system_prompt": "Be concise."},
