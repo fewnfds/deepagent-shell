@@ -46,10 +46,10 @@ Python template 或 runtime cache。模型要求会随配置导入，模型连�
 
 ZIP 只接受当前 format version、canonical `manifest.json`、规范相对 POSIX path 和匹配的 SHA-256 asset tree hash；绝对路径、
 `..`、反斜杠、重复/大小写冲突 entry、file/directory 前缀冲突、symlink/reparse、未声明文件、未知 kind/type/field
-或缺失依赖闭包会被拒绝。
+或缺失依赖闭包会被拒绝。Windows 控制字符、不可创建的文件名字符和设备名也在写入 staging 前拒绝。
 Filesystem host content 不进入 Bundle；绝对 mapped path 和全部 virtual source path 必须在目标实例显式重绑。
 
-导入永不覆盖配置或资产。preview 生成的新 UUID map 与 bundle digest 必须原样提交；Workflow 固定 disabled。提交使用 staging 与
+导入永不覆盖配置或资产。preview 生成的新 UUID map、bundle digest 与无状态 plan token 必须原样提交；token 同时绑定 active Repository、manifest digest 和 UUID map，名称与 Filesystem binding 仍可填写。Workflow 固定 disabled。提交使用 staging 与
 prepared/committed journal，失败或下次启动恢复只清理该 journal 声明的新 UUID 路径，不把导入前对象作为回滚目标。部署侧的
 反向代理仍负责按实例资源条件设置上传 request body 边界；应用不隐藏另设 Bundle 大小、文件数或展开字节上限。
 

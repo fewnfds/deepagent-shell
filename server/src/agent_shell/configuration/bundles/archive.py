@@ -7,6 +7,7 @@ import json
 from pathlib import Path, PurePosixPath
 import stat
 from typing import Any
+import zlib
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile, ZipInfo
 
 from pydantic import ValidationError
@@ -22,6 +23,11 @@ _WINDOWS_RESERVED_NAMES = {
     *(f"com{index}" for index in range(1, 10)),
     *(f"lpt{index}" for index in range(1, 10)),
 }
+_WINDOWS_INVALID_FILENAME_CHARACTERS = frozenset('\"*<>?|')
+
+
+def is_windows_reserved_name(value: str) -> bool:
+    return value.split(".", 1)[0].casefold() in _WINDOWS_RESERVED_NAMES
 
 
 class BundleArchiveError(ValueError):
@@ -77,9 +83,17 @@ def _validate_relative_path(value: str, *, directory: bool = False) -> str:
     if path.is_absolute() or path.as_posix() != normalized:
         raise BundleArchiveError("bundle paths must be normalized relative POSIX paths")
     for segment in path.parts:
-        if segment in {"", ".", ".."} or segment.endswith((" ", ".")):
+        if (
+            segment in {"", ".", ".."}
+            or segment.endswith((" ", "."))
+            or any(ord(character) < 32 for character in segment)
+            or any(
+                character in _WINDOWS_INVALID_FILENAME_CHARACTERS
+                for character in segment
+            )
+        ):
             raise BundleArchiveError("bundle paths contain an unsafe segment")
-        if segment.split(".", 1)[0].casefold() in _WINDOWS_RESERVED_NAMES:
+        if is_windows_reserved_name(segment):
             raise BundleArchiveError("bundle paths contain a reserved filesystem name")
     return value
 
@@ -175,7 +189,14 @@ def parse_bundle(content: bytes) -> ParsedBundle:
                     raise BundleArchiveError(
                         "bundle archive paths cannot be both files and directories"
                     )
-    except (BadZipFile, NotImplementedError, OSError, RuntimeError) as exc:
+    except (
+        BadZipFile,
+        EOFError,
+        NotImplementedError,
+        OSError,
+        RuntimeError,
+        zlib.error,
+    ) as exc:
         raise BundleArchiveError("configuration bundle is not a readable ZIP archive") from exc
 
     manifest_bytes = files.get("manifest.json")
@@ -227,10 +248,13 @@ def parse_bundle(content: bytes) -> ParsedBundle:
 
 
 def materialize_files(folder: Path, files: dict[str, bytes]) -> None:
+    validated = [
+        (PurePosixPath(_validate_relative_path(relative)), content)
+        for relative, content in sorted(files.items())
+    ]
     folder.mkdir(parents=True, exist_ok=False)
-    for relative, content in sorted(files.items()):
-        _validate_relative_path(relative)
-        target = folder.joinpath(*PurePosixPath(relative).parts)
+    for relative, content in validated:
+        target = folder.joinpath(*relative.parts)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
 
@@ -241,6 +265,7 @@ __all__ = [
     "build_bundle",
     "canonical_json_bytes",
     "canonical_tree_sha256",
+    "is_windows_reserved_name",
     "materialize_files",
     "parse_bundle",
     "snapshot_directory",

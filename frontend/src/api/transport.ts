@@ -1,4 +1,4 @@
-import type { JsonPrimitive, ManagementEvent, ValidationReport } from './types'
+import type { JsonPrimitive, ManagementEvent, NamedDownload, ValidationReport } from './types'
 
 type AuthChallengeReason = 'invalid' | 'required'
 
@@ -346,6 +346,37 @@ export async function managementDownload(
   const response = await authenticatedFetch(path, init, 'application/octet-stream')
   if (!response.ok) await parseManagementResponse<never>(response)
   return response.blob()
+}
+
+function downloadFilename(response: Response): string {
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const extended = /(?:^|;)\s*filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1]
+  if (extended) {
+    try {
+      return decodeURIComponent(extended)
+    } catch {
+      // Fall through to the plain filename supplied by the same server response.
+    }
+  }
+  const plain = /(?:^|;)\s*filename="([^"]+)"/i.exec(disposition)?.[1]
+  if (plain) return plain
+  throw new ManagementApiError({
+    status: response.status,
+    code: 'download_filename_missing',
+    message: 'The download response did not include a filename.',
+  })
+}
+
+export async function managementNamedDownload(
+  path: string,
+  init: RequestInit = {},
+): Promise<NamedDownload> {
+  const response = await authenticatedFetch(path, init, 'application/octet-stream')
+  if (!response.ok) await parseManagementResponse<never>(response)
+  return {
+    blob: await response.blob(),
+    filename: downloadFilename(response),
+  }
 }
 
 function uploadResponse(xhr: XMLHttpRequest): Response {

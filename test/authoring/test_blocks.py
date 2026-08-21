@@ -398,6 +398,7 @@ def test_filesystem_mapped_directory_modes_are_explicit(
     for path_origin, local_path in (
         ("absolute", "relative/path"),
         ("data-root-relative", str(tmp_path.resolve())),
+        ("data-root-relative", "C:relative"),
     ):
         response = client.post(
             "/api/blocks/filesystem",

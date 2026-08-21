@@ -127,9 +127,31 @@ def test_workflow_bundle_import_remaps_identity_and_requires_path_binding(
             "opaque_python_runtime_target",
             "workflow_imported_disabled",
         }.issubset(warning_codes)
+        assert len(preview["plan_token"]) == 64
+
+        invalid_rebind = {
+            "bundle_sha256": preview["bundle_sha256"],
+            "plan_token": preview["plan_token"],
+            "resolutions": {
+                "target_ids": preview["target_ids"],
+                "filesystem_bindings": {
+                    binding["binding_id"]: {
+                        "value": "C:relative",
+                        "path_origin": "data-root-relative",
+                    }
+                },
+            },
+        }
+        rejected_rebind = target.post(
+            "/api/configuration-bundles/import",
+            files={"bundle": ("portable.zip", bundle, "application/zip")},
+            data={"request": json.dumps(invalid_rebind)},
+        )
+        assert rejected_rebind.status_code == 409, rejected_rebind.text
 
         request = {
             "bundle_sha256": preview["bundle_sha256"],
+            "plan_token": preview["plan_token"],
             "resolutions": {
                 "target_ids": preview["target_ids"],
                 "filesystem_bindings": {
@@ -217,6 +239,7 @@ def test_bundle_import_failure_removes_staged_configuration_and_assets(
         binding = preview["filesystem_bindings"][0]
         request = {
             "bundle_sha256": preview["bundle_sha256"],
+            "plan_token": preview["plan_token"],
             "resolutions": {
                 "target_ids": preview["target_ids"],
                 "filesystem_bindings": {
@@ -381,6 +404,7 @@ def test_committed_import_survives_deferred_housekeeping(
                 "request": json.dumps(
                     {
                         "bundle_sha256": preview["bundle_sha256"],
+                        "plan_token": preview["plan_token"],
                         "resolutions": {"target_ids": preview["target_ids"]},
                     }
                 )
@@ -481,6 +505,7 @@ def test_skill_private_package_import_is_independent_from_target_templates(
         ]
         request = {
             "bundle_sha256": preview["bundle_sha256"],
+            "plan_token": preview["plan_token"],
             "resolutions": {"target_ids": preview["target_ids"]},
         }
         imported = target.post(
@@ -600,6 +625,7 @@ def test_name_conflict_requires_confirmation_and_import_plan_cannot_be_replayed(
 
         base_request = {
             "bundle_sha256": preview["bundle_sha256"],
+            "plan_token": preview["plan_token"],
             "resolutions": {"target_ids": preview["target_ids"]},
         }
         unconfirmed = target.post(
@@ -616,6 +642,17 @@ def test_name_conflict_requires_confirmation_and_import_plan_cannot_be_replayed(
         confirmed_request["resolutions"]["names"] = {
             source_id: record["suggested_name"]
         }
+        wrong_plan = deepcopy_json(confirmed_request)
+        wrong_plan["resolutions"]["target_ids"][source_id] = (
+            "33333333-3333-4333-8333-333333333333"
+        )
+        rejected_plan = target.post(
+            "/api/configuration-bundles/import",
+            files={"bundle": ("prompt.zip", exported.content, "application/zip")},
+            data={"request": json.dumps(wrong_plan)},
+        )
+        assert rejected_plan.status_code == 409, rejected_plan.text
+
         wrong_digest = deepcopy_json(confirmed_request)
         wrong_digest["bundle_sha256"] = "0" * 64
         rejected_digest = target.post(
@@ -644,6 +681,63 @@ def test_name_conflict_requires_confirmation_and_import_plan_cannot_be_replayed(
         "Shared prompt (imported)",
     }
     assert existing.json()["id"] != preview["target_ids"][source_id]
+
+
+def test_malformed_bundle_is_422_for_preview_and_import(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    malformed = b"not-a-zip"
+    with make_client(tmp_path, monkeypatch) as client:
+        preview = client.post(
+            "/api/configuration-bundles/preview",
+            files={"bundle": ("broken.zip", malformed, "application/zip")},
+        )
+        imported = client.post(
+            "/api/configuration-bundles/import",
+            files={"bundle": ("broken.zip", malformed, "application/zip")},
+            data={
+                "request": json.dumps(
+                    {
+                        "bundle_sha256": "0" * 64,
+                        "plan_token": "0" * 64,
+                        "resolutions": {"target_ids": {}},
+                    }
+                )
+            },
+        )
+
+    assert preview.status_code == 422, preview.text
+    assert imported.status_code == 422, imported.text
+    assert preview.json()["detail"]["code"] == "configuration_bundle_invalid"
+    assert imported.json()["detail"]["code"] == "configuration_bundle_invalid"
+
+
+@pytest.mark.parametrize("name", ["CON", "PRN.txt", "com1.JSON"])
+def test_bundle_download_avoids_windows_reserved_basenames(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    name: str,
+) -> None:
+    with make_client(tmp_path, monkeypatch) as client:
+        created = client.post(
+            "/api/blocks/system-prompt",
+            json={"name": name, "system_prompt": "Portable prompt."},
+        )
+        assert created.status_code == 200, created.text
+        exported = client.post(
+            "/api/configuration-bundles/export",
+            json={
+                "kind": "component",
+                "type": "system-prompt",
+                "source_id": created.json()["id"],
+            },
+        )
+
+    assert exported.status_code == 200, exported.text
+    disposition = exported.headers["content-disposition"]
+    assert 'filename="configuration-' in disposition
+    assert disposition.endswith('.agent-shell-config.zip"')
 
 
 def deepcopy_json(value: dict) -> dict:

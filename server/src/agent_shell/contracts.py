@@ -28,6 +28,7 @@ from agent_shell.configuration.identity import ConfigurationId
 from agent_shell.command import CommandBlock
 from agent_shell.model_provider_contracts import validate_provider_settings
 from agent_shell.provider_integrations import bundled_provider_ids
+from agent_shell.storage.owned_paths import require_data_root_relative_path
 from agent_shell.task_dispatcher import TaskDispatcherBlock
 from agent_shell.workflow_event_output import WorkflowEventOutputBlock
 
@@ -384,12 +385,10 @@ class MappedDirectory(BaseModel):
             if not local.is_absolute():
                 raise ValueError("absolute mapped local_path must be absolute")
             return self
-        if local.is_absolute():
-            raise ValueError("data-root-relative mapped local_path must be relative")
-        if any(part in {".", ".."} for part in local.parts):
-            raise ValueError(
-                "data-root-relative mapped local_path must not contain . or .."
-            )
+        require_data_root_relative_path(
+            self.local_path,
+            label="data-root-relative mapped local_path",
+        )
         return self
 
 

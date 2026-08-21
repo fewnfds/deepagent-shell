@@ -2,6 +2,7 @@ import {
   buildQuery,
   managementAuth,
   managementDownload,
+  managementNamedDownload,
   managementRequest,
   managementUpload,
   watchManagementEvents,
@@ -29,6 +30,7 @@ import type {
   EventSource,
   HealthResponse,
   ManagementEvent,
+  NamedDownload,
   Workflow,
   WorkflowLifecyclePage,
   WorkflowLifecycleDetail,
@@ -211,8 +213,8 @@ export const managementApi = {
     )
   },
 
-  exportConfigurationBundle(root: ConfigurationBundleRoot): Promise<Blob> {
-    return managementDownload(
+  exportConfigurationBundle(root: ConfigurationBundleRoot): Promise<NamedDownload> {
+    return managementNamedDownload(
       '/api/configuration-bundles/export',
       jsonBody(root),
     )
@@ -230,12 +232,14 @@ export const managementApi = {
   importConfigurationBundle(
     bundle: File,
     bundleSha256: string,
+    planToken: string,
     resolutions: ConfigurationBundleResolutions,
   ): Promise<ConfigurationBundleImportResult> {
     const body = new FormData()
     body.append('bundle', bundle, bundle.name)
     body.append('request', JSON.stringify({
       bundle_sha256: bundleSha256,
+      plan_token: planToken,
       resolutions,
     }))
     return managementRequest('/api/configuration-bundles/import', {

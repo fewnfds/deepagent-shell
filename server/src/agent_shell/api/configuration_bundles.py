@@ -17,6 +17,7 @@ class _ImportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     bundle_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    plan_token: str = Field(pattern=r"^[0-9a-f]{64}$")
     resolutions: ImportResolutions
 
 
@@ -70,13 +71,16 @@ def build_configuration_bundle_router(
             return bundles.commit(
                 await bundle.read(),
                 bundle_sha256=parsed_request.bundle_sha256,
+                plan_token=parsed_request.plan_token,
                 resolutions=parsed_request.resolutions,
             )
         except ValidationError as exc:
             raise _bundle_error(
                 ValueError("configuration bundle import request is invalid")
             ) from exc
-        except (BundleArchiveError, BundleImportError, ValueError) as exc:
+        except BundleArchiveError as exc:
+            raise _bundle_error(exc) from exc
+        except BundleImportError as exc:
             raise _bundle_error(exc, status_code=409) from exc
 
     return router

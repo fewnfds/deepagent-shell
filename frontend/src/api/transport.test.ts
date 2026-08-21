@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   managementAuth,
+  managementNamedDownload,
   ManagementApiError,
   managementRequest,
   managementUpload,
@@ -134,6 +135,21 @@ describe('management transport', () => {
         issues: [expect.objectContaining({ path: 'name' })],
       },
     })
+  })
+
+  it('returns the server-supplied download filename with the response body', async () => {
+    managementAuth.submit('management-token')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('bundle', {
+      status: 200,
+      headers: {
+        'Content-Disposition': 'attachment; filename="portable.agent-shell-config.zip"',
+      },
+    })))
+
+    const download = await managementNamedDownload('/api/configuration-bundles/export')
+
+    expect(download.filename).toBe('portable.agent-shell-config.zip')
+    await expect(download.blob.text()).resolves.toBe('bundle')
   })
 
   it('uploads a blob with progress and retries after an authentication challenge', async () => {

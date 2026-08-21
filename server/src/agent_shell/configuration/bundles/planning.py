@@ -36,6 +36,10 @@ from agent_shell.configuration.dependencies import (
     iter_configuration_entities,
 )
 from agent_shell.storage.file_config import FileConfigRepository
+from agent_shell.storage.owned_paths import (
+    OwnedPathError,
+    resolve_data_root_relative_path,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,17 +157,24 @@ class BundleImportPlanner:
                         path=binding.path,
                     )
                 )
-            elif selected_origin == "data-root-relative" and not (
-                self._repository.data_root / selected_value
-            ).is_dir():
-                warnings.append(
-                    _issue(
-                        "filesystem_relative_target_missing",
-                        "The data-root-relative mapped directory does not exist on this instance.",
-                        source_id=binding.source_id,
-                        path=binding.path,
+            elif selected_origin == "data-root-relative":
+                try:
+                    relative_target = resolve_data_root_relative_path(
+                        self._repository.data_root,
+                        selected_value,
+                        label="mapped directory binding",
                     )
-                )
+                except OwnedPathError:
+                    continue
+                if not relative_target.is_dir():
+                    warnings.append(
+                        _issue(
+                            "filesystem_relative_target_missing",
+                            "The data-root-relative mapped directory does not exist on this instance.",
+                            source_id=binding.source_id,
+                            path=binding.path,
+                        )
+                    )
 
         temporary_root = self._runtime_root / "tmp"
         temporary_root.mkdir(parents=True, exist_ok=True)

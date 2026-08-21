@@ -3,21 +3,27 @@ from __future__ import annotations
 from hashlib import sha256
 from io import BytesIO
 import json
+from pathlib import Path
+import zlib
 from zipfile import ZipFile
 
 import pytest
 
 from agent_shell.configuration.bundles.archive import (
     BundleArchiveError,
+    ParsedBundle,
     build_bundle,
     canonical_json_bytes,
     canonical_tree_sha256,
+    materialize_files,
     parse_bundle,
 )
+from agent_shell.configuration.bundles.assets import materialize_package_assets
 from agent_shell.configuration.bundles.contracts import (
     BundleManifest,
     BundleRecord,
     BundleRoot,
+    PythonPackageAsset,
     SkillPackageAsset,
 )
 
@@ -133,3 +139,83 @@ def test_bundle_archive_rejects_path_traversal_unknown_version_and_asset_tamperi
     )
     with pytest.raises(BundleArchiveError, match="hash"):
         parse_bundle(tampered)
+
+
+def test_bundle_archive_classifies_corrupt_deflate_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest, files = _manifest()
+    bundle = build_bundle(manifest, files)
+
+    def fail_read(*_args, **_kwargs):
+        raise zlib.error("corrupt deflate data")
+
+    monkeypatch.setattr(
+        "agent_shell.configuration.bundles.archive.ZipFile.read",
+        fail_read,
+    )
+
+    with pytest.raises(BundleArchiveError, match="readable ZIP archive"):
+        parse_bundle(bundle)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "asset/control\x01.txt",
+        "asset/tab\t.txt",
+        'asset/quote".txt',
+        "asset/star*.txt",
+        "asset/less<.txt",
+        "asset/greater>.txt",
+        "asset/pipe|.txt",
+        "asset/question?.txt",
+    ],
+)
+def test_bundle_materialization_rejects_windows_invalid_paths_before_writing(
+    tmp_path: Path,
+    path: str,
+) -> None:
+    destination = tmp_path / "destination"
+
+    with pytest.raises(BundleArchiveError, match="unsafe segment"):
+        materialize_files(destination, {path: b"content"})
+
+    assert not destination.exists()
+
+
+def test_python_package_requirements_must_use_utf8(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest, _files = _manifest()
+    prefix = f"assets/python-packages/{SOURCE_ID}/"
+    asset = PythonPackageAsset(
+        kind="python-package",
+        owner_source_id=SOURCE_ID,
+        path=prefix,
+        sha256="0" * 64,
+    )
+    parsed = ParsedBundle(
+        manifest=manifest,
+        files={
+            f"{prefix}package.json": b"{}",
+            f"{prefix}requirements.txt": b"\xff",
+        },
+        bundle_sha256="0" * 64,
+        manifest_sha256="0" * 64,
+    )
+    monkeypatch.setattr(
+        "agent_shell.configuration.bundles.assets.scan_python_package",
+        lambda *_args, **_kwargs: None,
+    )
+
+    with pytest.raises(BundleArchiveError, match="requirements.txt must use UTF-8"):
+        materialize_package_assets(
+            parsed,
+            {SOURCE_ID: asset},
+            {SOURCE_ID: "custom-tool"},
+            {SOURCE_ID: "22222222-2222-4222-8222-222222222222"},
+            tmp_path / "packages",
+            runtime_root=tmp_path / "runtime",
+        )

@@ -6,6 +6,10 @@ from pathlib import Path
 from typing import Any, Literal
 
 from agent_shell.configuration.bundles.contracts import FilesystemBindingResolution
+from agent_shell.storage.owned_paths import (
+    OwnedPathError,
+    resolve_data_root_relative_path,
+)
 
 
 BindingKind = Literal["mapped-directory", "virtual-directory", "virtual-file"]
@@ -145,10 +149,16 @@ def apply_filesystem_bindings(
             if resolution.path_origin == "absolute":
                 valid = target.is_absolute() and target.is_dir()
             else:
-                valid = (
-                    not target.is_absolute()
-                    and not any(part in {".", ".."} for part in target.parts)
-                )
+                try:
+                    resolve_data_root_relative_path(
+                        data_root,
+                        resolution.value,
+                        label="mapped directory binding",
+                    )
+                except OwnedPathError:
+                    valid = False
+                else:
+                    valid = True
             if not valid:
                 errors.append(
                     {

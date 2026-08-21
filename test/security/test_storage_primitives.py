@@ -10,7 +10,9 @@ from agent_shell.storage.owned_paths import (
     OwnedPathError,
     is_plain_tree,
     is_reparse_point,
+    require_data_root_relative_path,
     require_single_path_segment,
+    resolve_data_root_relative_path,
     resolve_owned_relative_path,
 )
 
@@ -53,6 +55,35 @@ def test_owned_relative_path_returns_normalized_path_inside_root(
 
     assert path == root / "folder" / "main.py"
     assert normalized == "folder/main.py"
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "C:relative",
+        "C:/absolute",
+        "C:\\absolute",
+        "\\\\server\\share",
+        "/absolute",
+        ".",
+        "..",
+        "folder/../outside",
+        "folder\\..\\outside",
+    ],
+)
+def test_data_root_relative_path_rejects_drive_root_and_dot_segments(
+    value: str,
+) -> None:
+    with pytest.raises(OwnedPathError):
+        require_data_root_relative_path(value)
+
+
+def test_data_root_relative_path_resolves_a_missing_nested_target(
+    tmp_path: Path,
+) -> None:
+    assert resolve_data_root_relative_path(tmp_path, "files/missing") == (
+        tmp_path / "files" / "missing"
+    ).resolve()
 
 
 @pytest.mark.parametrize(

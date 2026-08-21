@@ -23,17 +23,17 @@ Graph admission 问题也会显示。满足磁盘身份格式但业务配置无�
 当前后端可以把一个 Component、Subagent、Main Agent 或 Workflow 作为单根导出。Bundle 是 ZIP，根记录所需的
 声明式配置依赖会自动闭合；共享依赖只保存一次。管理 API 为：
 
-- `POST /api/configuration-bundles/export`：JSON body 使用 `kind`、`source_id`，Component 根另带 `type`；返回 ZIP；
+- `POST /api/configuration-bundles/export`：JSON body 使用 `kind`、`source_id`，Component 根另带 `type`；返回 ZIP，下载名以响应的 `Content-Disposition` 为准；
 - `POST /api/configuration-bundles/preview`：multipart 的 `bundle` 文件；返回 `bundle_sha256`、固定 target UUID map、名称建议、
-  Filesystem binding、errors 和 warnings；
+  Filesystem binding、errors、warnings 和本次 preview 的 `plan_token`；
 - `POST /api/configuration-bundles/import`：再次提交同一个 multipart `bundle`，并在 `request` form field 中提交 JSON；JSON 包含
-  preview 的 `bundle_sha256`，以及 `resolutions.target_ids`、可选 `resolutions.names` 和 `resolutions.filesystem_bindings`。
+  preview 的 `bundle_sha256`、`plan_token`，以及 `resolutions.target_ids`、可选 `resolutions.names` 和 `resolutions.filesystem_bindings`。
 
 导入不会按源 UUID 或名称复用、更新或覆盖配置。每条配置使用 preview 给出的新 UUID，声明式引用由后端机械重写；
 名称冲突会建议 `Name (imported)`、`Name (imported 2)` 等后缀，冲突名称必须显式确认。Workflow 导入后固定为
 `enabled=false`，需检查路径、credential、Skill、Python code 和依赖后再验证并启用。
 
-Python-backed Component 会携带完整 owner package，并在目标实例用新 UUID 重建 folder 和 `package.json.id`；导入过程只做
-静态扫描，不 import factory。Skill Component 携带完整 owner private package，目标实例始终用新 Component UUID 重建目录，不做全局 Skill 名称复用或冲突判断。Filesystem 的绝对 mapped path、
-virtual directory `source_path` 和 virtual file `source_path` 都必须在目标实例显式重绑；data-root-relative mapped path 会保留，
-目标不存在时 preview 给出 warning。
+ Python-backed Component 会携带完整 owner package，并在目标实例用新 UUID 重建 folder 和 `package.json.id`；导入过程只做
+ 静态扫描，不 import factory。Skill Component 携带完整 owner private package，目标实例始终用新 Component UUID 重建目录，不做全局 Skill 名称复用或冲突判断。Filesystem 的绝对 mapped path、
+ virtual directory `source_path` 和 virtual file `source_path` 都必须在目标实例显式重绑；data-root-relative mapped path 会保留，
+它必须是没有 drive、root、冒号和 `.`/`..` 段的相对路径；合法目标不存在时 preview 给出 warning。损坏 ZIP、manifest、hash、entry path 或请求格式返回 422；digest、preview plan、名称或目标实例状态冲突返回 409。

@@ -244,7 +244,10 @@ function createApi() {
     })),
     createConfigurationRepository: vi.fn(),
     activateConfigurationRepository: vi.fn(),
-    exportConfigurationBundle: vi.fn(async () => new Blob()),
+    exportConfigurationBundle: vi.fn(async () => ({
+      blob: new Blob(),
+      filename: 'configuration.agent-shell-config.zip',
+    })),
     previewConfigurationBundle: vi.fn(),
     importConfigurationBundle: vi.fn(),
   }
@@ -345,6 +348,7 @@ describe('ConfigLibraryPage', () => {
     const file = new File(['bundle'], 'model.zip', { type: 'application/zip' })
     vi.mocked(api.service.previewConfigurationBundle).mockResolvedValue({
       bundle_sha256: 'a'.repeat(64), manifest_sha256: 'b'.repeat(64),
+      plan_token: 'c'.repeat(64),
       root: { kind: 'component', type: 'model', source_id: 'source-id', target_id: 'target-id', workflow_role: null },
       target_ids: { 'source-id': 'target-id' },
       records: [{ source_id: 'source-id', target_id: 'target-id', kind: 'component', type: 'model', original_name: 'Model', suggested_name: 'Model', selected_name: 'Model', requires_confirmation: false }],
@@ -363,7 +367,7 @@ describe('ConfigLibraryPage', () => {
     await buttonByText(wrapper, 'Import').trigger('click')
     await flushPromises()
 
-    expect(api.service.importConfigurationBundle).toHaveBeenCalledWith(file, 'a'.repeat(64), {
+    expect(api.service.importConfigurationBundle).toHaveBeenCalledWith(file, 'a'.repeat(64), 'c'.repeat(64), {
       target_ids: { 'source-id': 'target-id' }, names: { 'source-id': 'Model' }, filesystem_bindings: {},
     })
   })

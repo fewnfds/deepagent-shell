@@ -177,7 +177,7 @@ Main Agent 的一层直接 Subagent，不接受嵌套 Subagent 树。
 `configuration.dependencies` 的 typed references 计算 transitive closure；不要按名称猜依赖，也不要扫描或替换 Python source
 中的 UUID。preview 为每个 source Configuration UUID 给出固定 target UUID，并返回名称建议、Filesystem bindings、阻塞项、warnings 和 trusted-code warnings。
 
-导入时提交同一 `bundle_sha256` 和完整 target map。所有配置 UUID 都改变，Node/Edge ID 等 Workflow-local topology key 保持不变；
+导入时提交 preview 返回的同一 `bundle_sha256`、`plan_token` 和完整 target map。所有配置 UUID 都改变，Node/Edge ID 等 Workflow-local topology key 保持不变；
 Python package folder/manifest owner UUID 跟随 Component target UUID。Workflow 必须保持 disabled，待 credential、path、Skill、
 Python code 和 dependency 复核完成后再走正常 Graph validation/publish。
 

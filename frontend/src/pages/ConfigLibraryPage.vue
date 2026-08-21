@@ -200,9 +200,8 @@ async function createRepository(): Promise<void> {
 async function downloadBundle(item: LibraryItem): Promise<void> {
   const category = currentCategory.value
   if (!category) return
-  const blob = await api.value.exportConfigurationBundle(bundleRoot(category, item.id))
-  const safeName = libraryItemName(item).replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'configuration'
-  triggerBrowserDownload(blob, `${safeName}.agent-shell.zip`)
+  const download = await api.value.exportConfigurationBundle(bundleRoot(category, item.id))
+  triggerBrowserDownload(download.blob, download.filename)
 }
 
 function openBundlePicker(): void { bundleInput.value?.click() }
@@ -249,7 +248,7 @@ async function importBundle(): Promise<void> {
   bundleBusy.value = true
   bundleError.value = ''
   try {
-    const imported = await api.value.importConfigurationBundle(file, preview.bundle_sha256, {
+    const imported = await api.value.importConfigurationBundle(file, preview.bundle_sha256, preview.plan_token, {
       target_ids: preview.target_ids,
       names: bundleNames.value,
       filesystem_bindings: bundleBindings.value,

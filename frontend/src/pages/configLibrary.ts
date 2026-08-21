@@ -9,6 +9,7 @@ import type {
   ConfigurationRepositoryActivation,
   ConfigurationRepositoryList,
   MainAgent,
+  NamedDownload,
   SavedBlock,
   Subagent,
   ValidationReport,
@@ -41,9 +42,9 @@ export interface ConfigLibraryApi {
   listConfigurationRepositories(): Promise<ConfigurationRepositoryList>
   createConfigurationRepository(name: string): Promise<ConfigurationRepository>
   activateConfigurationRepository(id: string): Promise<ConfigurationRepositoryActivation>
-  exportConfigurationBundle(root: ConfigurationBundleRoot): Promise<Blob>
+  exportConfigurationBundle(root: ConfigurationBundleRoot): Promise<NamedDownload>
   previewConfigurationBundle(bundle: File): Promise<ConfigurationBundlePreview>
-  importConfigurationBundle(bundle: File, digest: string, resolutions: ConfigurationBundleResolutions): Promise<ConfigurationBundleImportResult>
+  importConfigurationBundle(bundle: File, digest: string, planToken: string, resolutions: ConfigurationBundleResolutions): Promise<ConfigurationBundleImportResult>
 }
 
 export const agentLibraryCategories = [

@@ -17,6 +17,7 @@ from langgraph.store.sqlite import AsyncSqliteStore
 from agent_shell.contracts import FilesystemBlock
 from agent_shell.runtime.input_messages import client_messages_sha
 from agent_shell.storage.database import SQLiteDatabase
+from agent_shell.storage.owned_paths import resolve_data_root_relative_path
 from agent_shell.storage.workflow_lifecycles import WorkflowLifecycleStore
 from agent_shell.storage.workflow_run_history import WorkflowRunHistoryStore
 
@@ -505,16 +506,11 @@ class WorkflowLifecycleService:
             if not configured.is_absolute():
                 raise ValueError("absolute mapped local_path must be absolute")
             return configured.resolve()
-        if configured.is_absolute():
-            raise ValueError("data-root-relative mapped local_path must be relative")
-        resolved = (self._data_root / configured).resolve()
-        try:
-            resolved.relative_to(self._data_root)
-        except ValueError as exc:
-            raise ValueError(
-                "data-root-relative mapped local_path escapes the instance data root"
-            ) from exc
-        return resolved
+        return resolve_data_root_relative_path(
+            self._data_root,
+            local_path,
+            label="data-root-relative mapped local_path",
+        )
 
     async def resolve_mapped_directories(
         self,

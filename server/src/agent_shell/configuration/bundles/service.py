@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+import hmac
 from pathlib import Path
+from secrets import token_bytes
 import threading
 
+from agent_shell.configuration.bundles.archive import ParsedBundle, canonical_json_bytes
 from agent_shell.configuration.bundles.contracts import BundleRoot, ImportResolutions
 from agent_shell.configuration.bundles.exporting import (
     ConfigurationBundleExporter,
@@ -29,6 +32,7 @@ class ConfigurationBundleService:
         self._skills_dir_source = skills_dir
         self._runtime_root = runtime_root
         self._lock = threading.RLock()
+        self._plan_secret = token_bytes(32)
 
     @property
     def _packages_dir(self) -> Path:
@@ -64,13 +68,35 @@ class ConfigurationBundleService:
     def preview(self, content: bytes) -> dict[str, object]:
         with self._lock:
             with self._repository.exclusive_config_mutation():
-                return self._planner().preview(content).public_plan
+                prepared = self._planner().preview(content)
+                public_plan = dict(prepared.public_plan)
+                public_plan["plan_token"] = self._plan_token(
+                    prepared.parsed,
+                    prepared.target_ids,
+                )
+                return public_plan
+
+    def _plan_token(
+        self,
+        parsed: ParsedBundle,
+        target_ids: dict[str, str],
+    ) -> str:
+        payload = canonical_json_bytes(
+            {
+                "repository_id": self._repository.repository_id,
+                "bundle_sha256": parsed.bundle_sha256,
+                "manifest_sha256": parsed.manifest_sha256,
+                "target_ids": dict(sorted(target_ids.items())),
+            }
+        )
+        return hmac.digest(self._plan_secret, payload, "sha256").hex()
 
     def commit(
         self,
         content: bytes,
         *,
         bundle_sha256: str,
+        plan_token: str,
         resolutions: ImportResolutions,
     ) -> dict[str, object]:
         with self._lock:
@@ -83,6 +109,11 @@ class ConfigurationBundleService:
                 if prepared.parsed.bundle_sha256 != bundle_sha256:
                     raise BundleImportError(
                         "import bundle digest does not match the previewed bundle"
+                    )
+                expected_token = self._plan_token(prepared.parsed, prepared.target_ids)
+                if not hmac.compare_digest(expected_token, plan_token):
+                    raise BundleImportError(
+                        "import plan does not match the previewed target UUID mapping"
                     )
                 errors = prepared.public_plan["errors"]
                 if errors or prepared.public_plan["ready"] is not True:

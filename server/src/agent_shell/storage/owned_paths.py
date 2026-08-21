@@ -58,6 +58,50 @@ def require_single_path_segment(value: object, *, label: str) -> str:
     return value
 
 
+def require_data_root_relative_path(
+    value: object,
+    *,
+    label: str = "data-root-relative path",
+) -> str:
+    """Validate a host path that must be interpreted beneath the instance data root."""
+
+    if (
+        not isinstance(value, str)
+        or not value
+        or value in {".", ".."}
+        or "\x00" in value
+        or ":" in value
+    ):
+        raise OwnedPathError(f"{label} must be relative to the instance data root")
+    windows = PureWindowsPath(value)
+    posix = PurePosixPath(value)
+    if windows.drive or windows.root or posix.is_absolute():
+        raise OwnedPathError(f"{label} must be relative to the instance data root")
+    if any(
+        part in {".", ".."}
+        for path in (windows, posix)
+        for part in path.parts
+    ):
+        raise OwnedPathError(f"{label} must not contain . or .. segments")
+    return value
+
+
+def resolve_data_root_relative_path(
+    data_root: Path,
+    value: object,
+    *,
+    label: str = "data-root-relative path",
+) -> Path:
+    relative = require_data_root_relative_path(value, label=label)
+    root = Path(data_root).resolve()
+    resolved = (root / Path(relative)).resolve(strict=False)
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise OwnedPathError(f"{label} escapes the instance data root") from exc
+    return resolved
+
+
 def resolve_owned_relative_path(
     root: Path,
     value: object,
@@ -110,6 +154,8 @@ __all__ = [
     "OwnedPathError",
     "is_plain_tree",
     "is_reparse_point",
+    "require_data_root_relative_path",
     "require_single_path_segment",
+    "resolve_data_root_relative_path",
     "resolve_owned_relative_path",
 ]

@@ -1,6 +1,11 @@
 export type JsonPrimitive = boolean | number | string | null
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue }
 
+export interface NamedDownload {
+  blob: Blob
+  filename: string
+}
+
 export type BlockType =
   | 'model-requirement'
   | 'system-prompt'
@@ -289,6 +294,7 @@ export interface ConfigurationBundleIssue {
 export interface ConfigurationBundlePreview {
   bundle_sha256: string
   manifest_sha256: string
+  plan_token: string
   root: {
     kind: ConfigurationEntityKind
     type: ManagedComponentType | null

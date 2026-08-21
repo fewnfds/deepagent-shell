@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
+from agent_shell.configuration.bundles.archive import BundleArchiveError
 from agent_shell.configuration.bundles.contracts import BundleManifest, ImportResolutions
 from agent_shell.configuration.bundles.errors import BundleImportError
 from agent_shell.configuration.dependencies import (
@@ -74,16 +75,16 @@ def _validate_complete_closure(
         for reference in iter_configuration_references(owner):
             target = by_id.get(reference.target_id)
             if target is None:
-                raise BundleImportError(
+                raise BundleArchiveError(
                     f"bundle omits reference target at {reference.path}"
                 )
             if not _matches_reference(target, reference):
-                raise BundleImportError(
+                raise BundleArchiveError(
                     f"bundle reference has the wrong type at {reference.path}"
                 )
             pending.append(target)
     if reached != set(by_id):
-        raise BundleImportError("bundle contains records outside its root closure")
+        raise BundleArchiveError("bundle contains records outside its root closure")
 
 
 def load_bundle_record_set(manifest: BundleManifest) -> BundleRecordSet:
@@ -98,7 +99,7 @@ def load_bundle_record_set(manifest: BundleManifest) -> BundleRecordSet:
         set(component_types.values()).difference(MANAGED_COMPONENT_MODELS)
     )
     if unsupported:
-        raise BundleImportError(
+        raise BundleArchiveError(
             f"bundle contains unsupported component types: {', '.join(unsupported)}"
         )
 
@@ -110,13 +111,13 @@ def load_bundle_record_set(manifest: BundleManifest) -> BundleRecordSet:
         if entity.component_type == "model-requirement":
             allowed = {"id", "name", "description"}
             if set(entity.payload) - allowed:
-                raise BundleImportError(
+                raise BundleArchiveError(
                     "bundle Model Requirement contains connection fields"
                 )
         if entity.component_type in PACKAGE_COMPONENT_SPECS:
             reference = entity.payload.get("python_package")
             if not isinstance(reference, dict) or reference.get("folder") != entity.id:
-                raise BundleImportError(
+                raise BundleArchiveError(
                     "bundle Python package ownership does not match its Component UUID"
                 )
         payload = deepcopy(entity.payload)
@@ -130,7 +131,7 @@ def load_bundle_record_set(manifest: BundleManifest) -> BundleRecordSet:
         if entity.component_type == "skill":
             reference = entity.payload.get("skill_package")
             if not isinstance(reference, dict) or reference.get("folder") != entity.id:
-                raise BundleImportError(
+                raise BundleArchiveError(
                     "bundle Skill package ownership does not match its Component UUID"
                 )
             skill_package_owners.add(entity.id)

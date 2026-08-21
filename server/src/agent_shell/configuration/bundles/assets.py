@@ -118,10 +118,15 @@ def materialize_package_assets(
                 "bundled Python package does not satisfy its adapter contract"
             ) from exc
         requirements_path = folder / "requirements.txt"
-        requirements = bool(
-            requirements_path.is_file()
-            and requirements_path.read_text(encoding="utf-8").strip()
-        )
+        try:
+            requirements = bool(
+                requirements_path.is_file()
+                and requirements_path.read_text(encoding="utf-8").strip()
+            )
+        except UnicodeError as exc:
+            raise BundleArchiveError(
+                "bundled Python package requirements.txt must use UTF-8"
+            ) from exc
         plans.append(
             PackageAssetPlan(
                 source_id=source_id,

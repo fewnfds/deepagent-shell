@@ -10,6 +10,7 @@ from agent_shell import __version__
 from agent_shell.configuration.bundles.archive import (
     build_bundle,
     canonical_tree_sha256,
+    is_windows_reserved_name,
     materialize_files,
     snapshot_directory,
 )
@@ -43,6 +44,20 @@ class BundleExportError(ValueError):
 class ExportedBundle:
     content: bytes
     filename: str
+
+
+def _bundle_download_filename(name: str, fallback: str) -> str:
+    safe_name = "".join(
+        character
+        if character.isascii()
+        and (character.isalnum() or character in {"-", "_", "."})
+        else "-"
+        for character in name.strip()
+    ).strip("-.")
+    safe_name = safe_name or fallback
+    if is_windows_reserved_name(safe_name):
+        safe_name = f"configuration-{safe_name}"
+    return f"{safe_name}.agent-shell-config.zip"
 
 
 def _matches_reference(target: ConfigurationEntity, reference: Any) -> bool:
@@ -285,16 +300,9 @@ class ConfigurationBundleExporter:
         filename_name = next(
             record.name for record in records if record.source_id == root.source_id
         )
-        safe_name = "".join(
-            character
-            if character.isascii()
-            and (character.isalnum() or character in {"-", "_"})
-            else "-"
-            for character in filename_name.strip()
-        ).strip("-")
         return ExportedBundle(
             content=build_bundle(manifest, archive_files),
-            filename=f"{safe_name or root.kind}.agent-shell-config.zip",
+            filename=_bundle_download_filename(filename_name, root.kind),
         )
 
 
