@@ -124,7 +124,7 @@ editable 安装把其他项目注入 `sys.path`，测试会立即失败，不会
 pytest cache provider，避免生成仓库内 `.pytest_cache`。不要为一次局部改动运行完整 `test/`。大量 TestClient 用例会
 分别创建隔离 data root 和 SQLite，Windows 杀毒软件与目录索引会放大这类全量运行的磁盘成本。
 
-永久测试按职责放入 `test/api_server/`、`test/authoring/`、`test/runtime/` 或 `test/security/`。
+永久测试按职责放入 `test/api_server/`、`test/authoring/`、`test/runtime/`、`test/security/` 或 `test/architecture/`；共享 fixture 与测试支撑代码保存在 `test/fixtures/` 和 `test/` 的直接支撑模块中。
 用户可观察行为、API 和持久化结果是验收证据。
 
 推送 `workflow` 或 `main` 时，GitHub Actions 运行一次无凭据的确定性门禁：前端 typecheck、UI policy 与

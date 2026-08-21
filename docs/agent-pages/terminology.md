@@ -4,6 +4,8 @@
 | --- | --- |
 | Workflow | 保存当前 Graph definition/layout 与运行约束的图实体；父图可映射 `/v1/models`，子图只作为内部目标 |
 | Main Agent | 完整的 Deep Agents 装配，可被 Workflow 画布的 Agent node 引用 |
+| Configuration Repository / 配置仓库 | 一套可整体切换的 Component、Agent、Workflow 配置及其私有包；写入目标由当前 active Repository 决定 |
+| 组件库 | 查看和管理当前配置仓库记录、切换或创建仓库，以及执行单根配置 Bundle 导入导出的页面 |
 | 模型连接 | 实例私有的 LangChain Provider、具体 model、请求设置和凭据配置 |
 | 模型要求 | Configuration Repository 中描述所需模型能力的组件，只保存名称和说明 |
 | 模型映射 | 按 Configuration Repository 将模型要求绑定到本机模型连接的页面 |
@@ -14,6 +16,8 @@
 | 工作流组件 | 被 Workflow metadata 或画布 Node 引用的固定类型配置 |
 | Subagent 引用 | Main Agent 保存的 `subagent_id`，运行时投影为官方字典 SubAgent |
 | Skill | 含 `SKILL.md` 的按需说明目录 |
+| Skill Template / 技能模板 | `data/skills-template/` 中可被选择并复制的公共 Skill 素材，以规范相对路径区分同名模板 |
+| 私有 Skill package | Skill Component 创建后按 owner UUID 保存的独立 Skill 目录；可继续编辑，与原 Template 没有同步关系 |
 | 自定义工具 | 从 Python `@tool` 资源物化的 LangChain Tool |
 | 自定义 Middleware | 从本地包加载的官方 LangChain `AgentMiddleware` |
 | Task Dispatcher | 从 Workflow State/Context 生成动态任务，并由 LangGraph `Send` 分发到 Agent Node 的画布节点 |

@@ -11,6 +11,7 @@
 - `POST /api/model-connections/{id}/copy`
 
 模型连接表单沿用现有 Provider contract；`credential: null` 在 Provider 与 Base URL 未变时保留已有 secret。
+`name` 去除首尾空白后必须包含 1 到 120 个字符，并在实例内按大小写不敏感规则保持唯一。空白或超长名称返回 422 `model_connection_invalid`，重名返回 409 `model_connection_name_conflict`。
 
 ## 模型要求
 
@@ -30,3 +31,4 @@ Main Agent 和 Subagent 通过模型要求 UUID 引用。模型要求进入 Bund
 【模型 -> 模型映射】递归显示当前 Configuration Repository 的全部模型要求。每张卡显示 description，并从本机模型连接列表中显式选择绑定；一个连接可供多个要求复用。同一仓库的映射保存在 `data/config/model-bindings.yaml`，不随 Bundle 导出。
 
 导入后模型要求默认未绑定。页面和全局 repository validation 显示 warning；实际运行在 Agent 装配边界返回 `model_requirement_unbound`，不会启动模型调用。删除模型连接会清除相关 binding，不会自动替换。
+请求开始装配时会捕获对应 Repository 的 binding、模型连接和 credential 视图；捕获后的模型资源修改只对后续请求生效。

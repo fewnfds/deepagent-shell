@@ -49,15 +49,19 @@ Invoke-RestMethod "$baseUrl/api/readiness" -Headers $managementHeaders
 | `GET /api/workflow-node-catalog` | 当前 Node type/version、`config_schema`、input/output handle 和允许角色 |
 | `GET /api/blocks/{type}` | 某类现有 component 及 UUID |
 | `GET /api/main-agents`、`GET /api/subagents` | 现有 Agent configuration |
+| `GET /api/configuration-repositories` | Configuration Repository 列表与 active Repository；写操作进入 active Repository |
 | `GET /api/model-connections` | 当前实例私有模型连接的 masked/missing 投影 |
 | `GET /api/model-requirements` | 当前 Configuration Repository 的模型要求及本机绑定投影 |
 | `GET /api/workflows?workflow_role=parent` | 现有 parent Workflow |
+| `GET /api/skills` | 合法 Skill Template catalog 与不可选择的模板错误 |
 | `GET /api/python-package-templates/{kind}` | 当前 script template 和 read-only built-in example |
 | `GET /api/validation/repository` | 当前完整 configuration repository 的 validation |
+| `POST /api/configuration-bundles/export`、`preview`、`import` | 单根配置 Bundle 导出、预检与提交 |
 
 `{kind}` 当前为 `custom-tool`、`middleware`、`agent-event-output`、`workflow-event-output`、`command` 或
 `task-dispatcher`。catalog 是 Node 和 component type 的当前来源；模型连接以
 `/api/model-connections` 为事实，模型要求与绑定以 `/api/model-requirements` 为事实。
+实例会自动准备默认 Repository；创建或激活其他 Repository 使用 `/api/configuration-repositories` 对应的 POST 入口。管理台中的【组件库】提供同一组 Repository 与 Bundle 操作。
 
 写操作通常沿以下数据流进行：
 

@@ -92,7 +92,7 @@ Model Requirement、Agent Event Output、Main Agent 和 Workflow Input Context�
 阅读第一章了解 API，再按实际需求选择章节：
 
 1. [Management API authentication、对象关系与事实发现](01-api-and-discovery.md)
-2. [配置 Agent Filesystem 与 Agent](02-components-and-agents.md)
+2. [配置 Agent](02-components-and-agents.md)
 3. [创建 Workflow Graph](03-workflow-graph.md)
 4. [编写 Python extension](04-python-extensions.md)
 5. [使用 background Run](05-background-runs.md)（仅使用 background task 时阅读）

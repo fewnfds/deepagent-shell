@@ -11,6 +11,7 @@
 在“模型 -> 模型映射”中查看当前 Configuration Repository 的全部模型要求。导入配置后，要求默认未绑定；根据要求的 name 与 description 选择本机模型连接并保存。未绑定要求会显示 warning，实际运行前必须完成绑定。
 
 同一个本机模型连接可以绑定多个模型要求。切换 Configuration Repository 后，模型连接列表保持不变，但映射按仓库分别保存。
+请求开始装配时会捕获所用 Repository 的 binding、模型连接和 credential 视图。捕获完成后修改或删除连接、解除绑定或切换 Repository，只对后续请求生效。
 
 ## 代理组件中的模型要求
 

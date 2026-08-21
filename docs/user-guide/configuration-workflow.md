@@ -2,12 +2,12 @@
 
 ## Workflow
 
-【Workflow】按父图和子图两个子页面管理同一种实体。当前 metadata CRUD 保存名称、角色、说明、
-可选事件输出组件引用、`recursion_limit`（最大 super-step 数，默认 `1,000,000`）、`execution_timeout_seconds`（单个 Run 的实际执行超时，不包含把已生成 SSE 文本交给慢速调用方的等待；默认 `1,200` 秒）和 `max_concurrency`（并行节点最大并发数，默认 `100`）。这些运行值只有正数约束，没有额外的产品上限；实际资源能力取决于 Workflow、Provider、工具、进程和宿主机资源。
-以及一份当前 Graph definition/layout。`enabled` 是同一 Workflow 的草稿/正式状态，只由 Graph 草稿保存或正式保存切换，metadata
+【Workflow】按父图和子图两个子页面管理同一种实体。装配页选择已有 Workflow，或新建并保存名称、角色、说明、
+可选事件输出组件引用、`recursion_limit`（最大 super-step 数，默认 `1,000,000`）、`execution_timeout_seconds`（单个 Run 的实际执行超时，不包含把已生成 SSE 文本交给慢速调用方的等待；默认 `1,200` 秒）、`max_concurrency`（并行节点最大并发数，默认 `100`）和一份当前 Graph definition/layout。这些运行值只有正数约束，没有额外的产品上限；实际资源能力取决于 Workflow、Provider、工具、进程和宿主机资源。
+`enabled` 是同一 Workflow 的草稿/正式状态，只由 Graph 草稿保存或正式保存切换，metadata
 表单不能直接切换。
 只有启用的父图出现在 `/v1/models`；子图不从 OpenAI-compatible 入口直接启动。两个页面复用同一配置表单和画布，
-编辑器工具栏显示当前角色并返回对应列表。
+编辑器工具栏显示当前角色并返回对应装配页。新记录保存并获得 UUID 后才能进入【编辑 Flow】；列表、删除和 Bundle 操作集中在【组件库】。
 
 Workflow root 不声明 `messages`。每个画布 Agent 节点由 wrapper 以空的私有 `messages` 调用自己的 Agent graph，
 所以后继 Agent 不会自动继承前序对话。Agent 完成后，wrapper 把完整 reduced conversation 作为不可变 artifact 写入

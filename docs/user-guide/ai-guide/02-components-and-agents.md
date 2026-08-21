@@ -51,6 +51,21 @@ Provider 和 Provider-specific field 以【模型 / 模型连接】页及 backen
 直连的 endpoint 支持官方 OpenAI Responses API 时才设为 `true`。示例中的 model ID 不是当前实例可用
 Model 的事实来源。
 
+## Skill
+
+`GET /api/skills` 扫描 `data/skills-template/`，只返回可选择的 Skill Template。Template 可以位于多层目录中；扫描遇到第一份 `SKILL.md` 就把该目录作为完整边界，并使用返回的 `template_path` 区分不同路径下的同名 Skill。
+
+创建 Skill Component 时向 `POST /api/blocks/skill` 提交名称和所选路径，例如：
+
+```json
+{
+  "name": "Writing skills",
+  "skill_template_paths": ["writing/outline", "review/continuity-check"]
+}
+```
+
+后端把所选 Template 复制到该 Component UUID 拥有的私有 Skill package，之后两者独立。`GET /api/blocks/skill/{block_id}/skills` 读取私有包；`POST` 同一路径并提交 `{"template_path":"..."}` 可增加 Skill，`DELETE /api/blocks/skill/{block_id}/skills/{folder_name}` 可删除。私有包内的 Skill 名称必须唯一，同名新增返回冲突，需要先删除再添加。私有包内容问题只在组件页载入或显式刷新时作为 warning 展示，不阻塞保存、Repository 切换、Bundle 或 Agent 装配。字段和页面行为见[Skill 配置](../../wizard-pages/skill-config.md)。
+
 ## Agent Event Output
 
 Main Agent 的 required reference 包含一个 `agent-event-output` package。先从 template catalog 选择一个合法模板：
@@ -172,6 +187,8 @@ Subagent 的 `name` 是 Model-visible routing name；清楚描述 delegation tim
 Main Agent 的一层直接 Subagent，不接受嵌套 Subagent 树。
 
 ## 可移植配置 Bundle
+
+管理台的【组件库】是 Repository 选择、Bundle 下载和上传的入口。Management API 使用 `POST /api/configuration-bundles/export` 导出，使用 `POST /api/configuration-bundles/preview` 上传预检，再使用 `POST /api/configuration-bundles/import` 提交同一文件和预检计划；完整 multipart 字段见[管理组件库](../configuration-library.md)。这些操作以 active Configuration Repository 为读取或写入目标。
 
 需要跨实例分享时，以一个 Component、Subagent、Main Agent 或 Workflow UUID 作为 Bundle root。后端沿
 `configuration.dependencies` 的 typed references 计算 transitive closure；不要按名称猜依赖，也不要扫描或替换 Python source

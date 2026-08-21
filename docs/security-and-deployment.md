@@ -38,7 +38,8 @@ Provider 原始错误正文。以下 management-only 功能会按产品用途保
 
 配置 Bundle 是 management-only 的 ZIP 导入/导出入口，用于迁移单个配置根及其声明式依赖闭包。它不承担实例备份；
 不会包含 `system.yaml`、`agent-shell.env`、credential value/environment reference、SQLite、运行历史、日志、媒体、普通文件、
-Python template 或 runtime cache。模型要求会随配置导入，模型连接和 credential 需要在目标实例单独维护并完成模型映射。
+Python template、`skills-template` 公共素材或 runtime cache。模型要求会随配置导入，模型连接和 credential 需要在目标实例单独维护并完成模型映射。
+Skill Component 导出的是该 Component 已拥有的私有 Skill package。
 
 平台不能可靠识别用户自行写进 prompt、Skill 文件或 Python source 的任意 secret。导出者在分享前仍需审查这些内容；导入者
 需把 Bundle 中的 Python package 视为受信任代码，并在启用 Workflow 前审查源码、requirements、文件与网络权限。导入和

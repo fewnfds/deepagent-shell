@@ -1,6 +1,8 @@
 # 管理组件库
 
-【组件库】按 Workflow、Main Agent、Subagent 和 Component 分类显示当前 Configuration Repository 的记录，支持搜索、查看详情、编辑、逐行下载、单项删除和批量删除。页面顶部提供 Repository selector 与创建空 Repository；切换只发布已完成加载的文件化配置上下文。
+【组件库】按 Workflow、代理组件、工作流组件和 Agent（Main Agent/Subagent）四组显示当前 Configuration Repository 的记录，支持搜索、查看详情、编辑、逐行下载、单项删除和批量删除。页面顶部提供 Repository selector 与创建空 Repository；切换只发布已完成加载的文件化配置上下文。
+
+系统设置、secret、SQLite/运行历史、日志、媒体、普通文件、Python Template、Skill Template 和模型连接属于实例域，切换 Repository 时保持不变。模型映射存储也属于实例域，其中的 binding 按 Repository UUID 分区；切换后页面使用所选 Repository 自己的 binding。请求开始装配时会捕获所用 Repository 的配置和模型资源视图，后续切换只影响新请求。
 
 - 编辑会跳转到对应页面，并以记录 UUID 确定更新目标；
 - 复制会创建新 UUID，副本名称经过当前校验；Python package 与 Skill private package 随 owner UUID 一起复制；
@@ -23,11 +25,13 @@ Graph admission 问题也会显示。满足磁盘身份格式但业务配置无�
 当前后端可以把一个 Component、Subagent、Main Agent 或 Workflow 作为单根导出。Bundle 是 ZIP，根记录所需的
 声明式配置依赖会自动闭合；共享依赖只保存一次。管理 API 为：
 
-- `POST /api/configuration-bundles/export`：JSON body 使用 `kind`、`source_id`，Component 根另带 `type`；返回 ZIP，下载名以响应的 `Content-Disposition` 为准；
+- `POST /api/configuration-bundles/export`：JSON body 使用 `kind`、`source_id`，Component 根另带 `type`；返回 ZIP。下载名只保留 ASCII 字母数字、`-`、`_` 和 `.`，其他字符替换为 `-`，Windows 保留设备名增加 `configuration-` 前缀，并统一使用 `.agent-shell-config.zip` 后缀；实际文件名以响应的 `Content-Disposition` 为准；
 - `POST /api/configuration-bundles/preview`：multipart 的 `bundle` 文件；返回 `bundle_sha256`、固定 target UUID map、名称建议、
   Filesystem binding、errors、warnings 和本次 preview 的 `plan_token`；
 - `POST /api/configuration-bundles/import`：再次提交同一个 multipart `bundle`，并在 `request` form field 中提交 JSON；JSON 包含
   preview 的 `bundle_sha256`、`plan_token`，以及 `resolutions.target_ids`、可选 `resolutions.names` 和 `resolutions.filesystem_bindings`。
+
+组件库只在 preview 为 ready、没有 blocker、全部名称已填写且所有 Filesystem binding 已完成时启用导入；mapped directory 还需明确 path origin。commit 复用本次 preview 的 `bundle_sha256`、`plan_token` 和 target UUID map。导入成功后，页面打开新 root 记录的编辑页。
 
 导入不会按源 UUID 或名称复用、更新或覆盖配置。每条配置使用 preview 给出的新 UUID，声明式引用由后端机械重写；
 名称冲突会建议 `Name (imported)`、`Name (imported 2)` 等后缀，冲突名称必须显式确认。Workflow 导入后固定为

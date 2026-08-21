@@ -39,6 +39,7 @@ data/
 模型连接是实例私有资源：Provider、endpoint、具体 model 和请求参数保存在
 `data/config/model-connections/<uuid>.yaml`，credential value 保存在 `data/config/agent-shell.env`。
 `data/config/model-bindings.yaml` 按 Configuration Repository 保存模型要求到本机连接的映射。模型连接和映射都不进入配置 Bundle。
+切换 Configuration Repository 只改变可装配配置和当前使用的 repository-scoped binding；上述系统设置、secret、SQLite 数据、普通文件、模板和模型连接保持不变。
 
 ## 文件管理
 
@@ -47,7 +48,7 @@ data/
 
 可见目录包括普通文件 `data/files/`、Skill 模板 `data/skills-template/`、Python 模板 `data/templates/`，以及每个
 Configuration Repository 中的 Component、Agent、Workflow 和配置私有包。`components/`、`agents/`、`workflows/`
-可以查看和下载，内容修改仍通过对应配置页面完成。Python 与 Skill 私有包支持文件操作；手工修改后，组件刷新、装配或运行校验会报告无效内容。
+可以查看和下载，内容修改仍通过对应配置页面完成。Python 与 Skill 私有包支持文件操作。Python 私有包的结构和 factory contract 会在组件检查或运行装配时校验；Skill 私有包的问题只在 Skill 组件页载入或显式刷新时显示 warning，不阻塞保存、装配、Repository 切换或 Bundle 操作。
 
 - 路径和面包屑直接显示 `data/...` 的真实目录名；
 - 文本编辑默认上限为 2 MiB，可在【系统 / 系统配置】调整；

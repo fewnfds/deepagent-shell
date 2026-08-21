@@ -26,6 +26,8 @@ Windows 源码 Clone 从项目根运行：
 
 ## 第一份可运行 Workflow
 
+首次启动会创建并激活 `Default` Configuration Repository。需要使用另一套配置时，先在【组件库】顶部创建或切换 Repository；之后创建的 Component、Agent 和 Workflow 都写入当前 Repository。
+
 1. 在【代理组件 / 文件系统】创建共享空间配置。
 2. 在【模型 / 模型连接】创建本机连接，在【代理组件 / 模型要求】创建名称和说明，再在【代理 / Main Agent】中选择模型要求、
    Agent 事件输出和其他能力；需要把客户端多轮消息整理到 Agent 初始上下文时，从
