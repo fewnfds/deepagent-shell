@@ -233,8 +233,8 @@ class AgentBuilder:
         ] | None = None,
         disabled_capabilities: frozenset[str] = frozenset(),
     ) -> MaterializedAgentProfile:
-        requirement_id = references["model-requirement"]
-        if "model-requirement" not in selected_blocks:
+        requirement_id = references.get("model-requirement")
+        if not requirement_id or "model-requirement" not in selected_blocks:
             raise configuration_error(
                 "model_requirement_unbound",
                 "The Agent does not select a model requirement.",
@@ -243,6 +243,7 @@ class AgentBuilder:
                 owner_id=owner_id,
                 owner_name=owner_name,
                 path="capability_refs.model-requirement",
+                message_key="validation.issue.modelRequirementUnbound",
             )
         connection_id = (
             self._model_resources.get_binding(self._repository_id, requirement_id)
@@ -258,6 +259,7 @@ class AgentBuilder:
                 owner_id=owner_id,
                 owner_name=owner_name,
                 path="capability_refs.model-requirement",
+                message_key="validation.issue.modelRequirementUnbound",
             )
         try:
             if self._model_resources is None:
@@ -272,6 +274,7 @@ class AgentBuilder:
                 owner_id=owner_id,
                 owner_name=owner_name,
                 path="capability_refs.model-requirement",
+                message_key="validation.issue.modelRequirementUnbound",
             ) from exc
         exception_retry = selected_blocks.get("exception-retry")
         effective_model_block = (

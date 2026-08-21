@@ -37,7 +37,7 @@ const messages = {
       upload: 'Upload configuration Bundle', download: 'Download Bundle', exportFailed: 'Export failed',
       previewTitle: 'Import Bundle', digest: 'Digest', originalName: 'Original', importName: 'Import name',
       targetId: 'Target UUID', bindings: 'Bindings', pathOrigin: 'Path origin', absolute: 'Absolute',
-      dataRootRelative: 'Data root relative', blockers: 'Blockers', warnings: 'Warnings', import: 'Import', imported: 'Imported',
+      selectPathOrigin: 'Select path origin', dataRootRelative: 'Data root relative', blockers: 'Blockers', warnings: 'Warnings', import: 'Import', imported: 'Imported',
     },
     catalogUnavailable: 'Catalog unavailable',
     unknownCategory: 'Unknown category {type}',
@@ -343,6 +343,32 @@ describe('ConfigLibraryPage', () => {
     expect(wrapper.text()).not.toContain('Details for Original model')
   })
 
+  it('restores the authoritative repository after create succeeds but activation fails', async () => {
+    const api = createApi()
+    const active = {
+      id: '11111111-1111-4111-8111-111111111111', name: 'Default', schema_version: 1 as const, active: true,
+    }
+    const created = {
+      id: '22222222-2222-4222-8222-222222222222', name: 'Created', schema_version: 1 as const, active: false,
+    }
+    vi.mocked(api.service.listConfigurationRepositories)
+      .mockResolvedValueOnce({ active_id: active.id, repositories: [active] })
+      .mockResolvedValueOnce({ active_id: active.id, repositories: [active, created] })
+    vi.mocked(api.service.createConfigurationRepository).mockResolvedValue(created)
+    vi.mocked(api.service.activateConfigurationRepository).mockRejectedValue(new Error('activation failed'))
+    const { wrapper } = await mountPage(api.service)
+
+    await wrapper.get('#new-repository-name').setValue('Created')
+    await wrapper.get('[data-testid="create-repository-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(api.service.activateConfigurationRepository).toHaveBeenCalledWith(created.id)
+    expect(api.service.listConfigurationRepositories).toHaveBeenCalledTimes(2)
+    expect((wrapper.get('[data-testid="repository-switcher"] select').element as HTMLSelectElement).value).toBe(active.id)
+    expect(wrapper.get('[data-testid="repository-switcher"]').text()).toContain(created.name)
+    expect(wrapper.get('[data-testid="repository-switcher"] [role="alert"]').text()).toContain('Request failed')
+  })
+
   it('commits the same uploaded Bundle digest and target UUID plan', async () => {
     const api = createApi()
     const file = new File(['bundle'], 'model.zip', { type: 'application/zip' })
@@ -370,6 +396,60 @@ describe('ConfigLibraryPage', () => {
     expect(api.service.importConfigurationBundle).toHaveBeenCalledWith(file, 'a'.repeat(64), 'c'.repeat(64), {
       target_ids: { 'source-id': 'target-id' }, names: { 'source-id': 'Model' }, filesystem_bindings: {},
     })
+  })
+
+  it('keeps Bundle import disabled until preview and path resolutions are ready', async () => {
+    const api = createApi()
+    const file = new File(['bundle'], 'filesystem.zip', { type: 'application/zip' })
+    vi.mocked(api.service.previewConfigurationBundle).mockResolvedValue({
+      bundle_sha256: 'a'.repeat(64), manifest_sha256: 'b'.repeat(64),
+      plan_token: 'c'.repeat(64),
+      root: { kind: 'component', type: 'filesystem', source_id: 'source-id', target_id: 'target-id', workflow_role: null },
+      target_ids: { 'source-id': 'target-id' },
+      records: [{ source_id: 'source-id', target_id: 'target-id', kind: 'component', type: 'filesystem', original_name: 'Files', suggested_name: 'Files', selected_name: 'Files', requires_confirmation: false }],
+      filesystem_bindings: [{
+        binding_id: 'source-id:mapped_directories[0].local_path', source_id: 'source-id',
+        configuration_name: 'Files', path: 'mapped_directories[0].local_path', kind: 'mapped-directory',
+        source_value: 'C:/source', source_path_origin: 'absolute', required: true,
+        status: 'binding-required', target_value: null,
+      }],
+      skill_packages: [], errors: [], warnings: [], ready: true,
+    })
+    const { wrapper } = await mountPage(api.service)
+    const input = wrapper.get('input[type="file"]')
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+    const importButton = buttonByText(wrapper, 'Import')
+
+    expect(importButton.attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="bundle-binding-value"]').setValue('D:/target')
+    expect(importButton.attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="bundle-path-origin"]').setValue('absolute')
+    expect(importButton.attributes('disabled')).toBeUndefined()
+    await wrapper.get('table input').setValue('')
+    expect(importButton.attributes('disabled')).toBeDefined()
+    await importButton.trigger('click')
+    expect(api.service.importConfigurationBundle).not.toHaveBeenCalled()
+  })
+
+  it('keeps Bundle import disabled when the preview reports blockers', async () => {
+    const api = createApi()
+    const file = new File(['bundle'], 'blocked.zip', { type: 'application/zip' })
+    vi.mocked(api.service.previewConfigurationBundle).mockResolvedValue({
+      bundle_sha256: 'a'.repeat(64), manifest_sha256: 'b'.repeat(64),
+      plan_token: 'c'.repeat(64),
+      root: { kind: 'component', type: 'filesystem', source_id: 'source-id', target_id: 'target-id', workflow_role: null },
+      target_ids: { 'source-id': 'target-id' }, records: [], filesystem_bindings: [], skill_packages: [],
+      errors: [{ code: 'blocked', message: 'Blocked' }], warnings: [], ready: false,
+    })
+    const { wrapper } = await mountPage(api.service)
+    const input = wrapper.get('input[type="file"]')
+    Object.defineProperty(input.element, 'files', { configurable: true, value: [file] })
+    await input.trigger('change')
+    await flushPromises()
+
+    expect(buttonByText(wrapper, 'Import').attributes('disabled')).toBeDefined()
   })
 
   it('keeps list and copy failures in their local error regions without toasts', async () => {

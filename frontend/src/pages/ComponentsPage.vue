@@ -153,6 +153,34 @@ const loadingResource = ref(false)
 
 let routeSequence = 0
 let catalogSequence = 0
+let resourceSequence = 0
+let privateSkillSequence = 0
+let privateSkillLoadingSequence = 0
+let privateSkillMutationSequence = 0
+
+function invalidateResourceRequests(): void {
+  resourceSequence += 1
+  privateSkillSequence += 1
+  loadingResource.value = false
+  privateSkillLoading.value = false
+  privateSkillMutating.value = false
+}
+
+function resourceRequestIsCurrent(
+  sequence: number,
+  type: ManagedComponentType | null,
+): boolean {
+  return sequence === resourceSequence && activeType.value === type
+}
+
+function privateSkillRequestIsCurrent(sequence: number, ownerId: string): boolean {
+  return (
+    sequence === privateSkillSequence
+    && activeType.value === 'skill'
+    && draft.value?.id === ownerId
+  )
+}
+
 function defaultsForType(type: ManagedComponentType | null): unknown {
   const editorKey = manifests.value.find((item) => item.type === type)?.editor_key
   return editorKey ? editorDefaults.value[editorKey] : undefined
@@ -344,6 +372,7 @@ async function loadRoute(): Promise<void> {
 
   routeSequence += 1
   const sequence = routeSequence
+  invalidateResourceRequests()
   loading.value = true
   pageError.value = ''
   saveValidation.value = null
@@ -573,80 +602,133 @@ function updateDraft(value: BlockDraftBase): void {
 }
 
 async function refreshResource(): Promise<void> {
+  const type = activeType.value
+  const ownerId = draft.value?.id ?? ''
+  resourceSequence += 1
+  const sequence = resourceSequence
   loadingResource.value = true
   try {
-    const current = draft.value as (BlockDraftBase & PythonPackageDraftState) | null
-    if (activeType.value && usesPythonExtension(activeType.value) && current?.id) {
+    if (type && usesPythonExtension(type) && ownerId) {
       const inspection: PythonPackageInspection = await managementApi.inspectPythonPackage(
-        activeType.value,
-        current.id,
+        type,
+        ownerId,
       )
-      if (draft.value?.id === current.id) applyPythonPackageInspection(current, inspection)
-    } else if (activeType.value === 'custom-tool') {
+      if (resourceRequestIsCurrent(sequence, type) && draft.value?.id === ownerId) {
+        applyPythonPackageInspection(
+          draft.value as BlockDraftBase & PythonPackageDraftState,
+          inspection,
+        )
+      }
+    } else if (type === 'custom-tool') {
       const result = await managementApi.listCustomToolTemplates()
+      if (!resourceRequestIsCurrent(sequence, type)) return
       customTools.value = result.catalog
       customToolErrors.value = result.errors
-    } else if (activeType.value === 'custom-middleware') {
+    } else if (type === 'custom-middleware') {
       const result = await managementApi.listMiddlewareTemplates()
+      if (!resourceRequestIsCurrent(sequence, type)) return
       customMiddlewares.value = result.catalog
       customMiddlewareErrors.value = result.errors
-    } else if (activeType.value === 'agent-event-output') {
+    } else if (type === 'agent-event-output') {
       const result = await managementApi.listAgentEventOutputTemplates()
+      if (!resourceRequestIsCurrent(sequence, type)) return
       agentEventOutputs.value = result.catalog
       agentEventOutputErrors.value = result.errors
-    } else if (activeType.value === 'workflow-event-output') {
+    } else if (type === 'workflow-event-output') {
       const result = await managementApi.listWorkflowEventOutputTemplates()
+      if (!resourceRequestIsCurrent(sequence, type)) return
       workflowEventOutputs.value = result.catalog
       workflowEventOutputErrors.value = result.errors
-    } else if (activeType.value === 'command') {
+    } else if (type === 'command') {
       const result = await managementApi.listCommandTemplates()
+      if (!resourceRequestIsCurrent(sequence, type)) return
       commandPackages.value = result.catalog
       commandPackageErrors.value = result.errors
-    } else if (activeType.value === 'task-dispatcher') {
+    } else if (type === 'task-dispatcher') {
       const result = await managementApi.listTaskDispatcherTemplates()
+      if (!resourceRequestIsCurrent(sequence, type)) return
       taskDispatcherPackages.value = result.catalog
       taskDispatcherPackageErrors.value = result.errors
-    } else if (activeType.value === 'skill') {
+    } else if (type === 'skill') {
       const result = await managementApi.listSkills()
+      if (!resourceRequestIsCurrent(sequence, type)) return
       skills.value = result.catalog
       skillErrors.value = result.errors
-      if (draft.value?.id) {
-        privateSkillLoading.value = true
-        try {
-          privateSkillPackage.value = await managementApi.inspectPrivateSkills(draft.value.id)
-        } finally {
-          privateSkillLoading.value = false
-        }
-      }
+      if (ownerId) await refreshPrivateSkillPackage(ownerId)
     }
   } catch (error) {
-    notifyFailure('components.feedback.resourceFailed', error)
+    if (resourceRequestIsCurrent(sequence, type)) {
+      notifyFailure('components.feedback.resourceFailed', error)
+    }
   } finally {
-    loadingResource.value = false
+    if (sequence === resourceSequence) loadingResource.value = false
+  }
+}
+
+async function refreshPrivateSkillPackage(ownerId: string): Promise<void> {
+  privateSkillSequence += 1
+  const sequence = privateSkillSequence
+  privateSkillLoadingSequence = sequence
+  privateSkillLoading.value = true
+  try {
+    const inspection = await managementApi.inspectPrivateSkills(ownerId)
+    if (privateSkillRequestIsCurrent(sequence, ownerId)) {
+      privateSkillPackage.value = inspection
+    }
+  } catch (error) {
+    if (privateSkillRequestIsCurrent(sequence, ownerId)) {
+      notifyFailure('components.feedback.resourceFailed', error)
+    }
+  } finally {
+    if (privateSkillLoadingSequence === sequence) {
+      privateSkillLoading.value = false
+    }
   }
 }
 
 async function addPrivateSkill(templatePath: string): Promise<void> {
   if (activeType.value !== 'skill' || !draft.value?.id) return
+  const ownerId = draft.value.id
+  privateSkillSequence += 1
+  const sequence = privateSkillSequence
+  privateSkillMutationSequence = sequence
   privateSkillMutating.value = true
   try {
-    privateSkillPackage.value = await managementApi.addPrivateSkill(draft.value.id, templatePath)
+    const inspection = await managementApi.addPrivateSkill(ownerId, templatePath)
+    if (privateSkillRequestIsCurrent(sequence, ownerId)) {
+      privateSkillPackage.value = inspection
+    }
   } catch (error) {
-    notifyFailure('components.feedback.resourceFailed', error)
+    if (privateSkillRequestIsCurrent(sequence, ownerId)) {
+      notifyFailure('components.feedback.resourceFailed', error)
+    }
   } finally {
-    privateSkillMutating.value = false
+    if (privateSkillMutationSequence === sequence) {
+      privateSkillMutating.value = false
+    }
   }
 }
 
 async function removePrivateSkill(folder: string): Promise<void> {
   if (activeType.value !== 'skill' || !draft.value?.id) return
+  const ownerId = draft.value.id
+  privateSkillSequence += 1
+  const sequence = privateSkillSequence
+  privateSkillMutationSequence = sequence
   privateSkillMutating.value = true
   try {
-    privateSkillPackage.value = await managementApi.deletePrivateSkill(draft.value.id, folder)
+    const inspection = await managementApi.deletePrivateSkill(ownerId, folder)
+    if (privateSkillRequestIsCurrent(sequence, ownerId)) {
+      privateSkillPackage.value = inspection
+    }
   } catch (error) {
-    notifyFailure('components.feedback.resourceFailed', error)
+    if (privateSkillRequestIsCurrent(sequence, ownerId)) {
+      notifyFailure('components.feedback.resourceFailed', error)
+    }
   } finally {
-    privateSkillMutating.value = false
+    if (privateSkillMutationSequence === sequence) {
+      privateSkillMutating.value = false
+    }
   }
 }
 
@@ -655,6 +737,7 @@ watch(
   ([scope], [previousScope]) => {
     if (scope !== previousScope) {
       routeSequence += 1
+      invalidateResourceRequests()
       manifests.value = []
       activeType.value = null
       records.value = []

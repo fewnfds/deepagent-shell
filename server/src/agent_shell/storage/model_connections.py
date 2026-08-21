@@ -23,6 +23,10 @@ from agent_shell.storage.environment import (
 from agent_shell.storage.file_config import _dump_yaml
 
 
+class ModelConnectionNameConflictError(ValueError):
+    """The requested instance model connection name is already in use."""
+
+
 def _credential_reference(record: dict[str, Any]) -> str | None:
     credential = record.get("credential")
     if not isinstance(credential, dict) or set(credential) != {"reference"}:
@@ -262,7 +266,9 @@ class ModelResourceStore:
                     and name_collision_key(str(item["name"]))
                     == name_collision_key(name)
                 ):
-                    raise ValueError("model connection name already exists")
+                    raise ModelConnectionNameConflictError(
+                        "model connection name already exists"
+                    )
 
             candidate = ModelConnectionBlock.model_validate(
                 {key: value for key, value in payload.items() if key != "id"}
@@ -446,6 +452,7 @@ class ModelResourceStore:
 
 
 __all__ = [
+    "ModelConnectionNameConflictError",
     "ModelResourceSnapshot",
     "ModelResourceStore",
 ]

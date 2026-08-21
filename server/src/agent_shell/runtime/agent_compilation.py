@@ -59,6 +59,7 @@ def configuration_error(
     owner_id: str,
     owner_name: str,
     path: str,
+    message_key: str = "validation.issue.runtime.configuration",
 ) -> AgentRuntimeError:
     report = ValidationReport(
         stage="request_assembly",
@@ -70,7 +71,7 @@ def configuration_error(
                 owner_name=owner_name,
                 path=path,
                 message=message,
-                message_key="validation.issue.runtime.configuration",
+                message_key=message_key,
                 message_args={},
             ),
         ),

@@ -285,6 +285,13 @@ def build_router(
                 message_args={"count": len(exc.errors())},
             ) from exc
         except ProviderCredentialError as exc:
+            if exc.code == "model_connection_not_found":
+                raise management_error(
+                    404,
+                    code=exc.code,
+                    message_key="errors.modelConnectionNotFound",
+                    message="The model connection does not exist.",
+                ) from exc
             raise management_error(
                 422,
                 code=exc.code,

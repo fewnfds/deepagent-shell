@@ -8,11 +8,34 @@ from agent_shell.app import create_app
 
 from .provider_secret_support import *
 
+
+def test_model_catalog_reports_a_missing_saved_connection_as_not_found(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _ = make_client(tmp_path, monkeypatch)
+
+    response = client.post(
+        "/api/fetch-models",
+        json={
+            "provider": "openai",
+            "base_url": "https://provider.example/v1",
+            "credential": None,
+            "block_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        },
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "model_connection_not_found"
+    assert response.json()["detail"]["message_key"] == (
+        "errors.modelConnectionNotFound"
+    )
+
 def test_model_catalog_uses_entered_or_saved_key_and_allows_no_key(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client, _ = make_client(tmp_path, monkeypatch)
-    block = client.post("/api/blocks/model", json=model_payload()).json()
+    connection = client.post("/api/model-connections", json=model_payload()).json()
     observed: list[tuple[str, str]] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -36,16 +59,16 @@ def test_model_catalog_uses_entered_or_saved_key_and_allows_no_key(
         "/api/fetch-models",
         json={
             "provider": "openai",
-            "base_url": block["base_url"],
+            "base_url": connection["base_url"],
             "credential": None,
-            "block_id": block["id"],
+            "block_id": connection["id"],
         },
     )
     no_key_response = client.post(
         "/api/fetch-models",
         json={
             "provider": "openai",
-            "base_url": block["base_url"],
+            "base_url": connection["base_url"],
             "credential": None,
             "block_id": "",
         },
@@ -65,7 +88,7 @@ def test_model_catalog_never_reuses_saved_key_for_a_different_endpoint(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client, _ = make_client(tmp_path, monkeypatch)
-    block = client.post("/api/blocks/model", json=model_payload()).json()
+    connection = client.post("/api/model-connections", json=model_payload()).json()
     upstream_called = False
 
     def unexpected_client(**kwargs):
@@ -82,7 +105,7 @@ def test_model_catalog_never_reuses_saved_key_for_a_different_endpoint(
             "provider": "openai",
             "base_url": "https://other-provider.example/v1",
             "credential": None,
-            "block_id": block["id"],
+            "block_id": connection["id"],
         },
     )
 
@@ -126,7 +149,7 @@ def test_model_catalog_never_reuses_saved_key_for_a_different_provider(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client, _ = make_client(tmp_path, monkeypatch)
-    block = client.post("/api/blocks/model", json=model_payload()).json()
+    connection = client.post("/api/model-connections", json=model_payload()).json()
     upstream_called = False
 
     def unexpected_client(**kwargs):
@@ -141,9 +164,9 @@ def test_model_catalog_never_reuses_saved_key_for_a_different_provider(
         "/api/fetch-models",
         json={
             "provider": "deepseek",
-            "base_url": block["base_url"],
+            "base_url": connection["base_url"],
             "credential": None,
-            "block_id": block["id"],
+            "block_id": connection["id"],
         },
     )
 

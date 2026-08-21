@@ -114,6 +114,18 @@ const currentCategoryLabel = computed(() => currentCategory.value
 const detailValue = computed<Record<string, unknown>>(() => (
   detailItem.value ? { ...detailItem.value } : {}
 ))
+const canImport = computed(() => {
+  const preview = bundlePreview.value
+  if (!preview || preview.ready !== true || preview.errors.length > 0) return false
+  if (preview.records.some((record) => !bundleNames.value[record.source_id]?.trim())) {
+    return false
+  }
+  return preview.filesystem_bindings.every((binding) => {
+    const resolution = bundleBindings.value[binding.binding_id]
+    if (!resolution?.value.trim()) return false
+    return binding.kind !== 'mapped-directory' || Boolean(resolution.path_origin)
+  })
+})
 
 async function loadCatalog(): Promise<void> {
   catalogError.value = ''
@@ -184,9 +196,20 @@ async function createRepository(): Promise<void> {
   repositoryError.value = ''
   try {
     const created = await api.value.createConfigurationRepository(name)
-    activeRepositoryId.value = created.id
+    repositories.value = [
+      ...repositories.value.filter((repository) => repository.id !== created.id),
+      created,
+    ].sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id))
     repositoryName.value = ''
-    await api.value.activateConfigurationRepository(created.id)
+    try {
+      await api.value.activateConfigurationRepository(created.id)
+    } catch (cause) {
+      const activationError = managementError.describe(cause).display
+      await loadRepositories()
+      repositoryError.value = activationError
+      return
+    }
+    activeRepositoryId.value = created.id
     resetRepositoryScopedUi()
     await Promise.all([loadRepositories(), loadCatalog(), libraryTable.value?.reload(), refreshRepositoryValidation()])
     notify({ tone: 'success', title: t('library.repository.created') })
@@ -244,7 +267,7 @@ function bundleCategory(preview: ConfigurationBundlePreview): LibraryCategoryId 
 async function importBundle(): Promise<void> {
   const file = bundleFile.value
   const preview = bundlePreview.value
-  if (!file || !preview || bundleBusy.value) return
+  if (!file || !preview || bundleBusy.value || !canImport.value) return
   bundleBusy.value = true
   bundleError.value = ''
   try {
@@ -521,7 +544,7 @@ onMounted(async () => {
             </FormField>
           </div>
           <div class="col-lg-6">
-            <form class="d-flex gap-2" @submit.prevent="createRepository">
+            <form class="d-flex gap-2" data-testid="create-repository-form" @submit.prevent="createRepository">
               <div class="w-100"><label class="form-label" for="new-repository-name">{{ t('library.repository.newName') }}</label><input id="new-repository-name" v-model="repositoryName" class="form-control" maxlength="120" required></div>
               <LteButton class="align-items-end" :disabled="repositoryBusy || bundleBusy || !repositoryName.trim()" theme="success" type="submit"><i class="bi bi-plus-lg" aria-hidden="true" /> {{ t('library.repository.create') }}</LteButton>
             </form>
@@ -682,10 +705,10 @@ onMounted(async () => {
     <template v-if="bundlePreview">
       <p class="small font-monospace text-break">{{ t('library.bundle.digest') }}: {{ bundlePreview.bundle_sha256 }}</p>
       <div class="table-responsive mb-3"><table class="table table-striped align-middle"><thead><tr><th>{{ t('library.bundle.originalName') }}</th><th>{{ t('library.bundle.importName') }}</th><th>{{ t('library.bundle.targetId') }}</th></tr></thead><tbody><tr v-for="record in bundlePreview.records" :key="record.source_id"><td>{{ record.original_name }}</td><td><input v-model="bundleNames[record.source_id]" class="form-control" required></td><td class="small font-monospace text-break">{{ record.target_id }}</td></tr></tbody></table></div>
-      <section v-if="bundlePreview.filesystem_bindings.length" class="mb-3"><h3 class="h5">{{ t('library.bundle.bindings') }}</h3><div v-for="binding in bundlePreview.filesystem_bindings" :key="binding.binding_id" class="row g-3 align-items-end mb-2"><div v-if="binding.kind === 'mapped-directory'" class="col-lg-4"><label class="form-label">{{ t('library.bundle.pathOrigin') }}</label><select v-model="bundleBindings[binding.binding_id]!.path_origin" class="form-select"><option value="absolute">{{ t('library.bundle.absolute') }}</option><option value="data-root-relative">{{ t('library.bundle.dataRootRelative') }}</option></select></div><div class="col"><label class="form-label">{{ binding.configuration_name }} · {{ binding.path }}</label><input v-model="bundleBindings[binding.binding_id]!.value" class="form-control" required></div></div></section>
+      <section v-if="bundlePreview.filesystem_bindings.length" class="mb-3"><h3 class="h5">{{ t('library.bundle.bindings') }}</h3><div v-for="binding in bundlePreview.filesystem_bindings" :key="binding.binding_id" class="row g-3 align-items-end mb-2"><div v-if="binding.kind === 'mapped-directory'" class="col-lg-4"><label class="form-label">{{ t('library.bundle.pathOrigin') }}</label><select v-model="bundleBindings[binding.binding_id]!.path_origin" class="form-select" data-testid="bundle-path-origin"><option disabled value="">{{ t('library.bundle.selectPathOrigin') }}</option><option value="absolute">{{ t('library.bundle.absolute') }}</option><option value="data-root-relative">{{ t('library.bundle.dataRootRelative') }}</option></select></div><div class="col"><label class="form-label">{{ binding.configuration_name }} · {{ binding.path }}</label><input v-model="bundleBindings[binding.binding_id]!.value" class="form-control" data-testid="bundle-binding-value" required></div></div></section>
       <LteAlert v-if="bundlePreview.errors.length" :title="t('library.bundle.blockers')" theme="danger"><p v-for="issue in bundlePreview.errors" :key="`${issue.code}:${issue.source_id}:${issue.path}`" class="mb-1">{{ issue.message }}</p></LteAlert>
       <LteAlert v-if="bundlePreview.warnings.length" :title="t('library.bundle.warnings')" theme="warning"><p v-for="issue in bundlePreview.warnings" :key="`${issue.code}:${issue.source_id}:${issue.path}`" class="mb-1">{{ issue.message }}</p></LteAlert>
     </template>
-    <template #footer><LteButton :disabled="bundleBusy" theme="warning" type="button" @click="closeBundle">{{ t('common.cancel') }}</LteButton><LteButton :disabled="bundleBusy || !bundlePreview || Object.values(bundleNames).some((name) => !name.trim()) || Object.values(bundleBindings).some((binding) => !binding.value.trim())" theme="primary" type="button" @click="importBundle"><span v-if="bundleBusy" class="spinner-border spinner-border-sm" aria-hidden="true" />{{ t('library.bundle.import') }}</LteButton></template>
+    <template #footer><LteButton :disabled="bundleBusy" theme="warning" type="button" @click="closeBundle">{{ t('common.cancel') }}</LteButton><LteButton :disabled="bundleBusy || !canImport" theme="primary" type="button" @click="importBundle"><span v-if="bundleBusy" class="spinner-border spinner-border-sm" aria-hidden="true" />{{ t('library.bundle.import') }}</LteButton></template>
   </ModalHost>
 </template>

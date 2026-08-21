@@ -55,6 +55,14 @@ function testRouter() {
   })
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((accept) => {
+    resolve = accept
+  })
+  return { promise, resolve }
+}
+
 afterEach(() => {
   vi.restoreAllMocks()
   useConfirmation().cancel()
@@ -89,8 +97,8 @@ describe('WorkflowsPage', () => {
     await componentSelects[0]!.setValue(eventOutput.id)
     const runtimeLimits = wrapper.findAll('input[type="number"]')
     await runtimeLimits[0]!.setValue(250)
-    await runtimeLimits[1]!.setValue(900)
-    await runtimeLimits[2]!.setValue(32)
+    await runtimeLimits[1]!.setValue(90_000)
+    await runtimeLimits[2]!.setValue(300)
     await wrapper.findAll('button').find((button) => button.text() === 'Save')!.trigger('click')
     await flushPromises()
 
@@ -100,8 +108,8 @@ describe('WorkflowsPage', () => {
       description: 'New description',
       workflow_event_output_id: eventOutput.id,
       recursion_limit: 250,
-      execution_timeout_seconds: 900,
-      max_concurrency: 32,
+      execution_timeout_seconds: 90_000,
+      max_concurrency: 300,
     })
 
     wrapper.unmount()
@@ -173,6 +181,69 @@ describe('WorkflowsPage', () => {
       max_concurrency: 100,
     })
     wrapper.unmount()
+  })
+
+  it('freezes record changes during save and sorts a created Workflow immediately', async () => {
+    const pending = deferred<Workflow>()
+    vi.spyOn(managementApi, 'listWorkflows').mockResolvedValue([workflow])
+    mockComponentLists()
+    vi.spyOn(managementApi, 'createWorkflow').mockReturnValue(pending.promise)
+    const router = testRouter()
+    await router.push('/workflows/parents')
+    await router.isReady()
+    const wrapper = mount(WorkflowsPage, {
+      props: { workflowRole: 'parent' },
+      global: { plugins: [i18n(), router] },
+    })
+    await flushPromises()
+
+    await wrapper.findAll('button').find((button) => button.text() === 'New')!.trigger('click')
+    await wrapper.get('[data-field="record-name"]').setValue('Apple Workflow')
+    await wrapper.findAll('button').find((button) => button.text() === 'Save')!.trigger('click')
+    await flushPromises()
+
+    const newButton = wrapper.findAll('button').find((button) => button.text() === 'New')!
+    expect(newButton.attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="record-picker-select"]').attributes('disabled')).toBeDefined()
+    await newButton.trigger('click')
+    expect((wrapper.get('[data-field="record-name"]').element as HTMLInputElement).value).toBe('Apple Workflow')
+
+    pending.resolve({ ...workflow, id: 'workflow-apple', name: 'Apple Workflow' })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="record-picker-select"]').findAll('option').slice(1).map((option) => option.text())).toEqual([
+      'Apple Workflow',
+      'Research Workflow',
+    ])
+    wrapper.unmount()
+  })
+
+  it('canonicalizes an invalid Workflow query and removes it for an empty list', async () => {
+    const list = vi.spyOn(managementApi, 'listWorkflows').mockResolvedValue([workflow])
+    mockComponentLists()
+    const router = testRouter()
+    await router.push('/workflows/parents?id=missing')
+    await router.isReady()
+    const wrapper = mount(WorkflowsPage, {
+      props: { workflowRole: 'parent' },
+      global: { plugins: [i18n(), router] },
+    })
+    await flushPromises()
+
+    expect(router.currentRoute.value.query.id).toBe(workflow.id)
+    wrapper.unmount()
+
+    list.mockResolvedValue([])
+    const emptyRouter = testRouter()
+    await emptyRouter.push('/workflows/parents?id=missing')
+    await emptyRouter.isReady()
+    const emptyWrapper = mount(WorkflowsPage, {
+      props: { workflowRole: 'parent' },
+      global: { plugins: [i18n(), emptyRouter] },
+    })
+    await flushPromises()
+
+    expect(emptyRouter.currentRoute.value.query.id).toBeUndefined()
+    emptyWrapper.unmount()
   })
 
   it('round-trips the current Vue Flow document and viewport', () => {

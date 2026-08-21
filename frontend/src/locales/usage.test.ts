@@ -48,10 +48,18 @@ function staticLocaleKeys(): string[] {
 function backendMessageKeys(): string[] {
   const candidates = new Set<string>()
   const messageKey = /['"]((?:errors|resource|validation)(?:\.[A-Za-z][A-Za-z0-9]*)+)['"]/g
+  const generatedAuthoringError = /(?:PythonPackageAuthoringError|SkillPackageAuthoringError)\(\s*['"]([a-z][a-z0-9_]*)['"]/g
   for (const file of sourceFiles(backendRoot)) {
     const source = readFileSync(file, 'utf8')
     for (const match of source.matchAll(messageKey)) {
       if (match[1]) candidates.add(match[1])
+    }
+    for (const match of source.matchAll(generatedAuthoringError)) {
+      if (!match[1]) continue
+      const [first, ...rest] = match[1].split('_')
+      candidates.add(`errors.${first}${rest.map((part) => (
+        part.charAt(0).toUpperCase() + part.slice(1)
+      )).join('')}`)
     }
   }
   return [...candidates].sort()

@@ -18,11 +18,12 @@ from agent_shell.storage.file_config import FileConfigRepository
 from agent_shell.storage.configuration_mutations import ConfigurationMutationCoordinator
 from agent_shell.storage.environment import (
     API_SERVER_ENVIRONMENT_OWNER,
+    EnvironmentSnapshot,
     InstanceEnvironmentStore,
     MODEL_CONNECTION_ENVIRONMENT_OWNER,
     parse_environment_text,
 )
-from agent_shell.storage.model_connections import ModelResourceStore
+from agent_shell.storage.model_connections import ModelResourceSnapshot, ModelResourceStore
 from agent_shell.provider_secrets import ProviderSecretResolver
 import agent_shell.storage.model_connections as model_connection_storage
 from agent_shell.runtime import agent_builder as agent_builder_module
@@ -43,6 +44,26 @@ def connection_payload(name: str = "Local") -> dict[str, object]:
         "response_format": None,
         "model_settings": {},
     }
+
+
+def runtime_builder(
+    tmp_path: Path,
+    repository: FileConfigRepository,
+    resources: ModelResourceStore,
+    *,
+    model_resources: ModelResourceSnapshot | None = None,
+) -> AgentBuilder:
+    return AgentBuilder(
+        ProviderSecretResolver(repository, resources),
+        python_packages_dir=tmp_path / "python-packages",
+        runtime_dir=tmp_path / "runtime",
+        skills_dir=tmp_path / "skills",
+        validation=object(),
+        provider_http_clients=object(),
+        store=InMemoryStore(),
+        model_resources=model_resources or resources.snapshot(),
+        repository_id=repository.repository_id,
+    )
 
 
 def test_model_connection_is_instance_private_and_secret_is_write_only(tmp_path: Path) -> None:
@@ -301,6 +322,57 @@ def test_model_requirement_binding_is_scoped_and_reports_unbound(tmp_path: Path)
     ).status_code == 422
 
 
+def test_model_connection_api_uses_distinct_error_semantics(tmp_path: Path) -> None:
+    repository = FileConfigRepository.empty(tmp_path)
+    blocks = BlockStore(repository)
+    resources = ModelResourceStore(tmp_path)
+    app = FastAPI()
+    app.include_router(build_model_connection_router(repository, blocks, resources))
+    client = TestClient(app)
+
+    created = client.post(
+        "/api/model-connections",
+        json=connection_payload(),
+    )
+    assert created.status_code == 200
+
+    cases = [
+        (
+            client.post("/api/model-connections", json=connection_payload()),
+            409,
+            "model_connection_name_conflict",
+            "errors.modelConnectionNameConflict",
+        ),
+        (
+            client.post("/api/model-connections", json={"name": "Incomplete"}),
+            422,
+            "model_connection_invalid",
+            "errors.modelConnectionInvalid",
+        ),
+        (
+            client.get(
+                "/api/model-connections/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+            ),
+            404,
+            "model_connection_not_found",
+            "errors.modelConnectionNotFound",
+        ),
+        (
+            client.put(
+                "/api/model-requirements/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/binding",
+                json={"connection_id": None},
+            ),
+            404,
+            "model_requirement_not_found",
+            "errors.modelRequirementNotFound",
+        ),
+    ]
+    for response, status, code, message_key in cases:
+        assert response.status_code == status
+        assert response.json()["detail"]["code"] == code
+        assert response.json()["detail"]["message_key"] == message_key
+
+
 def test_model_connection_rejects_blank_or_unknown_name_fields(tmp_path: Path) -> None:
     resources = ModelResourceStore(tmp_path)
 
@@ -350,17 +422,7 @@ def test_model_requirement_binding_resolves_into_runtime_model(
             workspace=SimpleNamespace(initial_files={}),
         ),
     )
-    builder = AgentBuilder(
-        ProviderSecretResolver(repository, resources),
-        python_packages_dir=tmp_path / "python-packages",
-        runtime_dir=tmp_path / "runtime",
-        skills_dir=tmp_path / "skills",
-        validation=object(),
-        provider_http_clients=object(),
-        store=InMemoryStore(),
-        model_resources=resources.snapshot(),
-        repository_id=repository.repository_id,
-    )
+    builder = runtime_builder(tmp_path, repository, resources)
     profile = builder._materialize_profile(
         {"model-requirement": requirement_id},
         {"model-requirement": {"id": requirement_id, "name": "Reasoning", "description": "Use reasoning."}},
@@ -389,17 +451,7 @@ def test_runtime_reports_structured_unbound_requirement_error(
             backend=None, middleware=(), initial_files={}, skill_sources=(), permissions=(), workspace=SimpleNamespace(initial_files={})
         ),
     )
-    builder = AgentBuilder(
-        ProviderSecretResolver(repository, resources),
-        python_packages_dir=tmp_path / "python-packages",
-        runtime_dir=tmp_path / "runtime",
-        skills_dir=tmp_path / "skills",
-        validation=object(),
-        provider_http_clients=object(),
-        store=InMemoryStore(),
-        model_resources=resources.snapshot(),
-        repository_id=repository.repository_id,
-    )
+    builder = runtime_builder(tmp_path, repository, resources)
 
     with pytest.raises(AgentRuntimeError) as raised:
         builder._materialize_profile(
@@ -411,8 +463,91 @@ def test_runtime_reports_structured_unbound_requirement_error(
             owner_name="Main Agent",
         )
     assert raised.value.code == "model_requirement_unbound"
+    assert raised.value.status_code == 409
     assert raised.value.validation_report is not None
     assert raised.value.validation_report.issues[0].path == "capability_refs.model-requirement"
+    assert raised.value.validation_report.issues[0].message_key == (
+        "validation.issue.modelRequirementUnbound"
+    )
+
+
+def test_runtime_reports_structured_error_when_requirement_reference_is_missing(
+    tmp_path: Path,
+) -> None:
+    repository = FileConfigRepository.empty(tmp_path)
+    resources = ModelResourceStore(tmp_path)
+    requirement_id = repository.new_configuration_id()
+    builder = runtime_builder(tmp_path, repository, resources)
+
+    with pytest.raises(AgentRuntimeError) as raised:
+        builder._materialize_profile(
+            {},
+            {
+                "model-requirement": {
+                    "id": requirement_id,
+                    "name": "Reasoning",
+                    "description": "Use reasoning.",
+                }
+            },
+            filesystem_mode="default-shared",
+            scope="main_agent",
+            owner_id="main-agent-id",
+            owner_name="Main Agent",
+        )
+
+    assert raised.value.code == "model_requirement_unbound"
+    assert raised.value.status_code == 409
+    assert raised.value.validation_report is not None
+    assert raised.value.validation_report.issues[0].message_key == (
+        "validation.issue.modelRequirementUnbound"
+    )
+
+
+def test_runtime_reports_structured_error_for_missing_bound_connection(
+    tmp_path: Path,
+) -> None:
+    repository = FileConfigRepository.empty(tmp_path)
+    resources = ModelResourceStore(tmp_path)
+    requirement_id = repository.new_configuration_id()
+    missing_connection_id = "abababab-abab-4aba-8aba-abababababab"
+    stale_snapshot = ModelResourceSnapshot.capture(
+        [],
+        EnvironmentSnapshot.capture({}),
+        {
+            repository.repository_id: {
+                requirement_id: missing_connection_id,
+            }
+        },
+    )
+    builder = runtime_builder(
+        tmp_path,
+        repository,
+        resources,
+        model_resources=stale_snapshot,
+    )
+
+    with pytest.raises(AgentRuntimeError) as raised:
+        builder._materialize_profile(
+            {"model-requirement": requirement_id},
+            {
+                "model-requirement": {
+                    "id": requirement_id,
+                    "name": "Reasoning",
+                    "description": "Use reasoning.",
+                }
+            },
+            filesystem_mode="default-shared",
+            scope="main_agent",
+            owner_id="main-agent-id",
+            owner_name="Main Agent",
+        )
+
+    assert raised.value.code == "model_requirement_unbound"
+    assert raised.value.status_code == 409
+    assert raised.value.validation_report is not None
+    assert raised.value.validation_report.issues[0].message_key == (
+        "validation.issue.modelRequirementUnbound"
+    )
 
 
 def test_request_resource_clones_freeze_connection_and_binding_views(tmp_path: Path) -> None:

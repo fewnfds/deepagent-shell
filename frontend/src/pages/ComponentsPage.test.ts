@@ -8,6 +8,7 @@ import {
   type BlockType,
   type CapabilityManifest,
   type SavedBlock,
+  type SkillPackageInspection,
   type WorkflowComponentManifest,
 } from '@/api'
 import { useConfirmation } from '@/composables/useConfirmation'
@@ -123,6 +124,19 @@ function skillRecord(id: string): SavedBlock {
     skill_package: { folder: id },
     skill_package_contents: { folder: id, path: `skills/${id}`, catalog: [], warnings: {} },
     instruction_override: null,
+  }
+}
+
+function privateSkillInspection(ownerId: string, skillName: string): SkillPackageInspection {
+  return {
+    folder: ownerId,
+    path: `skills/${ownerId}`,
+    catalog: [{
+      name: skillName,
+      folder: skillName.toLowerCase(),
+      description: `${skillName} description`,
+    }],
+    warnings: {},
   }
 }
 
@@ -330,6 +344,52 @@ describe('ComponentsPage', () => {
     expect(api.listSkills).toHaveBeenCalledTimes(2)
     expect(api.listCustomToolTemplates).not.toHaveBeenCalled()
     expect(api.listMiddlewareTemplates).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('ignores a private Skill inspection that finishes after another owner is selected', async () => {
+    const firstId = '00000000-0000-4000-8000-000000000011'
+    const secondId = '00000000-0000-4000-8000-000000000022'
+    const first = deferred<SkillPackageInspection>()
+    const second = deferred<SkillPackageInspection>()
+    api.listBlocks.mockResolvedValueOnce([skillRecord(firstId), skillRecord(secondId)])
+    api.inspectPrivateSkills.mockImplementation((id: string) => (
+      id === firstId ? first.promise : second.promise
+    ))
+    const { router, wrapper } = await mountAt(`/agent-components/skill?id=${firstId}`)
+
+    await router.push(`/agent-components/skill?id=${secondId}`)
+    await flushPromises()
+    second.resolve(privateSkillInspection(secondId, 'Second owner skill'))
+    await flushPromises()
+    first.resolve(privateSkillInspection(firstId, 'First owner skill'))
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="private-skill-item"]').text()).toContain('Second owner skill')
+    expect(wrapper.text()).not.toContain('First owner skill')
+    wrapper.unmount()
+  })
+
+  it('ignores a private Skill mutation response after switching owners', async () => {
+    const firstId = '00000000-0000-4000-8000-000000000033'
+    const secondId = '00000000-0000-4000-8000-000000000044'
+    const mutation = deferred<SkillPackageInspection>()
+    api.listBlocks.mockResolvedValueOnce([skillRecord(firstId), skillRecord(secondId)])
+    api.inspectPrivateSkills.mockImplementation(async (id: string) => (
+      privateSkillInspection(id, id === firstId ? 'First existing skill' : 'Second existing skill')
+    ))
+    api.addPrivateSkill.mockReturnValueOnce(mutation.promise)
+    const { router, wrapper } = await mountAt(`/agent-components/skill?id=${firstId}`)
+
+    await wrapper.get('[data-testid="skill-template-item"] button').trigger('click')
+    expect(api.addPrivateSkill).toHaveBeenCalledWith(firstId, 'group/research')
+    await router.push(`/agent-components/skill?id=${secondId}`)
+    await flushPromises()
+    mutation.resolve(privateSkillInspection(firstId, 'Stale added skill'))
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="private-skill-item"]').text()).toContain('Second existing skill')
+    expect(wrapper.text()).not.toContain('Stale added skill')
     wrapper.unmount()
   })
 

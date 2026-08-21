@@ -34,6 +34,8 @@ const messages = {
   models: {
     connections: {
       deleteTitle: 'Delete connection', deleteDescription: 'Delete {name}?', empty: 'No connections', loadFailed: 'Load failed',
+      saveFailed: 'Save failed', copyFailed: 'Copy failed', deleteFailed: 'Delete failed', modelsFailed: 'Models failed',
+      credentialReplacementRequired: 'Enter a new credential.',
     },
     mapping: {
       warningTitle: 'Requirements need mapping', warning: '{count} unbound', description: 'Description',
@@ -42,7 +44,11 @@ const messages = {
   },
   editors: { common: { refresh: 'Refresh' } },
   common: { new: 'New', copy: 'Copy', delete: 'Delete', save: 'Save', cancel: 'Cancel', configuredSecretPlaceholder: 'Configured', apiKeyPlaceholder: 'API key' },
-  errors: { requestFailed: 'Request failed', modelConfigurationInvalid: 'Invalid model', modelBindingInvalid: 'Invalid binding', blockNotFound: 'Not found', copyRequestInvalid: 'Invalid copy' },
+  errors: {
+    requestFailed: 'Request failed', modelConnectionInvalid: 'Invalid model', modelBindingInvalid: 'Invalid binding',
+    modelConnectionNotFound: 'Connection not found', modelRequirementNotFound: 'Requirement not found',
+    modelConnectionNameConflict: 'Name conflict', copyRequestInvalid: 'Invalid copy',
+  },
 }
 
 const connection: ModelConnection = {
@@ -81,7 +87,11 @@ beforeEach(() => {
   vi.clearAllMocks()
   api.listModelConnections.mockResolvedValue([connection])
   api.listModelProviders.mockResolvedValue(providerCatalog)
-  api.saveModelConnection.mockResolvedValue(connection)
+  api.saveModelConnection.mockImplementation(async (payload: { id?: string, name: string }) => ({
+    ...connection,
+    id: payload.id ?? '44444444-4444-4444-8444-444444444444',
+    name: payload.name,
+  }))
   api.copyModelConnection.mockResolvedValue({ ...connection, id: '22222222-2222-4222-8222-222222222222', name: 'Local GPT (copy)' })
   api.deleteModelConnection.mockResolvedValue({ ok: true })
   api.listModelRequirements.mockResolvedValue([requirement('33333333-3333-4333-8333-333333333333', null)])
@@ -91,17 +101,53 @@ beforeEach(() => {
 afterEach(() => useConfirmation().cancel())
 
 describe('model management pages', () => {
-  it('lists private model connections and saves through the connection API', async () => {
+  it('creates and renames private model connections through the connection API', async () => {
     const wrapper = await mountPage(ModelConnectionsPage, '/models/connections')
     expect(wrapper.text()).toContain('Local GPT')
     expect(api.listModelConnections).toHaveBeenCalledOnce()
     expect(api.listModelProviders).toHaveBeenCalledOnce()
 
-    const saveButton = Array.from(document.body.querySelectorAll('.page-action-dock button')).at(-1)
-    expect(saveButton).toBeDefined()
-    saveButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await wrapper.get('[data-field="model-connection-name"]').setValue('Renamed connection')
+    const actions = () => Array.from(document.body.querySelectorAll<HTMLButtonElement>('.page-action-dock button'))
+    const saveButton = () => actions().find((button) => button.textContent?.trim() === 'Save')
+    saveButton()?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await flushPromises()
-    expect(api.saveModelConnection).toHaveBeenCalledOnce()
+    expect(api.saveModelConnection).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ id: connection.id, name: 'Renamed connection' }),
+    )
+
+    actions().find((button) => button.textContent?.trim() === 'New')
+      ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(saveButton()?.disabled).toBe(true)
+    await wrapper.get('[data-field="model-connection-name"]').setValue('New connection')
+    expect(saveButton()?.disabled).toBe(false)
+    saveButton()?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(api.saveModelConnection).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ name: 'New connection' }),
+    )
+    expect(api.saveModelConnection.mock.calls[1]?.[0]).not.toHaveProperty('id')
+    wrapper.unmount()
+  })
+
+  it('clears a previous save error after a successful retry', async () => {
+    api.saveModelConnection
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce(connection)
+    const wrapper = await mountPage(ModelConnectionsPage, '/models/connections')
+    const save = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.page-action-dock button'))
+      .find((button) => button.textContent?.trim() === 'Save')
+
+    save?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true)
+
+    save?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await flushPromises()
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
